@@ -1,0 +1,72 @@
+import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson } from "./astreinte-logic.js";
+import { watchPeople, watchAbsences } from "./firestore-data.js";
+
+let unsubs = [];
+let people = { n1: [], n2: [] };
+let absences = [];
+let mountedContainer = null;
+let tilesRef = [];
+let onNavigateRef = null;
+
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+
+export function mountAccueil(container, user, tiles, onNavigate) {
+  cleanup();
+  mountedContainer = container;
+  tilesRef = tiles;
+  onNavigateRef = onNavigate;
+  container.innerHTML = `<div class="hint">Chargement…</div>`;
+  unsubs.push(watchPeople((p) => { people = p; render(user); }));
+  unsubs.push(watchAbsences((a) => { absences = a; render(user); }));
+}
+
+function render(user) {
+  if (!mountedContainer) return;
+  const today = new Date();
+  const inRange = today >= YEAR_START && today <= YEAR_END;
+  const refDate = inRange ? today : YEAR_START;
+  const hasPeople = people.n1.length > 0 && people.n2.length > 0;
+
+  let n1 = null, n2 = null, holidayToday = null;
+  if (hasPeople) {
+    const { titN1, titN2 } = computeWeeklyTitulaires(people, absences);
+    n1 = resolveDayN1(refDate, people, absences, titN1);
+    n2 = resolveDayN2(refDate, people, absences, titN2);
+    holidayToday = HOLIDAYS.get(dateKey(refDate));
+  }
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <div class="hero">
+        <div class="hero-label">Bonjour ${esc(user.nom || user.email)}</div>
+        ${hasPeople ? `
+        <div class="hero-blocks">
+          <div class="hero-block n1">
+            <div class="avatar" style="background:${colorForPerson(n1.assigned, people)}">${n1.assigned === 'A DÉFINIR' ? '!' : initials(n1.assigned)}</div>
+            <div><div class="hero-block-label">Astreinte N1 aujourd'hui</div><div class="hero-block-value">${esc(n1.assigned)}</div></div>
+          </div>
+          <div class="hero-block n2">
+            <div class="avatar" style="background:${colorForPerson(n2.assigned, people)}">${n2.assigned === 'A DÉFINIR' ? '!' : initials(n2.assigned)}</div>
+            <div><div class="hero-block-label">Astreinte N2 aujourd'hui</div><div class="hero-block-value">${esc(n2.assigned)}</div></div>
+          </div>
+        </div>
+        ${holidayToday ? `<div style="margin-top:10px;color:var(--violet);font-size:12px">☀️ ${esc(holidayToday)}</div>` : ""}
+        ` : `<p class="hint">Astreinte pas encore configurée.</p>`}
+      </div>
+
+      <div class="tiles-grid">
+        ${tilesRef.map(t => `
+          <button class="tile-card" data-nav="${t.id}">
+            <span class="tile-icon">${t.icon}</span>
+            <span class="tile-label">${esc(t.label)}</span>
+            <span class="tile-desc">${esc(t.desc || "")}</span>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  mountedContainer.querySelectorAll("[data-nav]").forEach(btn => {
+    btn.addEventListener("click", () => onNavigateRef(btn.dataset.nav));
+  });
+}

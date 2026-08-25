@@ -27,7 +27,7 @@ let mountedUser = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
-function permissions(user) {
+export function permissions(user) {
   const isEditor = user.role === "admin" || user.role === "n1";
   const isTech = user.role === "technicien";
   return {
@@ -42,15 +42,14 @@ function permissions(user) {
   };
 }
 
-export function mountPlanning(container, user) {
+function startListeners(container, user, tab) {
   cleanup();
   mountedContainer = container;
   mountedUser = user;
-  const perms = permissions(user);
-  if (!["calendrier"].includes(ui.subtab) && !subtabAllowed(ui.subtab, perms)) ui.subtab = "calendrier";
+  ui.subtab = tab;
   if (user.role === "technicien") ui.form.technicien = user.nom || user.email;
 
-  container.innerHTML = `<div class="hint">Chargement du planning…</div>`;
+  container.innerHTML = `<div class="hint">Chargement…</div>`;
 
   unsubs.push(watchPeople((p) => {
     state.people = p;
@@ -62,41 +61,22 @@ export function mountPlanning(container, user) {
   unsubs.push(watchInterventions((i) => { state.interventions = i; renderAll(); }));
 }
 
-function subtabAllowed(tab, perms) {
-  if (tab === "calendrier") return true;
-  if (tab === "absences") return perms.canSeeAbsencesTab;
-  if (tab === "interventions") return perms.canSeeInterventionsTab;
-  if (tab === "synthese") return perms.canSeeSynthese;
-  return false;
-}
+export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
+export function mountAbsencesTab(container, user) { startListeners(container, user, "absences"); }
+export function mountInterventionsTab(container, user) { startListeners(container, user, "interventions"); }
+export function mountSyntheseTab(container, user) { startListeners(container, user, "synthese"); }
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
   const perms = permissions(mountedUser);
-  const subtabs = [
-    { id: "calendrier", label: "📅 Calendrier", show: true },
-    { id: "absences", label: "👥 Absences", show: perms.canSeeAbsencesTab },
-    { id: "interventions", label: "🔧 Interventions", show: perms.canSeeInterventionsTab },
-    { id: "synthese", label: "📊 Synthèse", show: perms.canSeeSynthese },
-  ].filter(t => t.show);
+  if (ui.subtab === "absences" && !perms.canSeeAbsencesTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
+  if (ui.subtab === "interventions" && !perms.canSeeInterventionsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
+  if (ui.subtab === "synthese" && !perms.canSeeSynthese) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
 
-  mountedContainer.innerHTML = `
-    <div class="stack">
-      <div class="tabs" style="background:none;border:none;padding:0;margin-bottom:-6px">
-        ${subtabs.map(t => `<button class="tab-btn ${ui.subtab === t.id ? 'active' : ''}" data-subtab="${t.id}">${t.label}</button>`).join("")}
-      </div>
-      <div id="planning-subcontent"></div>
-    </div>
-  `;
-  mountedContainer.querySelectorAll("[data-subtab]").forEach(btn => {
-    btn.addEventListener("click", () => { ui.subtab = btn.dataset.subtab; renderAll(); });
-  });
-
-  const sub = document.getElementById("planning-subcontent");
-  if (ui.subtab === "calendrier") return renderCalendar(sub, perms);
-  if (ui.subtab === "absences") return renderAbsences(sub, perms);
-  if (ui.subtab === "interventions") return renderInterventions(sub, perms);
-  if (ui.subtab === "synthese") return renderSynthese(sub, perms);
+  if (ui.subtab === "calendrier") return renderCalendar(mountedContainer, perms);
+  if (ui.subtab === "absences") return renderAbsences(mountedContainer, perms);
+  if (ui.subtab === "interventions") return renderInterventions(mountedContainer, perms);
+  if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
 }
 
 // =================================================================
