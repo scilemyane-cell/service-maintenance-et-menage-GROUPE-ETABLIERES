@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Novimmo Astreinte</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  import { watchAuth, logout, roleLabel } from "./js/auth.js";
+  import { mountPlanning } from "./js/planning.js";
+
+  let currentUser = null;
+  let currentTab = "planning";
+
+  const TABS = [
+    { id: "planning", label: "📅 Planning", roles: ["admin","n1","technicien","menage","mi_temps","direction"] },
+    { id: "sites", label: "🏢 Dossiers de site", roles: ["admin","n1","technicien","menage","mi_temps","direction"], soon: true },
+    { id: "heures", label: "🕒 Mes heures", roles: ["menage","mi_temps"], soon: true },
+    { id: "synthese", label: "📊 Synthèse", roles: ["admin","n1","direction"], soon: true },
+  ];
+
+  watchAuth((user) => {
+    if (!user) { window.location.href = "index.html"; return; }
+    currentUser = user;
+    render();
+  });
+
+  function render() {
+    const app = document.getElementById("app");
+
+    if (currentUser.role === null) {
+      app.innerHTML = `
+        <div class="login-screen">
+          <div class="login-card">
+            <div class="login-eyebrow">Compte non configuré</div>
+            <h1>Presque prêt</h1>
+            <p class="hint">Ton compte existe mais n'a pas encore de rôle attribué dans la base. Demande à l'administrateur de créer ton profil dans la collection <code>users</code> (voir README).</p>
+            <button class="logout-btn" id="logout-btn" style="margin-top:16px">Se déconnecter</button>
+          </div>
+        </div>`;
+      document.getElementById("logout-btn").addEventListener("click", () => logout());
+      return;
+    }
+
+    const visibleTabs = TABS.filter(t => t.roles.includes(currentUser.role));
+
+    app.innerHTML = `
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="topbar-eyebrow">Groupe Établières · Maintenance</span>
+          <h1>Novimmo <span class="accent">Astreinte</span></h1>
+        </div>
+        <div class="topbar-user">
+          <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
+          <button class="logout-btn" id="logout-btn">Se déconnecter</button>
+        </div>
+      </header>
+      <nav class="tabs">
+        ${visibleTabs.map(t => `<button class="tab-btn ${t.id===currentTab?'active':''}" data-tab="${t.id}">${t.label}</button>`).join("")}
+      </nav>
+      <main class="content" id="content"></main>
+    `;
+
+    document.getElementById("logout-btn").addEventListener("click", () => logout());
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => { currentTab = btn.dataset.tab; render(); });
+    });
+
+    renderTabContent();
+  }
+
+  function renderTabContent() {
+    const content = document.getElementById("content");
+    if (currentTab === "planning") {
+      mountPlanning(content, currentUser);
+      return;
+    }
+    content.innerHTML = `
+      <div class="placeholder-card">
+        <b>Bientôt disponible</b><br><br>
+        Ce module (${escapeHtml(TABS.find(t=>t.id===currentTab)?.label || "")}) arrive dans une prochaine phase du projet.
+      </div>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+</script>
+</body>
+</html>

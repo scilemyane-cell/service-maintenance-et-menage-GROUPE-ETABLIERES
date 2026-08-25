@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Novimmo Astreinte — Connexion</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="login-screen">
+    <div class="login-card">
+      <div class="login-eyebrow">Groupe Établières</div>
+      <h1>Novimmo <span style="color:var(--gold)">Astreinte</span></h1>
+      <form id="login-form">
+        <label>Email</label>
+        <input type="email" id="email" required autocomplete="username">
+        <label>Mot de passe</label>
+        <input type="password" id="password" required autocomplete="current-password">
+        <button type="submit" class="login-btn" id="login-btn">Se connecter</button>
+      </form>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { login, watchAuth } from "./js/auth.js";
+
+    // Si déjà connecté, on saute directement vers l'application
+    watchAuth((user) => { if (user) window.location.href = "app.html"; });
+
+    const form = document.getElementById("login-form");
+    const errorBox = document.getElementById("login-error");
+    const btn = document.getElementById("login-btn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorBox.style.display = "none";
+      btn.disabled = true;
+      btn.textContent = "Connexion…";
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      try {
+        await login(email, password);
+        window.location.href = "app.html";
+      } catch (err) {
+        errorBox.textContent = "Connexion impossible : vérifie ton email et ton mot de passe.";
+        errorBox.style.display = "block";
+        btn.disabled = false;
+        btn.textContent = "Se connecter";
+      }
+    });
+  </script>
+</body>
+</html>

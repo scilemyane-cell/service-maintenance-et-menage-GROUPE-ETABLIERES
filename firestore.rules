@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isEditor() {
+      return isSignedIn() && (myRole() == 'admin' || myRole() == 'n1');
+    }
+
+    // ---- Profils utilisateurs ----
+    // Chacun peut lire son propre profil et ceux des autres (pour afficher
+    // les noms dans les listes). Seul un admin peut créer/modifier un profil
+    // (c'est ainsi que l'on attribue les rôles).
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && myRole() == 'admin';
+    }
+
+    // ---- Configuration (noms N1/N2, paramètres) ----
+    match /config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
+
+    // ---- Absences ----
+    match /absences/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
+
+    // ---- Interventions ----
+    // Tout le monde peut lire. Un éditeur (admin/n1) peut tout écrire.
+    // Un technicien peut créer une intervention et supprimer UNIQUEMENT
+    // celles qu'il a lui-même créées (createdBy == son propre uid).
+    match /interventions/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isEditor() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+    }
+  }
+}
