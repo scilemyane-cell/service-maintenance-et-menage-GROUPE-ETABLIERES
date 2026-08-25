@@ -45,5 +45,16 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
       allow update, delete: if isEditor() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
     }
+    // ---- Heures (agents d'entretien / temps partiel) ----
+    // Chacun ne peut créer QUE ses propres heures (uid == son uid).
+    // Seul un éditeur (admin/n1) peut valider (update). La direction peut
+    // seulement lire. Suppression : éditeur, ou la personne elle-même tant
+    // que l'entrée n'est pas encore validée.
+    match /heures/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isEditor();
+      allow delete: if isEditor() || (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.validated == false);
+    }
   }
 }
