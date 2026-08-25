@@ -49,6 +49,13 @@ body{
 .placeholder-card{ background:var(--panel); border:1px dashed var(--border); border-radius:14px; padding:40px 20px; text-align:center; color:var(--text-dim); }
 .placeholder-card b{ color:var(--gold); }
 
+.tiles-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+.tile-card{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px 14px; text-align:left; cursor:pointer; display:flex; flex-direction:column; gap:6px; color:var(--text); font-family:inherit; }
+.tile-card:hover{ border-color:var(--gold); background:var(--panel-alt); }
+.tile-icon{ font-size:22px; }
+.tile-label{ font-size:14px; font-weight:700; }
+.tile-desc{ font-size:11px; color:var(--text-dim); }
+
 .hero{ background:linear-gradient(135deg, rgba(217,178,76,.08), rgba(63,182,172,.05)); border:1px solid var(--border); border-radius:14px; padding:18px; }
 .hero-label{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); margin-bottom:10px; font-family:ui-monospace,monospace; }
 .hero-blocks{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
