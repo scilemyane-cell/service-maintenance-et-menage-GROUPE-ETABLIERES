@@ -200,6 +200,47 @@ export const SITES = [
     ],
     literie: true,
   },
+  {
+    id: "residence-daoud",
+    name: "Résidence",
+    dispositif: "Daoud Mahdi",
+    rooms: [
+      room("Parties communes", DAYS, [
+        "Sols : aspirateur & lavage",
+        "Poussières mobiliers",
+        "Nettoyage vitres, poignées & interrupteurs",
+        "Vider les poubelles intérieures",
+        "Plinthes",
+      ]),
+      room("Espaces verts", ["LUN"], [
+        { label: "Tonte / entretien pelouse", freq: "1X/semaine" },
+        { label: "Taille haies et arbustes", freq: "selon saison" },
+        "Ramassage des déchets extérieurs",
+        { label: "Arrosage", freq: "selon besoin" },
+      ]),
+      room("Poubelles", ["LUN", "JEU"], [
+        "Sortie des poubelles (bacs à la rue)",
+        "Rentrée des bacs",
+        { label: "Nettoyage des containers", freq: "1X/mois" },
+      ]),
+    ],
+    literie: false,
+  },
+  {
+    id: "haras-vendee",
+    name: "Haras de Vendée",
+    dispositif: "Daoud Mahdi",
+    rooms: [
+      room("Ménage général", DAYS, [
+        "Sols : aspirateur & lavage",
+        "Poussières mobiliers",
+        "Nettoyage vitres, poignées & interrupteurs",
+        "Vider les poubelles",
+        "Plinthes",
+      ]),
+    ],
+    literie: false,
+  },
 ];
 
 export function findSite(id) {
