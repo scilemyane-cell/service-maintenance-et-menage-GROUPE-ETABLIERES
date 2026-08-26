@@ -13,7 +13,6 @@ let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
 let mountedDispositif = null;
-let saveTimer = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
@@ -65,21 +64,23 @@ function currentRecord() {
   };
 }
 
-async function saveFicheStatus(id, data) {
+async function persist(id, data) {
   const statusEl = document.getElementById("rp-save-status");
   if (statusEl) statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
   try {
     await saveRepartition(id, data);
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--teal)">✓ Enregistré</span>`;
+    const el = document.getElementById("rp-save-status");
+    if (el) el.innerHTML = `<span style="color:var(--teal)">✓ Enregistré</span>`;
   } catch (e) {
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+    const el = document.getElementById("rp-save-status");
+    if (el) el.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
   }
 }
 
 let saveDebounceId = null;
 function scheduleSave(id, data) {
   if (saveDebounceId) clearTimeout(saveDebounceId);
-  saveDebounceId = setTimeout(() => { saveFicheStatus(id, data); }, 500);
+  saveDebounceId = setTimeout(() => { persist(id, data); }, 500);
 }
 
 function dayTotals(data) {
@@ -88,9 +89,19 @@ function dayTotals(data) {
   return totals;
 }
 
+// render() recharge l'agent/la semaine courante depuis les données
+// connues (Firestore). renderView() affiche un objet `data` déjà en main
+// SANS repasser par Firestore — indispensable pour que les modifications
+// locales (ajout/suppression de ligne) ne soient jamais écrasées par une
+// reconstruction depuis le modèle avant que la sauvegarde n'ait eu lieu.
 function render() {
   if (!mountedContainer) return;
   const { id, data } = currentRecord();
+  renderView(id, data);
+}
+
+function renderView(id, data) {
+  if (!mountedContainer) return;
   const weekStartDate = new Date(ui.weekStart);
   const weekEndDate = addDays(weekStartDate, 6);
   const totalPrevu = data.lignes.reduce((s, l) => s + (l.prevu || 0), 0);
@@ -135,7 +146,7 @@ function render() {
             <th></th>
           </tr></thead>
           <tbody>
-            ${data.lignes.length === 0 ? `<tr><td colspan="11" class="empty-row">Aucun modèle défini pour ce dispositif — ajoute des lignes manuellement, ou configure un modèle dans Paramètres.</td></tr>` :
+            ${data.lignes.length === 0 ? `<tr><td colspan="11" class="empty-row">Aucune ligne — ajoute-en une ci-dessous, ou configure un modèle dans Paramètres.</td></tr>` :
               data.lignes.map((l, i) => {
                 const ligneTotal = DAYS.reduce((s, d) => s + (parseFloat(l.jours[d]) || 0), 0);
                 return `
@@ -186,20 +197,21 @@ function render() {
     inp.addEventListener("change", () => {
       const [i, d] = inp.dataset.ligneJour.split("-");
       data.lignes[i].jours[d] = parseFloat(inp.value) || 0;
-      saveFicheStatus(id, data);
-      render();
+      persist(id, data);
+      renderView(id, data);
     });
   });
   mountedContainer.querySelectorAll("[data-del-ligne]").forEach(btn => {
     btn.addEventListener("click", () => {
       data.lignes.splice(parseInt(btn.dataset.delLigne, 10), 1);
-      saveRepartition(id, data);
-      render();
+      persist(id, data);
+      renderView(id, data);
     });
   });
   document.getElementById("rp-add-ligne").addEventListener("click", () => {
     data.lignes.push({ label: "Autre tâche", jours: emptyDays() });
-    render();
+    persist(id, data);
+    renderView(id, data);
   });
-  document.getElementById("rp-save").addEventListener("click", () => { saveFicheStatus(id, data); });
+  document.getElementById("rp-save").addEventListener("click", () => { persist(id, data); });
 }
