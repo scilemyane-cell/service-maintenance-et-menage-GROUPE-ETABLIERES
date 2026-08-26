@@ -22,6 +22,7 @@ let ui = {
   filterTech: "Tous", filterSite: "Tous",
   form: { date: new Date().toISOString().slice(0, 10), technicien: "", site: "", type: "", heures: "", description: "" },
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
+  docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
 let unsubs = [];
 let clearCountdown = null;
@@ -302,8 +303,63 @@ function renderAbsences(container, perms) {
 // =================================================================
 // Interventions
 // =================================================================
+function renderDocPreview() {
+  const filtered = state.interventions
+    .filter(i => ui.docForm.person === "Tous" || i.technicien === ui.docForm.person)
+    .filter(i => i.date >= ui.docForm.start && i.date <= ui.docForm.end)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
+
+  return `
+    <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
+    <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
+        <span style="font-size:13px">Le ${fmtShort(new Date())}</span>
+      </div>
+      <p style="font-size:14px;margin:0 0 6px">RELEVÉ D'HEURES SUPPLÉMENTAIRES — ASTREINTE</p>
+      <p style="font-size:13px;margin:0 0 6px">Intervenant : ${esc(ui.docForm.person)}</p>
+      <p style="font-size:13px;margin:0 0 18px">Période du ${fmtShort(new Date(ui.docForm.start))} au ${fmtShort(new Date(ui.docForm.end))}</p>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+        <thead><tr>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Date</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Intervenant</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Site</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Type</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Description</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.length === 0 ? `<tr><td colspan="6" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
+            filtered.map(i => `
+              <tr>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${new Date(i.date).toLocaleDateString("fr-FR")}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.technicien)}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.site)}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.type)}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.description)}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heures}</td>
+              </tr>`).join("")}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700">
+            <td colspan="5" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
+            <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${total.toFixed(2)} h</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
+        <span>Signature intervenant</span>
+        <span>Signature manager (validation pour paiement)</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderInterventions(container, perms) {
-  const technicians = state.people.n2;
+  const intervenants = [...state.people.n1, ...state.people.n2];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   const isLockedTech = perms.isTech && !perms.isEditor;
 
@@ -313,10 +369,10 @@ function renderInterventions(container, perms) {
       <div class="form-card">
         <div class="form-grid">
           <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
-          <label>Technicien
+          <label>Intervenant
             ${isLockedTech
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
-              : `<select id="f-tech">${technicians.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
+              : `<select id="f-tech">${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
           <label>Site<input id="f-site" list="sites" value="${esc(ui.form.site)}" placeholder="ex. Résidence Valoria"><datalist id="sites">${SITE_SUGGESTIONS.map(s => `<option value="${esc(s)}">`).join("")}</datalist></label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
@@ -325,9 +381,23 @@ function renderInterventions(container, perms) {
         </div>
         <button class="add-btn" id="add-interv">➕ Ajouter l'intervention</button>
       </div>` : ""}
+
+      ${perms.isEditor ? `
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Générer un relevé d'heures supplémentaires</h3>
+        <div class="form-grid">
+          <label>Intervenant<select id="doc-person"><option value="Tous" ${ui.docForm.person === 'Tous' ? 'selected' : ''}>Tous</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.docForm.person === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select></label>
+          <label>Du<input type="date" id="doc-start" value="${esc(ui.docForm.start)}"></label>
+          <label>Au<input type="date" id="doc-end" value="${esc(ui.docForm.end)}"></label>
+        </div>
+        <button class="add-btn" id="doc-generate">📄 Générer le document</button>
+      </div>
+      ${ui.docForm.generated ? renderDocPreview() : ""}
+      ` : ""}
+
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Technicien</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th></th></tr></thead>
           <tbody>
             ${sorted.length === 0 ? `<tr><td colspan="7" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
               sorted.map(i => {
@@ -366,6 +436,14 @@ function renderInterventions(container, perms) {
     container.querySelectorAll("[data-del]").forEach(btn => {
       btn.addEventListener("click", async () => { await deleteIntervention(btn.dataset.del); });
     });
+  }
+
+  if (perms.isEditor) {
+    document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; });
+    document.getElementById("doc-start").addEventListener("input", (e) => { ui.docForm.start = e.target.value; });
+    document.getElementById("doc-end").addEventListener("input", (e) => { ui.docForm.end = e.target.value; });
+    document.getElementById("doc-generate").addEventListener("click", () => { ui.docForm.generated = true; renderAll(); });
+    document.getElementById("doc-print")?.addEventListener("click", () => { window.print(); });
   }
 }
 
