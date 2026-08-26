@@ -86,5 +86,12 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);
       allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
     }
+    // ---- Confirmations de transfert de ligne téléphonique (N1) ----
+    // N'importe quel utilisateur connecté peut lire et confirmer un
+    // transfert (un seul document par jour, écrasé si reconfirmé).
+    match /transferts-ligne/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.resource.data.confirmedBy == request.auth.uid;
+    }
   }
 }

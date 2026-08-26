@@ -155,3 +155,24 @@ export function colorForPerson(name, people) {
   if (i2 >= 0) return N2_COLORS[i2 % N2_COLORS.length];
   return "#999";
 }
+
+// Détecte si `date` est un jour de bascule du cadre d'astreinte N1
+// (la personne en charge aujourd'hui diffère de celle d'hier).
+// Nécessite un resolveDayN1 déjà importé par l'appelant pour éviter une
+// dépendance circulaire avec sites-data / le calcul complet.
+export function handoverInfo(date, people, absences, titN1, resolveDayN1Fn) {
+  const today = resolveDayN1Fn(date, people, absences, titN1);
+  const yesterday = resolveDayN1Fn(addDays(date, -1), people, absences, titN1);
+  if (today.assigned === yesterday.assigned) return null;
+  if (today.assigned === "A DÉFINIR" || yesterday.assigned === "A DÉFINIR") return null;
+  return { from: yesterday.assigned, to: today.assigned };
+}
+
+export function hoursLeftToday() {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+  const ms = end - now;
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return { h, m };
+}

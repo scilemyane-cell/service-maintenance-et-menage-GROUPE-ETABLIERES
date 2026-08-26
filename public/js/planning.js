@@ -1,18 +1,20 @@
 import {
   addDays, dateKey, sameDay, fmtLong, fmtShort, HOLIDAYS,
   YEAR_START, YEAR_END, computeWeeklyTitulaires, resolveDayN1, resolveDayN2,
-  isAbsentOnDate, esc, initials, colorForPerson,
+  isAbsentOnDate, esc, initials, colorForPerson, handoverInfo,
 } from "./astreinte-logic.js";
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
   watchInterventions, addIntervention, deleteIntervention,
 } from "./firestore-data.js";
+import { watchTransferts } from "./transfert-data.js";
+import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 
 const SITE_SUGGESTIONS = ["École", "Agropolis", "Armonia", "Résidence Valoria", "Internat Bâtiment A", "Internat Bâtiment B"];
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 
-let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [] };
+let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [] };
 let ui = {
   subtab: "calendrier",
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
@@ -22,10 +24,15 @@ let ui = {
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
 };
 let unsubs = [];
+let clearCountdown = null;
 let mountedContainer = null;
 let mountedUser = null;
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+function cleanup() {
+  unsubs.forEach(u => u());
+  unsubs = [];
+  if (clearCountdown) { clearCountdown(); clearCountdown = null; }
+}
 
 export function permissions(user) {
   const isEditor = user.role === "admin" || user.role === "n1";
@@ -59,6 +66,7 @@ function startListeners(container, user, tab) {
   }));
   unsubs.push(watchAbsences((a) => { state.absences = a; renderAll(); }));
   unsubs.push(watchInterventions((i) => { state.interventions = i; renderAll(); }));
+  unsubs.push(watchTransferts((t) => { state.transferts = t; renderAll(); }));
 }
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
@@ -99,6 +107,9 @@ function renderCalendar(container, perms) {
   const n1Today = resolveDayN1(refDate, state.people, state.absences, titN1);
   const n2Today = resolveDayN2(refDate, state.people, state.absences, titN2);
   const holidayToday = HOLIDAYS.get(dateKey(refDate));
+  const handover = todayInRange ? handoverInfo(refDate, state.people, state.absences, titN1, resolveDayN1) : null;
+  const todayKey = dateKey(refDate);
+  const confirmedRecord = state.transferts.find(t => t.id === todayKey);
 
   let alertDays = [];
   for (let d = new Date(YEAR_START); d <= YEAR_END; d = addDays(d, 1)) {
@@ -126,6 +137,7 @@ function renderCalendar(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
+      ${transfertBannerHTML(handover, confirmedRecord)}
       <div class="hero">
         <div class="hero-label">${todayInRange ? "Astreinte du jour" : "Aperçu — année scolaire"}</div>
         <div class="hero-blocks">
@@ -216,6 +228,9 @@ function renderCalendar(container, perms) {
   container.querySelectorAll(".cal-day[data-date]").forEach(cell => {
     cell.addEventListener("click", () => { ui.selectedDate = cell.dataset.date; renderAll(); });
   });
+
+  if (clearCountdown) { clearCountdown(); clearCountdown = null; }
+  clearCountdown = attachTransfertListeners(container, handover, mountedUser, () => renderAll());
 }
 
 // =================================================================
