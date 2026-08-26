@@ -56,5 +56,14 @@ service cloud.firestore {
       allow update: if isEditor();
       allow delete: if isEditor() || (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.validated == false);
     }
+    // ---- Fiches de traçabilité ménage ----
+    // Chacun peut créer/modifier SES PROPRES fiches (agentUid == son uid).
+    // Un éditeur (admin/n1) peut tout modifier. Tout le monde peut lire
+    // (onglet Traçabilité).
+    match /fiches/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);
+      allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
+    }
   }
 }
