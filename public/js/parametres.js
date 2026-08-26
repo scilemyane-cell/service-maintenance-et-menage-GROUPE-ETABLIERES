@@ -6,8 +6,9 @@ import { watchAccess, setDispositifAccess } from "./access-data.js";
 import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate } from "./dispositif-settings-data.js";
 import { roleLabel } from "./auth.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { auth } from "./firebase-init.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 const ALL_DAYS = ["LUN", "MAR", "MER", "JEU", "VEN"];
 const ROLES = ["admin", "n1", "technicien", "menage", "mi_temps", "direction"];
@@ -68,17 +69,21 @@ function renderUtilisateurs(container) {
         <div id="nu-result"></div>
       </div>
 
-      <p class="hint">Modifie le nom affiché ou le rôle de chaque compte existant. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
+      <p class="hint">Modifie le nom affiché ou le rôle de chaque compte existant. "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th></tr></thead>
+          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Mot de passe</th></tr></thead>
           <tbody>
-            ${usersState.users.length === 0 ? `<tr><td colspan="3" class="empty-row">Aucun utilisateur.</td></tr>` :
+            ${usersState.users.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucun utilisateur.</td></tr>` :
               usersState.users.map(u => `
                 <tr>
                   <td>${esc(u.email || "")}</td>
                   <td><input data-user-nom="${u.uid}" value="${esc(u.nom || '')}" style="min-width:160px"></td>
                   <td><select data-user-role="${u.uid}">${ROLES.map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select></td>
+                  <td>
+                    <button class="nav-btn" data-reset-pwd="${esc(u.email || '')}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
+                    <div data-reset-status="${esc(u.email || '')}" style="font-size:11px;margin-top:4px"></div>
+                  </td>
                 </tr>
               `).join("")}
           </tbody>
@@ -121,6 +126,23 @@ function renderUtilisateurs(container) {
   });
   container.querySelectorAll("[data-user-role]").forEach(sel => {
     sel.addEventListener("change", async () => { await updateUser(sel.dataset.userRole, { role: sel.value }); });
+  });
+  container.querySelectorAll("[data-reset-pwd]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const email = btn.dataset.resetPwd;
+      const statusEl = container.querySelector(`[data-reset-status="${CSS.escape(email)}"]`);
+      if (!email) { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">Aucun email pour ce compte.</span>`; return; }
+      btn.disabled = true;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--teal)">✓ Email envoyé</span>`;
+      } catch (e) {
+        const msg = e.code === "auth/user-not-found" ? "Aucun compte avec cet email." : "Échec : " + (e.message || e);
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">${esc(msg)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
   });
 }
 
