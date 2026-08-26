@@ -94,26 +94,61 @@ function render() {
 
       ${opened ? `
       <button class="add-btn" id="tr-print">🖨️ Exporter en PDF (imprimer)</button>
-      <div class="form-card print-fiche">
-        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">${esc(opened.siteName)} — ${fmtShort(new Date(opened.weekStart))} → ${fmtShort(new Date(opened.weekEnd))} — ${esc(opened.agentNom)}</h3>
-        ${openedSite ? openedSite.rooms.map((room, ri) => `
-          <div style="margin-bottom:14px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:4px">${esc(room.name)}</div>
-            ${room.tasks.map((task, ti) => {
-              const doneDays = room.days.filter(d => opened.cells && opened.cells[`${ri}-${ti}-${d}`]);
-              const obs = (opened.obs && opened.obs[`${ri}-${ti}`]) || "";
-              if (doneDays.length === 0 && !obs) return "";
-              return `<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--border)">
-                <b>${esc(task.label)}</b> — ${doneDays.length ? doneDays.join(", ") : "non coché"}
-                ${obs ? `<br><span style="color:var(--text-dim)">${esc(obs)}</span>` : ""}
-              </div>`;
-            }).join("")}
-          </div>
-        `).join("") : ""}
-        ${opened.observationsGenerales ? `<div class="hint"><b>Observations générales :</b> ${esc(opened.observationsGenerales)}</div>` : ""}
-        <div style="margin-top:20px;display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim)">
-          <span>Signature agent : ____________________</span>
-          <span>Signature éducateur : ____________________</span>
+      <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+          <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
+          <span style="font-size:13px">Le ${fmtShort(new Date())}</span>
+        </div>
+        <p style="font-size:14px;margin:0 0 6px">FICHE DE TRAÇABILITÉ – AGENT D'ENTRETIEN${lockedDispositif ? ` (${esc(lockedDispositif).toUpperCase()})` : ""}</p>
+        <p style="font-size:13px;margin:0 0 6px">Structure : ${esc(opened.siteName).toUpperCase()}</p>
+        <p style="font-size:13px;margin:0 0 18px">Date du ${fmtShort(new Date(opened.weekStart))} au ${fmtShort(new Date(opened.weekEnd))} &nbsp;&nbsp;&nbsp; Nom de l'agent : ${esc(opened.agentNom)}</p>
+
+        ${openedSite ? openedSite.rooms.map((room, ri) => {
+          const dayNames = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" };
+          return `
+          <p style="font-size:13px;font-weight:700;margin:16px 0 6px">${esc(room.name).toUpperCase()}</p>
+          <table class="print-fiche-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
+            <thead><tr>
+              <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">TÂCHE</th>
+              ${room.days.map(d => `<th style="border:1px solid #999;padding:4px 6px;font-size:11px">${dayNames[d]}</th>`).join("")}
+              <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">OBSERVATIONS</th>
+            </tr></thead>
+            <tbody>
+              ${room.tasks.map((task, ti) => `
+                <tr>
+                  <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(task.label)}${task.freq ? ` (${esc(task.freq)})` : ""}</td>
+                  ${room.days.map(d => `<td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${(opened.cells && opened.cells[`${ri}-${ti}-${d}`]) ? "✓" : ""}</td>`).join("")}
+                  <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc((opened.obs && opened.obs[`${ri}-${ti}`]) || "")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>`;
+        }).join("") : ""}
+
+        ${opened.chambres && opened.chambres.length ? `
+        <p style="font-size:13px;font-weight:700;margin:16px 0 6px">LITERIE SUR DEMANDE</p>
+        <table class="print-fiche-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
+          <thead><tr>
+            <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">CHAMBRE</th>
+            <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">DATE</th>
+            <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">OBSERVATIONS</th>
+          </tr></thead>
+          <tbody>
+            ${opened.chambres.map(c => `
+              <tr>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(c.chambre)}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${c.date ? fmtShort(new Date(c.date)) : ""}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(c.observation)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>` : ""}
+
+        <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
+
+        <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
+          <span>SIGNATURE AGENT</span>
+          <span>SIGNATURE + NOM ÉDUCATEUR</span>
         </div>
       </div>` : ""}
     </div>
