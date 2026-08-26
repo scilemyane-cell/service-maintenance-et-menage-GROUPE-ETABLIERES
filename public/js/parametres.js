@@ -31,7 +31,7 @@ async function createUserAccount(email, password, nom, role) {
   const secondaryAuth = getAuth(secondaryApp);
   try {
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await createUserProfile(cred.user.uid, { nom, role });
+    await createUserProfile(cred.user.uid, { nom, role, email });
     await signOut(secondaryAuth);
     return cred.user.uid;
   } finally {
@@ -69,7 +69,7 @@ function renderUtilisateurs(container) {
         <div id="nu-result"></div>
       </div>
 
-      <p class="hint">Modifie le nom affiché ou le rôle de chaque compte existant. "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
+      <p class="hint">Modifie le nom affiché, l'email ou le rôle de chaque compte existant. Si l'email est vide ci-dessous (comptes créés avant cette mise à jour), renseigne-le manuellement — nécessaire pour "Réinitialiser". "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Mot de passe</th></tr></thead>
@@ -77,12 +77,12 @@ function renderUtilisateurs(container) {
             ${usersState.users.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucun utilisateur.</td></tr>` :
               usersState.users.map(u => `
                 <tr>
-                  <td>${esc(u.email || "")}</td>
+                  <td><input data-user-email="${u.uid}" value="${esc(u.email || '')}" placeholder="email manquant — à renseigner" style="min-width:200px${!u.email ? ';border-color:var(--red)' : ''}"></td>
                   <td><input data-user-nom="${u.uid}" value="${esc(u.nom || '')}" style="min-width:160px"></td>
                   <td><select data-user-role="${u.uid}">${ROLES.map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select></td>
                   <td>
-                    <button class="nav-btn" data-reset-pwd="${esc(u.email || '')}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
-                    <div data-reset-status="${esc(u.email || '')}" style="font-size:11px;margin-top:4px"></div>
+                    <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
+                    <div data-reset-status="${u.uid}" style="font-size:11px;margin-top:4px"></div>
                   </td>
                 </tr>
               `).join("")}
@@ -124,14 +124,22 @@ function renderUtilisateurs(container) {
   container.querySelectorAll("[data-user-nom]").forEach(inp => {
     inp.addEventListener("change", async () => { await updateUser(inp.dataset.userNom, { nom: inp.value }); });
   });
+  container.querySelectorAll("[data-user-email]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      await updateUser(inp.dataset.userEmail, { email: inp.value.trim() });
+      inp.style.borderColor = "";
+    });
+  });
   container.querySelectorAll("[data-user-role]").forEach(sel => {
     sel.addEventListener("change", async () => { await updateUser(sel.dataset.userRole, { role: sel.value }); });
   });
   container.querySelectorAll("[data-reset-pwd]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const email = btn.dataset.resetPwd;
-      const statusEl = container.querySelector(`[data-reset-status="${CSS.escape(email)}"]`);
-      if (!email) { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">Aucun email pour ce compte.</span>`; return; }
+      const uid = btn.dataset.resetPwd;
+      const emailInput = container.querySelector(`[data-user-email="${uid}"]`);
+      const email = emailInput ? emailInput.value.trim() : "";
+      const statusEl = container.querySelector(`[data-reset-status="${uid}"]`);
+      if (!email) { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">Renseigne d'abord l'email dans la colonne de gauche.</span>`; return; }
       btn.disabled = true;
       try {
         await sendPasswordResetEmail(auth, email);
