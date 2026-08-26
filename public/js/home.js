@@ -5,16 +5,16 @@ let unsubs = [];
 let people = { n1: [], n2: [] };
 let absences = [];
 let mountedContainer = null;
-let tilesRef = [];
-let onNavigateRef = null;
+let catsRef = [];
+let onSelectRef = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
-export function mountAccueil(container, user, tiles, onNavigate) {
+export function mountDashboard(container, user, categories, onSelect) {
   cleanup();
   mountedContainer = container;
-  tilesRef = tiles;
-  onNavigateRef = onNavigate;
+  catsRef = categories;
+  onSelectRef = onSelect;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchPeople((p) => { people = p; render(user); }));
   unsubs.push(watchAbsences((a) => { absences = a; render(user); }));
@@ -54,19 +54,19 @@ function render(user) {
         ` : `<p class="hint">Astreinte pas encore configurée.</p>`}
       </div>
 
-      <div class="tiles-grid">
-        ${tilesRef.map(t => `
-          <button class="tile-card" data-nav="${t.id}">
-            <span class="tile-icon">${t.icon}</span>
-            <span class="tile-label">${esc(t.label)}</span>
-            <span class="tile-desc">${esc(t.desc || "")}</span>
+      <div class="bubble-grid">
+        ${catsRef.map(c => `
+          <button class="bubble-card" data-cat="${c.id}">
+            <span class="bubble-icon">${c.icon}</span>
+            <span class="bubble-label">${esc(c.label)}</span>
+            <span class="bubble-desc">${esc(c.desc || "")}</span>
           </button>
         `).join("")}
       </div>
     </div>
   `;
 
-  mountedContainer.querySelectorAll("[data-nav]").forEach(btn => {
-    btn.addEventListener("click", () => onNavigateRef(btn.dataset.nav));
+  mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
+    btn.addEventListener("click", () => onSelectRef(btn.dataset.cat));
   });
 }

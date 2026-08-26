@@ -15,19 +15,39 @@
   import { watchAuth, logout, roleLabel } from "./js/auth.js";
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab } from "./js/planning.js";
   import { mountHeures } from "./js/heures.js";
-  import { mountAccueil } from "./js/home.js";
+  import { mountDashboard } from "./js/home.js";
+  import { mountFiches, mountTracabilite } from "./js/menage-extra.js";
 
   let currentUser = null;
-  let currentTab = "accueil";
+  let currentCategory = null; // null = accueil (bulles)
+  let currentSubtab = null;
 
-  const TABS = [
-    { id: "accueil",       label: "Accueil",         icon: "🏠", desc: "Vue d'ensemble",              roles: ["admin","n1","technicien","menage","mi_temps","direction"] },
-    { id: "astreinte",     label: "Astreinte",        icon: "📅", desc: "Calendrier des gardes",       roles: ["admin","n1","technicien","menage","mi_temps","direction"] },
-    { id: "absences",      label: "Absences",         icon: "👥", desc: "Congés et arrêts",            roles: ["admin","n1"] },
-    { id: "interventions", label: "Interventions",    icon: "🔧", desc: "Journal des interventions",   roles: ["admin","n1","technicien"] },
-    { id: "synthese",      label: "Synthèse",         icon: "📊", desc: "Statistiques d'interventions",roles: ["admin","n1","direction"] },
-    { id: "heures",        label: "Heures",           icon: "🕒", desc: "Saisie et validation",        roles: ["admin","n1","direction","menage","mi_temps"] },
-    { id: "sites",         label: "Dossiers de site", icon: "🏢", desc: "Bientôt disponible",          roles: ["admin","n1","technicien","menage","mi_temps","direction"], soon: true },
+  const ALL = ["admin","n1","technicien","menage","mi_temps","direction"];
+
+  const CATEGORIES = [
+    {
+      id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning, absences, interventions",
+      subtabs: [
+        { id: "calendrier",     label: "Calendrier",     icon: "📅", roles: ALL,                             mount: mountCalendrier },
+        { id: "absences",       label: "Absences",       icon: "👥", roles: ["admin","n1"],                  mount: mountAbsencesTab },
+        { id: "interventions",  label: "Interventions",  icon: "🔧", roles: ["admin","n1","technicien"],     mount: mountInterventionsTab },
+        { id: "synthese",       label: "Synthèse",       icon: "📊", roles: ["admin","n1","direction"],      mount: mountSyntheseTab },
+      ],
+    },
+    {
+      id: "menage", label: "Service Ménage", icon: "🧹", desc: "Heures, fiches, traçabilité",
+      subtabs: [
+        { id: "heures",       label: "Heures",             icon: "🕒", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountHeures },
+        { id: "fiches",       label: "Fiches de ménage",   icon: "📋", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountFiches },
+        { id: "tracabilite",  label: "Traçabilité",        icon: "🧾", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountTracabilite },
+      ],
+    },
+    {
+      id: "sites", label: "Dossiers de site", icon: "🏢", desc: "Bientôt disponible",
+      subtabs: [
+        { id: "liste", label: "Dossiers", icon: "🏢", roles: ALL, mount: null },
+      ],
+    },
   ];
 
   watchAuth((user) => {
@@ -36,8 +56,11 @@
     render();
   });
 
-  function visibleTabsFor(user) {
-    return TABS.filter(t => t.roles.includes(user.role));
+  function categorySubtabsFor(category, user) {
+    return category.subtabs.filter(s => s.roles.includes(user.role));
+  }
+  function visibleCategoriesFor(user) {
+    return CATEGORIES.filter(c => categorySubtabsFor(c, user).length > 0);
   }
 
   function render() {
@@ -57,13 +80,13 @@
       return;
     }
 
-    const visibleTabs = visibleTabsFor(currentUser);
-    if (!visibleTabs.some(t => t.id === currentTab)) currentTab = "accueil";
+    const category = CATEGORIES.find(c => c.id === currentCategory) || null;
 
     app.innerHTML = `
       <header class="topbar">
         <div class="topbar-title">
-          <span class="topbar-eyebrow">Groupe Établières · Maintenance</span>
+          ${category ? `<button class="back-btn" id="back-home">← Accueil</button>` : ""}
+          <span class="topbar-eyebrow">Groupe Établières · Service Maintenance et Ménage</span>
           <h1>Novimmo <span class="accent">Astreinte</span></h1>
         </div>
         <div class="topbar-user">
@@ -71,39 +94,52 @@
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
       </header>
+      ${category ? `
       <nav class="tabs">
-        ${visibleTabs.map(t => `<button class="tab-btn ${t.id===currentTab?'active':''}" data-tab="${t.id}">${t.icon} ${t.label}</button>`).join("")}
-      </nav>
+        ${categorySubtabsFor(category, currentUser).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}">${s.icon} ${s.label}</button>`).join("")}
+      </nav>` : ""}
       <main class="content" id="content"></main>
     `;
 
     document.getElementById("logout-btn").addEventListener("click", () => logout());
-    document.querySelectorAll(".tab-btn").forEach(btn => {
-      btn.addEventListener("click", () => { currentTab = btn.dataset.tab; render(); });
+    const backBtn = document.getElementById("back-home");
+    if (backBtn) backBtn.addEventListener("click", () => { currentCategory = null; currentSubtab = null; render(); });
+
+    document.querySelectorAll("[data-subtab]").forEach(btn => {
+      btn.addEventListener("click", () => { currentSubtab = btn.dataset.subtab; render(); });
     });
 
-    renderTabContent();
+    renderContent(category);
   }
 
-  function renderTabContent() {
+  function renderContent(category) {
     const content = document.getElementById("content");
-    const tabDef = TABS.find(t => t.id === currentTab);
 
-    if (currentTab === "accueil") {
-      const tiles = visibleTabsFor(currentUser).filter(t => t.id !== "accueil");
-      mountAccueil(content, currentUser, tiles, (tabId) => { currentTab = tabId; render(); });
+    if (!category) {
+      const cats = visibleCategoriesFor(currentUser);
+      mountDashboard(content, currentUser, cats, (catId) => {
+        currentCategory = catId;
+        const cat = CATEGORIES.find(c => c.id === catId);
+        const subs = categorySubtabsFor(cat, currentUser);
+        currentSubtab = subs[0]?.id || null;
+        render();
+      });
       return;
     }
-    if (currentTab === "astreinte") { mountCalendrier(content, currentUser); return; }
-    if (currentTab === "absences") { mountAbsencesTab(content, currentUser); return; }
-    if (currentTab === "interventions") { mountInterventionsTab(content, currentUser); return; }
-    if (currentTab === "synthese") { mountSyntheseTab(content, currentUser); return; }
-    if (currentTab === "heures") { mountHeures(content, currentUser); return; }
+
+    const subs = categorySubtabsFor(category, currentUser);
+    if (!subs.some(s => s.id === currentSubtab)) currentSubtab = subs[0]?.id || null;
+    const activeSub = subs.find(s => s.id === currentSubtab);
+
+    if (activeSub && activeSub.mount) {
+      activeSub.mount(content, currentUser);
+      return;
+    }
 
     content.innerHTML = `
       <div class="placeholder-card">
         <b>Bientôt disponible</b><br><br>
-        Ce module (${escapeHtml(tabDef?.label || "")}) arrive dans une prochaine phase du projet.
+        Ce module (${escapeHtml(activeSub?.label || category.label)}) arrive dans une prochaine phase du projet.
       </div>`;
   }
 

@@ -56,6 +56,27 @@ body{
 .tile-label{ font-size:14px; font-weight:700; }
 .tile-desc{ font-size:11px; color:var(--text-dim); }
 
+.bubble-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:20px; margin-top:6px; }
+.bubble-card{
+  background:linear-gradient(160deg, var(--panel), var(--panel-alt));
+  border:1px solid var(--border); border-radius:24px; padding:32px 20px;
+  text-align:center; cursor:pointer; display:flex; flex-direction:column;
+  align-items:center; gap:10px; color:var(--text); font-family:inherit;
+  transition:transform .12s ease, border-color .12s ease;
+}
+.bubble-card:hover{ border-color:var(--gold); transform:translateY(-3px); }
+.bubble-icon{
+  width:64px; height:64px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, rgba(217,178,76,.35), rgba(63,182,172,.15));
+  border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center; font-size:28px;
+}
+.bubble-label{ font-size:16px; font-weight:800; }
+.bubble-desc{ font-size:12px; color:var(--text-dim); }
+
+.back-btn{ background:none; border:none; color:var(--gold); font-size:12px; font-weight:700; cursor:pointer; padding:0 0 4px 0; display:block; }
+.back-btn:hover{ text-decoration:underline; }
+
 .hero{ background:linear-gradient(135deg, rgba(217,178,76,.08), rgba(63,182,172,.05)); border:1px solid var(--border); border-radius:14px; padding:18px; }
 .hero-label{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); margin-bottom:10px; font-family:ui-monospace,monospace; }
 .hero-blocks{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
