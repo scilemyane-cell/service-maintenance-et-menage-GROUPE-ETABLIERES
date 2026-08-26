@@ -1,5 +1,5 @@
 import { db } from "./firebase-init.js";
-import { doc, updateDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, setDoc, updateDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 export function watchUsers(callback) {
   return onSnapshot(collection(db, "users"), (snap) => {
@@ -11,4 +11,8 @@ export function watchUsers(callback) {
 
 export async function updateUser(uid, fields) {
   await updateDoc(doc(db, "users", uid), fields);
+}
+
+export async function createUserProfile(uid, fields) {
+  await setDoc(doc(db, "users", uid), fields);
 }

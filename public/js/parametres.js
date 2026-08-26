@@ -1,13 +1,20 @@
 import { esc, addDays, dateKey, fmtShort } from "./astreinte-logic.js";
 import { watchSites, saveSites } from "./sites-data.js";
-import { watchUsers, updateUser } from "./users-data.js";
+import { watchUsers, updateUser, createUserProfile } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
 import { roleLabel } from "./auth.js";
+import { firebaseConfig } from "./firebase-config.js";
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 const ALL_DAYS = ["LUN", "MAR", "MER", "JEU", "VEN"];
 
 let state = { sites: [], users: [], invitations: [] };
-let ui = { section: "fiches", editSiteId: null, invForm: { siteId: "", label: "", weekStart: "", nbWeeks: 1 } };
+let ui = {
+  section: "fiches", editSiteId: null,
+  invForm: { siteId: "", label: "", weekStart: "", nbWeeks: 1 },
+  newUser: { email: "", password: "", nom: "", role: "menage" },
+};
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
@@ -157,6 +164,28 @@ function renderFiches(container) {
   });
 }
 
+function randomPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let pwd = "";
+  for (let i = 0; i < 10; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+  return pwd;
+}
+
+// Crée le compte via une instance Firebase SECONDAIRE : createUserWithEmailAndPassword
+// connecte automatiquement la session avec le nouveau compte si on utilise l'app
+// principale — l'admin serait déconnecté. L'app secondaire évite ce piège.
+async function createUserAccount(email, password, nom, role) {
+  const secondaryApp = initializeApp(firebaseConfig, "secondary-" + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    await createUserProfile(cred.user.uid, { nom, role });
+    await signOut(secondaryAuth);
+  } finally {
+    await deleteApp(secondaryApp);
+  }
+}
+
 // =================================================================
 // Utilisateurs
 // =================================================================
@@ -165,7 +194,22 @@ const ROLES = ["admin", "n1", "technicien", "menage", "mi_temps", "direction"];
 function renderUsers(container) {
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Modifie le nom affiché ou le rôle de chaque compte. Utile par exemple si une société externe remplace temporairement un agent.</p>
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Créer un compte</h3>
+        <div class="form-grid">
+          <label>Email<input type="email" id="nu-email" value="${esc(ui.newUser.email)}" placeholder="prenom.nom@etablieres.fr"></label>
+          <label>Nom affiché<input id="nu-nom" value="${esc(ui.newUser.nom)}" placeholder="ex. Lionel"></label>
+          <label>Rôle<select id="nu-role">${ROLES.map(r => `<option value="${r}" ${ui.newUser.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select></label>
+          <label>Mot de passe<div style="display:flex;gap:6px">
+            <input id="nu-password" value="${esc(ui.newUser.password)}" placeholder="min. 6 caractères" style="flex:1">
+            <button class="nav-btn" id="nu-generate" type="button">🎲</button>
+          </div></label>
+        </div>
+        <button class="add-btn" id="nu-create">➕ Créer le compte</button>
+        <div id="nu-result"></div>
+      </div>
+
+      <p class="hint">Modifie le nom affiché ou le rôle de chaque compte existant ci-dessous. La suppression d'un compte se fait encore depuis la console Firebase (Authentication).</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th></tr></thead>
@@ -183,6 +227,37 @@ function renderUsers(container) {
       </div>
     </div>
   `;
+
+  document.getElementById("nu-email").addEventListener("input", (e) => { ui.newUser.email = e.target.value; });
+  document.getElementById("nu-nom").addEventListener("input", (e) => { ui.newUser.nom = e.target.value; });
+  document.getElementById("nu-role").addEventListener("change", (e) => { ui.newUser.role = e.target.value; });
+  document.getElementById("nu-password").addEventListener("input", (e) => { ui.newUser.password = e.target.value; });
+  document.getElementById("nu-generate").addEventListener("click", () => {
+    ui.newUser.password = randomPassword();
+    document.getElementById("nu-password").value = ui.newUser.password;
+  });
+  document.getElementById("nu-create").addEventListener("click", async () => {
+    const { email, password, nom, role } = ui.newUser;
+    const resultBox = document.getElementById("nu-result");
+    if (!email || !password || !nom) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Email, nom et mot de passe sont obligatoires.</p>`; return; }
+    if (password.length < 6) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Le mot de passe doit faire au moins 6 caractères.</p>`; return; }
+    resultBox.innerHTML = `<p class="hint">Création en cours…</p>`;
+    try {
+      await createUserAccount(email, password, nom, role);
+      resultBox.innerHTML = `
+        <div class="form-card" style="margin-top:12px">
+          <p class="hint">✓ Compte créé pour <b>${esc(nom)}</b>. Transmets-lui ces identifiants :</p>
+          <p style="font-family:ui-monospace,monospace;font-size:13px">Email : ${esc(email)}<br>Mot de passe : ${esc(password)}</p>
+        </div>`;
+      ui.newUser = { email: "", password: "", nom: "", role: "menage" };
+    } catch (e) {
+      const msg = e.code === "auth/email-already-in-use" ? "Cet email est déjà utilisé par un autre compte."
+        : e.code === "auth/invalid-email" ? "Adresse email invalide."
+        : "Erreur : " + e.message;
+      resultBox.innerHTML = `<p class="hint" style="color:var(--red)">${esc(msg)}</p>`;
+    }
+  });
+
   container.querySelectorAll("[data-user-nom]").forEach(inp => {
     inp.addEventListener("change", async () => { await updateUser(inp.dataset.userNom, { nom: inp.value }); });
   });
