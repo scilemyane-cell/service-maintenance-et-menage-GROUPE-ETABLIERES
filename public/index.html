@@ -19,13 +19,22 @@
         <button type="submit" class="login-btn" id="login-btn">Se connecter</button>
       </form>
       <div class="login-error" id="login-error"></div>
+      <button type="button" id="forgot-link" style="background:none;border:none;color:var(--text-dim);font-size:12px;margin-top:14px;cursor:pointer;text-decoration:underline">Mot de passe oublié ?</button>
+
+      <div id="forgot-box" style="display:none;margin-top:14px">
+        <label>Email du compte</label>
+        <input type="email" id="forgot-email" placeholder="ton-email@etablieres.fr">
+        <button type="button" class="login-btn" id="forgot-send" style="margin-top:10px">Envoyer le lien de réinitialisation</button>
+        <div id="forgot-status" style="font-size:12px;margin-top:10px"></div>
+      </div>
     </div>
   </div>
 
   <script type="module">
     import { login, watchAuth } from "./js/auth.js";
+    import { auth } from "./js/firebase-init.js";
+    import { sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
-    // Si déjà connecté, on saute directement vers l'application
     watchAuth((user) => { if (user) window.location.href = "app.html"; });
 
     const form = document.getElementById("login-form");
@@ -47,6 +56,35 @@
         errorBox.style.display = "block";
         btn.disabled = false;
         btn.textContent = "Se connecter";
+      }
+    });
+
+    const forgotLink = document.getElementById("forgot-link");
+    const forgotBox = document.getElementById("forgot-box");
+    const forgotEmail = document.getElementById("forgot-email");
+    const forgotSend = document.getElementById("forgot-send");
+    const forgotStatus = document.getElementById("forgot-status");
+
+    forgotLink.addEventListener("click", () => {
+      forgotBox.style.display = forgotBox.style.display === "none" ? "block" : "none";
+      if (forgotBox.style.display === "block") {
+        forgotEmail.value = document.getElementById("email").value.trim();
+        forgotEmail.focus();
+      }
+    });
+
+    forgotSend.addEventListener("click", async () => {
+      const email = forgotEmail.value.trim();
+      if (!email) { forgotStatus.innerHTML = `<span style="color:var(--red)">Indique ton email.</span>`; return; }
+      forgotSend.disabled = true;
+      forgotStatus.innerHTML = `<span style="color:var(--text-dim)">Envoi en cours…</span>`;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        forgotStatus.innerHTML = `<span style="color:var(--teal)">✓ Email envoyé si ce compte existe. Vérifie ta boîte de réception (et les spams).</span>`;
+      } catch (err) {
+        forgotStatus.innerHTML = `<span style="color:var(--teal)">✓ Email envoyé si ce compte existe. Vérifie ta boîte de réception (et les spams).</span>`;
+      } finally {
+        forgotSend.disabled = false;
       }
     });
   </script>
