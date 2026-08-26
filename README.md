@@ -143,3 +143,4 @@ dans le code mais leur espace dédié arrive en phase 3.
 - **Pas de tests automatisés en ligne** dans ce dépôt, mais la logique de
   `astreinte-logic.js` a été testée manuellement en dehors du navigateur
   (fonctions pures, sans dépendance Firebase/DOM) avant livraison.
+# trigger
