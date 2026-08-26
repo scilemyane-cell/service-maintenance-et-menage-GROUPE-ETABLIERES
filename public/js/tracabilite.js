@@ -3,11 +3,14 @@ import { watchSites } from "./sites-data.js";
 import { watchFiches } from "./fiches-data.js";
 
 let state = { fiches: [], sites: [] };
-let ui = { filterSite: "Tous", filterAgent: "Tous", openId: null };
+let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null };
 let unsubs = [];
 let mountedContainer = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+
+function siteDispositif(site) { return site?.dispositif || "Dispositif MNA"; }
+function ficheDispositif(fiche) { return siteDispositif(state.sites.find(s => s.id === fiche.siteId)); }
 
 export function mountTracabilite(container) {
   cleanup();
@@ -33,9 +36,12 @@ function taskCompletion(fiche, site) {
 
 function render() {
   if (!mountedContainer) return;
+  const dispositifs = ["Tous", ...new Set(state.sites.map(siteDispositif))];
   const agents = ["Tous", ...new Set(state.fiches.map(f => f.agentNom))];
-  const siteNames = ["Tous", ...state.sites.map(s => s.name)];
+  const sitesForFilter = ui.filterDispositif === "Tous" ? state.sites : state.sites.filter(s => siteDispositif(s) === ui.filterDispositif);
+  const siteNames = ["Tous", ...sitesForFilter.map(s => s.name)];
   const filtered = state.fiches
+    .filter(f => ui.filterDispositif === "Tous" || ficheDispositif(f) === ui.filterDispositif)
     .filter(f => ui.filterSite === "Tous" || f.siteName === ui.filterSite)
     .filter(f => ui.filterAgent === "Tous" || f.agentNom === ui.filterAgent)
     .sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
@@ -46,6 +52,7 @@ function render() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <div class="filters-row">
+        <label>Dispositif<select id="tr-disp">${dispositifs.map(d => `<option ${ui.filterDispositif === d ? 'selected' : ''}>${esc(d)}</option>`).join("")}</select></label>
         <label>Site<select id="tr-site">${siteNames.map(s => `<option ${ui.filterSite === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}</select></label>
         <label>Agent<select id="tr-agent">${agents.map(a => `<option ${ui.filterAgent === a ? 'selected' : ''}>${esc(a)}</option>`).join("")}</select></label>
       </div>
@@ -98,6 +105,7 @@ function render() {
     </div>
   `;
 
+  document.getElementById("tr-disp").addEventListener("change", (e) => { ui.filterDispositif = e.target.value; ui.filterSite = "Tous"; render(); });
   document.getElementById("tr-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; render(); });
   document.getElementById("tr-agent").addEventListener("change", (e) => { ui.filterAgent = e.target.value; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {

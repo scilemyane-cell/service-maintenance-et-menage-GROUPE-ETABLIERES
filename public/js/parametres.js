@@ -67,7 +67,10 @@ function renderFiches(container) {
 
       ${site ? `
       <div class="form-card">
-        <label style="font-size:11px;color:var(--text-dim)">Nom du site<input id="pf-site-name" value="${esc(site.name)}" style="margin-top:4px;background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px;width:100%"></label>
+        <div class="form-grid">
+          <label style="font-size:11px;color:var(--text-dim)">Nom du site<input id="pf-site-name" value="${esc(site.name)}" style="margin-top:4px;background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px;width:100%"></label>
+          <label style="font-size:11px;color:var(--text-dim)">Dispositif (regroupe les sites en onglets)<input id="pf-site-disp" value="${esc(site.dispositif || 'Dispositif MNA')}" placeholder="ex. Dispositif MNA" style="margin-top:4px;background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px;width:100%"></label>
+        </div>
       </div>
 
       ${site.rooms.map((room, ri) => `
@@ -107,13 +110,14 @@ function renderFiches(container) {
   document.getElementById("pf-site").addEventListener("change", (e) => { ui.editSiteId = e.target.value; render(); });
   document.getElementById("pf-add-site").addEventListener("click", () => {
     const id = "site-" + Date.now();
-    state.sites.push({ id, name: "Nouveau site", literie: true, rooms: [] });
+    state.sites.push({ id, name: "Nouveau site", dispositif: "Nouveau dispositif", literie: true, rooms: [] });
     ui.editSiteId = id;
     render();
   });
   if (!site) return;
 
   document.getElementById("pf-site-name").addEventListener("input", (e) => { site.name = e.target.value; });
+  document.getElementById("pf-site-disp").addEventListener("input", (e) => { site.dispositif = e.target.value; });
 
   container.querySelectorAll("[data-room-name]").forEach(inp => {
     inp.addEventListener("input", () => { site.rooms[inp.dataset.roomName].name = inp.value; });

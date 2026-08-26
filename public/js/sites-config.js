@@ -16,6 +16,7 @@ export const SITES = [
   {
     id: "svdp",
     name: "Maison MNA Saint Vincent de Paul",
+    dispositif: "Dispositif MNA",
     rooms: [
       room("Bureau", ["MAR"], [
         "Plinthes", "Poignées & interrupteurs", "Sols : aspirateur & lavage",
@@ -87,6 +88,7 @@ export const SITES = [
   {
     id: "dr",
     name: "Maison MNA DR",
+    dispositif: "Dispositif MNA",
     rooms: [
       room("Bureau", ["MAR"], [
         "Plinthes", "Poignées & interrupteurs", "Sols : aspirateur & lavage",
@@ -161,6 +163,7 @@ export const SITES = [
   {
     id: "aga",
     name: "Maison MNA AGA",
+    dispositif: "Dispositif MNA",
     rooms: [
       room("Bureau", ["JEU"], [
         "Plinthes", "Poignées & interrupteurs", "Sols : aspirateur & lavage",

@@ -5,13 +5,19 @@ import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
 
 let state = { fiches: [], sites: [] };
-let ui = { siteId: null, weekStart: null };
+let ui = { dispositif: null, siteId: null, weekStart: null };
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
 let saveTimer = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+
+function siteDispositif(site) { return site.dispositif || "Dispositif MNA"; }
+
+function dispositifs() {
+  return [...new Set(state.sites.map(siteDispositif))];
+}
 
 function mondayOf(date) {
   const offset = (date.getDay() + 6) % 7;
@@ -24,7 +30,12 @@ export function mountFiches(container, user) {
   mountedUser = user;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchSites((s) => { state.sites = s; if (!ui.siteId) ui.siteId = s[0]?.id; render(); }));
+  unsubs.push(watchSites((s) => {
+    state.sites = s;
+    if (!ui.dispositif) ui.dispositif = siteDispositif(s[0] || {});
+    if (!ui.siteId) ui.siteId = s.find(x => siteDispositif(x) === ui.dispositif)?.id || s[0]?.id;
+    render();
+  }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
 }
 
@@ -53,18 +64,25 @@ function scheduleSave(id, data) {
 function render() {
   if (!mountedContainer) return;
   if (state.sites.length === 0) { mountedContainer.innerHTML = `<div class="hint">Chargement des sites…</div>`; return; }
-  const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
+  const disps = dispositifs();
+  const sitesInDisp = state.sites.filter(s => siteDispositif(s) === ui.dispositif);
+  const site = sitesInDisp.find(s => s.id === ui.siteId) || sitesInDisp[0];
   const weekStartDate = new Date(ui.weekStart);
   const weekEndDate = addDays(weekStartDate, 4);
   const { id, data } = currentFiche();
 
   mountedContainer.innerHTML = `
     <div class="stack">
+      <div class="tabs" style="background:none;border:none;padding:0;margin-bottom:-6px">
+        ${disps.map(d => `<button class="tab-btn ${d === ui.dispositif ? 'active' : ''}" data-disp="${esc(d)}">${esc(d)}</button>`).join("")}
+      </div>
+
       <div class="form-card">
         <div class="form-grid">
+          ${sitesInDisp.length > 1 ? `
           <label>Site
-            <select id="fc-site">${state.sites.map(s => `<option value="${s.id}" ${s.id === ui.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join("")}</select>
-          </label>
+            <select id="fc-site">${sitesInDisp.map(s => `<option value="${s.id}" ${s.id === ui.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join("")}</select>
+          </label>` : `<label>Site<input value="${esc(site?.name || '')}" disabled></label>`}
           <label>Semaine
             <div style="display:flex;align-items:center;gap:8px">
               <button class="nav-btn" id="fc-prev">‹</button>
@@ -139,9 +157,16 @@ function render() {
     </div>
   `;
 
-  document.getElementById("fc-site").addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });
+  document.getElementById("fc-site")?.addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });
   document.getElementById("fc-prev").addEventListener("click", () => { ui.weekStart = dateKey(addDays(weekStartDate, -7)); render(); });
   document.getElementById("fc-next").addEventListener("click", () => { ui.weekStart = dateKey(addDays(weekStartDate, 7)); render(); });
+  mountedContainer.querySelectorAll("[data-disp]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      ui.dispositif = btn.dataset.disp;
+      ui.siteId = state.sites.find(s => siteDispositif(s) === ui.dispositif)?.id;
+      render();
+    });
+  });
 
   mountedContainer.querySelectorAll("[data-cell]").forEach(cb => {
     cb.addEventListener("change", () => {
