@@ -14,9 +14,8 @@
 <script type="module">
   import { watchAuth, logout, roleLabel } from "./js/auth.js";
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab } from "./js/planning.js";
-  import { mountHeures } from "./js/heures.js";
   import { mountDashboard } from "./js/home.js";
-  import { mountFichesForDispositif } from "./js/fiches.js";
+  import { mountDispositifPage } from "./js/dispositif-page.js";
   import { mountTracabilite } from "./js/tracabilite.js";
   import { mountParametres } from "./js/parametres.js";
   import { watchSites } from "./js/sites-data.js";
@@ -32,11 +31,10 @@
 
   function menageSubtabs() {
     const dispTabs = dispositifsList.map(d => ({
-      id: "disp-" + d, label: d, icon: "📋", roles: MENAGE_ROLES,
-      mount: (container, user) => mountFichesForDispositif(container, user, d),
+      id: "disp-" + d, label: d, icon: "🧹", roles: MENAGE_ROLES,
+      mount: (container, user) => mountDispositifPage(container, user, d),
     }));
     return [
-      { id: "heures",      label: "Heures",      icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
       ...dispTabs,
       { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES, mount: mountTracabilite },
       { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"], mount: mountParametres },
