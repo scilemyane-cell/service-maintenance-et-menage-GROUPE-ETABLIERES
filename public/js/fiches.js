@@ -78,8 +78,25 @@ function currentFiche() {
 }
 
 function scheduleSave(id, data) {
+  setSaveStatus("saving");
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { saveFiche(id, data); }, 500);
+  saveTimer = setTimeout(async () => {
+    try {
+      await saveFiche(id, data);
+      setSaveStatus("ok");
+    } catch (e) {
+      console.error("Erreur d'enregistrement de la fiche:", e);
+      setSaveStatus("error", e.message || String(e));
+    }
+  }, 500);
+}
+
+function setSaveStatus(status, errorMsg) {
+  const el = document.getElementById("fc-save-status");
+  if (!el) return;
+  if (status === "saving") el.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+  else if (status === "ok") el.innerHTML = `<span style="color:var(--teal)">✓ Enregistré</span>`;
+  else if (status === "error") el.innerHTML = `<span style="color:var(--red)">❌ Échec de l'enregistrement : ${esc(errorMsg)}</span>`;
 }
 
 function render() {
@@ -172,9 +189,10 @@ function render() {
         <textarea id="fc-obs-generales" rows="3" style="width:100%;background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:9px 10px;color:var(--text);font-size:13px;font-family:inherit">${esc(data.observationsGenerales)}</textarea>
       </div>
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="add-btn" id="fc-save">💾 Enregistrer</button>
         <button class="nav-btn" id="fc-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "✓ Marquer la semaine comme terminée"}</button>
+        <span id="fc-save-status" style="font-size:12px"></span>
       </div>
     </div>
   `;
@@ -209,26 +227,30 @@ function render() {
       scheduleSave(id, data);
     });
   });
-  document.getElementById("fc-add-chambre")?.addEventListener("click", () => {
+  document.getElementById("fc-add-chambre")?.addEventListener("click", async () => {
     data.chambres.push({ chambre: "", date: "", observation: "" });
-    saveFiche(id, data);
     render();
+    try { await saveFiche(id, data); } catch (e) { console.error(e); alert("Échec de l'enregistrement : " + e.message); }
   });
   mountedContainer.querySelectorAll("[data-del-chambre]").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       data.chambres.splice(parseInt(btn.dataset.delChambre, 10), 1);
-      saveFiche(id, data);
       render();
+      try { await saveFiche(id, data); } catch (e) { console.error(e); alert("Échec de l'enregistrement : " + e.message); }
     });
   });
   document.getElementById("fc-obs-generales").addEventListener("input", (e) => {
     data.observationsGenerales = e.target.value;
     scheduleSave(id, data);
   });
-  document.getElementById("fc-save").addEventListener("click", () => { saveFiche(id, data); });
-  document.getElementById("fc-submit").addEventListener("click", () => {
+  document.getElementById("fc-save").addEventListener("click", async () => {
+    setSaveStatus("saving");
+    try { await saveFiche(id, data); setSaveStatus("ok"); }
+    catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
+  });
+  document.getElementById("fc-submit").addEventListener("click", async () => {
     data.submitted = !data.submitted;
-    saveFiche(id, data);
-    render();
+    try { await saveFiche(id, data); render(); }
+    catch (e) { console.error(e); alert("Échec de l'enregistrement : " + e.message); }
   });
 }
