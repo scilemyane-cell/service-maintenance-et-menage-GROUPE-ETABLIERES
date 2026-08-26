@@ -2,12 +2,13 @@ import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchDispositifSettings, templateFor } from "./dispositif-settings-data.js";
 import { watchRepartitions, saveRepartition, repartitionId } from "./heures-repartition-data.js";
 import { watchUsers } from "./users-data.js";
+import { watchHeuresParams } from "./heures-data.js";
 
 const MENAGE_ROLES = ["menage", "mi_temps"];
 const DAYS = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven", SAM: "Sam", DIM: "Dim" };
 
-let state = { settings: {}, repartitions: [], agents: [] };
+let state = { settings: {}, repartitions: [], agents: [], params: { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 } };
 let ui = { weekStart: null, actingUid: null, actingNom: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -35,6 +36,7 @@ export function mountRepartitionForDispositif(container, user, dispositif) {
   unsubs.push(watchDispositifSettings((s) => { state.settings = s; render(); }));
   unsubs.push(watchRepartitions((r) => { state.repartitions = r; render(); }));
   unsubs.push(watchUsers((u) => { state.agents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchHeuresParams((p) => { state.params = p; render(); }));
 }
 
 function effectiveAgent() {
@@ -84,9 +86,27 @@ function scheduleSave(id, data) {
   saveDebounceId = setTimeout(() => { persist(id, data); }, 500);
 }
 
+// Moyenne glissante sur N semaines pour cet agent, sur ce dispositif
+// précisément (les heures saisies ailleurs — onglet Heures, autres
+// dispositifs — ne sont pas incluses dans ce calcul-ci).
+function slidingAverageBreach(agentUid, dispositif, nbSemaines, seuil, currentWeekStart, currentTotal) {
+  const byWeek = {};
+  state.repartitions
+    .filter(r => r.agentUid === agentUid && r.dispositif === dispositif)
+    .forEach(r => { byWeek[r.weekStart] = dayTotals(r).__total; });
+  byWeek[currentWeekStart] = currentTotal; // inclut la semaine en cours d'édition
+  const weekKeys = Object.keys(byWeek).sort();
+  if (weekKeys.length < nbSemaines) return null;
+  const lastWeeks = weekKeys.slice(-nbSemaines);
+  const sum = lastWeeks.reduce((s, wk) => s + (byWeek[wk] || 0), 0);
+  const avg = sum / nbSemaines;
+  return avg > seuil ? avg : null;
+}
+
 function dayTotals(data) {
   const totals = emptyDays();
   data.lignes.forEach(l => { DAYS.forEach(d => { totals[d] += parseFloat(l.jours[d]) || 0; }); });
+  totals.__total = DAYS.reduce((s, d) => s + totals[d], 0);
   return totals;
 }
 
@@ -110,6 +130,9 @@ function renderView(id, data) {
   const totalSemaine = DAYS.reduce((s, d) => s + totals[d], 0);
   const joursTravailles = DAYS.filter(d => totals[d] > 0);
   const aRepos = joursTravailles.length < 7;
+  const agent = effectiveAgent();
+  const depasseSemaine = totalSemaine > state.params.seuilSemaine;
+  const moyenneDepassee = slidingAverageBreach(agent.uid, mountedDispositif, state.params.nbSemainesMoyenne, state.params.seuilMoyenne, ui.weekStart, totalSemaine);
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -136,6 +159,9 @@ function renderView(id, data) {
 
       ${aRepos ? `<div class="stat-chip ok" style="width:fit-content">✓ Repos hebdomadaire présent (${7 - joursTravailles.length} jour${7 - joursTravailles.length > 1 ? 's' : ''} non travaillé${7 - joursTravailles.length > 1 ? 's' : ''})</div>`
               : `<div class="alert-banner">⚠️ Aucun jour de repos détecté cette semaine — tous les jours affichent des heures.</div>`}
+
+      ${depasseSemaine ? `<div class="alert-banner">⚠️ Total de la semaine (${totalSemaine.toFixed(2)}h) au-dessus du seuil de ${state.params.seuilSemaine}h/semaine.</div>` : ""}
+      ${moyenneDepassee ? `<div class="alert-banner">⚠️ Moyenne de ${moyenneDepassee.toFixed(2)}h/semaine sur les ${state.params.nbSemainesMoyenne} dernières semaines (seuil : ${state.params.seuilMoyenne}h) — sur ce dispositif uniquement.</div>` : ""}
 
       ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Semaine marquée comme terminée</div>` : ""}
 
