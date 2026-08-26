@@ -5,7 +5,7 @@ import {
 } from "./astreinte-logic.js";
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
-  watchInterventions, addIntervention, deleteIntervention,
+  watchInterventions, addIntervention, updateIntervention, deleteIntervention,
 } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -329,9 +329,10 @@ function renderDocPreview() {
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Type</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Description</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Transmis</th>
         </tr></thead>
         <tbody>
-          ${filtered.length === 0 ? `<tr><td colspan="6" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
+          ${filtered.length === 0 ? `<tr><td colspan="7" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
             filtered.map(i => `
               <tr>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${new Date(i.date).toLocaleDateString("fr-FR")}</td>
@@ -340,12 +341,14 @@ function renderDocPreview() {
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.type)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.description)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heures}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.transmis ? "✓" : ""}</td>
               </tr>`).join("")}
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
             <td colspan="5" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${total.toFixed(2)} h</td>
+            <td style="border:1px solid #999;padding:4px 6px"></td>
           </tr>
         </tfoot>
       </table>
@@ -399,14 +402,15 @@ function renderInterventions(container, perms) {
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th>${perms.isEditor ? '<th>Transmis RH</th>' : ''}<th></th></tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="7" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="8" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
               sorted.map(i => {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
                 return `<tr>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
                   <td>${i.heures} h</td><td>${esc(i.description)}</td>
+                  ${perms.isEditor ? `<td><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-transmis="${i.id}" ${i.transmis ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--teal)">${i.transmis ? `<span class="tag" style="background:var(--teal);font-size:9px">Transmis</span>` : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</label></td>` : ''}
                   <td>${canDelete ? `<button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
                 </tr>`;
               }).join("")}
@@ -445,7 +449,24 @@ function renderInterventions(container, perms) {
       }
     });
     container.querySelectorAll("[data-del]").forEach(btn => {
-      btn.addEventListener("click", async () => { await deleteIntervention(btn.dataset.del); });
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.del;
+        state.interventions = state.interventions.filter(i => i.id !== id);
+        renderAll();
+        await deleteIntervention(id);
+      });
+    });
+  }
+
+  if (perms.isEditor) {
+    container.querySelectorAll("[data-transmis]").forEach(cb => {
+      cb.addEventListener("change", async () => {
+        const id = cb.dataset.transmis;
+        const record = state.interventions.find(i => i.id === id);
+        if (record) record.transmis = cb.checked;
+        renderAll();
+        await updateIntervention(id, { transmis: cb.checked });
+      });
     });
   }
 

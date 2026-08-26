@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, getDoc, setDoc,
+  doc, getDoc, setDoc, updateDoc,
   collection, addDoc, deleteDoc, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -42,6 +42,9 @@ export function watchInterventions(callback) {
 }
 export async function addIntervention(record) {
   await addDoc(collection(db, "interventions"), record);
+}
+export async function updateIntervention(id, fields) {
+  await updateDoc(doc(db, "interventions", id), fields);
 }
 export async function deleteIntervention(id) {
   await deleteDoc(doc(db, "interventions", id));
