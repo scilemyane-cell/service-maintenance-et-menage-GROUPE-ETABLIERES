@@ -71,7 +71,8 @@ function render() {
       </div>
 
       ${opened ? `
-      <div class="form-card">
+      <button class="add-btn" id="tr-print">🖨️ Exporter en PDF (imprimer)</button>
+      <div class="form-card print-fiche">
         <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">${esc(opened.siteName)} — ${fmtShort(new Date(opened.weekStart))} → ${fmtShort(new Date(opened.weekEnd))} — ${esc(opened.agentNom)}</h3>
         ${openedSite ? openedSite.rooms.map((room, ri) => `
           <div style="margin-bottom:14px">
@@ -88,6 +89,10 @@ function render() {
           </div>
         `).join("") : ""}
         ${opened.observationsGenerales ? `<div class="hint"><b>Observations générales :</b> ${esc(opened.observationsGenerales)}</div>` : ""}
+        <div style="margin-top:20px;display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim)">
+          <span>Signature agent : ____________________</span>
+          <span>Signature éducateur : ____________________</span>
+        </div>
       </div>` : ""}
     </div>
   `;
@@ -97,4 +102,5 @@ function render() {
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
+  document.getElementById("tr-print")?.addEventListener("click", () => { window.print(); });
 }

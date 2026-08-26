@@ -140,3 +140,16 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
   .cal-day{ min-height:52px; padding:4px 3px; }
   .cal-chip{ font-size:8px; }
 }
+
+/* ---- Impression / export PDF manuel d'une fiche ---- */
+.print-only{ display:none; }
+@media print{
+  body{ background:#fff !important; color:#000 !important; }
+  .topbar, .tabs, .filters-row, .add-btn, .del-btn, .nav-btn, #tr-site, #tr-agent{ display:none !important; }
+  .content > .stack > *:not(.print-fiche){ display:none !important; }
+  .print-only{ display:block !important; }
+  .print-fiche{ color:#000 !important; background:#fff !important; border:1px solid #999 !important; }
+  .print-fiche table{ color:#000; }
+  .print-fiche th, .print-fiche td{ border:1px solid #999 !important; color:#000 !important; }
+  .print-fiche h3{ color:#000 !important; }
+}
