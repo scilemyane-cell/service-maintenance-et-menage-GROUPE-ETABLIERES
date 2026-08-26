@@ -3,6 +3,7 @@ import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
 import { watchAccess, setDispositifAccess } from "./access-data.js";
+import { watchDispositifSettings, setDispositifHeures, heuresEnabled } from "./dispositif-settings-data.js";
 import { roleLabel } from "./auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -31,6 +32,7 @@ async function createUserAccount(email, password, nom, role) {
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     await createUserProfile(cred.user.uid, { nom, role });
     await signOut(secondaryAuth);
+    return cred.user.uid;
   } finally {
     await deleteApp(secondaryApp);
   }
@@ -244,8 +246,9 @@ async function showResult(token) {
 // =================================================================
 // PARAMÈTRES D'UN DISPOSITIF — Fiches (scoped) + Accès (scoped)
 // =================================================================
-let dpState = { sites: [], users: [], access: {} };
+let dpState = { sites: [], users: [], access: {}, settings: {} };
 let dpUi = { section: "fiches", editSiteId: null };
+let dpNewUserForm = { email: "", password: "", nom: "" };
 
 export function mountParametresDispositif(container, user, dispositif) {
   cleanup();
@@ -260,12 +263,14 @@ export function mountParametresDispositif(container, user, dispositif) {
   }));
   unsubs.push(watchUsers((u) => { dpState.users = u.filter(x => MENAGE_ROLES.includes(x.role)); renderParametresDispositif(container, user, dispositif); }));
   unsubs.push(watchAccess((a) => { dpState.access = a; renderParametresDispositif(container, user, dispositif); }));
+  unsubs.push(watchDispositifSettings((s) => { dpState.settings = s; renderParametresDispositif(container, user, dispositif); }));
 }
 
 function renderParametresDispositif(container, user, dispositif) {
   container.innerHTML = `
     <div class="stack">
       <div class="tabs" style="background:none;border:none;padding:0;margin-bottom:-6px">
+        <button class="tab-btn ${dpUi.section === 'general' ? 'active' : ''}" data-dpp-section="general">⚙️ Général</button>
         <button class="tab-btn ${dpUi.section === 'fiches' ? 'active' : ''}" data-dpp-section="fiches">📋 Fiches</button>
         <button class="tab-btn ${dpUi.section === 'acces' ? 'active' : ''}" data-dpp-section="acces">🔐 Accès</button>
       </div>
@@ -276,8 +281,75 @@ function renderParametresDispositif(container, user, dispositif) {
     btn.addEventListener("click", () => { dpUi.section = btn.dataset.dppSection; renderParametresDispositif(container, user, dispositif); });
   });
   const sub = document.getElementById("dpp-sub");
+  if (dpUi.section === "general") return renderGeneralEditor(sub, user, dispositif);
   if (dpUi.section === "fiches") return renderFichesEditor(sub, dispositif);
   if (dpUi.section === "acces") return renderAccesEditor(sub, dispositif);
+}
+
+function renderGeneralEditor(container, user, dispositif) {
+  const heuresOn = heuresEnabled(dpState.settings, dispositif);
+  container.innerHTML = `
+    <div class="stack">
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Suivi des heures</h3>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <input type="checkbox" id="gen-heures" ${heuresOn ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)">
+          Activer l'onglet "Heures" pour ce dispositif
+        </label>
+        <p class="hint" style="margin-top:8px">À désactiver pour un dispositif à contrat fixe (ex. 35h) qui n'a pas besoin de saisie horaire au jour le jour.</p>
+      </div>
+
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Créer un compte pour ce dispositif</h3>
+        <p class="hint" style="margin-bottom:10px">Le compte créé ici est automatiquement autorisé à accéder à ce dispositif (voir onglet Accès pour l'ajuster).</p>
+        <div class="form-grid">
+          <label>Email<input type="email" id="dgn-email" value="${esc(dpNewUserForm.email)}" placeholder="prenom.nom@etablieres.fr"></label>
+          <label>Nom affiché<input id="dgn-nom" value="${esc(dpNewUserForm.nom)}" placeholder="ex. Daoud"></label>
+          <label>Mot de passe<div style="display:flex;gap:6px">
+            <input id="dgn-password" value="${esc(dpNewUserForm.password || "")}" placeholder="min. 6 caractères" style="flex:1">
+            <button class="nav-btn" id="dgn-generate" type="button">🎲</button>
+          </div></label>
+        </div>
+        <button class="add-btn" id="dgn-create">➕ Créer et autoriser sur ce dispositif</button>
+        <div id="dgn-result"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("gen-heures").addEventListener("change", async (e) => {
+    await setDispositifHeures(dispositif, e.target.checked);
+  });
+
+  document.getElementById("dgn-email").addEventListener("input", (e) => { dpNewUserForm.email = e.target.value; });
+  document.getElementById("dgn-nom").addEventListener("input", (e) => { dpNewUserForm.nom = e.target.value; });
+  document.getElementById("dgn-password").addEventListener("input", (e) => { dpNewUserForm.password = e.target.value; });
+  document.getElementById("dgn-generate").addEventListener("click", () => {
+    dpNewUserForm.password = randomPassword();
+    document.getElementById("dgn-password").value = dpNewUserForm.password;
+  });
+  document.getElementById("dgn-create").addEventListener("click", async () => {
+    const { email, password, nom } = dpNewUserForm;
+    const resultBox = document.getElementById("dgn-result");
+    if (!email || !password || !nom) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Email, nom et mot de passe sont obligatoires.</p>`; return; }
+    if (password.length < 6) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Le mot de passe doit faire au moins 6 caractères.</p>`; return; }
+    resultBox.innerHTML = `<p class="hint">Création en cours…</p>`;
+    try {
+      const uid = await createUserAccount(email, password, nom, "menage");
+      const currentAccess = dpState.access[dispositif] || [];
+      await setDispositifAccess(dispositif, [...currentAccess, uid]);
+      resultBox.innerHTML = `
+        <div class="form-card" style="margin-top:12px">
+          <p class="hint">✓ Compte créé pour <b>${esc(nom)}</b> et autorisé sur ce dispositif. Transmets-lui ces identifiants :</p>
+          <p style="font-family:ui-monospace,monospace;font-size:13px">Email : ${esc(email)}<br>Mot de passe : ${esc(password)}</p>
+        </div>`;
+      dpNewUserForm = { email: "", password: "", nom: "" };
+    } catch (e) {
+      const msg = e.code === "auth/email-already-in-use" ? "Cet email est déjà utilisé par un autre compte."
+        : e.code === "auth/invalid-email" ? "Adresse email invalide."
+        : "Erreur : " + e.message;
+      resultBox.innerHTML = `<p class="hint" style="color:var(--red)">${esc(msg)}</p>`;
+    }
+  });
 }
 
 function renderFichesEditor(container, dispositif) {
