@@ -7,7 +7,7 @@ import { watchHeures, addHeures, validateHeures, deleteHeures, watchHeuresParams
 // sans avoir besoin de changer le code.
 // ⚠️ Ce sont des seuils d'ALERTE pour aider au suivi, pas un calcul
 // juridiquement certifié — à valider avec un service RH/juridique.
-let params = { seuilSemaine: 48, nbSemainesMoyenne: 8, seuilMoyenne: 44 };
+let params = { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 };
 
 let state = { heures: [] };
 let ui = {

@@ -4,7 +4,7 @@ import {
   collection, addDoc, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-const DEFAULT_PARAMS = { seuilSemaine: 48, nbSemainesMoyenne: 8, seuilMoyenne: 44 };
+const DEFAULT_PARAMS = { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 };
 
 // ---- Paramètres de seuils (modifiables par un admin/n1 dans l'appli) ----
 export function watchHeuresParams(callback) {
