@@ -360,6 +360,7 @@ function renderDocPreview() {
 
 function renderInterventions(container, perms) {
   const intervenants = [...state.people.n1, ...state.people.n2];
+  if (!ui.form.technicien && intervenants.length > 0) ui.form.technicien = intervenants[0];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   const isLockedTech = perms.isTech && !perms.isEditor;
 
@@ -380,6 +381,7 @@ function renderInterventions(container, perms) {
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
         <button class="add-btn" id="add-interv">➕ Ajouter l'intervention</button>
+        <div id="interv-status" style="margin-top:8px;font-size:12px"></div>
       </div>` : ""}
 
       ${perms.isEditor ? `
@@ -424,14 +426,23 @@ function renderInterventions(container, perms) {
       if (techEl) techEl.addEventListener("input", () => { ui.form.technicien = techEl.value; });
     }
     document.getElementById("add-interv").addEventListener("click", async () => {
-      if (!ui.form.site || !ui.form.type || !ui.form.heures) return;
-      await addIntervention({
-        date: ui.form.date, technicien: ui.form.technicien, site: ui.form.site,
-        type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
-        createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
-      });
-      ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
-      renderAll();
+      const statusEl = document.getElementById("interv-status");
+      if (!ui.form.technicien) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un intervenant.</span>`; return; }
+      if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un site.</span>`; return; }
+      if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
+      if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      try {
+        await addIntervention({
+          date: ui.form.date, technicien: ui.form.technicien, site: ui.form.site,
+          type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
+          createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
+        });
+        ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
+        renderAll();
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+      }
     });
     container.querySelectorAll("[data-del]").forEach(btn => {
       btn.addEventListener("click", async () => { await deleteIntervention(btn.dataset.del); });
