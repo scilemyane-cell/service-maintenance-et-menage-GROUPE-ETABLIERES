@@ -17,11 +17,12 @@
   import { mountDashboard } from "./js/home.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
+  import { mountRepartitionForDispositif } from "./js/heures-repartition.js";
+  import { watchDispositifSettings, heuresEnabled } from "./js/dispositif-settings-data.js";
   import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
   import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif } from "./js/parametres.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
-  import { watchDispositifSettings, heuresEnabled } from "./js/dispositif-settings-data.js";
 
   let currentUser = null;
   let currentCategory = null; // null = accueil (bulles)
@@ -41,7 +42,10 @@
         id: "disp-" + d, label: d, icon: "🧹", desc: "Fiches, traçabilité",
         subtabs: [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
-          ...(heuresEnabled(dispositifSettings, d) ? [{ id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures }] : []),
+          ...(heuresEnabled(dispositifSettings, d) ? [
+            { id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
+            { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
+          ] : []),
           { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"],     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],

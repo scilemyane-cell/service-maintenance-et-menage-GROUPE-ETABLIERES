@@ -3,7 +3,7 @@ import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
 import { watchAccess, setDispositifAccess } from "./access-data.js";
-import { watchDispositifSettings, setDispositifHeures, heuresEnabled } from "./dispositif-settings-data.js";
+import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate } from "./dispositif-settings-data.js";
 import { roleLabel } from "./auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -288,6 +288,8 @@ function renderParametresDispositif(container, user, dispositif) {
 
 function renderGeneralEditor(container, user, dispositif) {
   const heuresOn = heuresEnabled(dpState.settings, dispositif);
+  const template = templateFor(dpState.settings, dispositif);
+  const totalTemplate = template.reduce((s, t) => s + (t.heures || 0), 0);
   container.innerHTML = `
     <div class="stack">
       <div class="form-card">
@@ -298,6 +300,28 @@ function renderGeneralEditor(container, user, dispositif) {
         </label>
         <p class="hint" style="margin-top:8px">À désactiver pour un dispositif à contrat fixe (ex. 35h) qui n'a pas besoin de saisie horaire au jour le jour.</p>
       </div>
+
+      ${heuresOn ? `
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Modèle hebdomadaire de répartition (${totalTemplate}h)</h3>
+        <p class="hint" style="margin-bottom:10px">Ces lignes préremplissent automatiquement chaque semaine dans l'onglet "Répartition" de l'agent — il peut ensuite ajuster les heures réelles et en ajouter.</p>
+        <div class="table-wrap" style="border:none">
+          <table>
+            <thead><tr><th>Tâche</th><th style="width:110px">Heures / semaine</th><th></th></tr></thead>
+            <tbody>
+              ${template.map((t, i) => `
+                <tr>
+                  <td><input data-tpl-label="${i}" value="${esc(t.label)}" style="width:100%"></td>
+                  <td><input type="number" step="0.25" min="0" data-tpl-heures="${i}" value="${t.heures}" style="width:100%"></td>
+                  <td><button class="del-btn" data-tpl-del="${i}">🗑️</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+        <button class="nav-btn" id="tpl-add" style="margin-top:10px">➕ Ajouter une ligne au modèle</button>
+        <button class="add-btn" id="tpl-save" style="margin-top:10px">💾 Enregistrer le modèle</button>
+      </div>` : ""}
 
       <div class="form-card">
         <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Créer un compte pour ce dispositif</h3>
@@ -318,6 +342,27 @@ function renderGeneralEditor(container, user, dispositif) {
 
   document.getElementById("gen-heures").addEventListener("change", async (e) => {
     await setDispositifHeures(dispositif, e.target.checked);
+  });
+
+  let workingTemplate = JSON.parse(JSON.stringify(template));
+  container.querySelectorAll("[data-tpl-label]").forEach(inp => {
+    inp.addEventListener("input", () => { workingTemplate[inp.dataset.tplLabel].label = inp.value; });
+  });
+  container.querySelectorAll("[data-tpl-heures]").forEach(inp => {
+    inp.addEventListener("input", () => { workingTemplate[inp.dataset.tplHeures].heures = parseFloat(inp.value) || 0; });
+  });
+  container.querySelectorAll("[data-tpl-del]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      workingTemplate.splice(parseInt(btn.dataset.tplDel, 10), 1);
+      await setDispositifTemplate(dispositif, workingTemplate);
+    });
+  });
+  document.getElementById("tpl-add")?.addEventListener("click", async () => {
+    workingTemplate.push({ label: "Nouvelle tâche", heures: 0 });
+    await setDispositifTemplate(dispositif, workingTemplate);
+  });
+  document.getElementById("tpl-save")?.addEventListener("click", async () => {
+    await setDispositifTemplate(dispositif, workingTemplate);
   });
 
   document.getElementById("dgn-email").addEventListener("input", (e) => { dpNewUserForm.email = e.target.value; });

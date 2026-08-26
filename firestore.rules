@@ -77,5 +77,14 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);
       allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
     }
+    // ---- Répartition hebdomadaire des heures par tâche ----
+    // Même logique que fiches : chacun gère ses propres enregistrements,
+    // un éditeur (admin/n1) peut tout gérer (y compris remplir au nom
+    // d'un agent).
+    match /heures-repartition/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);
+      allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
+    }
   }
 }
