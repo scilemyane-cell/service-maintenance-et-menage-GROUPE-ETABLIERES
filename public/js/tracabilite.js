@@ -101,6 +101,7 @@ function render() {
       ${opened ? `
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="tr-print">🖨️ Exporter en PDF (imprimer)</button>
+        <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
       </div>
       <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
@@ -170,6 +171,7 @@ function render() {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
   document.getElementById("tr-print")?.addEventListener("click", () => { window.print(); });
+  document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
     if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
       await deleteFiche(ui.openId);
