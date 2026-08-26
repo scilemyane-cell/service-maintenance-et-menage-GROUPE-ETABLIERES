@@ -5,7 +5,7 @@ import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
 
 let state = { fiches: [], sites: [] };
-let ui = { dispositif: null, siteId: null, weekStart: null };
+let ui = { dispositif: null, lockDispositif: false, siteId: null, weekStart: null };
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
@@ -28,12 +28,33 @@ export function mountFiches(container, user) {
   cleanup();
   mountedContainer = container;
   mountedUser = user;
+  ui.lockDispositif = false;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => {
     state.sites = s;
     if (!ui.dispositif) ui.dispositif = siteDispositif(s[0] || {});
     if (!ui.siteId) ui.siteId = s.find(x => siteDispositif(x) === ui.dispositif)?.id || s[0]?.id;
+    render();
+  }));
+  unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
+}
+
+// Même écran, mais verrouillé sur un dispositif précis (pas de barre
+// d'onglets interne) — utilisé quand chaque dispositif a son propre
+// onglet de premier niveau dans la navigation.
+export function mountFichesForDispositif(container, user, dispositif) {
+  cleanup();
+  mountedContainer = container;
+  mountedUser = user;
+  ui.dispositif = dispositif;
+  ui.lockDispositif = true;
+  ui.siteId = null;
+  if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
+  container.innerHTML = `<div class="hint">Chargement…</div>`;
+  unsubs.push(watchSites((s) => {
+    state.sites = s;
+    if (!ui.siteId) ui.siteId = s.find(x => siteDispositif(x) === dispositif)?.id;
     render();
   }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
@@ -73,9 +94,10 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
+      ${!ui.lockDispositif ? `
       <div class="tabs" style="background:none;border:none;padding:0;margin-bottom:-6px">
         ${disps.map(d => `<button class="tab-btn ${d === ui.dispositif ? 'active' : ''}" data-disp="${esc(d)}">${esc(d)}</button>`).join("")}
-      </div>
+      </div>` : ""}
 
       <div class="form-card">
         <div class="form-grid">

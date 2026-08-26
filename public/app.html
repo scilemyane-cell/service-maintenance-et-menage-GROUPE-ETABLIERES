@@ -16,15 +16,32 @@
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab } from "./js/planning.js";
   import { mountHeures } from "./js/heures.js";
   import { mountDashboard } from "./js/home.js";
-  import { mountFiches } from "./js/fiches.js";
+  import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountTracabilite } from "./js/tracabilite.js";
   import { mountParametres } from "./js/parametres.js";
+  import { watchSites } from "./js/sites-data.js";
 
   let currentUser = null;
   let currentCategory = null; // null = accueil (bulles)
   let currentSubtab = null;
+  let dispositifsList = [];
+  let sitesSubscribed = false;
 
   const ALL = ["admin","n1","technicien","menage","mi_temps","direction"];
+  const MENAGE_ROLES = ["admin","n1","direction","menage","mi_temps"];
+
+  function menageSubtabs() {
+    const dispTabs = dispositifsList.map(d => ({
+      id: "disp-" + d, label: d, icon: "📋", roles: MENAGE_ROLES,
+      mount: (container, user) => mountFichesForDispositif(container, user, d),
+    }));
+    return [
+      { id: "heures",      label: "Heures",      icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
+      ...dispTabs,
+      { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES, mount: mountTracabilite },
+      { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"], mount: mountParametres },
+    ];
+  }
 
   const CATEGORIES = [
     {
@@ -37,13 +54,8 @@
       ],
     },
     {
-      id: "menage", label: "Service Ménage", icon: "🧹", desc: "Heures, fiches, traçabilité",
-      subtabs: [
-        { id: "heures",       label: "Heures",             icon: "🕒", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountHeures },
-        { id: "fiches",       label: "Fiches de ménage",   icon: "📋", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountFiches },
-        { id: "tracabilite",  label: "Traçabilité",        icon: "🧾", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountTracabilite },
-        { id: "parametres",   label: "Paramètres",         icon: "⚙️", roles: ["admin","n1"], mount: mountParametres },
-      ],
+      id: "menage", label: "Service Ménage", icon: "🧹", desc: "Heures, dispositifs, traçabilité",
+      subtabs: [], // calculé dynamiquement, voir menageSubtabs()
     },
     {
       id: "sites", label: "Dossiers de site", icon: "🏢", desc: "Bientôt disponible",
@@ -56,11 +68,19 @@
   watchAuth((user) => {
     if (!user) { window.location.href = "index.html"; return; }
     currentUser = user;
+    if (!sitesSubscribed) {
+      sitesSubscribed = true;
+      watchSites((sites) => {
+        dispositifsList = [...new Set(sites.map(s => s.dispositif || "Dispositif MNA"))];
+        render();
+      });
+    }
     render();
   });
 
   function categorySubtabsFor(category, user) {
-    return category.subtabs.filter(s => s.roles.includes(user.role));
+    const subtabs = category.id === "menage" ? menageSubtabs() : category.subtabs;
+    return subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {
     return CATEGORIES.filter(c => categorySubtabsFor(c, user).length > 0);
