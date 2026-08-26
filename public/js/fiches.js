@@ -1,11 +1,13 @@
 import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
+import { watchUsers } from "./users-data.js";
 
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
+const MENAGE_ROLES = ["menage", "mi_temps"];
 
-let state = { fiches: [], sites: [] };
-let ui = { dispositif: null, lockDispositif: false, siteId: null, weekStart: null };
+let state = { fiches: [], sites: [], agents: [] };
+let ui = { dispositif: null, lockDispositif: false, siteId: null, weekStart: null, actingUid: null, actingNom: null };
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
@@ -38,6 +40,7 @@ export function mountFiches(container, user) {
     render();
   }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
+  unsubs.push(watchUsers((u) => { state.agents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
 }
 
 // Même écran, mais verrouillé sur un dispositif précis (pas de barre
@@ -58,11 +61,22 @@ export function mountFichesForDispositif(container, user, dispositif) {
     render();
   }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
+  unsubs.push(watchUsers((u) => { state.agents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+}
+
+function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
+
+function effectiveAgent() {
+  if (isEditorUser(mountedUser) && ui.actingUid) {
+    return { uid: ui.actingUid, nom: ui.actingNom };
+  }
+  return { uid: mountedUser.uid, nom: mountedUser.nom || mountedUser.email };
 }
 
 function currentFiche() {
   const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
-  const id = ficheId(ui.siteId, ui.weekStart, mountedUser.uid);
+  const agent = effectiveAgent();
+  const id = ficheId(ui.siteId, ui.weekStart, agent.uid);
   const existing = state.fiches.find(f => f.id === id);
   if (existing) return { id, data: existing };
   return {
@@ -70,7 +84,7 @@ function currentFiche() {
     data: {
       siteId: site?.id, siteName: site?.name,
       weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart), 4)),
-      agentUid: mountedUser.uid, agentNom: mountedUser.nom || mountedUser.email,
+      agentUid: agent.uid, agentNom: agent.nom,
       cells: {}, obs: {}, chambres: [], observationsGenerales: "",
       submitted: false,
     },
@@ -129,7 +143,13 @@ function render() {
               <button class="nav-btn" id="fc-next">›</button>
             </div>
           </label>
-          <label>Agent<input value="${esc(data.agentNom)}" disabled></label>
+          ${isEditorUser(mountedUser) ? `
+          <label>Remplir au nom de
+            <select id="fc-agent">
+              <option value="" ${!ui.actingUid ? 'selected' : ''}>Moi-même (${esc(mountedUser.nom || mountedUser.email)})</option>
+              ${state.agents.map(a => `<option value="${a.uid}" ${ui.actingUid === a.uid ? 'selected' : ''}>${esc(a.nom || a.email)}</option>`).join("")}
+            </select>
+          </label>` : `<label>Agent<input value="${esc(data.agentNom)}" disabled></label>`}
         </div>
       </div>
 
@@ -198,6 +218,16 @@ function render() {
   `;
 
   document.getElementById("fc-site")?.addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });
+  document.getElementById("fc-agent")?.addEventListener("change", (e) => {
+    const uid = e.target.value;
+    if (!uid) { ui.actingUid = null; ui.actingNom = null; }
+    else {
+      const a = state.agents.find(x => x.uid === uid);
+      ui.actingUid = uid;
+      ui.actingNom = a?.nom || a?.email;
+    }
+    render();
+  });
   document.getElementById("fc-prev").addEventListener("click", () => { ui.weekStart = dateKey(addDays(weekStartDate, -7)); render(); });
   document.getElementById("fc-next").addEventListener("click", () => { ui.weekStart = dateKey(addDays(weekStartDate, 7)); render(); });
   mountedContainer.querySelectorAll("[data-disp]").forEach(btn => {

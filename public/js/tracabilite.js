@@ -1,34 +1,37 @@
 import { fmtShort, esc } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
-import { watchFiches } from "./fiches-data.js";
+import { watchFiches, deleteFiche } from "./fiches-data.js";
 
 let state = { fiches: [], sites: [] };
 let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null };
 let unsubs = [];
 let mountedContainer = null;
+let mountedUser = null;
 let lockedDispositif = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
 function siteDispositif(site) { return site?.dispositif || "Dispositif MNA"; }
 function ficheDispositif(fiche) { return siteDispositif(state.sites.find(s => s.id === fiche.siteId)); }
+function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
 
-export function mountTracabilite(container) {
+export function mountTracabilite(container, user) {
   lockedDispositif = null;
   ui.filterDispositif = "Tous";
-  mountInternal(container);
+  mountInternal(container, user);
 }
 
 // Version verrouillée sur un seul dispositif (pas de sélecteur de dispositif ni de site)
-export function mountTracabiliteForDispositif(container, dispositif) {
+export function mountTracabiliteForDispositif(container, user, dispositif) {
   lockedDispositif = dispositif;
   ui.filterDispositif = dispositif;
-  mountInternal(container);
+  mountInternal(container, user);
 }
 
-function mountInternal(container) {
+function mountInternal(container, user) {
   cleanup();
   mountedContainer = container;
+  mountedUser = user;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
@@ -85,7 +88,10 @@ function render() {
                   <td>${esc(f.agentNom)}</td>
                   <td>${done}/${total}</td>
                   <td>${f.submitted ? `<span class="tag" style="background:var(--teal)">Terminée</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">En cours</span>`}</td>
-                  <td><button class="nav-btn" data-open="${f.id}" style="padding:4px 10px;font-size:11px">Voir</button></td>
+                  <td style="white-space:nowrap">
+                    <button class="nav-btn" data-open="${f.id}" style="padding:4px 10px;font-size:11px">Voir</button>
+                    ${isEditorUser(mountedUser) ? `<button class="del-btn" data-del-fiche="${f.id}">🗑️</button>` : ""}
+                  </td>
                 </tr>`;
               }).join("")}
           </tbody>
@@ -93,7 +99,10 @@ function render() {
       </div>
 
       ${opened ? `
-      <button class="add-btn" id="tr-print">🖨️ Exporter en PDF (imprimer)</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="add-btn" id="tr-print">🖨️ Exporter en PDF (imprimer)</button>
+        ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
+      </div>
       <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
           <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
@@ -161,4 +170,21 @@ function render() {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
   document.getElementById("tr-print")?.addEventListener("click", () => { window.print(); });
+  document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
+    if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
+      await deleteFiche(ui.openId);
+      ui.openId = null;
+      render();
+    }
+  });
+  mountedContainer.querySelectorAll("[data-del-fiche]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
+        await deleteFiche(btn.dataset.delFiche);
+        if (ui.openId === btn.dataset.delFiche) ui.openId = null;
+        render();
+      }
+    });
+  });
 }

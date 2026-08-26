@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Novimmo Astreinte</title>
+<title>Établières Astreinte</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -42,7 +42,7 @@
         subtabs: [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
           ...(heuresEnabled(dispositifSettings, d) ? [{ id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures }] : []),
-          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c) => mountTracabiliteForDispositif(c, d) },
+          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"],     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],
       }));
@@ -127,7 +127,7 @@
         <div class="topbar-title">
           ${category ? `<button class="back-btn" id="back-home">← Accueil</button>` : ""}
           <span class="topbar-eyebrow">Groupe Établières · Service Maintenance et Ménage</span>
-          <h1>Novimmo <span class="accent">Astreinte</span></h1>
+          <h1>Établières <span class="accent">Astreinte</span></h1>
         </div>
         <div class="topbar-user">
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
