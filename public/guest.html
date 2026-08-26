@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accès remplaçant — Novimmo Astreinte</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getInvitation } from "./js/invitations-data.js";
+  import { mountGuestFiche } from "./js/guest-fiche.js";
+
+  const params = new URLSearchParams(location.search);
+  const token = params.get("invite");
+  const app = document.getElementById("app");
+
+  function showError(msg) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Accès invalide</div>
+          <h1>Impossible d'accéder</h1>
+          <p class="hint">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  if (!token) {
+    showError("Ce lien ne contient pas de code d'accès valide. Demande un nouveau lien à ton contact.");
+  } else {
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        try { await signInAnonymously(auth); } catch (e) { showError("Connexion impossible. Réessaie plus tard."); }
+        return;
+      }
+      const invitation = await getInvitation(token);
+      if (!invitation) { showError("Ce lien n'existe pas ou plus."); return; }
+      if (!invitation.active) { showError("Cet accès a été désactivé. Contacte ton responsable."); return; }
+      app.innerHTML = `
+        <header class="topbar">
+          <div class="topbar-title">
+            <span class="topbar-eyebrow">Groupe Établières · Accès remplaçant</span>
+            <h1>${invitation.siteName}</h1>
+          </div>
+          <div class="topbar-user"><span><b>${invitation.label}</b></span></div>
+        </header>
+        <main class="content" id="content"></main>
+      `;
+      mountGuestFiche(document.getElementById("content"), user, invitation);
+    });
+  }
+</script>
+</body>
+</html>

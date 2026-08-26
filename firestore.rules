@@ -56,10 +56,22 @@ service cloud.firestore {
       allow update: if isEditor();
       allow delete: if isEditor() || (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.validated == false);
     }
+    // ---- Invitations (accès remplaçant par QR code / lien) ----
+    // N'importe qui connecté (y compris en mode invité anonyme) peut LIRE
+    // une invitation précise s'il connaît son identifiant (le lien/QR).
+    // Seul un éditeur peut lister toutes les invitations ou en créer.
+    match /invitations/{token} {
+      allow get: if isSignedIn();
+      allow list: if isEditor();
+      allow write: if isEditor();
+    }
+
     // ---- Fiches de traçabilité ménage ----
     // Chacun peut créer/modifier SES PROPRES fiches (agentUid == son uid).
     // Un éditeur (admin/n1) peut tout modifier. Tout le monde peut lire
-    // (onglet Traçabilité).
+    // (onglet Traçabilité). Fonctionne aussi pour les comptes invités
+    // anonymes (mode remplaçant via QR code), qui ont un uid Firebase
+    // comme n'importe quel autre compte connecté.
     match /fiches/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);

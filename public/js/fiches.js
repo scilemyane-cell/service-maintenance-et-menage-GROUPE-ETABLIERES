@@ -1,11 +1,11 @@
 import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
-import { SITES, findSite } from "./sites-config.js";
+import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
 
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
 
-let state = { fiches: [] };
-let ui = { siteId: SITES[0].id, weekStart: null };
+let state = { fiches: [], sites: [] };
+let ui = { siteId: null, weekStart: null };
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
@@ -24,18 +24,19 @@ export function mountFiches(container, user) {
   mountedUser = user;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
   container.innerHTML = `<div class="hint">Chargement…</div>`;
+  unsubs.push(watchSites((s) => { state.sites = s; if (!ui.siteId) ui.siteId = s[0]?.id; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
 }
 
 function currentFiche() {
-  const site = findSite(ui.siteId);
+  const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
   const id = ficheId(ui.siteId, ui.weekStart, mountedUser.uid);
   const existing = state.fiches.find(f => f.id === id);
   if (existing) return { id, data: existing };
   return {
     id,
     data: {
-      siteId: site.id, siteName: site.name,
+      siteId: site?.id, siteName: site?.name,
       weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart), 4)),
       agentUid: mountedUser.uid, agentNom: mountedUser.nom || mountedUser.email,
       cells: {}, obs: {}, chambres: [], observationsGenerales: "",
@@ -51,7 +52,8 @@ function scheduleSave(id, data) {
 
 function render() {
   if (!mountedContainer) return;
-  const site = findSite(ui.siteId);
+  if (state.sites.length === 0) { mountedContainer.innerHTML = `<div class="hint">Chargement des sites…</div>`; return; }
+  const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
   const weekStartDate = new Date(ui.weekStart);
   const weekEndDate = addDays(weekStartDate, 4);
   const { id, data } = currentFiche();
@@ -61,7 +63,7 @@ function render() {
       <div class="form-card">
         <div class="form-grid">
           <label>Site
-            <select id="fc-site">${SITES.map(s => `<option value="${s.id}" ${s.id === ui.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join("")}</select>
+            <select id="fc-site">${state.sites.map(s => `<option value="${s.id}" ${s.id === ui.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join("")}</select>
           </label>
           <label>Semaine
             <div style="display:flex;align-items:center;gap:8px">

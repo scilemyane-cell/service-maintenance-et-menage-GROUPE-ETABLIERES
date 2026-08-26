@@ -18,6 +18,7 @@
   import { mountDashboard } from "./js/home.js";
   import { mountFiches } from "./js/fiches.js";
   import { mountTracabilite } from "./js/tracabilite.js";
+  import { mountParametres } from "./js/parametres.js";
 
   let currentUser = null;
   let currentCategory = null; // null = accueil (bulles)
@@ -41,6 +42,7 @@
         { id: "heures",       label: "Heures",             icon: "🕒", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountHeures },
         { id: "fiches",       label: "Fiches de ménage",   icon: "📋", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountFiches },
         { id: "tracabilite",  label: "Traçabilité",        icon: "🧾", roles: ["admin","n1","direction","menage","mi_temps"], mount: mountTracabilite },
+        { id: "parametres",   label: "Paramètres",         icon: "⚙️", roles: ["admin","n1"], mount: mountParametres },
       ],
     },
     {

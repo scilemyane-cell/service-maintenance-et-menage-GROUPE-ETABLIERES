@@ -1,8 +1,8 @@
 import { fmtShort, esc } from "./astreinte-logic.js";
-import { SITES } from "./sites-config.js";
+import { watchSites } from "./sites-data.js";
 import { watchFiches } from "./fiches-data.js";
 
-let state = { fiches: [] };
+let state = { fiches: [], sites: [] };
 let ui = { filterSite: "Tous", filterAgent: "Tous", openId: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -13,6 +13,7 @@ export function mountTracabilite(container) {
   cleanup();
   mountedContainer = container;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
+  unsubs.push(watchSites((s) => { state.sites = s; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
 }
 
@@ -33,14 +34,14 @@ function taskCompletion(fiche, site) {
 function render() {
   if (!mountedContainer) return;
   const agents = ["Tous", ...new Set(state.fiches.map(f => f.agentNom))];
-  const siteNames = ["Tous", ...SITES.map(s => s.name)];
+  const siteNames = ["Tous", ...state.sites.map(s => s.name)];
   const filtered = state.fiches
     .filter(f => ui.filterSite === "Tous" || f.siteName === ui.filterSite)
     .filter(f => ui.filterAgent === "Tous" || f.agentNom === ui.filterAgent)
     .sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
 
   const opened = ui.openId ? state.fiches.find(f => f.id === ui.openId) : null;
-  const openedSite = opened ? SITES.find(s => s.id === opened.siteId) : null;
+  const openedSite = opened ? state.sites.find(s => s.id === opened.siteId) : null;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -55,7 +56,7 @@ function render() {
           <tbody>
             ${filtered.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucune fiche pour l'instant.</td></tr>` :
               filtered.map(f => {
-                const site = SITES.find(s => s.id === f.siteId);
+                const site = state.sites.find(s => s.id === f.siteId);
                 const { done, total } = taskCompletion(f, site);
                 return `<tr>
                   <td>${fmtShort(new Date(f.weekStart))} → ${fmtShort(new Date(f.weekEnd))}</td>
