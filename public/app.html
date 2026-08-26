@@ -15,73 +15,88 @@
   import { watchAuth, logout, roleLabel } from "./js/auth.js";
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab } from "./js/planning.js";
   import { mountDashboard } from "./js/home.js";
-  import { mountDispositifPage } from "./js/dispositif-page.js";
-  import { mountTracabilite } from "./js/tracabilite.js";
-  import { mountParametres } from "./js/parametres.js";
+  import { mountFichesForDispositif } from "./js/fiches.js";
+  import { mountHeures } from "./js/heures.js";
+  import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
+  import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif } from "./js/parametres.js";
   import { watchSites } from "./js/sites-data.js";
+  import { watchAccess, hasAccess } from "./js/access-data.js";
 
   let currentUser = null;
   let currentCategory = null; // null = accueil (bulles)
   let currentSubtab = null;
   let dispositifsList = [];
+  let accessMap = {};
   let sitesSubscribed = false;
 
   const ALL = ["admin","n1","technicien","menage","mi_temps","direction"];
   const MENAGE_ROLES = ["admin","n1","direction","menage","mi_temps"];
 
-  function menageSubtabs() {
-    const dispTabs = dispositifsList.map(d => ({
-      id: "disp-" + d, label: d, icon: "🧹", roles: MENAGE_ROLES,
-      mount: (container, user) => mountDispositifPage(container, user, d),
-    }));
+  function dispositifCategories(user) {
+    return dispositifsList
+      .filter(d => hasAccess(accessMap, d, user))
+      .map(d => ({
+        id: "disp-" + d, label: d, icon: "🧹", desc: "Fiches, heures, traçabilité",
+        subtabs: [
+          { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
+          { id: "heures",      label: "Heures",      icon: "🕒", roles: MENAGE_ROLES,       mount: mountHeures },
+          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c) => mountTracabiliteForDispositif(c, d) },
+          { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"],     mount: (c, u) => mountParametresDispositif(c, u, d) },
+        ],
+      }));
+  }
+
+  function staticCategories() {
     return [
-      ...dispTabs,
-      { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES, mount: mountTracabilite },
-      { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"], mount: mountParametres },
+      {
+        id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning, absences, interventions",
+        subtabs: [
+          { id: "calendrier",     label: "Calendrier",     icon: "📅", roles: ALL,                         mount: mountCalendrier },
+          { id: "absences",       label: "Absences",       icon: "👥", roles: ["admin","n1"],              mount: mountAbsencesTab },
+          { id: "interventions",  label: "Interventions",  icon: "🔧", roles: ["admin","n1","technicien"], mount: mountInterventionsTab },
+          { id: "synthese",       label: "Synthèse",       icon: "📊", roles: ["admin","n1","direction"],  mount: mountSyntheseTab },
+        ],
+      },
+      {
+        id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès remplaçants",
+        subtabs: [
+          { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ["admin","n1"], mount: mountUtilisateurs },
+          { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ["admin","n1"], mount: mountAccesRemplacants },
+        ],
+      },
+      {
+        id: "sites", label: "Dossiers de site", icon: "🏢", desc: "Bientôt disponible",
+        subtabs: [
+          { id: "liste", label: "Dossiers", icon: "🏢", roles: ALL, mount: null },
+        ],
+      },
     ];
   }
 
-  const CATEGORIES = [
-    {
-      id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning, absences, interventions",
-      subtabs: [
-        { id: "calendrier",     label: "Calendrier",     icon: "📅", roles: ALL,                             mount: mountCalendrier },
-        { id: "absences",       label: "Absences",       icon: "👥", roles: ["admin","n1"],                  mount: mountAbsencesTab },
-        { id: "interventions",  label: "Interventions",  icon: "🔧", roles: ["admin","n1","technicien"],     mount: mountInterventionsTab },
-        { id: "synthese",       label: "Synthèse",       icon: "📊", roles: ["admin","n1","direction"],      mount: mountSyntheseTab },
-      ],
-    },
-    {
-      id: "menage", label: "Service Ménage", icon: "🧹", desc: "Heures, dispositifs, traçabilité",
-      subtabs: [], // calculé dynamiquement, voir menageSubtabs()
-    },
-    {
-      id: "sites", label: "Dossiers de site", icon: "🏢", desc: "Bientôt disponible",
-      subtabs: [
-        { id: "liste", label: "Dossiers", icon: "🏢", roles: ALL, mount: null },
-      ],
-    },
-  ];
+  function allCategories(user) {
+    const [astreinte, administration, sites] = staticCategories();
+    return [astreinte, ...dispositifCategories(user), administration, sites];
+  }
 
   watchAuth((user) => {
     if (!user) { window.location.href = "index.html"; return; }
     currentUser = user;
     if (!sitesSubscribed) {
       sitesSubscribed = true;
-      watchSites((sites) => {
-        dispositifsList = [...new Set(sites.map(s => s.dispositif || "Dispositif MNA"))];
+      watchSites((sitesList) => {
+        dispositifsList = [...new Set(sitesList.map(s => s.dispositif || "Dispositif MNA"))];
         render();
       });
+      watchAccess((a) => { accessMap = a; render(); });
     }
     render();
   });
 
   function categorySubtabsFor(category, user) {
-    const subtabs = category.id === "menage" ? menageSubtabs() : category.subtabs;
-    return subtabs.filter(s => s.roles.includes(user.role));
+    return category.subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {
-    return CATEGORIES.filter(c => categorySubtabsFor(c, user).length > 0);
+    return allCategories(user).filter(c => categorySubtabsFor(c, user).length > 0);
   }
 
   function render() {
@@ -101,7 +116,8 @@
       return;
     }
 
-    const category = CATEGORIES.find(c => c.id === currentCategory) || null;
+    const cats = allCategories(currentUser);
+    const category = cats.find(c => c.id === currentCategory) || null;
 
     app.innerHTML = `
       <header class="topbar">
@@ -140,7 +156,7 @@
       const cats = visibleCategoriesFor(currentUser);
       mountDashboard(content, currentUser, cats, (catId) => {
         currentCategory = catId;
-        const cat = CATEGORIES.find(c => c.id === catId);
+        const cat = allCategories(currentUser).find(c => c.id === catId);
         const subs = categorySubtabsFor(cat, currentUser);
         currentSubtab = subs[0]?.id || null;
         render();

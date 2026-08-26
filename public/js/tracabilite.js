@@ -6,6 +6,7 @@ let state = { fiches: [], sites: [] };
 let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null };
 let unsubs = [];
 let mountedContainer = null;
+let lockedDispositif = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
@@ -13,6 +14,19 @@ function siteDispositif(site) { return site?.dispositif || "Dispositif MNA"; }
 function ficheDispositif(fiche) { return siteDispositif(state.sites.find(s => s.id === fiche.siteId)); }
 
 export function mountTracabilite(container) {
+  lockedDispositif = null;
+  ui.filterDispositif = "Tous";
+  mountInternal(container);
+}
+
+// Version verrouillée sur un seul dispositif (pas de sélecteur de dispositif ni de site)
+export function mountTracabiliteForDispositif(container, dispositif) {
+  lockedDispositif = dispositif;
+  ui.filterDispositif = dispositif;
+  mountInternal(container);
+}
+
+function mountInternal(container) {
   cleanup();
   mountedContainer = container;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
@@ -52,7 +66,7 @@ function render() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <div class="filters-row">
-        <label>Dispositif<select id="tr-disp">${dispositifs.map(d => `<option ${ui.filterDispositif === d ? 'selected' : ''}>${esc(d)}</option>`).join("")}</select></label>
+        ${!lockedDispositif ? `<label>Dispositif<select id="tr-disp">${dispositifs.map(d => `<option ${ui.filterDispositif === d ? 'selected' : ''}>${esc(d)}</option>`).join("")}</select></label>` : ""}
         <label>Site<select id="tr-site">${siteNames.map(s => `<option ${ui.filterSite === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}</select></label>
         <label>Agent<select id="tr-agent">${agents.map(a => `<option ${ui.filterAgent === a ? 'selected' : ''}>${esc(a)}</option>`).join("")}</select></label>
       </div>
@@ -105,7 +119,7 @@ function render() {
     </div>
   `;
 
-  document.getElementById("tr-disp").addEventListener("change", (e) => { ui.filterDispositif = e.target.value; ui.filterSite = "Tous"; render(); });
+  document.getElementById("tr-disp")?.addEventListener("change", (e) => { ui.filterDispositif = e.target.value; ui.filterSite = "Tous"; render(); });
   document.getElementById("tr-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; render(); });
   document.getElementById("tr-agent").addEventListener("change", (e) => { ui.filterAgent = e.target.value; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
