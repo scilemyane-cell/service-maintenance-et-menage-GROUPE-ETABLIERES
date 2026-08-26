@@ -1,7 +1,7 @@
 import {
   addDays, dateKey, sameDay, fmtLong, fmtShort, HOLIDAYS,
   YEAR_START, YEAR_END, computeWeeklyTitulaires, resolveDayN1, resolveDayN2,
-  isAbsentOnDate, esc, initials, colorForPerson, handoverInfo,
+  isAbsentOnDate, esc, initials, colorForPerson, handoverInfo, upcomingHandover,
 } from "./astreinte-logic.js";
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
@@ -108,6 +108,7 @@ function renderCalendar(container, perms) {
   const n2Today = resolveDayN2(refDate, state.people, state.absences, titN2);
   const holidayToday = HOLIDAYS.get(dateKey(refDate));
   const handover = todayInRange ? handoverInfo(refDate, state.people, state.absences, titN1, resolveDayN1) : null;
+  const upcoming = (todayInRange && !handover) ? upcomingHandover(refDate, state.people, state.absences, titN1, resolveDayN1, 3) : null;
   const todayKey = dateKey(refDate);
   const confirmedRecord = state.transferts.find(t => t.id === todayKey);
 
@@ -137,7 +138,7 @@ function renderCalendar(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      ${transfertBannerHTML(handover, confirmedRecord)}
+      ${transfertBannerHTML(handover, confirmedRecord, upcoming)}
       <div class="hero">
         <div class="hero-label">${todayInRange ? "Astreinte du jour" : "Aperçu — année scolaire"}</div>
         <div class="hero-blocks">

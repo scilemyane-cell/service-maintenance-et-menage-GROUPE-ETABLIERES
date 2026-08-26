@@ -168,6 +168,17 @@ export function handoverInfo(date, people, absences, titN1, resolveDayN1Fn) {
   return { from: yesterday.assigned, to: today.assigned };
 }
 
+// Cherche le prochain jour de bascule dans les `maxDays` jours à venir
+// (sans compter aujourd'hui) — pour un préavis avant le jour J.
+export function upcomingHandover(date, people, absences, titN1, resolveDayN1Fn, maxDays = 3) {
+  for (let i = 1; i <= maxDays; i++) {
+    const checkDate = addDays(date, i);
+    const info = handoverInfo(checkDate, people, absences, titN1, resolveDayN1Fn);
+    if (info) return { ...info, date: checkDate, daysUntil: i };
+  }
+  return null;
+}
+
 export function hoursLeftToday() {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);

@@ -1,26 +1,36 @@
-import { esc, hoursLeftToday, dateKey } from "./astreinte-logic.js";
+import { esc, hoursLeftToday, dateKey, fmtShort } from "./astreinte-logic.js";
 import { confirmTransfert } from "./transfert-data.js";
 
-export function transfertBannerHTML(handover, confirmedRecord) {
-  if (!handover) return "";
-  if (confirmedRecord) {
-    const time = new Date(confirmedRecord.confirmedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+export function transfertBannerHTML(handover, confirmedRecord, upcoming) {
+  if (handover) {
+    if (confirmedRecord) {
+      const time = new Date(confirmedRecord.confirmedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      return `
+        <div class="alert-banner" style="border-color:var(--teal);background:rgba(63,182,172,.12)">
+          ✅ <div>
+            <div><b>Transfert du numéro effectué</b> — de ${esc(handover.from)} vers ${esc(handover.to)}</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:2px">Confirmé par ${esc(confirmedRecord.confirmedByNom)} à ${time}</div>
+          </div>
+        </div>`;
+    }
     return `
-      <div class="alert-banner" style="border-color:var(--teal);background:rgba(63,182,172,.12)">
-        ✅ <div>
-          <div><b>Transfert du numéro effectué</b> — de ${esc(handover.from)} vers ${esc(handover.to)}</div>
-          <div style="font-size:12px;color:var(--text-dim);margin-top:2px">Confirmé par ${esc(confirmedRecord.confirmedByNom)} à ${time}</div>
+      <div class="alert-banner" id="transfert-banner" style="border-color:var(--red);background:rgba(229,83,61,.18)">
+        🔴 <div>
+          <div><b>Transfert du numéro à faire aujourd'hui</b> — de ${esc(handover.from)} vers ${esc(handover.to)}</div>
+          <div style="font-size:12px;margin-top:4px" id="transfert-countdown"></div>
+          <button class="add-btn" id="transfert-confirm-btn" style="margin-top:8px">✓ J'ai fait le transfert</button>
         </div>
       </div>`;
   }
-  return `
-    <div class="alert-banner" id="transfert-banner" style="border-color:var(--red);background:rgba(229,83,61,.18)">
-      🔴 <div>
-        <div><b>Transfert du numéro à faire aujourd'hui</b> — de ${esc(handover.from)} vers ${esc(handover.to)}</div>
-        <div style="font-size:12px;margin-top:4px" id="transfert-countdown"></div>
-        <button class="add-btn" id="transfert-confirm-btn" style="margin-top:8px">✓ J'ai fait le transfert</button>
-      </div>
-    </div>`;
+  if (upcoming) {
+    return `
+      <div class="alert-banner" style="border-color:var(--gold);background:rgba(217,178,76,.12)">
+        🟡 <div>
+          <div><b>Transfert du numéro à prévoir dans ${upcoming.daysUntil} jour${upcoming.daysUntil > 1 ? 's' : ''}</b> (le ${fmtShort(upcoming.date)}) — de ${esc(upcoming.from)} vers ${esc(upcoming.to)}</div>
+        </div>
+      </div>`;
+  }
+  return "";
 }
 
 // Retourne une fonction de nettoyage (à ajouter aux unsubs du module appelant)

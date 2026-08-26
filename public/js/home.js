@@ -1,4 +1,4 @@
-import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, handoverInfo } from "./astreinte-logic.js";
+import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, handoverInfo, upcomingHandover } from "./astreinte-logic.js";
 import { watchPeople, watchAbsences } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -38,13 +38,16 @@ function render() {
   const refDate = inRange ? today : YEAR_START;
   const hasPeople = people.n1.length > 0 && people.n2.length > 0;
 
-  let n1 = null, n2 = null, holidayToday = null, handover = null;
+  let n1 = null, n2 = null, holidayToday = null, handover = null, upcoming = null;
   if (hasPeople) {
     const { titN1, titN2 } = computeWeeklyTitulaires(people, absences);
     n1 = resolveDayN1(refDate, people, absences, titN1);
     n2 = resolveDayN2(refDate, people, absences, titN2);
     holidayToday = HOLIDAYS.get(dateKey(refDate));
-    if (inRange) handover = handoverInfo(refDate, people, absences, titN1, resolveDayN1);
+    if (inRange) {
+      handover = handoverInfo(refDate, people, absences, titN1, resolveDayN1);
+      if (!handover) upcoming = upcomingHandover(refDate, people, absences, titN1, resolveDayN1, 3);
+    }
   }
   const todayKey = dateKey(refDate);
   const confirmedRecord = transferts.find(t => t.id === todayKey);
@@ -53,7 +56,7 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      ${transfertBannerHTML(handover, confirmedRecord)}
+      ${transfertBannerHTML(handover, confirmedRecord, upcoming)}
 
       <div class="hero">
         <div class="hero-label">Bonjour ${esc(mountedUser.nom || mountedUser.email)}</div>
