@@ -60,6 +60,7 @@ function currentRecord() {
       weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart), 6)),
       agentUid: agent.uid, agentNom: agent.nom,
       lignes: template.map(t => ({ label: t.label, prevu: t.heures, jours: emptyDays() })),
+      submitted: false,
     },
   };
 }
@@ -136,6 +137,8 @@ function renderView(id, data) {
       ${aRepos ? `<div class="stat-chip ok" style="width:fit-content">✓ Repos hebdomadaire présent (${7 - joursTravailles.length} jour${7 - joursTravailles.length > 1 ? 's' : ''} non travaillé${7 - joursTravailles.length > 1 ? 's' : ''})</div>`
               : `<div class="alert-banner">⚠️ Aucun jour de repos détecté cette semaine — tous les jours affichent des heures.</div>`}
 
+      ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Semaine marquée comme terminée</div>` : ""}
+
       <div class="table-wrap">
         <table>
           <thead><tr>
@@ -171,8 +174,9 @@ function renderView(id, data) {
       </div>
       <button class="nav-btn" id="rp-add-ligne">➕ Ajouter une ligne (heures complémentaires non prévues)</button>
 
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="rp-save">💾 Enregistrer</button>
+        <button class="nav-btn" id="rp-submit">${data.submitted ? "↩️ Rouvrir la semaine" : "✓ Marquer la semaine comme terminée"}</button>
         <span id="rp-save-status" style="font-size:12px"></span>
       </div>
     </div>
@@ -214,4 +218,9 @@ function renderView(id, data) {
     renderView(id, data);
   });
   document.getElementById("rp-save").addEventListener("click", () => { persist(id, data); });
+  document.getElementById("rp-submit").addEventListener("click", () => {
+    data.submitted = !data.submitted;
+    persist(id, data);
+    renderView(id, data);
+  });
 }
