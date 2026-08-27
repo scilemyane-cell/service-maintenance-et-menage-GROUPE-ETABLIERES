@@ -22,6 +22,7 @@ let ui = {
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
   form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", description: "" },
+  editingId: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
@@ -503,7 +504,8 @@ function renderInterventions(container, perms) {
           <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="ex. 1.5"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
-        <button class="add-btn" id="add-interv">➕ Ajouter l'intervention</button>
+        <button class="add-btn" id="add-interv">${ui.editingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'intervention"}</button>
+        ${ui.editingId ? `<button class="nav-btn" id="cancel-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
         <div id="interv-status" style="margin-top:8px;font-size:12px"></div>
       </div>` : ""}
 
@@ -537,7 +539,7 @@ function renderInterventions(container, perms) {
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
                   <td>${i.heures} h</td><td>${esc(i.description)}</td>
                   ${perms.isEditor ? `<td><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-transmis="${i.id}" ${i.transmis ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--teal)">${i.transmis ? `<span class="tag" style="background:var(--teal);font-size:9px">Transmis</span>` : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</label></td>` : ''}
-                  <td>${canDelete ? `<button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
+                  <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
                 </tr>`;
               }).join("")}
           </tbody>
@@ -575,17 +577,40 @@ function renderInterventions(container, perms) {
       if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
       if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      const payload = {
+        date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
+        type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
+      };
       try {
-        await addIntervention({
-          date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
-          type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
-          createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
-        });
+        if (ui.editingId) {
+          await updateIntervention(ui.editingId, payload);
+          ui.editingId = null;
+        } else {
+          await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
+        }
         ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
       }
+    });
+    document.getElementById("cancel-edit")?.addEventListener("click", () => {
+      ui.editingId = null;
+      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
+      renderAll();
+    });
+    container.querySelectorAll("[data-edit]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const i = state.interventions.find(x => x.id === btn.dataset.edit);
+        if (!i) return;
+        ui.editingId = i.id;
+        ui.form = {
+          date: i.date, technicien: i.technicien, association: i.association || "", groupe: i.groupe || "",
+          site: i.site, type: i.type, heures: String(i.heures), description: i.description || "",
+        };
+        renderAll();
+        mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     });
     container.querySelectorAll("[data-del]").forEach(btn => {
       btn.addEventListener("click", async () => {
