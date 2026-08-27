@@ -71,40 +71,6 @@ function weekTotal(record) {
   return record.lignes.reduce((s, l) => s + DAYS.reduce((s2, d) => s2 + (parseFloat(l.jours[d]) || 0), 0), 0);
 }
 
-function recapHTML() {
-  const byAgent = {};
-  state.repartitions
-    .filter(r => r.dispositif === mountedDispositif)
-    .forEach(r => {
-      if (!byAgent[r.agentNom]) byAgent[r.agentNom] = { valide: 0, attente: 0 };
-      const total = weekTotal(r);
-      if (r.valide) byAgent[r.agentNom].valide += total;
-      else byAgent[r.agentNom].attente += total;
-    });
-  const rows = Object.entries(byAgent).sort((a, b) => a[0].localeCompare(b[0]));
-
-  return `
-    <div class="form-card">
-      <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Récapitulatif — ${esc(mountedDispositif)}</h3>
-      <div class="table-wrap" style="border:none">
-        <table>
-          <thead><tr><th>Personne</th><th>Validé</th><th>En attente</th><th>Total</th></tr></thead>
-          <tbody>
-            ${rows.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucune donnée pour l'instant.</td></tr>` :
-              rows.map(([nom, r]) => `
-                <tr>
-                  <td>${esc(nom)}</td>
-                  <td>${r.valide.toFixed(2)} h</td>
-                  <td>${r.attente > 0 ? `<span style="color:var(--gold)">${r.attente.toFixed(2)} h</span>` : "0 h"}</td>
-                  <td style="font-weight:700">${(r.valide + r.attente).toFixed(2)} h</td>
-                </tr>
-              `).join("")}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-}
-
 async function persist(id, data) {
   const statusEl = document.getElementById("rp-save-status");
   if (statusEl) statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
@@ -192,8 +158,6 @@ function renderView(id, data) {
           </label>` : `<label>Agent<input value="${esc(data.agentNom)}" disabled></label>`}
         </div>
       </div>
-
-      ${isEditorUser(mountedUser) ? recapHTML() : ""}
 
       <p class="hint">Répartition pré-remplie selon le modèle hebdomadaire de ce dispositif (${totalPrevu}h prévues). Renseigne les heures réelles jour par jour — c'est modulable, ajuste selon la semaine réellement travaillée.</p>
 

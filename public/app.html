@@ -18,6 +18,7 @@
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
   import { mountRepartitionForDispositif } from "./js/heures-repartition.js";
+  import { mountArchiveForDispositif } from "./js/heures-archive.js";
   import { watchDispositifSettings, heuresEnabled } from "./js/dispositif-settings-data.js";
   import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
   import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif } from "./js/parametres.js";
@@ -45,6 +46,7 @@
           ...(heuresEnabled(dispositifSettings, d) ? [
             { id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
             { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
+            { id: "archive", label: "Archive", icon: "🗄️", roles: ["admin","n1","direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
           ] : []),
           { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"],     mount: (c, u) => mountParametresDispositif(c, u, d) },
