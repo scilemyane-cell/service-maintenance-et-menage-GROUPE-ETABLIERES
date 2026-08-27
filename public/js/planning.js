@@ -8,13 +8,14 @@ import {
   watchInterventions, addIntervention, updateIntervention, deleteIntervention,
 } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
+import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 
 const SITE_SUGGESTIONS = ["École", "Agropolis", "Armonia", "Résidence Valoria", "Internat Bâtiment A", "Internat Bâtiment B"];
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 
-let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [] };
+let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {} };
 let ui = {
   subtab: "calendrier",
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
@@ -48,6 +49,7 @@ export function permissions(user) {
     canSeeAbsencesTab: isEditor,
     canSeeInterventionsTab: isEditor || isTech,
     canSeeTransfertsTab: isEditor || user.role === "direction",
+    canSeeCoordonnees: true,
   };
 }
 
@@ -69,6 +71,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchAbsences((a) => { state.absences = a; renderAll(); }));
   unsubs.push(watchInterventions((i) => { state.interventions = i; renderAll(); }));
   unsubs.push(watchTransferts((t) => { state.transferts = t; renderAll(); }));
+  unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; renderAll(); }));
 }
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
@@ -76,6 +79,7 @@ export function mountAbsencesTab(container, user) { startListeners(container, us
 export function mountInterventionsTab(container, user) { startListeners(container, user, "interventions"); }
 export function mountSyntheseTab(container, user) { startListeners(container, user, "synthese"); }
 export function mountTransfertsTab(container, user) { startListeners(container, user, "transferts"); }
+export function mountCoordonneesTab(container, user) { startListeners(container, user, "coordonnees"); }
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
@@ -91,6 +95,7 @@ function renderAll() {
   if (ui.subtab === "interventions") return renderInterventions(mountedContainer, perms);
   if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
   if (ui.subtab === "transferts") return renderTransferts(mountedContainer, perms);
+  if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
 }
 
 // =================================================================
@@ -103,6 +108,60 @@ function monthGrid(year, month) {
   const days = [];
   for (let i = 0; i < 42; i++) days.push(addDays(gridStart, i));
   return days;
+}
+
+// =================================================================
+// Coordonnées (téléphone / email) des cadres et techniciens
+// =================================================================
+function renderCoordonnees(container, perms) {
+  const all = [
+    ...state.people.n1.map(nom => ({ nom, role: "Cadre astreinte" })),
+    ...state.people.n2.map(nom => ({ nom, role: "Technicien" })),
+  ];
+
+  container.innerHTML = `
+    <div class="stack">
+      <p class="hint">Coordonnées des cadres d'astreinte et techniciens. ${perms.isEditor ? "Clique sur un champ pour le modifier." : ""}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nom</th><th>Rôle</th><th>Téléphone</th><th>Email</th></tr></thead>
+          <tbody>
+            ${all.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucune personne configurée.</td></tr>` :
+              all.map(p => {
+                const c = state.coordonnees[p.nom] || {};
+                return `<tr>
+                  <td><b>${esc(p.nom)}</b></td>
+                  <td>${esc(p.role)}</td>
+                  <td>${perms.isEditor
+                    ? `<input type="tel" data-coord-tel="${esc(p.nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78" style="min-width:150px">`
+                    : (c.telephone ? `<a href="tel:${esc(c.telephone)}" style="color:var(--gold)">${esc(c.telephone)}</a>` : `<span class="hint">—</span>`)}</td>
+                  <td>${perms.isEditor
+                    ? `<input type="email" data-coord-email="${esc(p.nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr" style="min-width:200px">`
+                    : (c.email ? esc(c.email) : `<span class="hint">—</span>`)}</td>
+                </tr>`;
+              }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  if (!perms.isEditor) return;
+
+  container.querySelectorAll("[data-coord-tel]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      const nom = inp.dataset.coordTel;
+      const existing = state.coordonnees[nom] || {};
+      await saveCoordonnee(nom, { ...existing, telephone: inp.value.trim() });
+    });
+  });
+  container.querySelectorAll("[data-coord-email]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      const nom = inp.dataset.coordEmail;
+      const existing = state.coordonnees[nom] || {};
+      await saveCoordonnee(nom, { ...existing, email: inp.value.trim() });
+    });
+  });
 }
 
 // =================================================================
