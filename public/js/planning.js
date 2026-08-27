@@ -138,7 +138,7 @@ function renderTransferts(container) {
 function renderCalendar(container, perms) {
   const { titN1, titN2, scoresN1, scoresN2 } = computeWeeklyTitulaires(state.people, state.absences);
   const today = new Date();
-  const todayInRange = today >= YEAR_START && today <= YEAR_END;
+  const todayInRange = today >= addDays(YEAR_START, -7) && today <= addDays(YEAR_END, 7);
   const refDate = todayInRange ? today : YEAR_START;
   const n1Today = resolveDayN1(refDate, state.people, state.absences, titN1);
   const n2Today = resolveDayN2(refDate, state.people, state.absences, titN2);

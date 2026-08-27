@@ -1,4 +1,4 @@
-import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, handoverInfo, upcomingHandover } from "./astreinte-logic.js";
+import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, handoverInfo, upcomingHandover, addDays } from "./astreinte-logic.js";
 import { watchPeople, watchAbsences } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -36,7 +36,7 @@ function render() {
   if (!mountedContainer || !mountedUser) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; }
   const today = new Date();
-  const inRange = today >= YEAR_START && today <= YEAR_END;
+  const inRange = today >= addDays(YEAR_START, -7) && today <= addDays(YEAR_END, 7);
   const refDate = inRange ? today : YEAR_START;
   const hasPeople = people.n1.length > 0 && people.n2.length > 0;
 
