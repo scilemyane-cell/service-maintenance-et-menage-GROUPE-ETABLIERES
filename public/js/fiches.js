@@ -118,6 +118,7 @@ function setSaveStatus(status, errorMsg) {
 
 function render() {
   if (!mountedContainer) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   if (state.sites.length === 0) { mountedContainer.innerHTML = `<div class="hint">Chargement des sites…</div>`; return; }
   const disps = dispositifs();
   const sitesInDisp = state.sites.filter(s => siteDispositif(s) === ui.dispositif);

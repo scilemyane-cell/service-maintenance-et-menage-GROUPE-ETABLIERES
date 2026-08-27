@@ -50,6 +50,7 @@ function scheduleSave(id, data) {
 
 function render() {
   if (!mountedContainer) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   const { id, data, site } = currentFiche();
   if (!site) { mountedContainer.innerHTML = `<div class="hint">Site introuvable.</div>`; return; }
   const weekStartDate = new Date(ui.weekStart);

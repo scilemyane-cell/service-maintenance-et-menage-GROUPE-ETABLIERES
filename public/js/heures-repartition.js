@@ -123,6 +123,7 @@ function dayTotals(data) {
 // reconstruction depuis le modèle avant que la sauvegarde n'ait eu lieu.
 function render() {
   if (!mountedContainer) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   state.agents = state.allAgents.filter(a => hasAccess(state.access, mountedDispositif, { uid: a.uid, role: a.role }));
   const { id, data } = currentRecord();
   renderView(id, data);
@@ -130,6 +131,7 @@ function render() {
 
 function renderView(id, data) {
   if (!mountedContainer) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   const weekStartDate = new Date(ui.weekStart);
   const weekEndDate = addDays(weekStartDate, 6);
   const totalPrevu = data.lignes.reduce((s, l) => s + (l.prevu || 0), 0);

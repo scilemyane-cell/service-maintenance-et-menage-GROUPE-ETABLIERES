@@ -53,6 +53,7 @@ function taskCompletion(fiche, site) {
 
 function render() {
   if (!mountedContainer) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   const dispositifs = ["Tous", ...new Set(state.sites.map(siteDispositif))];
   const agents = ["Tous", ...new Set(state.fiches.map(f => f.agentNom))];
   const sitesForFilter = ui.filterDispositif === "Tous" ? state.sites : state.sites.filter(s => siteDispositif(s) === ui.filterDispositif);

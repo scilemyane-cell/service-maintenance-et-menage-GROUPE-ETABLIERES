@@ -52,6 +52,7 @@ export function mountUtilisateurs(container) {
 }
 
 function renderUtilisateurs(container) {
+  if (!document.contains(container)) { cleanup(); return; }
   container.innerHTML = `
     <div class="stack">
       <div class="form-card">
@@ -173,6 +174,7 @@ export function mountAccesRemplacants(container, user) {
 }
 
 function renderInvites(container, user) {
+  if (!document.contains(container)) { cleanup(); return; }
   if (!invForm.siteId && invState.sites[0]) invForm.siteId = invState.sites[0].id;
   if (!invForm.weekStart) invForm.weekStart = dateKey(weekStartOf(new Date()));
 
@@ -297,6 +299,7 @@ export function mountParametresDispositif(container, user, dispositif) {
 }
 
 function renderParametresDispositif(container, user, dispositif) {
+  if (!document.contains(container)) { cleanup(); return; }
   container.innerHTML = `
     <div class="stack">
       <div class="tabs" style="background:none;border:none;padding:0;margin-bottom:-6px">

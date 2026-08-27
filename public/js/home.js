@@ -34,6 +34,7 @@ export function mountDashboard(container, user, categories, onSelect) {
 
 function render() {
   if (!mountedContainer || !mountedUser) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   const today = new Date();
   const inRange = today >= YEAR_START && today <= YEAR_END;
   const refDate = inRange ? today : YEAR_START;

@@ -58,6 +58,7 @@ export function mountHeures(container, user) {
 
 function render() {
   if (!mountedContainer || !mountedUser) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   const isSelfEntry = mountedUser.role === "menage" || mountedUser.role === "mi_temps";
   const isReviewer = mountedUser.role === "admin" || mountedUser.role === "n1" || mountedUser.role === "direction";
 

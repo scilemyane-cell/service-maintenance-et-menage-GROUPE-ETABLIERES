@@ -77,6 +77,7 @@ export function mountSyntheseTab(container, user) { startListeners(container, us
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; } // l'utilisateur a changé d'écran, on arrête d'écouter
   const perms = permissions(mountedUser);
   if (ui.subtab === "absences" && !perms.canSeeAbsencesTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
   if (ui.subtab === "interventions" && !perms.canSeeInterventionsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }

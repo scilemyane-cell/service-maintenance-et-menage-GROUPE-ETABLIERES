@@ -28,6 +28,7 @@ export function mountArchiveForDispositif(container, user, dispositif) {
 
 function render() {
   if (!mountedContainer) return;
+  if (!document.contains(mountedContainer)) { cleanup(); return; }
   const validated = state.repartitions
     .filter(r => r.dispositif === mountedDispositif && r.valide)
     .sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
