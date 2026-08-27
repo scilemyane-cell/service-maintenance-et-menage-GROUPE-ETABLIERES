@@ -44,7 +44,8 @@ body{
 .tab-btn:disabled{ opacity:.35; cursor:not-allowed; }
 
 .content{ flex:1; padding:18px; max-width:1150px; margin:0 auto; width:100%; }
-.stack{ display:flex; flex-direction:column; gap:16px; }
+.stack{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+.stack > *{ min-width:0; } /* empêche un tableau large de faire déborder toute la page sur mobile */
 
 .placeholder-card{ background:var(--panel); border:1px dashed var(--border); border-radius:14px; padding:40px 20px; text-align:center; color:var(--text-dim); }
 .placeholder-card b{ color:var(--gold); }
@@ -104,7 +105,6 @@ body{
 .cal-day{ background:var(--panel-alt); border:1px solid var(--border); border-radius:8px; padding:6px 5px; min-height:64px; cursor:pointer; display:flex; flex-direction:column; gap:3px; position:relative; }
 .cal-day:hover{ border-color:var(--gold); }
 .cal-day.outside{ opacity:.28; }
-.cal-day.today{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
 .cal-day.selected{ background:rgba(217,178,76,.14); border-color:var(--gold); }
 .cal-daynum{ font-size:11px; color:var(--text-dim); font-family:ui-monospace,monospace; }
 .cal-chips{ display:flex; flex-direction:column; gap:2px; margin-top:auto; }
@@ -135,10 +135,26 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .del-btn{ background:none; border:none; color:var(--red); cursor:pointer; padding:4px; font-size:14px; }
 .empty-row{ text-align:center; color:var(--text-dim); padding:26px; }
 
+.cal-day.today{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 14px rgba(217,178,76,.45); animation:cal-pulse-gold 2.2s ease-in-out infinite; }
+.cal-day.alert-day{ border-color:var(--red); box-shadow:0 0 0 1px var(--red), 0 0 14px rgba(229,83,61,.45); animation:cal-pulse-red 1.5s ease-in-out infinite; }
+@keyframes cal-pulse-gold{ 0%,100%{ box-shadow:0 0 0 1px var(--gold), 0 0 8px rgba(217,178,76,.3);} 50%{ box-shadow:0 0 0 1px var(--gold), 0 0 20px rgba(217,178,76,.6);} }
+@keyframes cal-pulse-red{ 0%,100%{ box-shadow:0 0 0 1px var(--red), 0 0 8px rgba(229,83,61,.3);} 50%{ box-shadow:0 0 0 1px var(--red), 0 0 20px rgba(229,83,61,.6);} }
+
+/* Empêche un tableau large (grilles jour par jour) de casser la mise en
+   page sur mobile : le document devient défilable horizontalement au
+   lieu de faire déborder toute la page. */
+.print-fiche{ overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:100%; }
+.print-fiche table{ min-width:480px; }
+
 @media (max-width:720px){
   .hero-blocks{ grid-template-columns:1fr; }
   .cal-day{ min-height:52px; padding:4px 3px; }
   .cal-chip{ font-size:8px; }
+  .topbar{ padding:12px 14px; }
+  .content{ padding:12px; }
+  .login-card{ padding:22px; }
+  .print-fiche{ padding:14px !important; font-size:12px; }
+  .print-fiche table{ min-width:420px; }
 }
 
 /* ---- Impression / export PDF manuel d'une fiche ---- */

@@ -189,7 +189,8 @@ function renderCalendar(container, perms) {
             const a = inRange ? resolveDayN1(d, state.people, state.absences, titN1) : null;
             const b = inRange ? resolveDayN2(d, state.people, state.absences, titN2) : null;
             const hol = HOLIDAYS.get(dateKey(d));
-            return `<div class="cal-day ${inMonth ? '' : 'outside'} ${isToday ? 'today' : ''} ${isSel ? 'selected' : ''}" data-date="${dateKey(d)}">
+            const isAlert = a && b && (a.assigned === "A DÉFINIR" || b.assigned === "A DÉFINIR");
+            return `<div class="cal-day ${inMonth ? '' : 'outside'} ${isToday && !isAlert ? 'today' : ''} ${isAlert ? 'alert-day' : ''} ${isSel ? 'selected' : ''}" data-date="${dateKey(d)}">
               ${hol ? '<span class="cal-holiday-dot"></span>' : ''}
               <span class="cal-daynum">${d.getDate()}</span>
               ${a ? `<div class="cal-chips">
