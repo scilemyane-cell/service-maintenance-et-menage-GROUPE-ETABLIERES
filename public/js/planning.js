@@ -47,6 +47,7 @@ export function permissions(user) {
     canSeeSynthese: isEditor || user.role === "direction",
     canSeeAbsencesTab: isEditor,
     canSeeInterventionsTab: isEditor || isTech,
+    canSeeTransfertsTab: isEditor || user.role === "direction",
   };
 }
 
@@ -74,6 +75,7 @@ export function mountCalendrier(container, user) { startListeners(container, use
 export function mountAbsencesTab(container, user) { startListeners(container, user, "absences"); }
 export function mountInterventionsTab(container, user) { startListeners(container, user, "interventions"); }
 export function mountSyntheseTab(container, user) { startListeners(container, user, "synthese"); }
+export function mountTransfertsTab(container, user) { startListeners(container, user, "transferts"); }
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
@@ -82,11 +84,13 @@ function renderAll() {
   if (ui.subtab === "absences" && !perms.canSeeAbsencesTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
   if (ui.subtab === "interventions" && !perms.canSeeInterventionsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
   if (ui.subtab === "synthese" && !perms.canSeeSynthese) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
+  if (ui.subtab === "transferts" && !perms.canSeeTransfertsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
 
   if (ui.subtab === "calendrier") return renderCalendar(mountedContainer, perms);
   if (ui.subtab === "absences") return renderAbsences(mountedContainer, perms);
   if (ui.subtab === "interventions") return renderInterventions(mountedContainer, perms);
   if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
+  if (ui.subtab === "transferts") return renderTransferts(mountedContainer, perms);
 }
 
 // =================================================================
@@ -99,6 +103,36 @@ function monthGrid(year, month) {
   const days = [];
   for (let i = 0; i < 42; i++) days.push(addDays(gridStart, i));
   return days;
+}
+
+// =================================================================
+// Historique des transferts de ligne
+// =================================================================
+function renderTransferts(container) {
+  const sorted = [...state.transferts].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  container.innerHTML = `
+    <div class="stack">
+      <p class="hint">Historique des transferts de ligne confirmés — qui a validé, et quand.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>De</th><th>Vers</th><th>Confirmé par</th><th>Le</th></tr></thead>
+          <tbody>
+            ${sorted.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucun transfert confirmé pour l'instant.</td></tr>` :
+              sorted.map(t => `
+                <tr>
+                  <td>${new Date(t.date).toLocaleDateString("fr-FR")}</td>
+                  <td>${esc(t.fromPerson)}</td>
+                  <td>${esc(t.toPerson)}</td>
+                  <td>${esc(t.confirmedByNom)}</td>
+                  <td>${t.confirmedAt ? new Date(t.confirmedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                </tr>
+              `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 function renderCalendar(container, perms) {
