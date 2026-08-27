@@ -515,6 +515,12 @@ function renderInterventions(container, perms) {
           <label>Du<input type="date" id="doc-start" value="${esc(ui.docForm.start)}"></label>
           <label>Au<input type="date" id="doc-end" value="${esc(ui.docForm.end)}"></label>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="nav-btn" data-period="mois" style="padding:5px 12px;font-size:11px">Ce mois-ci</button>
+          <button class="nav-btn" data-period="3mois" style="padding:5px 12px;font-size:11px">3 derniers mois</button>
+          <button class="nav-btn" data-period="annee" style="padding:5px 12px;font-size:11px">Année en cours</button>
+          <button class="nav-btn" data-period="tout" style="padding:5px 12px;font-size:11px">Toute la période</button>
+        </div>
         <button class="add-btn" id="doc-generate">📄 Générer le document</button>
       </div>
       ${ui.docForm.generated ? renderDocPreview() : ""}
@@ -604,10 +610,32 @@ function renderInterventions(container, perms) {
   }
 
   if (perms.isEditor) {
-    document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; });
-    document.getElementById("doc-start").addEventListener("input", (e) => { ui.docForm.start = e.target.value; });
-    document.getElementById("doc-end").addEventListener("input", (e) => { ui.docForm.end = e.target.value; });
+    document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
+    document.getElementById("doc-start").addEventListener("change", (e) => { ui.docForm.start = e.target.value; if (ui.docForm.generated) renderAll(); });
+    document.getElementById("doc-end").addEventListener("change", (e) => { ui.docForm.end = e.target.value; if (ui.docForm.generated) renderAll(); });
     document.getElementById("doc-generate").addEventListener("click", () => { ui.docForm.generated = true; renderAll(); });
+    container.querySelectorAll("[data-period]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const today = new Date();
+        const iso = (d) => d.toISOString().slice(0, 10);
+        if (btn.dataset.period === "mois") {
+          ui.docForm.start = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+          ui.docForm.end = iso(today);
+        } else if (btn.dataset.period === "3mois") {
+          ui.docForm.start = iso(new Date(today.getFullYear(), today.getMonth() - 2, 1));
+          ui.docForm.end = iso(today);
+        } else if (btn.dataset.period === "annee") {
+          ui.docForm.start = iso(new Date(today.getFullYear(), 0, 1));
+          ui.docForm.end = iso(today);
+        } else if (btn.dataset.period === "tout") {
+          const dates = state.interventions.map(i => i.date).sort();
+          ui.docForm.start = dates[0] || iso(today);
+          ui.docForm.end = iso(today);
+        }
+        ui.docForm.generated = true;
+        renderAll();
+      });
+    });
     document.getElementById("doc-print")?.addEventListener("click", () => { window.print(); });
   }
 }
