@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Établières Astreinte</title>
+<title>Établières</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -133,7 +133,9 @@
         <div class="topbar-title">
           ${category ? `<button class="back-btn" id="back-home">← Accueil</button>` : ""}
           <span class="topbar-eyebrow">Groupe Établières · Service Maintenance et Ménage</span>
-          <h1>Établières <span class="accent">Astreinte</span></h1>
+          ${category
+            ? `<h1>${escapeHtml(category.label)}${categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab) ? ` <span class="accent">› ${escapeHtml(categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab).label)}</span>` : ""}</h1>`
+            : `<h1>Établières</h1>`}
         </div>
         <div class="topbar-user">
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
