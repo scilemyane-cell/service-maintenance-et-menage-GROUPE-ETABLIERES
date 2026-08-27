@@ -21,7 +21,7 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", site: "", type: "", heures: "", description: "" },
+  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", description: "" },
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
@@ -461,6 +461,14 @@ function renderInterventions(container, perms) {
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   const isLockedTech = perms.isTech && !perms.isEditor;
 
+  const currentAssoc = state.associations.find(a => a.nom === ui.form.association);
+  const groupesDispo = currentAssoc ? [...new Set(currentAssoc.sites.filter(s => s.groupe).map(s => s.groupe))] : [];
+  const hasSansGroupe = currentAssoc ? currentAssoc.sites.some(s => !s.groupe) : false;
+  const assocSelected = currentAssoc ? { groupes: groupesDispo, hasOnlyGrouped: groupesDispo.length > 0 && !hasSansGroupe } : null;
+  const sitesForSiteSelect = currentAssoc
+    ? currentAssoc.sites.filter(s => ui.form.groupe ? s.groupe === ui.form.groupe : !s.groupe)
+    : [];
+
   container.innerHTML = `
     <div class="stack">
       ${perms.canLogIntervention ? `
@@ -478,19 +486,17 @@ function renderInterventions(container, perms) {
               ${state.associations.map(a => `<option value="${esc(a.nom)}" ${ui.form.association === a.nom ? 'selected' : ''}>${esc(a.nom)}</option>`).join("")}
             </select>
           </label>
+          ${groupesDispo.length > 0 ? `
+          <label>Sous-service
+            <select id="f-groupe">
+              ${hasSansGroupe ? `<option value="" ${!ui.form.groupe ? 'selected' : ''}>— Aucun —</option>` : `<option value="">— Choisir —</option>`}
+              ${groupesDispo.map(g => `<option value="${esc(g)}" ${ui.form.groupe === g ? 'selected' : ''}>${esc(g)}</option>`).join("")}
+            </select>
+          </label>` : ""}
           <label>Site
-            <select id="f-site" ${!ui.form.association ? 'disabled' : ''}>
+            <select id="f-site" ${(!ui.form.association || (assocSelected?.groupes.length && !ui.form.groupe && assocSelected?.hasOnlyGrouped)) ? 'disabled' : ''}>
               <option value="">— Choisir —</option>
-              ${(() => {
-                const sites = state.associations.find(a => a.nom === ui.form.association)?.sites || [];
-                const sansGroupe = sites.filter(s => !s.groupe);
-                const groupes = [...new Set(sites.filter(s => s.groupe).map(s => s.groupe))];
-                let html = sansGroupe.map(s => `<option value="${esc(s.nom)}" ${ui.form.site === s.nom ? 'selected' : ''}>${esc(s.nom)}</option>`).join("");
-                groupes.forEach(g => {
-                  html += `<optgroup label="${esc(g)}">${sites.filter(s => s.groupe === g).map(s => `<option value="${esc(s.nom)}" ${ui.form.site === s.nom ? 'selected' : ''}>${esc(s.nom)}</option>`).join("")}</optgroup>`;
-                });
-                return html;
-              })()}
+              ${sitesForSiteSelect.map(s => `<option value="${esc(s.nom)}" ${ui.form.site === s.nom ? 'selected' : ''}>${esc(s.nom)}</option>`).join("")}
             </select>
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
@@ -541,6 +547,12 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("f-association").addEventListener("change", (e) => {
       ui.form.association = e.target.value;
+      ui.form.groupe = "";
+      ui.form.site = "";
+      renderAll();
+    });
+    document.getElementById("f-groupe")?.addEventListener("change", (e) => {
+      ui.form.groupe = e.target.value;
       ui.form.site = "";
       renderAll();
     });
@@ -559,11 +571,11 @@ function renderInterventions(container, perms) {
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
       try {
         await addIntervention({
-          date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, site: ui.form.site,
+          date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
           type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
           createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
         });
-        ui.form.association = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
+        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
