@@ -12,6 +12,7 @@ let mountedUser = null;
 let catsRef = [];
 let onSelectRef = null;
 let clearCountdown = null;
+let debugForce = false;
 
 function cleanup() {
   unsubs.forEach(u => u());
@@ -52,6 +53,8 @@ function render() {
   const todayKey = dateKey(refDate);
   const confirmedRecord = transferts.find(t => t.id === todayKey);
 
+  if (debugForce) { handover = { from: "Test A", to: "Test B" }; upcoming = null; }
+
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
 
   mountedContainer.innerHTML = `
@@ -84,12 +87,17 @@ function render() {
           </button>
         `).join("")}
       </div>
+
+      ${mountedUser.role === "admin" ? `
+      <button class="nav-btn" id="debug-toggle" style="width:fit-content;opacity:.6;font-size:11px">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester l'affichage du bandeau de transfert"}</button>
+      ` : ""}
     </div>
   `;
 
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => onSelectRef(btn.dataset.cat));
   });
+  document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
 
   clearCountdown = attachTransfertListeners(mountedContainer, handover, mountedUser, () => render());
 }
