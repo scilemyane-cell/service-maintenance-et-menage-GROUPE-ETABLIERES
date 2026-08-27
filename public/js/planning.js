@@ -406,7 +406,10 @@ function renderDocPreview() {
   const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
 
   return `
-    <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
+      <button class="nav-btn" id="doc-close">✕ Fermer l'aperçu</button>
+    </div>
     <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
         <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
@@ -669,6 +672,7 @@ function renderInterventions(container, perms) {
       });
     });
     document.getElementById("doc-print")?.addEventListener("click", () => { window.print(); });
+    document.getElementById("doc-close")?.addEventListener("click", () => { ui.docForm.generated = false; renderAll(); });
   }
 }
 
