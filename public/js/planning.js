@@ -642,7 +642,7 @@ function renderInterventions(container, perms) {
     container.querySelectorAll("[data-period]").forEach(btn => {
       btn.addEventListener("click", () => {
         const today = new Date();
-        const iso = (d) => d.toISOString().slice(0, 10);
+        const iso = (d) => dateKey(d);
         if (btn.dataset.period === "mois") {
           ui.docForm.start = iso(new Date(today.getFullYear(), today.getMonth(), 1));
           ui.docForm.end = iso(today);
