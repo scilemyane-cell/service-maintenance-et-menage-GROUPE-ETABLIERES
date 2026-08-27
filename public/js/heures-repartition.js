@@ -62,9 +62,47 @@ function currentRecord() {
       weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart), 6)),
       agentUid: agent.uid, agentNom: agent.nom,
       lignes: template.map(t => ({ label: t.label, prevu: t.heures, jours: emptyDays() })),
-      submitted: false,
+      submitted: false, valide: false,
     },
   };
+}
+
+function weekTotal(record) {
+  return record.lignes.reduce((s, l) => s + DAYS.reduce((s2, d) => s2 + (parseFloat(l.jours[d]) || 0), 0), 0);
+}
+
+function recapHTML() {
+  const byAgent = {};
+  state.repartitions
+    .filter(r => r.dispositif === mountedDispositif)
+    .forEach(r => {
+      if (!byAgent[r.agentNom]) byAgent[r.agentNom] = { valide: 0, attente: 0 };
+      const total = weekTotal(r);
+      if (r.valide) byAgent[r.agentNom].valide += total;
+      else byAgent[r.agentNom].attente += total;
+    });
+  const rows = Object.entries(byAgent).sort((a, b) => a[0].localeCompare(b[0]));
+
+  return `
+    <div class="form-card">
+      <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Récapitulatif — ${esc(mountedDispositif)}</h3>
+      <div class="table-wrap" style="border:none">
+        <table>
+          <thead><tr><th>Personne</th><th>Validé</th><th>En attente</th><th>Total</th></tr></thead>
+          <tbody>
+            ${rows.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucune donnée pour l'instant.</td></tr>` :
+              rows.map(([nom, r]) => `
+                <tr>
+                  <td>${esc(nom)}</td>
+                  <td>${r.valide.toFixed(2)} h</td>
+                  <td>${r.attente > 0 ? `<span style="color:var(--gold)">${r.attente.toFixed(2)} h</span>` : "0 h"}</td>
+                  <td style="font-weight:700">${(r.valide + r.attente).toFixed(2)} h</td>
+                </tr>
+              `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 async function persist(id, data) {
@@ -155,6 +193,8 @@ function renderView(id, data) {
         </div>
       </div>
 
+      ${isEditorUser(mountedUser) ? recapHTML() : ""}
+
       <p class="hint">Répartition pré-remplie selon le modèle hebdomadaire de ce dispositif (${totalPrevu}h prévues). Renseigne les heures réelles jour par jour — c'est modulable, ajuste selon la semaine réellement travaillée.</p>
 
       ${aRepos ? `<div class="stat-chip ok" style="width:fit-content">✓ Repos hebdomadaire présent (${7 - joursTravailles.length} jour${7 - joursTravailles.length > 1 ? 's' : ''} non travaillé${7 - joursTravailles.length > 1 ? 's' : ''})</div>`
@@ -163,7 +203,8 @@ function renderView(id, data) {
       ${depasseSemaine ? `<div class="alert-banner">⚠️ Total de la semaine (${totalSemaine.toFixed(2)}h) au-dessus du seuil de ${state.params.seuilSemaine}h/semaine.</div>` : ""}
       ${moyenneDepassee ? `<div class="alert-banner">⚠️ Moyenne de ${moyenneDepassee.toFixed(2)}h/semaine sur les ${state.params.nbSemainesMoyenne} dernières semaines (seuil : ${state.params.seuilMoyenne}h) — sur ce dispositif uniquement.</div>` : ""}
 
-      ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Semaine marquée comme terminée</div>` : ""}
+      ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Semaine marquée comme terminée par l'agent</div>` : ""}
+      ${data.valide ? `<div class="stat-chip ok" style="width:fit-content;background:rgba(63,182,172,.18)">✅ Semaine validée pour paiement</div>` : ""}
 
       <div class="table-wrap">
         <table>
@@ -203,6 +244,7 @@ function renderView(id, data) {
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="rp-save">💾 Enregistrer</button>
         <button class="nav-btn" id="rp-submit">${data.submitted ? "↩️ Rouvrir la semaine" : "✓ Marquer la semaine comme terminée"}</button>
+        ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="rp-valider" style="border-color:var(--teal)">${data.valide ? "↩️ Retirer la validation" : "✅ Valider pour paiement"}</button>` : ""}
         <span id="rp-save-status" style="font-size:12px"></span>
       </div>
     </div>
@@ -246,6 +288,11 @@ function renderView(id, data) {
   document.getElementById("rp-save").addEventListener("click", () => { persist(id, data); });
   document.getElementById("rp-submit").addEventListener("click", () => {
     data.submitted = !data.submitted;
+    persist(id, data);
+    renderView(id, data);
+  });
+  document.getElementById("rp-valider")?.addEventListener("click", () => {
+    data.valide = !data.valide;
     persist(id, data);
     renderView(id, data);
   });
