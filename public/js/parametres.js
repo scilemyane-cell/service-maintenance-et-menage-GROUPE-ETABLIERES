@@ -179,11 +179,12 @@ function renderAssociations(container) {
           </div>
           <div class="table-wrap" style="border:none">
             <table>
-              <thead><tr><th>Site</th><th></th></tr></thead>
+              <thead><tr><th>Site</th><th style="width:140px">Groupe (optionnel)</th><th></th></tr></thead>
               <tbody>
                 ${assoc.sites.map((site, si) => `
                   <tr>
-                    <td><input data-site-nom="${ai}-${si}" value="${esc(site)}" style="width:100%"></td>
+                    <td><input data-site-nom="${ai}-${si}" value="${esc(site.nom)}" style="width:100%"></td>
+                    <td><input data-site-groupe="${ai}-${si}" value="${esc(site.groupe || '')}" placeholder="ex. MNA" style="width:100%"></td>
                     <td><button class="del-btn" data-del-site="${ai}-${si}">🗑️</button></td>
                   </tr>
                 `).join("")}
@@ -204,7 +205,13 @@ function renderAssociations(container) {
   container.querySelectorAll("[data-site-nom]").forEach(inp => {
     inp.addEventListener("input", () => {
       const [ai, si] = inp.dataset.siteNom.split("-").map(Number);
-      assocState.associations[ai].sites[si] = inp.value;
+      assocState.associations[ai].sites[si].nom = inp.value;
+    });
+  });
+  container.querySelectorAll("[data-site-groupe]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const [ai, si] = inp.dataset.siteGroupe.split("-").map(Number);
+      assocState.associations[ai].sites[si].groupe = inp.value;
     });
   });
   container.querySelectorAll("[data-del-assoc]").forEach(btn => {
@@ -219,7 +226,7 @@ function renderAssociations(container) {
   });
   container.querySelectorAll("[data-add-site]").forEach(btn => {
     btn.addEventListener("click", () => {
-      assocState.associations[parseInt(btn.dataset.addSite, 10)].sites.push("Nouveau site");
+      assocState.associations[parseInt(btn.dataset.addSite, 10)].sites.push({ nom: "Nouveau site", groupe: "" });
       renderAssociations(container);
     });
   });

@@ -481,7 +481,16 @@ function renderInterventions(container, perms) {
           <label>Site
             <select id="f-site" ${!ui.form.association ? 'disabled' : ''}>
               <option value="">— Choisir —</option>
-              ${(state.associations.find(a => a.nom === ui.form.association)?.sites || []).map(s => `<option value="${esc(s)}" ${ui.form.site === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}
+              ${(() => {
+                const sites = state.associations.find(a => a.nom === ui.form.association)?.sites || [];
+                const sansGroupe = sites.filter(s => !s.groupe);
+                const groupes = [...new Set(sites.filter(s => s.groupe).map(s => s.groupe))];
+                let html = sansGroupe.map(s => `<option value="${esc(s.nom)}" ${ui.form.site === s.nom ? 'selected' : ''}>${esc(s.nom)}</option>`).join("");
+                groupes.forEach(g => {
+                  html += `<optgroup label="${esc(g)}">${sites.filter(s => s.groupe === g).map(s => `<option value="${esc(s.nom)}" ${ui.form.site === s.nom ? 'selected' : ''}>${esc(s.nom)}</option>`).join("")}</optgroup>`;
+                });
+                return html;
+              })()}
             </select>
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
