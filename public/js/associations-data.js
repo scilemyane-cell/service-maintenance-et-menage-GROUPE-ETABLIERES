@@ -34,7 +34,21 @@ function normalize(associations) {
 export function watchAssociations(callback) {
   return onSnapshot(REF(), (snap) => {
     if (snap.exists() && snap.data().associations) {
-      callback(normalize(snap.data().associations));
+      let existing = normalize(snap.data().associations);
+      callback(existing);
+      // Comble automatiquement une association déjà présente en base mais
+      // dont la liste de sites est encore vide, avec le modèle par défaut
+      // prévu dans le code — sans jamais toucher à une association qui a
+      // déjà au moins un site (donc déjà personnalisée par un admin).
+      let changed = false;
+      const patched = existing.map(a => {
+        if (a.sites.length === 0) {
+          const def = DEFAULT_ASSOCIATIONS.find(d => d.nom === a.nom);
+          if (def && def.sites.length > 0) { changed = true; return { nom: a.nom, sites: def.sites }; }
+        }
+        return a;
+      });
+      if (changed && !seeded) { seeded = true; setDoc(REF(), { associations: patched }).finally(() => { seeded = false; }); }
     } else {
       callback(DEFAULT_ASSOCIATIONS);
       if (!seeded) { seeded = true; setDoc(REF(), { associations: DEFAULT_ASSOCIATIONS }); }
