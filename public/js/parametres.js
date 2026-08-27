@@ -4,6 +4,7 @@ import { watchUsers, updateUser, createUserProfile } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
 import { watchAccess, setDispositifAccess } from "./access-data.js";
 import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate } from "./dispositif-settings-data.js";
+import { watchAssociations, saveAssociations } from "./associations-data.js";
 import { roleLabel } from "./auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { auth } from "./firebase-init.js";
@@ -152,6 +153,82 @@ function renderUtilisateurs(container) {
         btn.disabled = false;
       }
     });
+  });
+}
+
+// =================================================================
+// ADMINISTRATION GLOBALE — Associations & Sites (pour Interventions)
+// =================================================================
+let assocState = { associations: [] };
+
+export function mountAssociationsSites(container) {
+  cleanup();
+  container.innerHTML = `<div class="hint">Chargement…</div>`;
+  unsubs.push(watchAssociations((a) => { assocState.associations = JSON.parse(JSON.stringify(a)); renderAssociations(container); }));
+}
+
+function renderAssociations(container) {
+  container.innerHTML = `
+    <div class="stack">
+      <p class="hint">Ces associations et leurs sites alimentent le menu déroulant "Site" dans l'onglet Interventions.</p>
+      ${assocState.associations.map((assoc, ai) => `
+        <div class="form-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+            <input data-assoc-nom="${ai}" value="${esc(assoc.nom)}" style="font-weight:700;color:var(--gold);background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;flex:1">
+            <button class="del-btn" data-del-assoc="${ai}">🗑️ Supprimer l'association</button>
+          </div>
+          <div class="table-wrap" style="border:none">
+            <table>
+              <thead><tr><th>Site</th><th></th></tr></thead>
+              <tbody>
+                ${assoc.sites.map((site, si) => `
+                  <tr>
+                    <td><input data-site-nom="${ai}-${si}" value="${esc(site)}" style="width:100%"></td>
+                    <td><button class="del-btn" data-del-site="${ai}-${si}">🗑️</button></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+          <button class="nav-btn" data-add-site="${ai}" style="margin-top:10px">➕ Ajouter un site</button>
+        </div>
+      `).join("")}
+      <button class="nav-btn" id="assoc-add">➕ Ajouter une association</button>
+      <button class="add-btn" id="assoc-save">💾 Enregistrer</button>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-assoc-nom]").forEach(inp => {
+    inp.addEventListener("input", () => { assocState.associations[inp.dataset.assocNom].nom = inp.value; });
+  });
+  container.querySelectorAll("[data-site-nom]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const [ai, si] = inp.dataset.siteNom.split("-").map(Number);
+      assocState.associations[ai].sites[si] = inp.value;
+    });
+  });
+  container.querySelectorAll("[data-del-assoc]").forEach(btn => {
+    btn.addEventListener("click", () => { assocState.associations.splice(parseInt(btn.dataset.delAssoc, 10), 1); renderAssociations(container); });
+  });
+  container.querySelectorAll("[data-del-site]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const [ai, si] = btn.dataset.delSite.split("-").map(Number);
+      assocState.associations[ai].sites.splice(si, 1);
+      renderAssociations(container);
+    });
+  });
+  container.querySelectorAll("[data-add-site]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      assocState.associations[parseInt(btn.dataset.addSite, 10)].sites.push("Nouveau site");
+      renderAssociations(container);
+    });
+  });
+  document.getElementById("assoc-add").addEventListener("click", () => {
+    assocState.associations.push({ nom: "Nouvelle association", sites: [] });
+    renderAssociations(container);
+  });
+  document.getElementById("assoc-save").addEventListener("click", async () => {
+    await saveAssociations(assocState.associations);
   });
 }
 

@@ -21,7 +21,7 @@
   import { mountArchiveForDispositif } from "./js/heures-archive.js";
   import { watchDispositifSettings, heuresEnabled } from "./js/dispositif-settings-data.js";
   import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
-  import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif } from "./js/parametres.js";
+  import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif, mountAssociationsSites } from "./js/parametres.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
 
@@ -72,6 +72,7 @@
         subtabs: [
           { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ["admin","n1"], mount: mountUtilisateurs },
           { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ["admin","n1"], mount: mountAccesRemplacants },
+          { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ["admin","n1"], mount: mountAssociationsSites },
         ],
       },
       {

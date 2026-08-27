@@ -9,13 +9,13 @@ import {
 } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
+import { watchAssociations } from "./associations-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 
-const SITE_SUGGESTIONS = ["École", "Agropolis", "Armonia", "Résidence Valoria", "Internat Bâtiment A", "Internat Bâtiment B"];
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 
-let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {} };
+let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [] };
 let ui = {
   subtab: "calendrier",
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
@@ -72,6 +72,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchInterventions((i) => { state.interventions = i; renderAll(); }));
   unsubs.push(watchTransferts((t) => { state.transferts = t; renderAll(); }));
   unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; renderAll(); }));
+  unsubs.push(watchAssociations((a) => { state.associations = a; renderAll(); }));
 }
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
@@ -471,7 +472,7 @@ function renderInterventions(container, perms) {
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
               : `<select id="f-tech">${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
-          <label>Site<input id="f-site" list="sites" value="${esc(ui.form.site)}" placeholder="ex. Résidence Valoria"><datalist id="sites">${SITE_SUGGESTIONS.map(s => `<option value="${esc(s)}">`).join("")}</datalist></label>
+          <label>Site<input id="f-site" list="sites" value="${esc(ui.form.site)}" placeholder="ex. Résidence Valoria"><datalist id="sites">${state.associations.flatMap(a => [a.nom, ...a.sites]).map(s => `<option value="${esc(s)}">`).join("")}</datalist></label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
           <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="ex. 1.5"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
