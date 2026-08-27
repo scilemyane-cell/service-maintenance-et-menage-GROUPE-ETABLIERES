@@ -1,7 +1,7 @@
 import {
   addDays, dateKey, sameDay, fmtLong, fmtShort, HOLIDAYS,
   YEAR_START, YEAR_END, computeWeeklyTitulaires, resolveDayN1, resolveDayN2,
-  isAbsentOnDate, esc, initials, colorForPerson, handoverInfo, upcomingHandover,
+  isAbsentOnDate, esc, initials, colorForPerson, nextHandover,
 } from "./astreinte-logic.js";
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
@@ -143,10 +143,8 @@ function renderCalendar(container, perms) {
   const n1Today = resolveDayN1(refDate, state.people, state.absences, titN1);
   const n2Today = resolveDayN2(refDate, state.people, state.absences, titN2);
   const holidayToday = HOLIDAYS.get(dateKey(refDate));
-  const handover = todayInRange ? handoverInfo(refDate, state.people, state.absences, titN1, resolveDayN1) : null;
-  const upcoming = (todayInRange && !handover) ? upcomingHandover(refDate, state.people, state.absences, titN1, resolveDayN1, 3) : null;
-  const todayKey = dateKey(refDate);
-  const confirmedRecord = state.transferts.find(t => t.id === todayKey);
+  const next = todayInRange ? nextHandover(refDate, state.people, state.absences, titN1, resolveDayN1, 3) : null;
+  const confirmedRecord = next ? state.transferts.find(t => t.id === dateKey(next.date)) : null;
 
   let alertDays = [];
   for (let d = new Date(YEAR_START); d <= YEAR_END; d = addDays(d, 1)) {
@@ -174,7 +172,7 @@ function renderCalendar(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      ${transfertBannerHTML(handover, confirmedRecord, upcoming)}
+      ${transfertBannerHTML(next, confirmedRecord)}
       <div class="hero">
         <div class="hero-label">${todayInRange ? "Astreinte du jour" : "Aperçu — année scolaire"}</div>
         <div class="hero-blocks">
@@ -268,7 +266,7 @@ function renderCalendar(container, perms) {
   });
 
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
-  clearCountdown = attachTransfertListeners(container, handover, mountedUser, () => renderAll());
+  clearCountdown = attachTransfertListeners(container, next, mountedUser, () => renderAll());
 }
 
 // =================================================================

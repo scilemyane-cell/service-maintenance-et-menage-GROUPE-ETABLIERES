@@ -168,6 +168,19 @@ export function handoverInfo(date, people, absences, titN1, resolveDayN1Fn) {
   return { from: yesterday.assigned, to: today.assigned };
 }
 
+// Version unifiée : renvoie le prochain jour de bascule dans les
+// `maxDays` jours à venir (aujourd'hui inclus), avec sa date exacte et
+// le nombre de jours restants — pour un bandeau unique (aujourd'hui ou
+// bientôt) plutôt que deux affichages séparés.
+export function nextHandover(date, people, absences, titN1, resolveDayN1Fn, maxDays = 3) {
+  for (let i = 0; i <= maxDays; i++) {
+    const checkDate = addDays(date, i);
+    const info = handoverInfo(checkDate, people, absences, titN1, resolveDayN1Fn);
+    if (info) return { ...info, date: checkDate, daysUntil: i };
+  }
+  return null;
+}
+
 // Cherche le prochain jour de bascule dans les `maxDays` jours à venir
 // (sans compter aujourd'hui) — pour un préavis avant le jour J.
 export function upcomingHandover(date, people, absences, titN1, resolveDayN1Fn, maxDays = 3) {

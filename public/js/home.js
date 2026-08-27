@@ -1,4 +1,4 @@
-import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, handoverInfo, upcomingHandover, addDays } from "./astreinte-logic.js";
+import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
 import { watchPeople, watchAbsences } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -40,27 +40,23 @@ function render() {
   const refDate = inRange ? today : YEAR_START;
   const hasPeople = people.n1.length > 0 && people.n2.length > 0;
 
-  let n1 = null, n2 = null, holidayToday = null, handover = null, upcoming = null;
+  let n1 = null, n2 = null, holidayToday = null, next = null;
   if (hasPeople) {
     const { titN1, titN2 } = computeWeeklyTitulaires(people, absences);
     n1 = resolveDayN1(refDate, people, absences, titN1);
     n2 = resolveDayN2(refDate, people, absences, titN2);
     holidayToday = HOLIDAYS.get(dateKey(refDate));
-    if (inRange) {
-      handover = handoverInfo(refDate, people, absences, titN1, resolveDayN1);
-      if (!handover) upcoming = upcomingHandover(refDate, people, absences, titN1, resolveDayN1, 3);
-    }
+    if (inRange) next = nextHandover(refDate, people, absences, titN1, resolveDayN1, 3);
   }
-  const todayKey = dateKey(refDate);
-  const confirmedRecord = transferts.find(t => t.id === todayKey);
+  const confirmedRecord = next ? transferts.find(t => t.id === dateKey(next.date)) : null;
 
-  if (debugForce) { handover = { from: "Test A", to: "Test B" }; upcoming = null; }
+  if (debugForce) { next = { from: "Test A", to: "Test B", date: refDate, daysUntil: 0 }; }
 
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      ${transfertBannerHTML(handover, confirmedRecord, upcoming)}
+      ${transfertBannerHTML(next, confirmedRecord)}
 
       <div class="hero">
         <div class="hero-label">Bonjour ${esc(mountedUser.nom || mountedUser.email)}</div>
@@ -100,5 +96,5 @@ function render() {
   });
   document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
 
-  clearCountdown = attachTransfertListeners(mountedContainer, handover, mountedUser, () => render());
+  clearCountdown = attachTransfertListeners(mountedContainer, next, mountedUser, () => render());
 }
