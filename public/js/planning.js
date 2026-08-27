@@ -521,6 +521,7 @@ function renderInterventions(container, perms) {
           <button class="nav-btn" data-period="mois" style="padding:5px 12px;font-size:11px">Ce mois-ci</button>
           <button class="nav-btn" data-period="3mois" style="padding:5px 12px;font-size:11px">3 derniers mois</button>
           <button class="nav-btn" data-period="annee" style="padding:5px 12px;font-size:11px">Année en cours</button>
+          <button class="nav-btn" data-period="scolaire" style="padding:5px 12px;font-size:11px">Année scolaire (01/09 → 31/08)</button>
           <button class="nav-btn" data-period="tout" style="padding:5px 12px;font-size:11px">Toute la période</button>
         </div>
         <button class="add-btn" id="doc-generate">📄 Générer le document</button>
@@ -651,6 +652,12 @@ function renderInterventions(container, perms) {
           ui.docForm.end = iso(today);
         } else if (btn.dataset.period === "annee") {
           ui.docForm.start = iso(new Date(today.getFullYear(), 0, 1));
+          ui.docForm.end = iso(today);
+        } else if (btn.dataset.period === "scolaire") {
+          // Année scolaire : du 1er septembre au 31 août. Si on est avant
+          // septembre, elle a commencé l'année civile précédente.
+          const anneeDebut = today.getMonth() >= 8 ? today.getFullYear() : today.getFullYear() - 1;
+          ui.docForm.start = iso(new Date(anneeDebut, 8, 1));
           ui.docForm.end = iso(today);
         } else if (btn.dataset.period === "tout") {
           const dates = state.interventions.map(i => i.date).sort();
