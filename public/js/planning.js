@@ -21,7 +21,7 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", site: "", type: "", heures: "", description: "" },
+  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", site: "", type: "", heures: "", description: "" },
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
@@ -472,7 +472,18 @@ function renderInterventions(container, perms) {
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
               : `<select id="f-tech">${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
-          <label>Site<input id="f-site" list="sites" value="${esc(ui.form.site)}" placeholder="ex. Résidence Valoria"><datalist id="sites">${state.associations.flatMap(a => [a.nom, ...a.sites]).map(s => `<option value="${esc(s)}">`).join("")}</datalist></label>
+          <label>Association
+            <select id="f-association">
+              <option value="">— Choisir —</option>
+              ${state.associations.map(a => `<option value="${esc(a.nom)}" ${ui.form.association === a.nom ? 'selected' : ''}>${esc(a.nom)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Site
+            <select id="f-site" ${!ui.form.association ? 'disabled' : ''}>
+              <option value="">— Choisir —</option>
+              ${(state.associations.find(a => a.nom === ui.form.association)?.sites || []).map(s => `<option value="${esc(s)}" ${ui.form.site === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}
+            </select>
+          </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
           <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="ex. 1.5"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
@@ -515,10 +526,16 @@ function renderInterventions(container, perms) {
   `;
 
   if (perms.canLogIntervention) {
-    ["date", "site", "type", "heures", "desc"].forEach(field => {
+    ["date", "type", "heures", "desc"].forEach(field => {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
+    document.getElementById("f-association").addEventListener("change", (e) => {
+      ui.form.association = e.target.value;
+      ui.form.site = "";
+      renderAll();
+    });
+    document.getElementById("f-site").addEventListener("change", (e) => { ui.form.site = e.target.value; });
     if (!isLockedTech) {
       const techEl = document.getElementById("f-tech");
       if (techEl) techEl.addEventListener("input", () => { ui.form.technicien = techEl.value; });
@@ -526,17 +543,18 @@ function renderInterventions(container, perms) {
     document.getElementById("add-interv").addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
       if (!ui.form.technicien) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un intervenant.</span>`; return; }
-      if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un site.</span>`; return; }
+      if (!ui.form.association) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association.</span>`; return; }
+      if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un site.</span>`; return; }
       if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
       if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
       try {
         await addIntervention({
-          date: ui.form.date, technicien: ui.form.technicien, site: ui.form.site,
+          date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, site: ui.form.site,
           type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
           createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
         });
-        ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
+        ui.form.association = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
