@@ -67,11 +67,11 @@ function render() {
         ${hasPeople ? `
         <div class="hero-blocks">
           <div class="hero-block n1">
-            <div class="avatar" style="background:${colorForPerson(n1.assigned, people)}">${n1.assigned === 'A DÉFINIR' ? '!' : initials(n1.assigned)}</div>
+            <div class="avatar" style="background:${colorForPerson(n1.assigned, people)}"></div>
             <div><div class="hero-block-label">Astreinte N1 aujourd'hui</div><div class="hero-block-value">${esc(n1.assigned)}</div></div>
           </div>
           <div class="hero-block n2">
-            <div class="avatar" style="background:${colorForPerson(n2.assigned, people)}">${n2.assigned === 'A DÉFINIR' ? '!' : initials(n2.assigned)}</div>
+            <div class="avatar" style="background:${colorForPerson(n2.assigned, people)}"></div>
             <div><div class="hero-block-label">Astreinte N2 aujourd'hui</div><div class="hero-block-value">${esc(n2.assigned)}</div></div>
           </div>
         </div>

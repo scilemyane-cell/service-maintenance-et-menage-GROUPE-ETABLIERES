@@ -179,11 +179,11 @@ function renderCalendar(container, perms) {
         <div class="hero-label">${todayInRange ? "Astreinte du jour" : "Aperçu — année scolaire"}</div>
         <div class="hero-blocks">
           <div class="hero-block n1">
-            <div class="avatar" style="background:${colorForPerson(n1Today.assigned, state.people)}">${n1Today.assigned === 'A DÉFINIR' ? '!' : initials(n1Today.assigned)}</div>
+            <div class="avatar" style="background:${colorForPerson(n1Today.assigned, state.people)}"></div>
             <div><div class="hero-block-label">Niveau 1 · réception</div><div class="hero-block-value">${esc(n1Today.assigned)}</div></div>
           </div>
           <div class="hero-block n2">
-            <div class="avatar" style="background:${colorForPerson(n2Today.assigned, state.people)}">${n2Today.assigned === 'A DÉFINIR' ? '!' : initials(n2Today.assigned)}</div>
+            <div class="avatar" style="background:${colorForPerson(n2Today.assigned, state.people)}"></div>
             <div><div class="hero-block-label">Niveau 2 · intervention</div><div class="hero-block-value">${esc(n2Today.assigned)}</div></div>
           </div>
         </div>
@@ -229,8 +229,8 @@ function renderCalendar(container, perms) {
               ${hol ? '<span class="cal-holiday-dot"></span>' : ''}
               <span class="cal-daynum">${d.getDate()}</span>
               ${a ? `<div class="cal-chips">
-                <span class="cal-chip ${a.assigned === 'A DÉFINIR' ? 'def' : ''}" style="${a.assigned !== 'A DÉFINIR' ? `background:${colorForPerson(a.assigned, state.people)}` : ''}">${a.assigned === 'A DÉFINIR' ? 'N1 !' : initials(a.assigned)}</span>
-                <span class="cal-chip ${b.assigned === 'A DÉFINIR' ? 'def' : ''}" style="${b.assigned !== 'A DÉFINIR' ? `background:${colorForPerson(b.assigned, state.people)}` : ''}">${b.assigned === 'A DÉFINIR' ? 'N2 !' : initials(b.assigned)}</span>
+                <span class="cal-chip ${a.assigned === 'A DÉFINIR' ? 'def' : ''}" style="${a.assigned !== 'A DÉFINIR' ? `--chip-color:${colorForPerson(a.assigned, state.people)}` : ''}">${a.assigned === 'A DÉFINIR' ? 'N1 à définir' : esc(a.assigned)}</span>
+                <span class="cal-chip ${b.assigned === 'A DÉFINIR' ? 'def' : ''}" style="${b.assigned !== 'A DÉFINIR' ? `--chip-color:${colorForPerson(b.assigned, state.people)}` : ''}">${b.assigned === 'A DÉFINIR' ? 'N2 à définir' : esc(b.assigned)}</span>
               </div>` : ""}
             </div>`;
           }).join("")}
@@ -239,8 +239,8 @@ function renderCalendar(container, perms) {
 
       <div class="day-detail">
         <div class="day-detail-title">${fmtLong(selected)}</div>
-        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN1.assigned, state.people)}">${selN1.assigned === 'A DÉFINIR' ? '!' : initials(selN1.assigned)}</div> Niveau 1 : <b>${esc(selN1.assigned)}</b></div>
-        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN2.assigned, state.people)}">${selN2.assigned === 'A DÉFINIR' ? '!' : initials(selN2.assigned)}</div> Niveau 2 : <b>${esc(selN2.assigned)}</b></div>
+        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN1.assigned, state.people)}"></div> Niveau 1 : <b>${esc(selN1.assigned)}</b></div>
+        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN2.assigned, state.people)}"></div> Niveau 2 : <b>${esc(selN2.assigned)}</b></div>
         ${selHoliday ? `<div style="color:var(--violet);font-size:12px;margin-top:6px">☀️ ${esc(selHoliday)}</div>` : ""}
       </div>
     </div>
