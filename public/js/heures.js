@@ -200,6 +200,17 @@ function renderReview(container, user) {
   const uniqueWeekOver = [...new Set(weekOverAlerts)];
   const uniqueAvgOver = [...new Set(avgOverAlerts)];
 
+  // Récapitulatif par personne : total validé / en attente / général —
+  // pour avoir une vue d'ensemble sans dérouler toutes les lignes.
+  const recapByPerson = {};
+  state.heures.forEach(h => {
+    if (!recapByPerson[h.personNom]) recapByPerson[h.personNom] = { valide: 0, attente: 0 };
+    const total = (h.heuresInterne || 0) + (h.heuresExterne || 0);
+    if (h.validated) recapByPerson[h.personNom].valide += total;
+    else recapByPerson[h.personNom].attente += total;
+  });
+  const recapRows = Object.entries(recapByPerson).sort((a, b) => a[0].localeCompare(b[0]));
+
   container.innerHTML = `
     <div class="stack">
       ${canValidate ? `
@@ -217,6 +228,26 @@ function renderReview(container, user) {
       <p class="hint">Seuil actuel : ${params.seuilSemaine}h/semaine, et moyenne max de ${params.seuilMoyenne}h sur ${params.nbSemainesMoyenne} semaines glissantes.</p>
       ${uniqueWeekOver.length ? `<div class="alert-banner">⚠️ Dépassement hebdomadaire : ${uniqueWeekOver.join(", ")}</div>` : ""}
       ${uniqueAvgOver.length ? `<div class="alert-banner">⚠️ Moyenne sur ${params.nbSemainesMoyenne} semaines dépassée : ${uniqueAvgOver.join(", ")}</div>` : ""}
+
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Récapitulatif par personne</h3>
+        <div class="table-wrap" style="border:none">
+          <table>
+            <thead><tr><th>Personne</th><th>Validé</th><th>En attente</th><th>Total</th></tr></thead>
+            <tbody>
+              ${recapRows.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucune donnée.</td></tr>` :
+                recapRows.map(([person, r]) => `
+                  <tr>
+                    <td>${esc(person)}</td>
+                    <td>${r.valide.toFixed(2)} h</td>
+                    <td>${r.attente > 0 ? `<span style="color:var(--gold)">${r.attente.toFixed(2)} h</span>` : "0 h"}</td>
+                    <td style="font-weight:700">${(r.valide + r.attente).toFixed(2)} h</td>
+                  </tr>
+                `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="filters-row">
         <label>Personne<select id="filter-person">${people.map(p => `<option value="${esc(p)}" ${ui.filterPerson === p ? 'selected' : ''}>${esc(p)}</option>`).join("")}</select></label>
