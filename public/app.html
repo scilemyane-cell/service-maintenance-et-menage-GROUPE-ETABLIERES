@@ -13,7 +13,7 @@
 
 <script type="module">
   import { watchAuth, logout, roleLabel } from "./js/auth.js";
-  import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab } from "./js/planning.js";
+  import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab } from "./js/planning.js";
   import { mountDashboard } from "./js/home.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
@@ -65,6 +65,7 @@
           { id: "synthese",       label: "Synthèse",       icon: "📊", roles: ["admin","n1","direction"],  mount: mountSyntheseTab },
           { id: "transferts",     label: "Historique transferts", icon: "🔄", roles: ["admin","n1","direction"], mount: mountTransfertsTab },
           { id: "coordonnees",    label: "Coordonnées",    icon: "📞", roles: ALL, mount: mountCoordonneesTab },
+          { id: "archive-releves", label: "Archive relevés", icon: "🗄️", roles: ["admin","n1","direction"], mount: mountArchiveRelevesTab },
         ],
       },
       {

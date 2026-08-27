@@ -10,12 +10,13 @@ import {
 import { watchTransferts } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { watchAssociations } from "./associations-data.js";
+import { watchReleves, createReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 
-let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [] };
+let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [], releves: [] };
 let ui = {
   subtab: "calendrier",
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
@@ -51,6 +52,7 @@ export function permissions(user) {
     canSeeInterventionsTab: isEditor || isTech,
     canSeeTransfertsTab: isEditor || user.role === "direction",
     canSeeCoordonnees: true,
+    canSeeArchiveReleves: isEditor || user.role === "direction",
   };
 }
 
@@ -74,6 +76,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchTransferts((t) => { state.transferts = t; renderAll(); }));
   unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; renderAll(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; renderAll(); }));
+  unsubs.push(watchReleves((r) => { state.releves = r; renderAll(); }));
 }
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
@@ -82,6 +85,7 @@ export function mountInterventionsTab(container, user) { startListeners(containe
 export function mountSyntheseTab(container, user) { startListeners(container, user, "synthese"); }
 export function mountTransfertsTab(container, user) { startListeners(container, user, "transferts"); }
 export function mountCoordonneesTab(container, user) { startListeners(container, user, "coordonnees"); }
+export function mountArchiveRelevesTab(container, user) { startListeners(container, user, "archive-releves"); }
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
@@ -91,6 +95,7 @@ function renderAll() {
   if (ui.subtab === "interventions" && !perms.canSeeInterventionsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
   if (ui.subtab === "synthese" && !perms.canSeeSynthese) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
   if (ui.subtab === "transferts" && !perms.canSeeTransfertsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
+  if (ui.subtab === "archive-releves" && !perms.canSeeArchiveReleves) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
 
   if (ui.subtab === "calendrier") return renderCalendar(mountedContainer, perms);
   if (ui.subtab === "absences") return renderAbsences(mountedContainer, perms);
@@ -98,6 +103,7 @@ function renderAll() {
   if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
   if (ui.subtab === "transferts") return renderTransferts(mountedContainer, perms);
   if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
+  if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer);
 }
 
 // =================================================================
@@ -110,6 +116,37 @@ function monthGrid(year, month) {
   const days = [];
   for (let i = 0; i < 42; i++) days.push(addDays(gridStart, i));
   return days;
+}
+
+// =================================================================
+// Archive des relevés d'heures validés
+// =================================================================
+function renderArchiveReleves(container) {
+  const sorted = [...state.releves].sort((a, b) => (a.validatedAt < b.validatedAt ? 1 : -1));
+
+  container.innerHTML = `
+    <div class="stack">
+      <p class="hint">Historique des relevés d'heures générés puis validés (transmis aux RH pour paiement).</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Intervenant</th><th>Période</th><th>Interventions</th><th>Total</th><th>Validé par</th><th>Le</th></tr></thead>
+          <tbody>
+            ${sorted.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun relevé validé pour l'instant.</td></tr>` :
+              sorted.map(r => `
+                <tr>
+                  <td>${esc(r.person)}</td>
+                  <td>${fmtShort(new Date(r.start))} → ${fmtShort(new Date(r.end))}</td>
+                  <td>${r.nbInterventions}</td>
+                  <td>${(r.total || 0).toFixed(2)} h</td>
+                  <td>${esc(r.validatedByNom)}</td>
+                  <td>${r.validatedAt ? new Date(r.validatedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                </tr>
+              `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 // =================================================================
@@ -408,8 +445,10 @@ function renderDocPreview() {
   return `
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
+      <button class="nav-btn" id="doc-valider" style="border-color:var(--teal)">✅ Valider ce relevé (transmis RH)</button>
       <button class="nav-btn" id="doc-close">✕ Fermer l'aperçu</button>
     </div>
+    <div id="doc-valid-status" style="font-size:12px;margin:6px 0"></div>
     <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
         <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
@@ -427,10 +466,9 @@ function renderDocPreview() {
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Type</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Description</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures</th>
-          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Transmis</th>
         </tr></thead>
         <tbody>
-          ${filtered.length === 0 ? `<tr><td colspan="7" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
+          ${filtered.length === 0 ? `<tr><td colspan="6" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
             filtered.map(i => `
               <tr>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${new Date(i.date).toLocaleDateString("fr-FR")}</td>
@@ -439,14 +477,12 @@ function renderDocPreview() {
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.type)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.description)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heures}</td>
-                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.transmis ? "✓" : ""}</td>
               </tr>`).join("")}
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
             <td colspan="5" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${total.toFixed(2)} h</td>
-            <td style="border:1px solid #999;padding:4px 6px"></td>
           </tr>
         </tfoot>
       </table>
@@ -542,7 +578,7 @@ function renderInterventions(container, perms) {
                 return `<tr>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
                   <td>${i.heures} h</td><td>${esc(i.description)}</td>
-                  ${perms.isEditor ? `<td><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-transmis="${i.id}" ${i.transmis ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--teal)">${i.transmis ? `<span class="tag" style="background:var(--teal);font-size:9px">Transmis</span>` : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</label></td>` : ''}
+                  ${perms.isEditor ? `<td>${i.transmis ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>` : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</td>` : ''}
                   <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
                 </tr>`;
               }).join("")}
@@ -627,18 +663,6 @@ function renderInterventions(container, perms) {
   }
 
   if (perms.isEditor) {
-    container.querySelectorAll("[data-transmis]").forEach(cb => {
-      cb.addEventListener("change", async () => {
-        const id = cb.dataset.transmis;
-        const record = state.interventions.find(i => i.id === id);
-        if (record) record.transmis = cb.checked;
-        renderAll();
-        await updateIntervention(id, { transmis: cb.checked });
-      });
-    });
-  }
-
-  if (perms.isEditor) {
     document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
     document.getElementById("doc-start").addEventListener("change", (e) => { ui.docForm.start = e.target.value; if (ui.docForm.generated) renderAll(); });
     document.getElementById("doc-end").addEventListener("change", (e) => { ui.docForm.end = e.target.value; if (ui.docForm.generated) renderAll(); });
@@ -673,6 +697,28 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("doc-print")?.addEventListener("click", () => { window.print(); });
     document.getElementById("doc-close")?.addEventListener("click", () => { ui.docForm.generated = false; renderAll(); });
+    document.getElementById("doc-valider")?.addEventListener("click", async () => {
+      const statusEl = document.getElementById("doc-valid-status");
+      const filtered = state.interventions
+        .filter(i => ui.docForm.person === "Tous" || i.technicien === ui.docForm.person)
+        .filter(i => i.date >= ui.docForm.start && i.date <= ui.docForm.end);
+      if (filtered.length === 0) { statusEl.innerHTML = `<span style="color:var(--red)">Aucune intervention sur cette période à valider.</span>`; return; }
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Validation en cours…</span>`;
+      try {
+        const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
+        await createReleve({
+          person: ui.docForm.person, start: ui.docForm.start, end: ui.docForm.end,
+          total, nbInterventions: filtered.length,
+          interventionIds: filtered.map(i => i.id),
+          validatedBy: mountedUser.uid, validatedByNom: mountedUser.nom || mountedUser.email,
+          validatedAt: new Date().toISOString(),
+        });
+        await Promise.all(filtered.map(i => updateIntervention(i.id, { transmis: true })));
+        statusEl.innerHTML = `<span style="color:var(--teal)">✓ Relevé validé et archivé — ${filtered.length} intervention(s), ${total.toFixed(2)}h au total.</span>`;
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+      }
+    });
   }
 }
 

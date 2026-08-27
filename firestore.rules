@@ -93,5 +93,10 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.resource.data.confirmedBy == request.auth.uid;
     }
+    // ---- Relevés d'heures d'interventions validés (archive) ----
+    match /releves-interventions/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
   }
 }
