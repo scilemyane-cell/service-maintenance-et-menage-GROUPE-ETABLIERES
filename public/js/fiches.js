@@ -2,11 +2,12 @@ import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
+import { watchAccess, hasAccess } from "./access-data.js";
 
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
 const MENAGE_ROLES = ["menage", "mi_temps"];
 
-let state = { fiches: [], sites: [], agents: [] };
+let state = { fiches: [], sites: [], agents: [], allAgents: [], access: {} };
 let ui = { dispositif: null, lockDispositif: false, siteId: null, weekStart: null, actingUid: null, actingNom: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -40,7 +41,8 @@ export function mountFiches(container, user) {
     render();
   }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
-  unsubs.push(watchUsers((u) => { state.agents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchUsers((u) => { state.allAgents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchAccess((a) => { state.access = a; render(); }));
 }
 
 // Même écran, mais verrouillé sur un dispositif précis (pas de barre
@@ -61,7 +63,8 @@ export function mountFichesForDispositif(container, user, dispositif) {
     render();
   }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
-  unsubs.push(watchUsers((u) => { state.agents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchUsers((u) => { state.allAgents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchAccess((a) => { state.access = a; render(); }));
 }
 
 function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
@@ -119,6 +122,7 @@ function render() {
   const disps = dispositifs();
   const sitesInDisp = state.sites.filter(s => siteDispositif(s) === ui.dispositif);
   const site = sitesInDisp.find(s => s.id === ui.siteId) || sitesInDisp[0];
+  state.agents = state.allAgents.filter(a => hasAccess(state.access, ui.dispositif, { uid: a.uid, role: a.role }));
   const weekStartDate = new Date(ui.weekStart);
   const weekEndDate = addDays(weekStartDate, 4);
   const { id, data } = currentFiche();

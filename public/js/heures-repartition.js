@@ -2,13 +2,14 @@ import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchDispositifSettings, templateFor } from "./dispositif-settings-data.js";
 import { watchRepartitions, saveRepartition, repartitionId } from "./heures-repartition-data.js";
 import { watchUsers } from "./users-data.js";
+import { watchAccess, hasAccess } from "./access-data.js";
 import { watchHeuresParams } from "./heures-data.js";
 
 const MENAGE_ROLES = ["menage", "mi_temps"];
 const DAYS = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven", SAM: "Sam", DIM: "Dim" };
 
-let state = { settings: {}, repartitions: [], agents: [], params: { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 } };
+let state = { settings: {}, repartitions: [], agents: [], allAgents: [], access: {}, params: { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 } };
 let ui = { weekStart: null, actingUid: null, actingNom: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -35,7 +36,8 @@ export function mountRepartitionForDispositif(container, user, dispositif) {
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchDispositifSettings((s) => { state.settings = s; render(); }));
   unsubs.push(watchRepartitions((r) => { state.repartitions = r; render(); }));
-  unsubs.push(watchUsers((u) => { state.agents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchUsers((u) => { state.allAgents = u.filter(x => MENAGE_ROLES.includes(x.role)); render(); }));
+  unsubs.push(watchAccess((a) => { state.access = a; render(); }));
   unsubs.push(watchHeuresParams((p) => { state.params = p; render(); }));
 }
 
@@ -121,6 +123,7 @@ function dayTotals(data) {
 // reconstruction depuis le modèle avant que la sauvegarde n'ait eu lieu.
 function render() {
   if (!mountedContainer) return;
+  state.agents = state.allAgents.filter(a => hasAccess(state.access, mountedDispositif, { uid: a.uid, role: a.role }));
   const { id, data } = currentRecord();
   renderView(id, data);
 }
