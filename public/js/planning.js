@@ -14,6 +14,36 @@ import { watchReleves, createReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
+
+// Seuil "heure de nuit" indicatif (21h-6h) — à valider avec la convention
+// collective / le service RH, ce n'est pas un calcul juridiquement certifié.
+const NUIT_DEBUT_MIN = 21 * 60, NUIT_FIN_MIN = 6 * 60;
+const PRIME_DIMANCHE = 50;
+
+function toMinutes(hhmm) {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+// Calcule le nombre d'heures d'une intervention tombant dans la plage de
+// nuit (21h-6h), en gérant le passage à minuit.
+function heuresDeNuit(heureDebut, heureFin) {
+  const start = toMinutes(heureDebut);
+  let end = toMinutes(heureFin);
+  if (start === null || end === null) return 0;
+  if (end <= start) end += 1440; // passe minuit
+  const fenetres = [[0, NUIT_FIN_MIN], [NUIT_DEBUT_MIN, 1440 + NUIT_FIN_MIN], [1440 + NUIT_DEBUT_MIN, 2880]];
+  let minutes = 0;
+  for (const [ws, we] of fenetres) {
+    minutes += Math.max(0, Math.min(end, we) - Math.max(start, ws));
+  }
+  return minutes / 60;
+}
+
+function estDimanche(dateStr) {
+  return new Date(dateStr).getDay() === 0;
+}
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 
 let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [], releves: [] };
@@ -22,7 +52,7 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", description: "" },
+  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "" },
   editingId: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
@@ -129,15 +159,17 @@ function renderArchiveReleves(container) {
       <p class="hint">Historique des relevés d'heures générés puis validés (transmis aux RH pour paiement).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Intervenant</th><th>Période</th><th>Interventions</th><th>Total</th><th>Validé par</th><th>Le</th></tr></thead>
+          <thead><tr><th>Intervenant</th><th>Période</th><th>Interventions</th><th>Total</th><th>Dont nuit</th><th>Primes dim.</th><th>Validé par</th><th>Le</th></tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun relevé validé pour l'instant.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="8" class="empty-row">Aucun relevé validé pour l'instant.</td></tr>` :
               sorted.map(r => `
                 <tr>
                   <td>${esc(r.person)}</td>
                   <td>${fmtShort(new Date(r.start))} → ${fmtShort(new Date(r.end))}</td>
                   <td>${r.nbInterventions}</td>
                   <td>${(r.total || 0).toFixed(2)} h</td>
+                  <td>${(r.totalNuit || 0).toFixed(2)} h</td>
+                  <td>${r.totalPrimes > 0 ? r.totalPrimes + "€" : "—"}</td>
                   <td>${esc(r.validatedByNom)}</td>
                   <td>${r.validatedAt ? new Date(r.validatedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                 </tr>
@@ -441,6 +473,8 @@ function renderDocPreview() {
     .filter(i => i.date >= ui.docForm.start && i.date <= ui.docForm.end)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
   const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
+  const totalNuit = filtered.reduce((s, i) => s + (i.heuresNuit || 0), 0);
+  const totalPrimes = filtered.reduce((s, i) => s + (i.primeDimanche || 0), 0);
 
   return `
     <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -466,9 +500,11 @@ function renderDocPreview() {
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Type</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Description</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Nuit</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Prime dim.</th>
         </tr></thead>
         <tbody>
-          ${filtered.length === 0 ? `<tr><td colspan="6" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
+          ${filtered.length === 0 ? `<tr><td colspan="8" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
             filtered.map(i => `
               <tr>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${new Date(i.date).toLocaleDateString("fr-FR")}</td>
@@ -477,15 +513,20 @@ function renderDocPreview() {
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.type)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.description)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heures}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heuresNuit > 0 ? i.heuresNuit.toFixed(2) + "h" : ""}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.primeDimanche > 0 ? "+" + i.primeDimanche + "€" : ""}</td>
               </tr>`).join("")}
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
             <td colspan="5" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${total.toFixed(2)} h</td>
+            <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${totalNuit.toFixed(2)} h</td>
+            <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${totalPrimes > 0 ? totalPrimes + "€" : "0€"}</td>
           </tr>
         </tfoot>
       </table>
+      <p style="font-size:10px;color:#666;margin-bottom:12px">Heures de nuit calculées sur la plage 21h-6h (indicatif — à valider avec la convention collective). Prime dimanche : ${PRIME_DIMANCHE}€ par jour d'intervention un dimanche.</p>
 
       <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
         <span>Signature intervenant</span>
@@ -541,8 +582,19 @@ function renderInterventions(container, perms) {
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
           <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="ex. 1.5"></label>
+          <label>Heure d'arrivée<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
+          <label>Heure de départ<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
+        ${(() => {
+          const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
+          const dimanche = ui.form.date && estDimanche(ui.form.date);
+          if (!nuit && !dimanche) return "";
+          return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            ${nuit > 0 ? `<span class="tag" style="background:#3A3160">🌙 ${nuit.toFixed(2)}h de nuit (21h-6h, indicatif)</span>` : ""}
+            ${dimanche ? `<span class="tag" style="background:#8F5FBF">🌞 Dimanche — prime +${PRIME_DIMANCHE}€</span>` : ""}
+          </div>`;
+        })()}
         <button class="add-btn" id="add-interv">${ui.editingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'intervention"}</button>
         ${ui.editingId ? `<button class="nav-btn" id="cancel-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
         <div id="interv-status" style="margin-top:8px;font-size:12px"></div>
@@ -570,14 +622,18 @@ function renderInterventions(container, perms) {
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th>${perms.isEditor ? '<th>Transmis RH</th>' : ''}<th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis RH</th>' : ''}<th></th></tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="8" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="9" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
               sorted.map(i => {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
                 return `<tr>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
                   <td>${i.heures} h</td><td>${esc(i.description)}</td>
+                  <td style="white-space:nowrap">
+                    ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
+                    ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
+                  </td>
                   ${perms.isEditor ? `<td>${i.transmis ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>` : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</td>` : ''}
                   <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
                 </tr>`;
@@ -589,10 +645,13 @@ function renderInterventions(container, perms) {
   `;
 
   if (perms.canLogIntervention) {
-    ["date", "type", "heures", "desc"].forEach(field => {
+    ["type", "heures", "desc"].forEach(field => {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
+    document.getElementById("f-date").addEventListener("change", (e) => { ui.form.date = e.target.value; renderAll(); });
+    document.getElementById("f-heure-debut").addEventListener("change", (e) => { ui.form.heureDebut = e.target.value; renderAll(); });
+    document.getElementById("f-heure-fin").addEventListener("change", (e) => { ui.form.heureFin = e.target.value; renderAll(); });
     document.getElementById("f-association").addEventListener("change", (e) => {
       ui.form.association = e.target.value;
       ui.form.groupe = "";
@@ -617,9 +676,13 @@ function renderInterventions(container, perms) {
       if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
       if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
+      const dimanche = estDimanche(ui.form.date);
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
         type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
+        heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin,
+        heuresNuit: nuit, primeDimanche: dimanche ? PRIME_DIMANCHE : 0,
       };
       try {
         if (ui.editingId) {
@@ -628,7 +691,7 @@ function renderInterventions(container, perms) {
         } else {
           await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
         }
-        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
+        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = "";
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
@@ -636,7 +699,7 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("cancel-edit")?.addEventListener("click", () => {
       ui.editingId = null;
-      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.description = "";
+      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = "";
       renderAll();
     });
     container.querySelectorAll("[data-edit]").forEach(btn => {
@@ -646,7 +709,7 @@ function renderInterventions(container, perms) {
         ui.editingId = i.id;
         ui.form = {
           date: i.date, technicien: i.technicien, association: i.association || "", groupe: i.groupe || "",
-          site: i.site, type: i.type, heures: String(i.heures), description: i.description || "",
+          site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
         };
         renderAll();
         mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -706,9 +769,11 @@ function renderInterventions(container, perms) {
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Validation en cours…</span>`;
       try {
         const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
+        const totalNuit = filtered.reduce((s, i) => s + (i.heuresNuit || 0), 0);
+        const totalPrimes = filtered.reduce((s, i) => s + (i.primeDimanche || 0), 0);
         await createReleve({
           person: ui.docForm.person, start: ui.docForm.start, end: ui.docForm.end,
-          total, nbInterventions: filtered.length,
+          total, totalNuit, totalPrimes, nbInterventions: filtered.length,
           interventionIds: filtered.map(i => i.id),
           validatedBy: mountedUser.uid, validatedByNom: mountedUser.nom || mountedUser.email,
           validatedAt: new Date().toISOString(),
