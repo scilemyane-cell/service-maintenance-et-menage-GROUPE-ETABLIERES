@@ -2,6 +2,7 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
 } from "./site-dossier-data.js";
+import { uploadToDrive } from "./google-drive.js";
 
 let state = { dossiers: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
@@ -71,9 +72,12 @@ function photoGalleryHTML(section, sectionIndex, editable) {
       `).join("")}
     </div>
     ${editable ? `
-    <div style="display:flex;gap:6px;margin-top:8px">
-      <input type="url" data-photo-url-input="${sectionIndex}" placeholder="Colle ici le lien d'une photo (Google Photos, Drive partagé…)" style="flex:1">
-      <button class="nav-btn" data-add-photo-url="${sectionIndex}" style="white-space:nowrap">➕ Ajouter</button>
+    <div style="margin-top:8px">
+      <label style="display:inline-flex;align-items:center;gap:6px;background:var(--panel-alt);border:1px solid var(--border);border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px">
+        📷 Ajouter une photo
+        <input type="file" accept="image/*" capture="environment" data-upload-photo="${sectionIndex}" style="display:none">
+      </label>
+      <div data-upload-status="${sectionIndex}" style="font-size:11px;margin-top:4px"></div>
     </div>` : ""}
   `;
 }
@@ -250,7 +254,6 @@ function renderEdit(dOriginal, workingCopy) {
           </div>
           <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photos</label>
           ${photoGalleryHTML(s, i, true)}
-          <p class="hint" style="margin-top:4px">Astuce : héberge la photo sur Google Photos ou un Drive partagé en lecture, puis colle le lien de partage ici.</p>
         </div>
       `).join("")}
       <button class="nav-btn" id="sd-add-sec">➕ Ajouter un équipement</button>
@@ -276,14 +279,20 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-del-sec]").forEach(btn => btn.addEventListener("click", () => { data.sections.splice(parseInt(btn.dataset.delSec, 10), 1); renderEdit(dOriginal, data); }));
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
 
-  mountedContainer.querySelectorAll("[data-add-photo-url]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const si = parseInt(btn.dataset.addPhotoUrl, 10);
-      const input = mountedContainer.querySelector(`[data-photo-url-input="${si}"]`);
-      const url = input.value.trim();
-      if (!url) return;
-      data.sections[si].photos.push({ url });
-      renderEdit(dOriginal, data);
+  mountedContainer.querySelectorAll("[data-upload-photo]").forEach(input => {
+    input.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const si = parseInt(input.dataset.uploadPhoto, 10);
+      const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion Google puis envoi de la photo…</span>`;
+      try {
+        const { url, driveId } = await uploadToDrive(file);
+        data.sections[si].photos.push({ url, driveId });
+        renderEdit(dOriginal, data);
+      } catch (err) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
+      }
     });
   });
   mountedContainer.querySelectorAll("[data-del-photo]").forEach(btn => {
