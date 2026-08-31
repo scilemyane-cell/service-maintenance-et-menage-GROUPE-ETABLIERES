@@ -11,7 +11,7 @@
 
 // À REMPLIR : ID client OAuth créé dans Google Cloud Console
 // (APIs & Services > Identifiants > Créer des identifiants > ID client OAuth).
-export const GOOGLE_CLIENT_ID = "REMPLACER_PAR_TON_CLIENT_ID.apps.googleusercontent.com";
+export const GOOGLE_CLIENT_ID = "769766682655-33d68qv6151nmhsergqq750dovsf41r9.apps.googleusercontent.com";
 
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 
