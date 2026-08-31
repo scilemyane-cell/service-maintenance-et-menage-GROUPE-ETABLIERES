@@ -2,7 +2,7 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
 } from "./site-dossier-data.js";
-import { uploadToDrive } from "./google-drive.js";
+import { getAccessToken, uploadToDrive } from "./google-drive.js";
 
 let state = { dossiers: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
@@ -73,10 +73,8 @@ function photoGalleryHTML(section, sectionIndex, editable) {
     </div>
     ${editable ? `
     <div style="margin-top:8px">
-      <label style="display:inline-flex;align-items:center;gap:6px;background:var(--panel-alt);border:1px solid var(--border);border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px">
-        📷 Ajouter une photo
-        <input type="file" accept="image/*" capture="environment" data-upload-photo="${sectionIndex}" style="display:none">
-      </label>
+      <button type="button" class="nav-btn" data-open-photo-picker="${sectionIndex}" style="font-size:12px">📷 Ajouter une photo</button>
+      <input type="file" accept="image/*" capture="environment" data-hidden-file-input="${sectionIndex}" style="display:none">
       <div data-upload-status="${sectionIndex}" style="font-size:11px;margin-top:4px"></div>
     </div>` : ""}
   `;
@@ -279,15 +277,34 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-del-sec]").forEach(btn => btn.addEventListener("click", () => { data.sections.splice(parseInt(btn.dataset.delSec, 10), 1); renderEdit(dOriginal, data); }));
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
 
-  mountedContainer.querySelectorAll("[data-upload-photo]").forEach(input => {
+  mountedContainer.querySelectorAll("[data-open-photo-picker]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const si = parseInt(btn.dataset.openPhotoPicker, 10);
+      const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
+      const fileInput = mountedContainer.querySelector(`[data-hidden-file-input="${si}"]`);
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion à Google…</span>`;
+      try {
+        // La connexion Google DOIT être demandée en tout premier, en
+        // réaction directe au clic — sinon le navigateur bloque la
+        // fenêtre de connexion une fois le sélecteur de fichier ouvert.
+        const token = await getAccessToken();
+        statusEl.innerHTML = "";
+        fileInput.dataset.readyToken = token;
+        fileInput.click();
+      } catch (err) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+      }
+    });
+  });
+  mountedContainer.querySelectorAll("[data-hidden-file-input]").forEach(input => {
     input.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const si = parseInt(input.dataset.uploadPhoto, 10);
+      const si = parseInt(input.dataset.hiddenFileInput, 10);
       const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
-      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion Google puis envoi de la photo…</span>`;
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
       try {
-        const { url, driveId } = await uploadToDrive(file);
+        const { url, driveId } = await uploadToDrive(file, input.dataset.readyToken);
         data.sections[si].photos.push({ url, driveId });
         renderEdit(dOriginal, data);
       } catch (err) {

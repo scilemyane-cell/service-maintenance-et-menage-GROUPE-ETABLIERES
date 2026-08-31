@@ -33,7 +33,7 @@ function loadGis() {
   return gisLoaded;
 }
 
-async function getAccessToken() {
+export async function getAccessToken() {
   if (cachedToken && Date.now() < cachedTokenExpiry) return cachedToken;
   await loadGis();
   return new Promise((resolve, reject) => {
@@ -52,11 +52,11 @@ async function getAccessToken() {
   });
 }
 
-// Envoie le fichier sur Drive, le rend consultable via lien, puis renvoie
-// une URL directement affichable dans une balise <img>.
-export async function uploadToDrive(file) {
-  const token = await getAccessToken();
-
+// Envoie le fichier sur Drive avec un jeton déjà obtenu (voir getAccessToken
+// — doit être appelé AVANT d'ouvrir le sélecteur de fichier, sinon le
+// navigateur bloque la fenêtre de connexion Google car elle n'est plus
+// directement liée au clic de l'utilisateur).
+export async function uploadToDrive(file, token) {
   const metadata = { name: `${Date.now()}-${file.name}`, mimeType: file.type };
   const form = new FormData();
   form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
