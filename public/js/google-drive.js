@@ -71,11 +71,15 @@ export async function uploadToDrive(file, token) {
   const { id } = await uploadRes.json();
 
   // Rend le fichier consultable par lien (lecture seule, sans compte requis)
-  await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
+  const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ role: "reader", type: "anyone" }),
   });
+  if (!permRes.ok) console.warn("Impossible de rendre la photo publique — elle pourrait ne pas s'afficher pour les autres.");
 
-  return { url: `https://drive.google.com/uc?export=view&id=${id}`, driveId: id };
+  // Le format "thumbnail" est plus fiable que "uc?export=view" pour un
+  // affichage direct dans une balise <img> (Google restreint de plus en
+  // plus ce dernier format pour les sites tiers).
+  return { url: `https://drive.google.com/thumbnail?id=${id}&sz=w1000`, driveId: id };
 }
