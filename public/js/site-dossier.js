@@ -2,7 +2,6 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
 } from "./site-dossier-data.js";
-import { uploadPhoto, deletePhoto } from "./storage-helper.js";
 
 let state = { dossiers: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
@@ -66,15 +65,16 @@ function photoGalleryHTML(section, sectionIndex, editable) {
     <div class="sd-gallery" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       ${photos.map((p, pi) => `
         <div style="position:relative">
-          <img src="${esc(p.url)}" data-lightbox="${esc(p.url)}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border)">
+          <img src="${esc(p.url)}" data-lightbox="${esc(p.url)}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
           ${editable ? `<button data-del-photo="${sectionIndex}-${pi}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>` : ""}
         </div>
       `).join("")}
-      ${editable ? `
-      <label style="width:76px;height:76px;border:1px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);font-size:22px">
-        📷<input type="file" accept="image/*" capture="environment" data-upload-photo="${sectionIndex}" style="display:none">
-      </label>` : ""}
     </div>
+    ${editable ? `
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input type="url" data-photo-url-input="${sectionIndex}" placeholder="Colle ici le lien d'une photo (Google Photos, Drive partagé…)" style="flex:1">
+      <button class="nav-btn" data-add-photo-url="${sectionIndex}" style="white-space:nowrap">➕ Ajouter</button>
+    </div>` : ""}
   `;
 }
 
@@ -250,7 +250,7 @@ function renderEdit(dOriginal, workingCopy) {
           </div>
           <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photos</label>
           ${photoGalleryHTML(s, i, true)}
-          <div data-upload-status="${i}" style="font-size:11px;margin-top:4px"></div>
+          <p class="hint" style="margin-top:4px">Astuce : héberge la photo sur Google Photos ou un Drive partagé en lecture, puis colle le lien de partage ici.</p>
         </div>
       `).join("")}
       <button class="nav-btn" id="sd-add-sec">➕ Ajouter un équipement</button>
@@ -276,28 +276,21 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-del-sec]").forEach(btn => btn.addEventListener("click", () => { data.sections.splice(parseInt(btn.dataset.delSec, 10), 1); renderEdit(dOriginal, data); }));
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
 
-  mountedContainer.querySelectorAll("[data-upload-photo]").forEach(input => {
-    input.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const si = parseInt(input.dataset.uploadPhoto, 10);
-      const statusEl = document.querySelector(`[data-upload-status="${si}"]`);
-      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
-      try {
-        const { url, path } = await uploadPhoto(dOriginal.id, si, file);
-        data.sections[si].photos.push({ url, path });
-        renderEdit(dOriginal, data);
-      } catch (err) {
-        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec de l'envoi : ${esc(err.message || String(err))}</span>`;
-      }
+  mountedContainer.querySelectorAll("[data-add-photo-url]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const si = parseInt(btn.dataset.addPhotoUrl, 10);
+      const input = mountedContainer.querySelector(`[data-photo-url-input="${si}"]`);
+      const url = input.value.trim();
+      if (!url) return;
+      data.sections[si].photos.push({ url });
+      renderEdit(dOriginal, data);
     });
   });
   mountedContainer.querySelectorAll("[data-del-photo]").forEach(btn => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", () => {
       const [si, pi] = btn.dataset.delPhoto.split("-").map(Number);
-      const [photo] = data.sections[si].photos.splice(pi, 1);
+      data.sections[si].photos.splice(pi, 1);
       renderEdit(dOriginal, data);
-      if (photo?.path) await deletePhoto(photo.path);
     });
   });
 
