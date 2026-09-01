@@ -108,6 +108,15 @@
   watchAuth((user) => {
     if (!user) { window.location.href = "index.html"; return; }
     currentUser = user;
+    // Lien direct depuis un QR produit (scanné avec l'appareil photo du
+    // téléphone, hors appli) : .../app.html?stock=ID_PRODUIT
+    const stockParam = new URLSearchParams(window.location.search).get("stock");
+    if (stockParam && currentCategory === null) {
+      currentCategory = "stock";
+      currentSubtab = "inventaire";
+      window.stockDeepLinkProduitId = stockParam;
+      history.replaceState(null, "", window.location.pathname);
+    }
     if (!sitesSubscribed) {
       sitesSubscribed = true;
       watchSites((sitesList) => {

@@ -22,7 +22,17 @@ export function mountStockInventaire(container, user) {
   mountedUser = user;
   ui = { scanning: false, ajusteId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchStockProduits((p) => { state.produits = p; render(); }));
+  unsubs.push(watchStockProduits((p) => {
+    state.produits = p;
+    // Lien direct depuis un QR scanné avec l'appareil photo du téléphone
+    // (hors appli) — voir app.html, paramètre ?stock=
+    if (window.stockDeepLinkProduitId && !ui.ajusteId) {
+      const cible = p.find(x => x.id === window.stockDeepLinkProduitId);
+      window.stockDeepLinkProduitId = null;
+      if (cible) ui.ajusteId = cible.id;
+    }
+    render();
+  }));
 }
 
 function render() {
@@ -85,8 +95,15 @@ function renderScan() {
     { facingMode: "environment" },
     { fps: 10, qrbox: 220 },
     (decodedText) => {
-      const match = decodedText.match(/^ETAB-STOCK:(.+)$/);
-      const produit = match ? state.produits.find(p => p.id === match[1]) : null;
+      let produitId = null;
+      try {
+        const url = new URL(decodedText);
+        produitId = url.searchParams.get("stock");
+      } catch (e) {
+        const match = decodedText.match(/^ETAB-STOCK:(.+)$/); // ancien format, compatibilité
+        produitId = match ? match[1] : null;
+      }
+      const produit = produitId ? state.produits.find(p => p.id === produitId) : null;
       if (produit) {
         stopScanner();
         ui.scanning = false;
