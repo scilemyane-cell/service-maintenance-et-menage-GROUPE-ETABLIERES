@@ -1,12 +1,14 @@
 import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
+  watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl } from "./sharepoint-storage.js";
 import { watchAssociations } from "./associations-data.js";
 
-let state = { dossiers: [], associations: [] };
+let state = { dossiers: [], associations: [], sectionsOrder: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
+let paramsWorking = null; // copie de travail de l'ordre standard, pendant l'édition
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
@@ -19,9 +21,11 @@ export function mountSitesDossiers(container, user) {
   mountedContainer = container;
   mountedUser = user;
   ui.openId = null; ui.mode = "view"; ui.lightbox = null;
+  paramsWorking = null;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; render(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; render(); }));
+  unsubs.push(watchSectionsOrder((s) => { state.sectionsOrder = s; render(); }));
 }
 
 function groupedDossiers() {
@@ -52,13 +56,18 @@ function render() {
     if (ui.mode === "edit") renderEdit(opened); else renderView(opened);
     return;
   }
+  if (ui.mode === "params") { renderParams(); return; }
 
   const groups = groupedDossiers();
 
   mountedContainer.innerHTML = `
     <div class="stack">
       <p class="hint">Dossier technique et sécurité de chaque résidence — organes de coupure, accès clés, contacts d'urgence, photos. Structure uniforme reprise de la fiche index papier.</p>
-      ${isEditorUser(mountedUser) ? `<button class="add-btn" id="sd-new" style="width:fit-content">➕ Créer un nouveau dossier</button>` : ""}
+      ${isEditorUser(mountedUser) ? `
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="add-btn" id="sd-new" style="width:fit-content">➕ Créer un nouveau dossier</button>
+          <button class="nav-btn" id="sd-params" style="width:fit-content">⚙️ Paramètres (ordre des équipements)</button>
+        </div>` : ""}
       ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` :
         groups.map(g => `
           <div>
@@ -83,11 +92,74 @@ function render() {
   `;
 
   document.getElementById("sd-new")?.addEventListener("click", async () => {
-    const id = await createDossier(nouveauDossier());
+    const id = await createDossier(nouveauDossier(state.sectionsOrder));
     ui.openId = id; ui.mode = "edit"; render();
   });
+  document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; ui.mode = "view"; render(); });
+  });
+}
+
+// =================================================================
+// Paramètres — ordre standard des équipements pour les NOUVEAUX dossiers
+// (les dossiers déjà créés se réordonnent individuellement avec ▲▼
+// directement dans leur écran d'édition, sans passer par ici)
+// =================================================================
+function renderParams() {
+  const list = paramsWorking || [...state.sectionsOrder];
+  paramsWorking = list;
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="nav-btn" id="sp-back">← Retour</button>
+        <button class="add-btn" id="sp-save">💾 Enregistrer</button>
+        <span id="sp-status" style="font-size:12px;align-self:center"></span>
+      </div>
+      <p class="hint">Cet ordre s'applique aux nouveaux dossiers créés à partir de maintenant. Pour réordonner un dossier déjà existant, ouvre-le, passe en mode Modifier, et utilise les flèches ▲▼ sur chaque équipement.</p>
+      <div class="form-card">
+        ${list.map((titre, i) => `
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <button class="nav-btn" data-sp-up="${i}" ${i === 0 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px">▲</button>
+              <button class="nav-btn" data-sp-down="${i}" ${i === list.length - 1 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px">▼</button>
+            </div>
+            <input data-sp-titre="${i}" value="${esc(titre)}" style="flex:1">
+            <button class="del-btn" data-sp-del="${i}">🗑️</button>
+          </div>
+        `).join("")}
+      </div>
+      <button class="nav-btn" id="sp-add">➕ Ajouter une ligne standard</button>
+    </div>
+  `;
+
+  document.getElementById("sp-back").addEventListener("click", () => { paramsWorking = null; ui.mode = "view"; render(); });
+  document.getElementById("sp-add").addEventListener("click", () => { list.push("Nouvel équipement"); render(); });
+  mountedContainer.querySelectorAll("[data-sp-titre]").forEach(inp => {
+    inp.addEventListener("input", () => { list[parseInt(inp.dataset.spTitre, 10)] = inp.value; });
+  });
+  mountedContainer.querySelectorAll("[data-sp-del]").forEach(btn => {
+    btn.addEventListener("click", () => { list.splice(parseInt(btn.dataset.spDel, 10), 1); render(); });
+  });
+  mountedContainer.querySelectorAll("[data-sp-up]").forEach(btn => btn.addEventListener("click", () => {
+    const i = parseInt(btn.dataset.spUp, 10);
+    if (i > 0) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; render(); }
+  }));
+  mountedContainer.querySelectorAll("[data-sp-down]").forEach(btn => btn.addEventListener("click", () => {
+    const i = parseInt(btn.dataset.spDown, 10);
+    if (i < list.length - 1) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; render(); }
+  }));
+  document.getElementById("sp-save").addEventListener("click", async () => {
+    const statusEl = document.getElementById("sp-status");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    try {
+      await saveSectionsOrder(list.filter(t => t.trim() !== ""));
+      paramsWorking = null;
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ Enregistré</span>`;
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+    }
   });
 }
 
@@ -327,6 +399,10 @@ function renderEdit(dOriginal, workingCopy) {
       ${data.sections.map((s, i) => `
         <div class="form-card">
           <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px">
+            <div style="display:flex;flex-direction:column;gap:2px;padding-top:6px">
+              <button class="nav-btn" data-move-up="${i}" ${i === 0 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px" title="Monter">▲</button>
+              <button class="nav-btn" data-move-down="${i}" ${i === data.sections.length - 1 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px" title="Descendre">▼</button>
+            </div>
             <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;padding-top:8px">
               <input type="checkbox" data-sec-concerne="${i}" ${s.concerne ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)"> Concerné
             </label>
@@ -368,6 +444,14 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-sec-emplacement]").forEach(inp => inp.addEventListener("input", () => { data.sections[inp.dataset.secEmplacement].emplacement = inp.value; }));
   mountedContainer.querySelectorAll("[data-sec-procedure]").forEach(inp => inp.addEventListener("input", () => { data.sections[inp.dataset.secProcedure].procedure = inp.value; }));
   mountedContainer.querySelectorAll("[data-del-sec]").forEach(btn => btn.addEventListener("click", () => { data.sections.splice(parseInt(btn.dataset.delSec, 10), 1); renderEdit(dOriginal, data); }));
+  mountedContainer.querySelectorAll("[data-move-up]").forEach(btn => btn.addEventListener("click", () => {
+    const i = parseInt(btn.dataset.moveUp, 10);
+    if (i > 0) { [data.sections[i - 1], data.sections[i]] = [data.sections[i], data.sections[i - 1]]; renderEdit(dOriginal, data); }
+  }));
+  mountedContainer.querySelectorAll("[data-move-down]").forEach(btn => btn.addEventListener("click", () => {
+    const i = parseInt(btn.dataset.moveDown, 10);
+    if (i < data.sections.length - 1) { [data.sections[i + 1], data.sections[i]] = [data.sections[i], data.sections[i + 1]]; renderEdit(dOriginal, data); }
+  }));
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
 
   mountedContainer.querySelectorAll("[data-open-photo-picker]").forEach(btn => {
