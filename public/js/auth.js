@@ -40,7 +40,7 @@ export function roleLabel(role) {
   const labels = {
     super_admin: "Super Administrateur",
     admin: "Administrateur",
-    n1: "Cadre astreinte (N1)",
+    n1: "Superviseur",
     technicien: "Technicien",
     menage: "Agent d'entretien",
     mi_temps: "Salarié temps partiel",
