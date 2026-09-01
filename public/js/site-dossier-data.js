@@ -32,6 +32,22 @@ export const URGENCES_STANDARD = [
   { service: "SAMU", mission: "Urgence médicale grave", telephone: "15" },
 ];
 
+// Ordre standard des équipements, modifiable depuis l'onglet Paramètres —
+// stocké à part de SECTIONS_STANDARD (qui reste la valeur d'origine/repli
+// si personne n'a encore rien personnalisé).
+const SETTINGS_DOC = doc(db, "config", "site-dossier-sections");
+
+export function watchSectionsOrder(callback) {
+  return onSnapshot(SETTINGS_DOC, (snap) => {
+    const titres = snap.exists() ? snap.data().titres : null;
+    callback(Array.isArray(titres) && titres.length > 0 ? titres : SECTIONS_STANDARD);
+  }, (err) => { console.error("watchSectionsOrder:", err); callback(SECTIONS_STANDARD); });
+}
+
+export async function saveSectionsOrder(titres) {
+  await setDoc(SETTINGS_DOC, { titres });
+}
+
 export function watchSitesDossiers(callback) {
   return onSnapshot(collection(db, "sites-dossiers"), (snap) => {
     const list = [];
@@ -40,14 +56,15 @@ export function watchSitesDossiers(callback) {
   }, (err) => { console.error("watchSitesDossiers:", err); callback([]); });
 }
 
-export function nouveauDossier() {
+export function nouveauDossier(sectionsOrder) {
+  const titres = Array.isArray(sectionsOrder) && sectionsOrder.length > 0 ? sectionsOrder : SECTIONS_STANDARD;
   return {
     nom: "Nouvelle résidence",
     adresse: "",
     association: "",
     groupe: "",
     urgences: JSON.parse(JSON.stringify(URGENCES_STANDARD)),
-    sections: SECTIONS_STANDARD.map(titre => ({ titre, concerne: false, emplacement: "", procedure: "", photos: [] })),
+    sections: titres.map(titre => ({ titre, concerne: false, emplacement: "", procedure: "", photos: [] })),
   };
 }
 
