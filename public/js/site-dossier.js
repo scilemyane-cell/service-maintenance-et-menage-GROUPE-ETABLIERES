@@ -2,7 +2,7 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
 } from "./site-dossier-data.js";
-import { getAccessToken, uploadToDrive } from "./google-drive.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl } from "./sharepoint-storage.js";
 import { watchAssociations } from "./associations-data.js";
 
 let state = { dossiers: [], associations: [] };
@@ -98,7 +98,7 @@ function photoGalleryHTML(section, sectionIndex, editable) {
       ${photos.map((p, pi) => `
         <div style="position:relative">
           ${p.isImage !== false
-            ? `<img src="${esc(p.url)}" data-lightbox="${esc(p.url)}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border)" onerror="this.style.opacity=0.3">`
+            ? `<img data-resolve-img="${esc(p.itemId)}" data-lightbox-photo="${esc(p.itemId)}" alt="${esc(p.name || 'Photo')}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--panel-alt)" onerror="this.style.opacity=0.3">`
             : `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="width:76px;height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);text-decoration:none;color:var(--text);font-size:22px;padding:4px;text-align:center">
                 📄<span style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${esc(p.name || 'Document')}</span>
               </a>`}
@@ -127,10 +127,31 @@ function lightboxHTML() {
 }
 
 function attachLightboxListeners(container) {
-  container.querySelectorAll("[data-lightbox]").forEach(img => {
-    img.addEventListener("click", () => { ui.lightbox = img.dataset.lightbox; render(); });
-  });
   document.getElementById("sd-lightbox-overlay")?.addEventListener("click", () => { ui.lightbox = null; render(); });
+}
+
+// Contrairement à Google Drive, SharePoint ne fournit pas de lien image
+// permanent : on redemande une URL fraîche pour chaque photo au moment de
+// l'affichage (une seule requête par photo, même si elle apparaît deux
+// fois à l'écran — galerie + version imprimable).
+async function resolveGalleryImages(container) {
+  const nodes = [...container.querySelectorAll("[data-resolve-img]")];
+  const itemIds = [...new Set(nodes.map(n => n.dataset.resolveImg).filter(Boolean))];
+  await Promise.all(itemIds.map(async (itemId) => {
+    let url;
+    try {
+      url = await getImageDisplayUrl(itemId);
+    } catch (e) {
+      container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => { img.style.opacity = 0.3; });
+      return;
+    }
+    container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => {
+      img.src = url;
+      if (img.dataset.lightboxPhoto) {
+        img.addEventListener("click", () => { ui.lightbox = url; render(); });
+      }
+    });
+  }));
 }
 
 // =================================================================
@@ -214,7 +235,7 @@ function renderView(d) {
             ${s.emplacement ? `<p style="font-size:11px;margin:0 0 2px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
             ${s.procedure ? `<p style="font-size:11px;margin:0 0 4px;color:#555"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
             ${(s.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${s.photos.map(p => p.isImage !== false
-              ? `<img src="${esc(p.url)}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`
+              ? `<img data-resolve-img="${esc(p.itemId)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`
               : `<span style="display:inline-block;padding:6px 10px;border:1px solid #999;border-radius:4px;font-size:10px">📄 ${esc(p.name || 'Document')}</span>`
             ).join("")}</div>` : ""}
           </div>
@@ -232,6 +253,7 @@ function renderView(d) {
     if (confirm(`Supprimer définitivement le dossier "${d.nom}" ?`)) { await deleteDossier(d.id); ui.openId = null; render(); }
   });
   attachLightboxListeners(mountedContainer);
+  resolveGalleryImages(mountedContainer);
 }
 
 // =================================================================
@@ -346,7 +368,7 @@ function renderEdit(dOriginal, workingCopy) {
       const mode = btn.dataset.mode;
       const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
       const fileInput = mountedContainer.querySelector(`[data-hidden-file-input="${si}"][data-mode="${mode}"]`);
-      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion à Google…</span>`;
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion à Microsoft…</span>`;
       try {
         // La connexion Google DOIT être demandée en tout premier, en
         // réaction directe au clic — sinon le navigateur bloque la
@@ -368,8 +390,8 @@ function renderEdit(dOriginal, workingCopy) {
       const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
       try {
-        const { url, driveId, isImage, name } = await uploadToDrive(file, input.dataset.readyToken);
-        data.sections[si].photos.push({ url, driveId, isImage, name });
+        const { url, itemId, isImage, name } = await uploadToDrive(file, input.dataset.readyToken);
+        data.sections[si].photos.push({ url, itemId, isImage, name });
         renderEdit(dOriginal, data);
       } catch (err) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
@@ -399,4 +421,5 @@ function renderEdit(dOriginal, workingCopy) {
   document.getElementById("sd-save").addEventListener("click", doSave);
   document.getElementById("sd-save-bottom").addEventListener("click", doSave);
   attachLightboxListeners(mountedContainer);
+  resolveGalleryImages(mountedContainer);
 }
