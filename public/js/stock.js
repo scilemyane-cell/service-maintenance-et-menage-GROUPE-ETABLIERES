@@ -1,6 +1,6 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, deleteProduit, seedProduitsType } from "./stock-data.js";
-import { getAccessToken, uploadToDrive } from "./google-drive.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl } from "./sharepoint-storage.js";
 
 let state = { produits: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -60,7 +60,7 @@ function render() {
                 const color = status === "danger" ? "var(--red)" : status === "warn" ? "var(--gold)" : "var(--text)";
                 return `
                 <tr>
-                  <td>${p.photo?.url ? `<img src="${esc(p.photo.url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">` : `<span style="display:inline-block;width:36px;height:36px;border-radius:6px;background:var(--panel-alt)"></span>`}</td>
+                  <td>${p.photo?.itemId ? `<img data-resolve-photo="${esc(p.photo.itemId)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">` : p.photo?.url ? `<img src="${esc(p.photo.url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">` : `<span style="display:inline-block;width:36px;height:36px;border-radius:6px;background:var(--panel-alt)"></span>`}</td>
                   <td>${esc(p.nom)}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.categorie || "—")}</td>
                   <td style="color:${color};font-weight:700">${p.stockActuel ?? 0} / ${p.stockCible ?? 0} ${esc(p.unite || "")}${status === "danger" ? " ⚠️" : ""}</td>
@@ -92,6 +92,22 @@ function render() {
     const p = state.produits.find(x => x.id === btn.dataset.del);
     if (confirm(`Supprimer "${p.nom}" ?`)) await deleteProduit(p.id);
   }));
+  resolvePhotos(mountedContainer);
+}
+
+// SharePoint ne fournit pas de lien image permanent (contrairement à
+// Google Drive) : on redemande une URL fraîche à chaque affichage.
+async function resolvePhotos(container) {
+  const nodes = [...container.querySelectorAll("[data-resolve-photo]")];
+  const itemIds = [...new Set(nodes.map(n => n.dataset.resolvePhoto).filter(Boolean))];
+  await Promise.all(itemIds.map(async (itemId) => {
+    try {
+      const url = await getImageDisplayUrl(itemId);
+      container.querySelectorAll(`[data-resolve-photo="${itemId}"]`).forEach(img => { img.src = url; });
+    } catch (e) {
+      container.querySelectorAll(`[data-resolve-photo="${itemId}"]`).forEach(img => { img.style.opacity = 0.3; });
+    }
+  }));
 }
 
 function renderEditForm(p, workingCopy) {
@@ -116,9 +132,9 @@ function renderEditForm(p, workingCopy) {
 
         <label style="display:block;font-size:11px;color:var(--text-dim);margin:12px 0 6px">Photo du produit</label>
         <div id="sk-photo-zone">
-          ${data.photo?.url ? `
+          ${data.photo ? `
             <div style="position:relative;width:fit-content">
-              <img src="${esc(data.photo.url)}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
+              <img ${data.photo.itemId ? `data-resolve-photo="${esc(data.photo.itemId)}"` : `src="${esc(data.photo.url)}"`} alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
               <button id="sk-del-photo" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>
             </div>
           ` : `
@@ -208,6 +224,7 @@ function renderEditForm(p, workingCopy) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
     }
   });
+  resolvePhotos(mountedContainer);
 }
 
 // Encodage du QR : un vrai lien vers l'appli avec l'id du produit en
