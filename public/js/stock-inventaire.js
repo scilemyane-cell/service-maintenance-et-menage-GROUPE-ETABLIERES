@@ -1,5 +1,6 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, enregistrerInventaire } from "./stock-data.js";
+import { getImageDisplayUrl } from "./sharepoint-storage.js";
 
 let state = { produits: [] };
 let ui = { scanning: false, ajusteId: null };
@@ -128,7 +129,9 @@ function renderAjuste(p) {
     <div class="stack">
       <button class="nav-btn" id="sk-back">← Retour</button>
       <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
-        ${p.photo?.url
+        ${p.photo?.itemId
+          ? `<img data-resolve-photo="${esc(p.photo.itemId)}" alt="" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:1px solid var(--border);margin:0 auto 12px" onerror="this.style.display='none'">`
+          : p.photo?.url
           ? `<img src="${esc(p.photo.url)}" alt="" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:1px solid var(--border);margin:0 auto 12px" onerror="this.style.display='none'">`
           : `<div style="width:120px;height:120px;border-radius:12px;background:var(--panel-alt);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 12px">📦</div>`}
         <h3 style="margin:0 0 2px;font-size:17px">${esc(p.nom)}</h3>
@@ -153,6 +156,12 @@ function renderAjuste(p) {
 
   const qteInput = document.getElementById("sk-qte");
   const indicateur = document.getElementById("sk-indicateur");
+  const photoEl = mountedContainer.querySelector("[data-resolve-photo]");
+  if (photoEl) {
+    getImageDisplayUrl(photoEl.dataset.resolvePhoto)
+      .then(url => { photoEl.src = url; })
+      .catch(() => { photoEl.style.display = "none"; });
+  }
 
   function updateIndicateur() {
     const v = parseInt(qteInput.value, 10);
