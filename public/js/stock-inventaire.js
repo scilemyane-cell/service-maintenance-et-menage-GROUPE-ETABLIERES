@@ -121,27 +121,71 @@ function renderScan() {
 
 function renderAjuste(p) {
   if (!p) { ui.ajusteId = null; render(); return; }
+  const cible = p.stockCible ?? 0;
+  const min = p.stockMin ?? 0;
+
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="sk-back">← Retour</button>
-      <div class="form-card">
-        <h3 style="margin:0 0 4px;font-size:15px;color:var(--gold)">${esc(p.nom)}</h3>
-        <p class="hint" style="margin:0 0 12px">Stock actuel enregistré : ${p.stockActuel ?? 0} ${esc(p.unite || '')} · Stock cible : ${p.stockCible ?? 0}</p>
-        <label>Quantité comptée<input id="sk-qte" type="number" min="0" value="${p.stockActuel ?? 0}" style="font-size:18px;font-weight:700;width:120px"></label>
-        <button class="add-btn" id="sk-valider" style="margin-top:12px">✓ Valider le comptage</button>
-        <span id="sk-ajuste-status" style="font-size:12px;margin-left:8px"></span>
+      <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+        ${p.photo?.url
+          ? `<img src="${esc(p.photo.url)}" alt="" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:1px solid var(--border);margin:0 auto 12px" onerror="this.style.display='none'">`
+          : `<div style="width:120px;height:120px;border-radius:12px;background:var(--panel-alt);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 12px">📦</div>`}
+        <h3 style="margin:0 0 2px;font-size:17px">${esc(p.nom)}</h3>
+        <p class="hint" style="margin:0 0 4px">${esc(p.categorie || "")}${p.refFournisseur ? ` · réf. ${esc(p.refFournisseur)}` : ""}</p>
+        <p class="hint" style="margin:0 0 16px">Dernier stock enregistré : <b>${p.stockActuel ?? 0} ${esc(p.unite || '')}</b> · Cible : ${cible} · Seuil : ${min}</p>
+
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Quantité comptée</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
+          <button id="sk-moins" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">−</button>
+          <input id="sk-qte" type="number" min="0" value="${p.stockActuel ?? 0}" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
+          <button id="sk-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
+        </div>
+        <div id="sk-indicateur" style="font-size:12px;font-weight:700;margin-bottom:14px"></div>
+
+        <button class="nav-btn" id="sk-set-cible" style="margin-bottom:14px">Boîte pleine → régler sur ${cible} ${esc(p.unite || '')}</button>
+
+        <button class="add-btn" id="sk-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider le comptage</button>
+        <div id="sk-ajuste-status" style="font-size:12px;margin-top:10px"></div>
       </div>
     </div>
   `;
+
+  const qteInput = document.getElementById("sk-qte");
+  const indicateur = document.getElementById("sk-indicateur");
+
+  function updateIndicateur() {
+    const v = parseInt(qteInput.value, 10);
+    if (isNaN(v)) { indicateur.innerHTML = ""; return; }
+    if (v <= min) indicateur.innerHTML = `<span style="color:var(--red)">⚠️ Sous le seuil — apparaîtra dans "Commandes"</span>`;
+    else if (v < cible) indicateur.innerHTML = `<span style="color:var(--gold)">En dessous de la cible</span>`;
+    else indicateur.innerHTML = `<span style="color:var(--text-dim)">✓ Stock au niveau normal</span>`;
+  }
+  updateIndicateur();
+  qteInput.addEventListener("input", updateIndicateur);
+
+  document.getElementById("sk-moins").addEventListener("click", () => {
+    qteInput.value = Math.max(0, (parseInt(qteInput.value, 10) || 0) - 1);
+    updateIndicateur();
+  });
+  document.getElementById("sk-plus").addEventListener("click", () => {
+    qteInput.value = (parseInt(qteInput.value, 10) || 0) + 1;
+    updateIndicateur();
+  });
+  document.getElementById("sk-set-cible").addEventListener("click", () => {
+    qteInput.value = cible;
+    updateIndicateur();
+  });
+
   document.getElementById("sk-back").addEventListener("click", () => { ui.ajusteId = null; render(); });
   document.getElementById("sk-valider").addEventListener("click", async () => {
     const statusEl = document.getElementById("sk-ajuste-status");
-    const nouvelle = parseInt(document.getElementById("sk-qte").value, 10);
+    const nouvelle = parseInt(qteInput.value, 10);
     if (isNaN(nouvelle) || nouvelle < 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
       await enregistrerInventaire(p.id, p.stockActuel ?? 0, nouvelle, mountedUser?.uid || null);
-      const alerte = nouvelle <= (p.stockMin ?? 0);
+      const alerte = nouvelle <= min;
       statusEl.innerHTML = alerte
         ? `<span style="color:var(--red)">✓ Enregistré — sous le seuil, ce produit apparaîtra dans "Commandes".</span>`
         : `<span style="color:var(--gold)">✓ Enregistré</span>`;
