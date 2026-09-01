@@ -76,11 +76,13 @@ function photoGalleryHTML(section, sectionIndex, editable) {
       `).join("")}
     </div>
     ${editable ? `
-    <div style="margin-top:8px">
-      <button type="button" class="nav-btn" data-open-photo-picker="${sectionIndex}" style="font-size:12px">📎 Ajouter une photo ou un document</button>
-      <input type="file" data-hidden-file-input="${sectionIndex}" style="display:none">
-      <div data-upload-status="${sectionIndex}" style="font-size:11px;margin-top:4px"></div>
-    </div>` : ""}
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="nav-btn" data-open-photo-picker="${sectionIndex}" data-mode="camera" style="font-size:12px">📷 Prendre une photo</button>
+      <button type="button" class="nav-btn" data-open-photo-picker="${sectionIndex}" data-mode="file" style="font-size:12px">📎 Importer un fichier</button>
+      <input type="file" accept="image/*" capture="environment" data-hidden-file-input="${sectionIndex}" data-mode="camera" style="display:none">
+      <input type="file" data-hidden-file-input="${sectionIndex}" data-mode="file" style="display:none">
+    </div>
+    <div data-upload-status="${sectionIndex}" style="font-size:11px;margin-top:4px"></div>` : ""}
   `;
 }
 
@@ -287,8 +289,9 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-open-photo-picker]").forEach(btn => {
     btn.addEventListener("click", async () => {
       const si = parseInt(btn.dataset.openPhotoPicker, 10);
+      const mode = btn.dataset.mode;
       const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
-      const fileInput = mountedContainer.querySelector(`[data-hidden-file-input="${si}"]`);
+      const fileInput = mountedContainer.querySelector(`[data-hidden-file-input="${si}"][data-mode="${mode}"]`);
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion à Google…</span>`;
       try {
         // La connexion Google DOIT être demandée en tout premier, en
