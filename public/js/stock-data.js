@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, setDoc, deleteDoc, addDoc, updateDoc,
+  doc, setDoc, deleteDoc, addDoc, updateDoc, getDocs, deleteField,
   collection, onSnapshot, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -74,7 +74,7 @@ export const PRODUITS_TYPE = [
 export function watchStockProduits(callback) {
   return onSnapshot(collection(db, "stock-produits"), (snap) => {
     const list = [];
-    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
     callback(list.sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || "")));
   }, (err) => { console.error("watchStockProduits:", err); callback([]); });
 }
@@ -88,8 +88,23 @@ export async function saveProduit(id, data) {
   await setDoc(doc(db, "stock-produits", id), data);
 }
 
-export async function deleteProduit(id) {
+export async function envoyerProduitCorbeille(id) {
+  await updateDoc(doc(db, "stock-produits", id), { supprimeLe: serverTimestamp() });
+}
+
+export async function restaurerProduit(id) {
+  await updateDoc(doc(db, "stock-produits", id), { supprimeLe: deleteField() });
+}
+
+export async function purgerProduitDefinitivement(id) {
   await deleteDoc(doc(db, "stock-produits", id));
+}
+
+export async function listerProduitsCorbeille() {
+  const snap = await getDocs(collection(db, "stock-produits"));
+  const list = [];
+  snap.forEach((d) => { if (d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
+  return list;
 }
 
 // Charge la liste type en une fois (utile au premier démarrage du module).

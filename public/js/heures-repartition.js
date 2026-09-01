@@ -17,7 +17,7 @@ let mountedUser = null;
 let mountedDispositif = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
-function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
+function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 function mondayOf(date) {
   const offset = (date.getDay() + 6) % 7;

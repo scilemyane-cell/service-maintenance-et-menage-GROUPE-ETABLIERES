@@ -4,7 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-// Rôles possibles : "admin" | "n1" | "technicien" | "menage" | "mi_temps" | "direction"
+// Rôles possibles : "super_admin" | "admin" | "n1" | "technicien" | "menage" | "mi_temps" | "direction"
 
 export function login(email, password) {
   return signInWithEmailAndPassword(auth, email, password);
@@ -38,6 +38,7 @@ export function watchAuth(callback) {
 
 export function roleLabel(role) {
   const labels = {
+    super_admin: "Super Administrateur",
     admin: "Administrateur",
     n1: "Cadre astreinte (N1)",
     technicien: "Technicien",

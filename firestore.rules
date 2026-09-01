@@ -11,17 +11,32 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    function isSuperAdmin() {
+      return isSignedIn() && myRole() == 'super_admin';
+    }
+
+    function isAdminLevel() {
+      return isSignedIn() && (myRole() == 'admin' || myRole() == 'super_admin');
+    }
+
     function isEditor() {
-      return isSignedIn() && (myRole() == 'admin' || myRole() == 'n1');
+      return isSignedIn() && (myRole() == 'admin' || myRole() == 'super_admin' || myRole() == 'n1');
     }
 
     // ---- Profils utilisateurs ----
     // Chacun peut lire son propre profil et ceux des autres (pour afficher
-    // les noms dans les listes). Seul un admin peut créer/modifier un profil
-    // (c'est ainsi que l'on attribue les rôles).
+    // les noms dans les listes). Admin/Super Admin peuvent créer/modifier
+    // un profil (c'est ainsi que l'on attribue les rôles) — mais un simple
+    // Admin ne peut ni créer/promouvoir un compte Admin ou Super Admin, ni
+    // modifier un compte qui est déjà Admin ou Super Admin : seul un Super
+    // Admin peut toucher à ce niveau (protection contre la rétrogradation
+    // accidentelle ou l'auto-promotion).
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && myRole() == 'admin';
+      allow write: if isSuperAdmin()
+        || (isAdminLevel()
+            && !(resource != null && (resource.data.role == 'admin' || resource.data.role == 'super_admin'))
+            && request.resource.data.role != 'admin' && request.resource.data.role != 'super_admin');
     }
 
     // ---- Configuration (noms N1/N2, paramètres) ----
@@ -99,9 +114,12 @@ service cloud.firestore {
       allow write: if isEditor();
     }
     // ---- Dossiers de site (sécurité, contacts, organes techniques) ----
+    // La mise à la corbeille est une mise à jour (isEditor). La purge
+    // définitive (delete réel) est réservée Super Admin.
     match /sites-dossiers/{docId} {
       allow read: if isSignedIn();
-      allow write: if isEditor();
+      allow create, update: if isEditor();
+      allow delete: if isSuperAdmin();
     }
     // ---- Stock de maintenance (produits, historique d'inventaire) ----
     // Lecture ouverte à tous les connectés (utile pour l'inventaire par
@@ -110,7 +128,8 @@ service cloud.firestore {
     // n'importe quel utilisateur connecté peut créer.
     match /stock-produits/{docId} {
       allow read: if isSignedIn();
-      allow write: if isEditor();
+      allow create, update: if isEditor();
+      allow delete: if isSuperAdmin();
       allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockActuel', 'dateDernierInventaire']);
     }
     match /stock-mouvements/{docId} {

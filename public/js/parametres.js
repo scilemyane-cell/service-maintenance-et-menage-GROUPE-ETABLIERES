@@ -12,7 +12,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 const ALL_DAYS = ["LUN", "MAR", "MER", "JEU", "VEN"];
-const ROLES = ["admin", "n1", "technicien", "menage", "mi_temps", "direction"];
+const ROLES = ["super_admin", "admin", "n1", "technicien", "menage", "mi_temps", "direction"];
 const MENAGE_ROLES = ["menage", "mi_temps"];
 
 function siteDispositif(site) { return site.dispositif || "Dispositif MNA"; }
@@ -45,11 +45,25 @@ async function createUserAccount(email, password, nom, role) {
 // =================================================================
 let usersState = { users: [] };
 let newUserForm = { email: "", password: "", nom: "", role: "menage" };
+let currentUser = null;
 
-export function mountUtilisateurs(container) {
+export function mountUtilisateurs(container, user) {
   cleanup();
+  currentUser = user;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchUsers((u) => { usersState.users = u; renderUtilisateurs(container); }));
+}
+
+// Un Admin (pas Super Admin) ne peut ni attribuer, ni modifier un compte
+// Admin/Super Admin — seul un Super Admin le peut. Protège contre une
+// rétrogradation accidentelle ou une auto-promotion.
+function rolesAssignablesPar(user) {
+  if (user?.role === "super_admin") return ROLES;
+  return ROLES.filter(r => r !== "super_admin" && r !== "admin");
+}
+function peutModifierRoleDe(user, targetRole) {
+  if (user?.role === "super_admin") return true;
+  return targetRole !== "super_admin" && targetRole !== "admin";
 }
 
 function renderUtilisateurs(container) {
@@ -61,7 +75,7 @@ function renderUtilisateurs(container) {
         <div class="form-grid">
           <label>Email<input type="email" id="nu-email" value="${esc(newUserForm.email)}" placeholder="prenom.nom@etablieres.fr"></label>
           <label>Nom affiché<input id="nu-nom" value="${esc(newUserForm.nom)}" placeholder="ex. Lionel"></label>
-          <label>Rôle<select id="nu-role">${ROLES.map(r => `<option value="${r}" ${newUserForm.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select></label>
+          <label>Rôle<select id="nu-role">${rolesAssignablesPar(currentUser).map(r => `<option value="${r}" ${newUserForm.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select></label>
           <label>Mot de passe<div style="display:flex;gap:6px">
             <input id="nu-password" value="${esc(newUserForm.password)}" placeholder="min. 6 caractères" style="flex:1">
             <button class="nav-btn" id="nu-generate" type="button">🎲</button>
@@ -81,7 +95,9 @@ function renderUtilisateurs(container) {
                 <tr>
                   <td><input data-user-email="${u.uid}" value="${esc(u.email || '')}" placeholder="email manquant — à renseigner" style="min-width:200px${!u.email ? ';border-color:var(--red)' : ''}"></td>
                   <td><input data-user-nom="${u.uid}" value="${esc(u.nom || '')}" style="min-width:160px"></td>
-                  <td><select data-user-role="${u.uid}">${ROLES.map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select></td>
+                  <td>${peutModifierRoleDe(currentUser, u.role)
+                    ? `<select data-user-role="${u.uid}">${rolesAssignablesPar(currentUser).map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select>`
+                    : `<span title="Seul un Super Admin peut modifier ce rôle">🔒 ${esc(roleLabel(u.role))}</span>`}</td>
                   <td>
                     <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
                     <div data-reset-status="${u.uid}" style="font-size:11px;margin-top:4px"></div>

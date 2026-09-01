@@ -85,7 +85,7 @@ function render() {
         `).join("")}
       </div>
 
-      ${mountedUser.role === "admin" ? `
+      ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
       <button class="nav-btn" id="debug-toggle" style="width:fit-content;opacity:.6;font-size:11px">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester l'affichage du bandeau de transfert"}</button>
       ` : ""}
     </div>

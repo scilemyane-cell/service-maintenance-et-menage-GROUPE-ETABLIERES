@@ -67,7 +67,7 @@ export function mountFichesForDispositif(container, user, dispositif) {
   unsubs.push(watchAccess((a) => { state.access = a; render(); }));
 }
 
-function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
+function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 function effectiveAgent() {
   if (isEditorUser(mountedUser) && ui.actingUid) {

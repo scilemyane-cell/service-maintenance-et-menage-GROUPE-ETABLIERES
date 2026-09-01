@@ -31,6 +31,7 @@
   import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
   import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif, mountAssociationsSites } from "./js/parametres.js";
   import { mountMigrationTool } from "./js/migration-tool.js";
+  import { mountCorbeille } from "./js/corbeille.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
 
@@ -42,8 +43,10 @@
   let dispositifSettings = {};
   let sitesSubscribed = false;
 
-  const ALL = ["admin","n1","technicien","menage","mi_temps","direction"];
-  const MENAGE_ROLES = ["admin","n1","direction","menage","mi_temps"];
+  const ALL = ["super_admin","admin","n1","technicien","menage","mi_temps","direction"];
+  const MENAGE_ROLES = ["super_admin","admin","n1","direction","menage","mi_temps"];
+  const GESTION = ["super_admin","admin","n1"]; // gestion quotidienne (contenu)
+  const ADMIN_ONLY = ["super_admin","admin"]; // administration du systeme (comptes, corbeille...)
 
   function dispositifCategories(user) {
     return dispositifsList
@@ -55,10 +58,10 @@
           ...(heuresEnabled(dispositifSettings, d) ? [
             { id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
             { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
-            { id: "archive", label: "Archive", icon: "🗄️", roles: ["admin","n1","direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
+            { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
           ] : []),
           { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
-          { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: ["admin","n1"],     mount: (c, u) => mountParametresDispositif(c, u, d) },
+          { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],
       }));
   }
@@ -69,21 +72,22 @@
         id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning, absences, interventions",
         subtabs: [
           { id: "calendrier",     label: "Calendrier",     icon: "📅", roles: ALL,                         mount: mountCalendrier },
-          { id: "absences",       label: "Absences",       icon: "👥", roles: ["admin","n1"],              mount: mountAbsencesTab },
-          { id: "interventions",  label: "Interventions",  icon: "🔧", roles: ["admin","n1","technicien"], mount: mountInterventionsTab },
-          { id: "synthese",       label: "Synthèse",       icon: "📊", roles: ["admin","n1","direction"],  mount: mountSyntheseTab },
-          { id: "transferts",     label: "Historique transferts", icon: "🔄", roles: ["admin","n1","direction"], mount: mountTransfertsTab },
+          { id: "absences",       label: "Absences",       icon: "👥", roles: GESTION,              mount: mountAbsencesTab },
+          { id: "interventions",  label: "Interventions",  icon: "🔧", roles: [...GESTION,"technicien"], mount: mountInterventionsTab },
+          { id: "synthese",       label: "Synthèse",       icon: "📊", roles: [...GESTION,"direction"],  mount: mountSyntheseTab },
+          { id: "transferts",     label: "Historique transferts", icon: "🔄", roles: [...GESTION,"direction"], mount: mountTransfertsTab },
           { id: "coordonnees",    label: "Coordonnées",    icon: "📞", roles: ALL, mount: mountCoordonneesTab },
-          { id: "archive-releves", label: "Archive relevés", icon: "🗄️", roles: ["admin","n1","direction"], mount: mountArchiveRelevesTab },
+          { id: "archive-releves", label: "Archive relevés", icon: "🗄️", roles: [...GESTION,"direction"], mount: mountArchiveRelevesTab },
         ],
       },
       {
         id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès remplaçants",
         subtabs: [
-          { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ["admin","n1"], mount: mountUtilisateurs },
-          { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ["admin","n1"], mount: mountAccesRemplacants },
-          { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ["admin","n1"], mount: mountAssociationsSites },
-          { id: "migration", label: "Migration photos", icon: "🔄", roles: ["admin"], mount: mountMigrationTool },
+          { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ADMIN_ONLY, mount: mountUtilisateurs },
+          { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ADMIN_ONLY, mount: mountAccesRemplacants },
+          { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ADMIN_ONLY, mount: mountAssociationsSites },
+          { id: "corbeille", label: "Corbeille", icon: "🗑️", roles: ADMIN_ONLY, mount: mountCorbeille },
+          { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },
         ],
       },
       {
@@ -95,9 +99,9 @@
       {
         id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
         subtabs: [
-          { id: "produits",   label: "Produits",   icon: "📦", roles: ["admin","n1"],              mount: mountStockProduits },
-          { id: "inventaire", label: "Inventaire", icon: "📷", roles: ["admin","n1","technicien"], mount: mountStockInventaire },
-          { id: "commandes",  label: "Commandes",  icon: "📧", roles: ["admin","n1","direction"],  mount: mountStockCommandes },
+          { id: "produits",   label: "Produits",   icon: "📦", roles: GESTION,              mount: mountStockProduits },
+          { id: "inventaire", label: "Inventaire", icon: "📷", roles: [...GESTION,"technicien"], mount: mountStockInventaire },
+          { id: "commandes",  label: "Commandes",  icon: "📧", roles: [...GESTION,"direction"],  mount: mountStockCommandes },
         ],
       },
     ];

@@ -1,6 +1,6 @@
 import { esc } from "./astreinte-logic.js";
 import {
-  watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
+  watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem } from "./sharepoint-storage.js";
@@ -14,7 +14,7 @@ let mountedContainer = null;
 let mountedUser = null;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
-function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
+function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 export function mountSitesDossiers(container, user) {
   cleanup();
@@ -338,7 +338,7 @@ function renderView(d) {
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
         <button class="add-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
-        ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer</button>` : ""}
+        ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
 
@@ -394,7 +394,7 @@ function renderView(d) {
     }
   });
   document.getElementById("sd-del")?.addEventListener("click", async () => {
-    if (confirm(`Supprimer définitivement le dossier "${d.nom}" ?`)) { await deleteDossier(d.id); ui.openId = null; render(); }
+    if (confirm(`Mettre le dossier "${d.nom}" à la corbeille ? Il restera récupérable 60 jours (Administration > Corbeille).`)) { await envoyerDossierCorbeille(d.id); ui.openId = null; render(); }
   });
   attachLightboxListeners(mountedContainer);
   resolveGalleryImages(mountedContainer);

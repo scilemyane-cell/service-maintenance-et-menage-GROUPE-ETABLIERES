@@ -17,7 +17,7 @@ export async function setDispositifAccess(dispositif, uids) {
 }
 
 export function hasAccess(accessMap, dispositif, user) {
-  if (user.role === "admin" || user.role === "n1" || user.role === "direction") return true;
+  if (user.role === "super_admin" || user.role === "admin" || user.role === "n1" || user.role === "direction") return true;
   const list = accessMap[dispositif];
   if (!list || list.length === 0) return true; // pas de restriction définie = ouvert
   return list.includes(user.uid);

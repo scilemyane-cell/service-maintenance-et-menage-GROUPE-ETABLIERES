@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, setDoc, deleteDoc, addDoc,
+  doc, setDoc, deleteDoc, addDoc, updateDoc, getDocs, deleteField, serverTimestamp,
   collection, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -51,7 +51,7 @@ export async function saveSectionsOrder(titres) {
 export function watchSitesDossiers(callback) {
   return onSnapshot(collection(db, "sites-dossiers"), (snap) => {
     const list = [];
-    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
     callback(list.sort((a, b) => (a.nom || "").localeCompare(b.nom || "")));
   }, (err) => { console.error("watchSitesDossiers:", err); callback([]); });
 }
@@ -77,6 +77,26 @@ export async function saveDossier(id, data) {
   await setDoc(doc(db, "sites-dossiers", id), data);
 }
 
-export async function deleteDossier(id) {
+// Mise à la corbeille (récupérable) — la vraie suppression n'a lieu
+// qu'après le délai de rétention ou via purgerDossierDefinitivement
+// (réservé Super Admin, voir corbeille.js).
+export async function envoyerDossierCorbeille(id) {
+  await updateDoc(doc(db, "sites-dossiers", id), { supprimeLe: serverTimestamp() });
+}
+
+export async function restaurerDossier(id) {
+  await updateDoc(doc(db, "sites-dossiers", id), { supprimeLe: deleteField() });
+}
+
+export async function purgerDossierDefinitivement(id) {
   await deleteDoc(doc(db, "sites-dossiers", id));
+}
+
+// Liste ponctuelle (pas de watch temps réel) des dossiers actuellement à
+// la corbeille — utilisée par l'écran Corbeille.
+export async function listerDossiersCorbeille() {
+  const snap = await getDocs(collection(db, "sites-dossiers"));
+  const list = [];
+  snap.forEach((d) => { if (d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
+  return list;
 }

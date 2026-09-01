@@ -69,7 +69,7 @@ function cleanup() {
 }
 
 export function permissions(user) {
-  const isEditor = user.role === "admin" || user.role === "n1";
+  const isEditor = user.role === "super_admin" || user.role === "admin" || user.role === "n1";
   const isTech = user.role === "technicien";
   return {
     isEditor,

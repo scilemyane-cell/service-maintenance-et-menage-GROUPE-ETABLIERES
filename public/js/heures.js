@@ -60,7 +60,7 @@ function render() {
   if (!mountedContainer || !mountedUser) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; }
   const isSelfEntry = mountedUser.role === "menage" || mountedUser.role === "mi_temps";
-  const isReviewer = mountedUser.role === "admin" || mountedUser.role === "n1" || mountedUser.role === "direction";
+  const isReviewer = mountedUser.role === "super_admin" || mountedUser.role === "admin" || mountedUser.role === "n1" || mountedUser.role === "direction";
 
   if (isSelfEntry) return renderSelf(mountedContainer, mountedUser);
   if (isReviewer) return renderReview(mountedContainer, mountedUser);
@@ -179,7 +179,7 @@ function renderSelf(container, user) {
 // Vue validation — admin / n1 / direction
 // =================================================================
 function renderReview(container, user) {
-  const canValidate = user.role === "admin" || user.role === "n1";
+  const canValidate = user.role === "super_admin" || user.role === "admin" || user.role === "n1";
   const people = ["Tous", ...new Set(state.heures.map(h => h.personNom))];
   const filtered = state.heures.filter(h => ui.filterPerson === "Tous" || h.personNom === ui.filterPerson)
     .sort((a, b) => (a.date < b.date ? 1 : -1));

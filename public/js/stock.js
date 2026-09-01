@@ -1,5 +1,5 @@
 import { esc } from "./astreinte-logic.js";
-import { watchStockProduits, createProduit, saveProduit, deleteProduit, seedProduitsType } from "./stock-data.js";
+import { watchStockProduits, createProduit, saveProduit, envoyerProduitCorbeille, seedProduitsType } from "./stock-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 
 let state = { produits: [] };
@@ -90,7 +90,7 @@ function render() {
   mountedContainer.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => { ui.editId = btn.dataset.edit; render(); }));
   mountedContainer.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", async () => {
     const p = state.produits.find(x => x.id === btn.dataset.del);
-    if (confirm(`Supprimer "${p.nom}" ?`)) await deleteProduit(p.id);
+    if (confirm(`Mettre "${p.nom}" à la corbeille ? Récupérable 60 jours (Administration > Corbeille).`)) await envoyerProduitCorbeille(p.id);
   }));
   resolvePhotos(mountedContainer);
 }

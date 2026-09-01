@@ -13,7 +13,7 @@ function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
 function siteDispositif(site) { return site?.dispositif || "Dispositif MNA"; }
 function ficheDispositif(fiche) { return siteDispositif(state.sites.find(s => s.id === fiche.siteId)); }
-function isEditorUser(user) { return user && (user.role === "admin" || user.role === "n1"); }
+function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 export function mountTracabilite(container, user) {
   lockedDispositif = null;
