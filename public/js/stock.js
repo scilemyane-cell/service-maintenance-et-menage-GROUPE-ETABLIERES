@@ -1,5 +1,6 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, deleteProduit, seedProduitsType } from "./stock-data.js";
+import { getAccessToken, uploadToDrive } from "./google-drive.js";
 
 let state = { produits: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -51,18 +52,19 @@ function render() {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Produit</th><th>Catégorie</th><th>Stock</th><th>Fournisseur</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Stock</th><th>Fournisseur</th><th></th></tr></thead>
           <tbody>
-            ${filtered.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucun produit.</td></tr>` :
+            ${filtered.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun produit.</td></tr>` :
               filtered.map(p => {
                 const status = stockStatus(p);
                 const color = status === "danger" ? "var(--red)" : status === "warn" ? "var(--gold)" : "var(--text)";
                 return `
                 <tr>
+                  <td>${p.photo?.url ? `<img src="${esc(p.photo.url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">` : `<span style="display:inline-block;width:36px;height:36px;border-radius:6px;background:var(--panel-alt)"></span>`}</td>
                   <td>${esc(p.nom)}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.categorie || "—")}</td>
                   <td style="color:${color};font-weight:700">${p.stockActuel ?? 0} / ${p.stockCible ?? 0} ${esc(p.unite || "")}${status === "danger" ? " ⚠️" : ""}</td>
-                  <td style="font-size:12px">${esc(p.fournisseurNom || "—")}</td>
+                  <td style="font-size:12px">${esc(p.fournisseurNom || "—")}${p.refFournisseur ? `<br><span style="color:var(--text-dim)">réf. ${esc(p.refFournisseur)}</span>` : ""}</td>
                   <td style="white-space:nowrap">
                     <button class="nav-btn" data-qr="${p.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
                     <button class="nav-btn" data-edit="${p.id}" style="padding:4px 8px;font-size:11px">✏️</button>
@@ -92,8 +94,8 @@ function render() {
   }));
 }
 
-function renderEditForm(p) {
-  const data = p ? { ...p } : { nom: "", categorie: "", unite: "pièce", stockCible: 10, stockMin: 3, stockActuel: 0, fournisseurNom: "", fournisseurEmail: "" };
+function renderEditForm(p, workingCopy) {
+  const data = workingCopy || (p ? { ...p } : { nom: "", categorie: "", unite: "pièce", stockCible: 10, stockMin: 3, stockActuel: 0, fournisseurNom: "", fournisseurEmail: "", refFournisseur: "", photo: null });
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -109,14 +111,80 @@ function renderEditForm(p) {
           <label>Seuil minimum (déclenche la commande)<input id="sk-min" type="number" min="0" value="${data.stockMin ?? 0}"></label>
           <label>Fournisseur<input id="sk-fournisseur-nom" value="${esc(data.fournisseurNom || '')}" placeholder="ex. Cedeo, Rexel…"></label>
           <label>Email fournisseur<input id="sk-fournisseur-email" type="email" value="${esc(data.fournisseurEmail || '')}" placeholder="commandes@fournisseur.fr"></label>
+          <label>Référence fournisseur<input id="sk-ref-fournisseur" value="${esc(data.refFournisseur || '')}" placeholder="ex. réf. catalogue"></label>
         </div>
-        <button class="add-btn" id="sk-save">💾 Enregistrer</button>
+
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:12px 0 6px">Photo du produit</label>
+        <div id="sk-photo-zone">
+          ${data.photo?.url ? `
+            <div style="position:relative;width:fit-content">
+              <img src="${esc(data.photo.url)}" alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
+              <button id="sk-del-photo" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>
+            </div>
+          ` : `
+            <button class="nav-btn" id="sk-photo-btn" style="width:fit-content">📷 Ajouter une photo</button>
+            <input type="file" accept="image/*" capture="environment" id="sk-photo-input" style="display:none">
+          `}
+          <span id="sk-photo-status" style="font-size:12px;margin-left:8px"></span>
+        </div>
+
+        <button class="add-btn" id="sk-save" style="margin-top:14px">💾 Enregistrer</button>
         <span id="sk-status" style="font-size:12px;margin-left:8px"></span>
       </div>
     </div>
   `;
 
+  // Conserve dans `data` tout ce qui a été saisi avant un ajout/suppression
+  // de photo, pour ne rien perdre au ré-affichage du formulaire.
+  function syncFieldsIntoData() {
+    data.nom = document.getElementById("sk-nom").value;
+    data.categorie = document.getElementById("sk-categorie").value;
+    data.unite = document.getElementById("sk-unite").value;
+    data.stockActuel = document.getElementById("sk-actuel").value;
+    data.stockCible = document.getElementById("sk-cible").value;
+    data.stockMin = document.getElementById("sk-min").value;
+    data.fournisseurNom = document.getElementById("sk-fournisseur-nom").value;
+    data.fournisseurEmail = document.getElementById("sk-fournisseur-email").value;
+    data.refFournisseur = document.getElementById("sk-ref-fournisseur").value;
+  }
+
   document.getElementById("sk-back").addEventListener("click", () => { ui.editId = null; render(); });
+
+  document.getElementById("sk-del-photo")?.addEventListener("click", () => {
+    syncFieldsIntoData();
+    data.photo = null;
+    renderEditForm(p, data);
+  });
+  document.getElementById("sk-photo-btn")?.addEventListener("click", async () => {
+    const fileInput = document.getElementById("sk-photo-input");
+    const statusEl = document.getElementById("sk-photo-status");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion à Google…</span>`;
+    try {
+      // La connexion Google doit être demandée en réaction directe au clic,
+      // sinon le navigateur bloque la fenêtre de connexion.
+      const token = await getAccessToken();
+      statusEl.innerHTML = "";
+      fileInput.dataset.readyToken = token;
+      fileInput.click();
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+    }
+  });
+  document.getElementById("sk-photo-input")?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById("sk-photo-status");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
+    try {
+      const { url, driveId, isImage, name } = await uploadToDrive(file, e.target.dataset.readyToken);
+      syncFieldsIntoData();
+      data.photo = { url, driveId, isImage, name };
+      renderEditForm(p, data);
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
+    }
+  });
+
   document.getElementById("sk-save").addEventListener("click", async () => {
     const statusEl = document.getElementById("sk-status");
     const payload = {
@@ -128,6 +196,8 @@ function renderEditForm(p) {
       stockMin: parseInt(document.getElementById("sk-min").value, 10) || 0,
       fournisseurNom: document.getElementById("sk-fournisseur-nom").value.trim(),
       fournisseurEmail: document.getElementById("sk-fournisseur-email").value.trim(),
+      refFournisseur: document.getElementById("sk-ref-fournisseur").value.trim(),
+      photo: data.photo || null,
     };
     if (!payload.nom) { statusEl.innerHTML = `<span style="color:var(--red)">Le nom est obligatoire.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
