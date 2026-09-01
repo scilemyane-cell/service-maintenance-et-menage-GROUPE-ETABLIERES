@@ -103,5 +103,20 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isEditor();
     }
+    // ---- Stock de maintenance (produits, historique d'inventaire) ----
+    // Lecture ouverte à tous les connectés (utile pour l'inventaire par
+    // scan, accessible aussi aux techniciens). Écriture réservée aux
+    // éditeurs (admin/n1), sauf le comptage d'inventaire (mouvements) que
+    // n'importe quel utilisateur connecté peut créer.
+    match /stock-produits/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockActuel', 'dateDernierInventaire']);
+    }
+    match /stock-mouvements/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isEditor();
+    }
   }
 }
