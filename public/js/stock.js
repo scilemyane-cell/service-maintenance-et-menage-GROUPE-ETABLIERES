@@ -152,7 +152,7 @@ function renderQr(p) {
       <div class="form-card" style="text-align:center;max-width:320px" id="sk-qr-print">
         <p style="font-weight:700;margin:0 0 4px">${esc(p.nom)}</p>
         <p class="hint" style="margin:0 0 12px">${esc(p.categorie || "")}</p>
-        <canvas id="sk-qr-canvas" style="margin:0 auto"></canvas>
+        <div id="sk-qr-canvas" style="width:220px;height:220px;margin:0 auto"></div>
       </div>
       <button class="add-btn" id="sk-print" style="width:fit-content">🖨️ Imprimer l'étiquette</button>
     </div>
@@ -160,12 +160,15 @@ function renderQr(p) {
   document.getElementById("sk-back").addEventListener("click", () => { ui.qrId = null; render(); });
   document.getElementById("sk-print").addEventListener("click", () => window.print());
 
-  const canvas = document.getElementById("sk-qr-canvas");
+  const holder = document.getElementById("sk-qr-canvas");
   if (window.QRCode) {
-    window.QRCode.toCanvas(canvas, qrPayloadFor(p.id), { width: 220, margin: 1 }, (err) => {
-      if (err) canvas.replaceWith(document.createTextNode("Erreur de génération du QR."));
+    new window.QRCode(holder, {
+      text: qrPayloadFor(p.id),
+      width: 220,
+      height: 220,
+      correctLevel: window.QRCode.CorrectLevel.M,
     });
   } else {
-    canvas.replaceWith(document.createTextNode("Librairie QR non chargée (vérifier app.html)."));
+    holder.textContent = "Librairie QR non chargée (vérifier app.html).";
   }
 }

@@ -118,5 +118,9 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if isEditor();
     }
+    match /stock-commandes/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
   }
 }
