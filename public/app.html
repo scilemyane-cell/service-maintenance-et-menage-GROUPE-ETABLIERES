@@ -29,6 +29,7 @@
   import { watchDispositifSettings, heuresEnabled } from "./js/dispositif-settings-data.js";
   import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
   import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif, mountAssociationsSites } from "./js/parametres.js";
+  import { mountMigrationTool } from "./js/migration-tool.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
 
@@ -81,6 +82,7 @@
           { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ["admin","n1"], mount: mountUtilisateurs },
           { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ["admin","n1"], mount: mountAccesRemplacants },
           { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ["admin","n1"], mount: mountAssociationsSites },
+          { id: "migration", label: "Migration photos", icon: "🔄", roles: ["admin"], mount: mountMigrationTool },
         ],
       },
       {
