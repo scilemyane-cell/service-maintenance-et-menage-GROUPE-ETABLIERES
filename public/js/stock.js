@@ -1,6 +1,6 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, deleteProduit, seedProduitsType } from "./stock-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 
 let state = { produits: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -166,7 +166,18 @@ function renderEditForm(p, workingCopy) {
 
   document.getElementById("sk-back").addEventListener("click", () => { ui.editId = null; render(); });
 
-  document.getElementById("sk-del-photo")?.addEventListener("click", () => {
+  document.getElementById("sk-del-photo")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("sk-photo-status");
+    if (data.photo?.itemId) {
+      if (!confirm("Supprimer définitivement cette photo ?")) return;
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Suppression…</span>`;
+      try {
+        await deleteDriveItem(data.photo.itemId);
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+        return;
+      }
+    }
     syncFieldsIntoData();
     data.photo = null;
     renderEditForm(p, data);

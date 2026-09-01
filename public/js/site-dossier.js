@@ -3,7 +3,7 @@ import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem } from "./sharepoint-storage.js";
 import { watchAssociations } from "./associations-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
@@ -325,7 +325,7 @@ export async function generateAndUploadPdf(d, element) {
     .from(element)
     .outputPdf("blob");
   const file = new File([blob], filename, { type: "application/pdf" });
-  return uploadToDrive(file, token, [d.nom]);
+  return uploadToDrive(file, token, [d.nom], undefined, { conflictBehavior: "replace", fixedFilename: filename });
 }
 
 function renderView(d) {
@@ -557,8 +557,20 @@ function renderEdit(dOriginal, workingCopy) {
     });
   });
   mountedContainer.querySelectorAll("[data-del-photo]").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const [si, pi] = btn.dataset.delPhoto.split("-").map(Number);
+      const photo = data.sections[si].photos[pi];
+      if (!confirm(`Supprimer définitivement "${photo.name || 'ce fichier'}" ?`)) return;
+      btn.disabled = true;
+      if (photo.itemId) {
+        try {
+          await deleteDriveItem(photo.itemId);
+        } catch (e) {
+          alert("Échec de la suppression sur SharePoint : " + (e.message || e));
+          btn.disabled = false;
+          return;
+        }
+      }
       data.sections[si].photos.splice(pi, 1);
       renderEdit(dOriginal, data);
     });

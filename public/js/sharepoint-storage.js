@@ -81,6 +81,18 @@ export async function moveItemToFolder(itemId, folderPath) {
   return res.json();
 }
 
+// Supprime réellement un fichier sur SharePoint (pas juste sa référence
+// dans Firestore) — utilisée quand une photo est retirée d'une fiche.
+export async function deleteDriveItem(itemId) {
+  const token = await getGraphToken();
+  const driveId = await resolveDriveId(token);
+  const res = await fetch(`${GRAPH_ROOT}/drives/${driveId}/items/${itemId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`Échec de la suppression (${res.status})`);
+}
+
 function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|#%]/g, "_").trim() || "fichier";
 }
@@ -108,19 +120,23 @@ export async function getAccessToken() {
 // [nomProduit]) plutôt que dans un unique dossier plat. Utilise une session
 // d'upload par blocs de 5 Mo (fonctionne aussi bien pour une petite photo
 // que pour un gros PDF, sans limite de taille pratique).
-export async function uploadToDrive(file, token, folderSegments = [], rootFolder = ROOT_FOLDER) {
+export async function uploadToDrive(file, token, folderSegments = [], rootFolder = ROOT_FOLDER, options = {}) {
+  const { conflictBehavior = "rename", fixedFilename = null } = options;
   const driveId = await resolveDriveId(token);
-  const safeName = sanitizeFilename(file.name);
+  const safeName = fixedFilename ? sanitizeFilename(fixedFilename) : sanitizeFilename(file.name);
   const folder = buildFolderPath(rootFolder, folderSegments);
   await ensureFolderPath(driveId, token, folder);
-  const itemPath = `${folder}/${Date.now()}-${safeName}`;
+  // Nom horodaté par défaut pour ne jamais écraser une photo précédente ;
+  // si un nom fixe est fourni (ex. le PDF récapitulatif du dossier), on
+  // s'en tient à ce nom et on remplace l'ancien fichier au même endroit.
+  const itemPath = fixedFilename ? `${folder}/${safeName}` : `${folder}/${Date.now()}-${safeName}`;
 
   const sessionRes = await fetch(
     `${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }),
+      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior } }),
     }
   );
   if (!sessionRes.ok) throw new Error(`Échec de la création de la session d'envoi (${sessionRes.status})`);
