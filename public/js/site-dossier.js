@@ -482,7 +482,9 @@ function renderEdit(dOriginal, workingCopy) {
       const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
       try {
-        const { url, itemId, isImage, name } = await uploadToDrive(file, input.dataset.readyToken);
+        const { url, itemId, isImage, name } = await uploadToDrive(
+          file, input.dataset.readyToken, [data.nom, data.sections[si].titre]
+        );
         data.sections[si].photos.push({ url, itemId, isImage, name });
         renderEdit(dOriginal, data);
       } catch (err) {

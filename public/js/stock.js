@@ -1,6 +1,6 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, deleteProduit, seedProduitsType } from "./stock-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 
 let state = { produits: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -192,9 +192,11 @@ function renderEditForm(p, workingCopy) {
     const statusEl = document.getElementById("sk-photo-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
     try {
-      const { url, driveId, isImage, name } = await uploadToDrive(file, e.target.dataset.readyToken);
+      const { url, itemId, isImage, name } = await uploadToDrive(
+        file, e.target.dataset.readyToken, [document.getElementById("sk-nom").value || "Produit sans nom"], STOCK_ROOT_FOLDER
+      );
       syncFieldsIntoData();
-      data.photo = { url, driveId, isImage, name };
+      data.photo = { url, itemId, isImage, name };
       renderEditForm(p, data);
     } catch (err) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;

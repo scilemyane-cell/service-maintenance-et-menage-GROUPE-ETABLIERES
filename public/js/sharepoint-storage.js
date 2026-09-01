@@ -10,6 +10,7 @@ const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const SHAREPOINT_HOSTNAME = "etablieresfr.sharepoint.com";
 const SITE_PATH = "/sites/appsmm";
 const ROOT_FOLDER = "DossiersDeSite";
+export const STOCK_ROOT_FOLDER = "StockMaintenance";
 
 let cachedDriveId = null;
 
@@ -34,6 +35,17 @@ function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|#%]/g, "_").trim() || "fichier";
 }
 
+// Construit un chemin de dossier lisible à partir de segments (ex. nom de
+// résidence, nom d'équipement) — chaque segment est nettoyé des caractères
+// interdits dans un chemin, tronqué pour rester raisonnable, et un segment
+// vide est simplement ignoré.
+function buildFolderPath(rootFolder, segments) {
+  const clean = (segments || [])
+    .filter(Boolean)
+    .map(s => sanitizeFilename(String(s)).slice(0, 80));
+  return [rootFolder, ...clean].join("/");
+}
+
 // Même rôle que dans google-drive.js : à appeler AVANT d'ouvrir le
 // sélecteur de fichier, en réaction directe au clic (sinon le navigateur
 // bloque la popup de connexion Microsoft).
@@ -41,13 +53,16 @@ export async function getAccessToken() {
   return getGraphToken();
 }
 
-// Envoie le fichier sur SharePoint avec un jeton déjà obtenu. Utilise une
-// session d'upload par blocs de 5 Mo (fonctionne aussi bien pour une petite
-// photo que pour un gros PDF, sans limite de taille pratique).
-export async function uploadToDrive(file, token) {
+// Envoie le fichier sur SharePoint avec un jeton déjà obtenu, rangé dans un
+// dossier lisible (folderSegments, ex. [nomResidence, nomEquipement] ou
+// [nomProduit]) plutôt que dans un unique dossier plat. Utilise une session
+// d'upload par blocs de 5 Mo (fonctionne aussi bien pour une petite photo
+// que pour un gros PDF, sans limite de taille pratique).
+export async function uploadToDrive(file, token, folderSegments = [], rootFolder = ROOT_FOLDER) {
   const driveId = await resolveDriveId(token);
   const safeName = sanitizeFilename(file.name);
-  const itemPath = `${ROOT_FOLDER}/${Date.now()}-${safeName}`;
+  const folder = buildFolderPath(rootFolder, folderSegments);
+  const itemPath = `${folder}/${Date.now()}-${safeName}`;
 
   const sessionRes = await fetch(
     `${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
