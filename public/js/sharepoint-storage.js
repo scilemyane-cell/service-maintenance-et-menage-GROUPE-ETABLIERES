@@ -10,6 +10,7 @@ const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const SHAREPOINT_HOSTNAME = "etablieresfr.sharepoint.com";
 const SITE_PATH = "/sites/appsmm";
 const ROOT_FOLDER = "DossiersDeSite";
+export const DOSSIERS_ROOT_FOLDER = ROOT_FOLDER;
 export const STOCK_ROOT_FOLDER = "StockMaintenance";
 
 let cachedDriveId = null;
@@ -31,6 +32,55 @@ async function resolveDriveId(token) {
   return cachedDriveId;
 }
 
+// Vérifie/crée chaque niveau d'un chemin de dossiers, un par un — Graph ne
+// crée pas de façon fiable plusieurs niveaux de dossiers imbriqués en une
+// seule fois lors d'un envoi par session, contrairement à un envoi simple.
+// Idempotent : ne fait rien si le dossier existe déjà.
+export async function ensureFolderPath(driveId, token, folderPath) {
+  const segments = folderPath.split("/").filter(Boolean);
+  const encodedSoFar = [];
+  for (const segment of segments) {
+    const parentEncoded = encodedSoFar.join("/");
+    encodedSoFar.push(encodeURIComponent(segment));
+    const currentEncoded = encodedSoFar.join("/");
+
+    const checkRes = await fetch(
+      `${GRAPH_ROOT}/drives/${driveId}/root:/${currentEncoded}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (checkRes.ok) continue; // ce niveau existe déjà, passer au suivant
+
+    const childrenUrl = parentEncoded
+      ? `${GRAPH_ROOT}/drives/${driveId}/root:/${parentEncoded}:/children`
+      : `${GRAPH_ROOT}/drives/${driveId}/root/children`;
+    const createRes = await fetch(childrenUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: segment, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    });
+    // 409 = quelqu'un d'autre l'a créé entre-temps (course), ce n'est pas une erreur.
+    if (!createRes.ok && createRes.status !== 409) {
+      throw new Error(`Impossible de créer le dossier "${segment}" (${createRes.status})`);
+    }
+  }
+}
+
+// Déplace un fichier déjà envoyé vers le bon dossier (opération de
+// métadonnées uniquement — pas de retéléchargement). Sert à réparer les
+// fichiers mal rangés par un envoi précédent.
+export async function moveItemToFolder(itemId, folderPath) {
+  const token = await getGraphToken();
+  const driveId = await resolveDriveId(token);
+  await ensureFolderPath(driveId, token, folderPath);
+  const res = await fetch(`${GRAPH_ROOT}/drives/${driveId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ parentReference: { path: `/drive/root:/${folderPath}` } }),
+  });
+  if (!res.ok) throw new Error(`Échec du déplacement (${res.status})`);
+  return res.json();
+}
+
 function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|#%]/g, "_").trim() || "fichier";
 }
@@ -39,7 +89,7 @@ function sanitizeFilename(name) {
 // résidence, nom d'équipement) — chaque segment est nettoyé des caractères
 // interdits dans un chemin, tronqué pour rester raisonnable, et un segment
 // vide est simplement ignoré.
-function buildFolderPath(rootFolder, segments) {
+export function buildFolderPath(rootFolder, segments) {
   const clean = (segments || [])
     .filter(Boolean)
     .map(s => sanitizeFilename(String(s)).slice(0, 80));
@@ -62,6 +112,7 @@ export async function uploadToDrive(file, token, folderSegments = [], rootFolder
   const driveId = await resolveDriveId(token);
   const safeName = sanitizeFilename(file.name);
   const folder = buildFolderPath(rootFolder, folderSegments);
+  await ensureFolderPath(driveId, token, folder);
   const itemPath = `${folder}/${Date.now()}-${safeName}`;
 
   const sessionRes = await fetch(

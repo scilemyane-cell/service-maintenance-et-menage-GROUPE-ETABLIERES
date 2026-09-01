@@ -13,14 +13,14 @@ import {
   collection, getDocs, doc, getDoc, updateDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { getGoogleAccessToken, downloadDriveFile } from "./google-drive-readonly.js";
-import { getAccessToken as getMsToken, uploadToDrive, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { getAccessToken as getMsToken, uploadToDrive, moveItemToFolder, buildFolderPath, DOSSIERS_ROOT_FOLDER, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 
 let mountedContainer = null;
-let state = { candidates: null, googleReady: false, running: false, log: [], done: false };
+let state = { candidates: null, googleReady: false, running: false, log: [], done: false, repairing: false, repairLog: null };
 
 export function mountMigrationTool(container) {
   mountedContainer = container;
-  state = { candidates: null, googleReady: false, running: false, log: [], done: false };
+  state = { candidates: null, googleReady: false, running: false, log: [], done: false, repairing: false, repairLog: null };
   render();
 }
 
@@ -63,12 +63,76 @@ function render() {
         </div>
         ${state.log.some(l => !l.ok) ? `<p class="hint">Les échecs restent sur Google Drive — à migrer à la main (voir la procédure manuelle) : télécharger l'image depuis la fiche concernée, puis « Importer un fichier » au même endroit.</p>` : ""}
       ` : ""}
+
+      <div class="form-card">
+        <h3 style="margin:0 0 8px;font-size:14px;color:var(--gold)">🔧 Réparer l'organisation des dossiers</h3>
+        <p class="hint" style="margin:0 0 10px">Si des photos apparaissent dans SharePoint mais pas bien rangées par résidence/équipement (ou par produit) — sans re-télécharger, déplace juste chaque fichier déjà présent vers le bon dossier.</p>
+        <button class="nav-btn" id="mg-repair" ${state.repairing ? "disabled" : ""}>${state.repairing ? "⏳ Réparation en cours…" : "🔧 Réparer l'organisation"}</button>
+        ${state.repairLog ? `
+          <div style="max-height:320px;overflow-y:auto;font-size:12px;font-family:monospace;margin-top:10px">
+            ${state.repairLog.map(l => `<div style="padding:3px 0;color:${l.ok ? 'var(--gold)' : 'var(--red)'}">${l.ok ? '✓' : '❌'} ${esc(l.text)}</div>`).join("")}
+          </div>
+          <div class="stat-chip ${state.repairLog.some(l => !l.ok) ? 'warn' : 'ok'}" style="width:fit-content;margin-top:8px">
+            ${state.repairLog.filter(l => l.ok).length} déplacée(s), ${state.repairLog.filter(l => !l.ok).length} échec(s)
+          </div>
+        ` : ""}
+      </div>
     </div>
   `;
 
   document.getElementById("mg-scan")?.addEventListener("click", scanCandidates);
   document.getElementById("mg-google")?.addEventListener("click", connectGoogle);
   document.getElementById("mg-start")?.addEventListener("click", runMigration);
+  document.getElementById("mg-repair")?.addEventListener("click", runRepair);
+}
+
+async function runRepair() {
+  state.repairing = true;
+  state.repairLog = [];
+  render();
+
+  const items = [];
+
+  const dossiersSnap = await getDocs(collection(db, "sites-dossiers"));
+  dossiersSnap.forEach((d) => {
+    const data = d.data();
+    (data.sections || []).forEach((section) => {
+      (section.photos || []).forEach((photo) => {
+        if (photo.itemId) {
+          items.push({
+            itemId: photo.itemId,
+            folderPath: buildFolderPath(DOSSIERS_ROOT_FOLDER, [data.nom, section.titre]),
+            label: `${data.nom} / ${section.titre} / ${photo.name || "photo"}`,
+          });
+        }
+      });
+    });
+  });
+
+  const produitsSnap = await getDocs(collection(db, "stock-produits"));
+  produitsSnap.forEach((d) => {
+    const data = d.data();
+    if (data.photo?.itemId) {
+      items.push({
+        itemId: data.photo.itemId,
+        folderPath: buildFolderPath(STOCK_ROOT_FOLDER, [data.nom]),
+        label: `Produit : ${data.nom}`,
+      });
+    }
+  });
+
+  for (const it of items) {
+    try {
+      await moveItemToFolder(it.itemId, it.folderPath);
+      state.repairLog.push({ ok: true, text: it.label });
+    } catch (e) {
+      state.repairLog.push({ ok: false, text: `${it.label} — ${e.message || e}` });
+    }
+    render();
+  }
+
+  state.repairing = false;
+  render();
 }
 
 async function scanCandidates() {
