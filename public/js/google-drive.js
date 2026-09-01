@@ -76,10 +76,17 @@ export async function uploadToDrive(file, token) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ role: "reader", type: "anyone" }),
   });
-  if (!permRes.ok) console.warn("Impossible de rendre la photo publique — elle pourrait ne pas s'afficher pour les autres.");
+  if (!permRes.ok) console.warn("Impossible de rendre le fichier public — il pourrait ne pas s'afficher pour les autres.");
 
-  // Le format "thumbnail" est plus fiable que "uc?export=view" pour un
-  // affichage direct dans une balise <img> (Google restreint de plus en
-  // plus ce dernier format pour les sites tiers).
-  return { url: `https://drive.google.com/thumbnail?id=${id}&sz=w1000`, driveId: id };
+  const isImage = file.type.startsWith("image/");
+  return {
+    // Le format "thumbnail" est plus fiable que "uc?export=view" pour un
+    // affichage direct dans une balise <img> (Google restreint de plus en
+    // plus ce dernier format pour les sites tiers). Pour les documents non
+    // image, on garde un lien de consultation classique.
+    url: isImage ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : `https://drive.google.com/file/d/${id}/view`,
+    driveId: id,
+    isImage,
+    name: file.name,
+  };
 }
