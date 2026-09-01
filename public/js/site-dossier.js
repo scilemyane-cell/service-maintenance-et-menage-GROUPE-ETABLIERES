@@ -224,6 +224,7 @@ async function resolveGalleryImages(container) {
       return;
     }
     container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => {
+      img.crossOrigin = "anonymous"; // nécessaire pour que html2canvas puisse capturer l'image lors de l'export PDF
       img.src = url;
       if (img.dataset.lightboxPhoto) {
         img.addEventListener("click", () => { ui.lightbox = url; render(); });
@@ -235,51 +236,12 @@ async function resolveGalleryImages(container) {
 // =================================================================
 // Vue de consultation (imprimable + galerie interactive)
 // =================================================================
-function renderView(d) {
+// Gabarit HTML de la version imprimable — extrait en fonction réutilisable
+// pour être aussi utilisé par l'outil de génération PDF en masse
+// (migration-tool.js), sans dépendre de l'écran actuellement ouvert.
+export function printFicheHtml(d) {
   const concernes = (d.sections || []).filter(s => s.concerne);
-
-  mountedContainer.innerHTML = `
-    <div class="stack">
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="nav-btn" id="sd-back">← Tous les dossiers</button>
-        ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
-        <button class="add-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
-        ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer</button>` : ""}
-      </div>
-
-      <div class="form-card">
-        <h2 style="margin:0 0 4px;font-size:20px">${esc(d.nom)}</h2>
-        <p class="hint">${esc(d.adresse || "")}</p>
-      </div>
-
-      <div class="form-card">
-        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📞 Numéros d'urgence</h3>
-        <div class="table-wrap" style="border:none">
-          <table>
-            <thead><tr><th>Service</th><th>Mission</th><th>Téléphone</th></tr></thead>
-            <tbody>
-              ${(d.urgences || []).map(u => `
-                <tr><td>${esc(u.service)}</td><td>${esc(u.mission)}</td><td><a href="tel:${esc(u.telephone)}" style="color:var(--gold);font-weight:700">${esc(u.telephone)}</a></td></tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <h3 style="margin:12px 0 0;font-size:14px;color:var(--gold)">🔧 Équipements & organes techniques</h3>
-      ${concernes.length === 0 ? `<p class="hint">Aucun équipement marqué "concerné" pour l'instant.</p>` :
-        concernes.map((s) => {
-          const si = d.sections.indexOf(s);
-          return `
-          <div class="form-card">
-            <h4 style="margin:0 0 6px;font-size:14px">${esc(s.titre)}</h4>
-            ${s.emplacement ? `<p style="font-size:13px;margin:0 0 4px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
-            ${s.procedure ? `<p style="font-size:13px;margin:0 0 4px;color:var(--text-dim)"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
-            ${photoGalleryHTML(s, si, false)}
-          </div>`;
-        }).join("")}
-
-      <!-- Version imprimable, en dessous, cachée à l'écran mais utilisée pour l'export PDF -->
+  return `
       <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
           <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
@@ -322,6 +284,98 @@ function renderView(d) {
         `).join("")}
         <p style="font-size:10px;color:#666;margin-top:16px">Ce document doit rester consultable librement par tout intervenant extérieur, technicien de maintenance, prestataire ou service de secours dès son arrivée sur site.</p>
       </div>
+  `;
+}
+
+// Attend que toutes les images d'un élément soient chargées (ou en échec)
+// avant de générer le PDF — sinon des photos encore en cours de résolution
+// (voir resolveGalleryImages) apparaîtraient vides sur le PDF.
+async function waitForImages(element, timeoutMs = 10000) {
+  const imgs = [...element.querySelectorAll("img")];
+  await Promise.race([
+    Promise.all(imgs.map(img => (img.complete && img.naturalWidth > 0)
+      ? Promise.resolve()
+      : new Promise(res => {
+          img.addEventListener("load", res, { once: true });
+          img.addEventListener("error", res, { once: true });
+        })
+    )),
+    new Promise(res => setTimeout(res, timeoutMs)),
+  ]);
+}
+
+// Génère un PDF à partir d'un élément .print-fiche déjà présent dans le DOM
+// (avec ses images déjà résolues, voir resolveGalleryImages) et l'envoie
+// vers SharePoint, à la racine du dossier de la résidence. Réutilisée par
+// l'outil de génération en masse (migration-tool.js) pour tous les
+// dossiers existants.
+export async function generateAndUploadPdf(d, element) {
+  if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
+  await waitForImages(element);
+  const token = await getAccessToken();
+  const filename = `${d.nom} - Dossier technique.pdf`;
+  const blob = await window.html2pdf()
+    .set({
+      margin: 10,
+      filename,
+      image: { type: "jpeg", quality: 0.92 },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: false },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    })
+    .from(element)
+    .outputPdf("blob");
+  const file = new File([blob], filename, { type: "application/pdf" });
+  return uploadToDrive(file, token, [d.nom]);
+}
+
+function renderView(d) {
+  const concernes = (d.sections || []).filter(s => s.concerne);
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="nav-btn" id="sd-back">← Tous les dossiers</button>
+        ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
+        <button class="add-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
+        ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
+        ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer</button>` : ""}
+      </div>
+      <div id="sd-pdf-status" style="font-size:12px"></div>
+
+      <div class="form-card">
+        <h2 style="margin:0 0 4px;font-size:20px">${esc(d.nom)}</h2>
+        <p class="hint">${esc(d.adresse || "")}</p>
+      </div>
+
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📞 Numéros d'urgence</h3>
+        <div class="table-wrap" style="border:none">
+          <table>
+            <thead><tr><th>Service</th><th>Mission</th><th>Téléphone</th></tr></thead>
+            <tbody>
+              ${(d.urgences || []).map(u => `
+                <tr><td>${esc(u.service)}</td><td>${esc(u.mission)}</td><td><a href="tel:${esc(u.telephone)}" style="color:var(--gold);font-weight:700">${esc(u.telephone)}</a></td></tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3 style="margin:12px 0 0;font-size:14px;color:var(--gold)">🔧 Équipements & organes techniques</h3>
+      ${concernes.length === 0 ? `<p class="hint">Aucun équipement marqué "concerné" pour l'instant.</p>` :
+        concernes.map((s) => {
+          const si = d.sections.indexOf(s);
+          return `
+          <div class="form-card">
+            <h4 style="margin:0 0 6px;font-size:14px">${esc(s.titre)}</h4>
+            ${s.emplacement ? `<p style="font-size:13px;margin:0 0 4px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
+            ${s.procedure ? `<p style="font-size:13px;margin:0 0 4px;color:var(--text-dim)"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
+            ${photoGalleryHTML(s, si, false)}
+          </div>`;
+        }).join("")}
+
+      <!-- Version imprimable, en dessous, cachée à l'écran mais utilisée pour l'export PDF -->
+      ${printFicheHtml(d)}
     </div>
     ${lightboxHTML()}
   `;
@@ -329,6 +383,16 @@ function renderView(d) {
   document.getElementById("sd-back").addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; render(); });
   document.getElementById("sd-print").addEventListener("click", () => { window.print(); });
+  document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("sd-pdf-status");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération et envoi du PDF…</span>`;
+    try {
+      await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ PDF enregistré sur SharePoint</span>`;
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
   document.getElementById("sd-del")?.addEventListener("click", async () => {
     if (confirm(`Supprimer définitivement le dossier "${d.nom}" ?`)) { await deleteDossier(d.id); ui.openId = null; render(); }
   });

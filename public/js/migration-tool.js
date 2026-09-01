@@ -13,14 +13,15 @@ import {
   collection, getDocs, doc, getDoc, updateDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { getGoogleAccessToken, downloadDriveFile } from "./google-drive-readonly.js";
-import { getAccessToken as getMsToken, uploadToDrive, moveItemToFolder, buildFolderPath, DOSSIERS_ROOT_FOLDER, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { getAccessToken as getMsToken, uploadToDrive, moveItemToFolder, buildFolderPath, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { printFicheHtml, generateAndUploadPdf } from "./site-dossier.js";
 
 let mountedContainer = null;
-let state = { candidates: null, googleReady: false, running: false, log: [], done: false, repairing: false, repairLog: null };
+let state = { candidates: null, googleReady: false, running: false, log: [], done: false, repairing: false, repairLog: null, pdfRunning: false, pdfLog: null };
 
 export function mountMigrationTool(container) {
   mountedContainer = container;
-  state = { candidates: null, googleReady: false, running: false, log: [], done: false, repairing: false, repairLog: null };
+  state = { candidates: null, googleReady: false, running: false, log: [], done: false, repairing: false, repairLog: null, pdfRunning: false, pdfLog: null };
   render();
 }
 
@@ -77,6 +78,19 @@ function render() {
           </div>
         ` : ""}
       </div>
+      <div class="form-card">
+        <h3 style="margin:0 0 8px;font-size:14px;color:var(--gold)">📄 Générer et enregistrer le PDF de tous les dossiers</h3>
+        <p class="hint" style="margin:0 0 10px">Pour chaque dossier de site, génère le document complet (identique à « Exporter en PDF ») et l'enregistre à la racine du dossier de la résidence dans SharePoint — utile pour retrouver un document prêt à imprimer sans avoir à ouvrir l'appli.</p>
+        <button class="add-btn" id="mg-pdf-all" ${state.pdfRunning ? "disabled" : ""}>${state.pdfRunning ? "⏳ Génération en cours…" : "📄 Générer les PDF pour tous les dossiers"}</button>
+        ${state.pdfLog ? `
+          <div style="max-height:320px;overflow-y:auto;font-size:12px;font-family:monospace;margin-top:10px">
+            ${state.pdfLog.map(l => `<div style="padding:3px 0;color:${l.ok ? 'var(--gold)' : 'var(--red)'}">${l.ok ? '✓' : '❌'} ${esc(l.text)}</div>`).join("")}
+          </div>
+          <div class="stat-chip ${state.pdfLog.some(l => !l.ok) ? 'warn' : 'ok'}" style="width:fit-content;margin-top:8px">
+            ${state.pdfLog.filter(l => l.ok).length} généré(s), ${state.pdfLog.filter(l => !l.ok).length} échec(s)
+          </div>
+        ` : ""}
+      </div>
     </div>
   `;
 
@@ -84,6 +98,54 @@ function render() {
   document.getElementById("mg-google")?.addEventListener("click", connectGoogle);
   document.getElementById("mg-start")?.addEventListener("click", runMigration);
   document.getElementById("mg-repair")?.addEventListener("click", runRepair);
+  document.getElementById("mg-pdf-all")?.addEventListener("click", runPdfBatch);
+}
+
+// Résout les images d'un conteneur hors-écran (même logique que
+// resolveGalleryImages dans site-dossier.js, dupliquée ici pour ne pas
+// dépendre de l'état interne de ce module). Les échecs sont ignorés en
+// silence — la photo concernée n'apparaîtra simplement pas sur le PDF.
+async function resolveImagesOffscreen(container) {
+  const nodes = [...container.querySelectorAll("[data-resolve-img]")];
+  const itemIds = [...new Set(nodes.map(n => n.dataset.resolveImg).filter(Boolean))];
+  await Promise.all(itemIds.map(async (itemId) => {
+    try {
+      const url = await getImageDisplayUrl(itemId);
+      container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => {
+        img.crossOrigin = "anonymous";
+        img.src = url;
+      });
+    } catch (e) { /* laissé vide, la photo n'apparaîtra pas dans le PDF */ }
+  }));
+}
+
+async function runPdfBatch() {
+  state.pdfRunning = true;
+  state.pdfLog = [];
+  render();
+
+  const dossiersSnap = await getDocs(collection(db, "sites-dossiers"));
+  const dossiers = [];
+  dossiersSnap.forEach((d) => dossiers.push({ id: d.id, ...d.data() }));
+
+  for (const d of dossiers) {
+    const hidden = document.createElement("div");
+    hidden.style.cssText = "position:fixed;left:-9999px;top:0;width:800px;";
+    document.body.appendChild(hidden);
+    hidden.innerHTML = printFicheHtml(d);
+    try {
+      await resolveImagesOffscreen(hidden);
+      await generateAndUploadPdf(d, hidden.querySelector(".print-fiche"));
+      state.pdfLog.push({ ok: true, text: d.nom });
+    } catch (e) {
+      state.pdfLog.push({ ok: false, text: `${d.nom} — ${e.message || e}` });
+    }
+    hidden.remove();
+    render();
+  }
+
+  state.pdfRunning = false;
+  render();
 }
 
 async function runRepair() {
