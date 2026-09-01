@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Établières</title>
 <link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
 <div id="app">
@@ -15,6 +17,9 @@
   import { watchAuth, logout, roleLabel } from "./js/auth.js";
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab } from "./js/planning.js";
   import { mountSitesDossiers } from "./js/site-dossier.js";
+  import { mountStockProduits } from "./js/stock.js";
+  import { mountStockInventaire } from "./js/stock-inventaire.js";
+  import { mountStockCommandes } from "./js/stock-commandes.js";
   import { mountDashboard } from "./js/home.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
@@ -83,12 +88,20 @@
           { id: "liste", label: "Dossiers", icon: "🏢", roles: ALL, mount: mountSitesDossiers },
         ],
       },
+      {
+        id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
+        subtabs: [
+          { id: "produits",   label: "Produits",   icon: "📦", roles: ["admin","n1"],              mount: mountStockProduits },
+          { id: "inventaire", label: "Inventaire", icon: "📷", roles: ["admin","n1","technicien"], mount: mountStockInventaire },
+          { id: "commandes",  label: "Commandes",  icon: "📧", roles: ["admin","n1","direction"],  mount: mountStockCommandes },
+        ],
+      },
     ];
   }
 
   function allCategories(user) {
-    const [astreinte, administration, sites] = staticCategories();
-    return [astreinte, ...dispositifCategories(user), administration, sites];
+    const [astreinte, administration, sites, stock] = staticCategories();
+    return [astreinte, ...dispositifCategories(user), administration, sites, stock];
   }
 
   watchAuth((user) => {
