@@ -140,9 +140,13 @@ function renderEditForm(p) {
   });
 }
 
-// Encodage du QR : un simple préfixe + id produit, lu par l'onglet
-// Inventaire pour ouvrir directement la fiche du bon produit.
-export function qrPayloadFor(produitId) { return `ETAB-STOCK:${produitId}`; }
+// Encodage du QR : un vrai lien vers l'appli avec l'id du produit en
+// paramètre — scanné avec l'appareil photo normal du téléphone (pas besoin
+// d'ouvrir l'appli au préalable), ça ouvre directement la fiche du bon
+// produit, prête à ajuster.
+export function qrPayloadFor(produitId) {
+  return `https://service-maintenance-et-menage.web.app/app.html?stock=${produitId}`;
+}
 
 function renderQr(p) {
   if (!p) { ui.qrId = null; render(); return; }
