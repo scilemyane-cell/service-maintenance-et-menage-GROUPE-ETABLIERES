@@ -44,6 +44,8 @@ export function nouveauDossier() {
   return {
     nom: "Nouvelle résidence",
     adresse: "",
+    association: "",
+    groupe: "",
     urgences: JSON.parse(JSON.stringify(URGENCES_STANDARD)),
     sections: SECTIONS_STANDARD.map(titre => ({ titre, concerne: false, emplacement: "", procedure: "", photos: [] })),
   };

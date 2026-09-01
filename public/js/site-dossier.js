@@ -3,8 +3,9 @@ import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, deleteDossier,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive } from "./google-drive.js";
+import { watchAssociations } from "./associations-data.js";
 
-let state = { dossiers: [] };
+let state = { dossiers: [], associations: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -20,6 +21,26 @@ export function mountSitesDossiers(container, user) {
   ui.openId = null; ui.mode = "view"; ui.lightbox = null;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; render(); }));
+  unsubs.push(watchAssociations((a) => { state.associations = a; render(); }));
+}
+
+function groupedDossiers() {
+  const result = [];
+  const usedIds = new Set();
+  state.associations.forEach(assoc => {
+    const dossiersForAssoc = state.dossiers.filter(d => d.association === assoc.nom);
+    if (dossiersForAssoc.length === 0) return;
+    const groupeNames = [...new Set(dossiersForAssoc.map(d => d.groupe).filter(Boolean))];
+    const groups = [];
+    const sansGroupe = dossiersForAssoc.filter(d => !d.groupe);
+    if (sansGroupe.length) groups.push({ groupeLabel: null, dossiers: sansGroupe });
+    groupeNames.forEach(g => groups.push({ groupeLabel: g, dossiers: dossiersForAssoc.filter(d => d.groupe === g) }));
+    result.push({ assocLabel: assoc.nom, groups });
+    dossiersForAssoc.forEach(d => usedIds.add(d.id));
+  });
+  const orphans = state.dossiers.filter(d => !usedIds.has(d.id));
+  if (orphans.length) result.push({ assocLabel: "Sans association", groups: [{ groupeLabel: null, dossiers: orphans }] });
+  return result;
 }
 
 function render() {
@@ -32,22 +53,32 @@ function render() {
     return;
   }
 
+  const groups = groupedDossiers();
+
   mountedContainer.innerHTML = `
     <div class="stack">
       <p class="hint">Dossier technique et sécurité de chaque résidence — organes de coupure, accès clés, contacts d'urgence, photos. Structure uniforme reprise de la fiche index papier.</p>
       ${isEditorUser(mountedUser) ? `<button class="add-btn" id="sd-new" style="width:fit-content">➕ Créer un nouveau dossier</button>` : ""}
-      <div class="bubble-grid">
-        ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` :
-          state.dossiers.map(d => {
-            const nbPhotos = (d.sections || []).reduce((s, sec) => s + (sec.photos?.length || 0), 0);
-            return `
-            <button class="bubble-card" data-open="${d.id}">
-              <span class="bubble-icon">🏢</span>
-              <span class="bubble-label">${esc(d.nom)}</span>
-              <span class="bubble-desc">${esc(d.adresse || "Adresse non renseignée")}${nbPhotos ? ` · 📷 ${nbPhotos}` : ""}</span>
-            </button>`;
-          }).join("")}
-      </div>
+      ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` :
+        groups.map(g => `
+          <div>
+            <h3 style="margin:12px 0 8px;font-size:15px;color:var(--gold)">${esc(g.assocLabel)}</h3>
+            ${g.groups.map(sub => `
+              ${sub.groupeLabel ? `<div style="font-size:12px;color:var(--text-dim);margin:6px 0 6px 4px">${esc(sub.groupeLabel)}</div>` : ""}
+              <div class="bubble-grid" style="margin-bottom:8px">
+                ${sub.dossiers.map(d => {
+                  const nbFichiers = (d.sections || []).reduce((s, sec) => s + (sec.photos?.length || 0), 0);
+                  return `
+                  <button class="bubble-card" data-open="${d.id}">
+                    <span class="bubble-icon">🏢</span>
+                    <span class="bubble-label">${esc(d.nom)}</span>
+                    <span class="bubble-desc">${esc(d.adresse || "Adresse non renseignée")}${nbFichiers ? ` · 📎 ${nbFichiers}` : ""}</span>
+                  </button>`;
+                }).join("")}
+              </div>
+            `).join("")}
+          </div>
+        `).join("")}
     </div>
   `;
 
@@ -222,6 +253,23 @@ function renderEdit(dOriginal, workingCopy) {
         <div class="form-grid">
           <label>Nom de la résidence<input id="sd-nom" value="${esc(data.nom)}"></label>
           <label>Adresse<input id="sd-adresse" value="${esc(data.adresse || '')}"></label>
+          <label>Association
+            <select id="sd-association">
+              <option value="" ${!data.association ? 'selected' : ''}>— Aucune —</option>
+              ${state.associations.map(a => `<option value="${esc(a.nom)}" ${data.association === a.nom ? 'selected' : ''}>${esc(a.nom)}</option>`).join("")}
+            </select>
+          </label>
+          ${(() => {
+            const assoc = state.associations.find(a => a.nom === data.association);
+            const groupesDispo = assoc ? [...new Set(assoc.sites.filter(s => s.groupe).map(s => s.groupe))] : [];
+            if (groupesDispo.length === 0) return "";
+            return `<label>Groupe (optionnel)
+              <select id="sd-groupe">
+                <option value="" ${!data.groupe ? 'selected' : ''}>— Aucun —</option>
+                ${groupesDispo.map(g => `<option value="${esc(g)}" ${data.groupe === g ? 'selected' : ''}>${esc(g)}</option>`).join("")}
+              </select>
+            </label>`;
+          })()}
         </div>
       </div>
 
@@ -272,6 +320,12 @@ function renderEdit(dOriginal, workingCopy) {
 
   document.getElementById("sd-nom").addEventListener("input", (e) => { data.nom = e.target.value; });
   document.getElementById("sd-adresse").addEventListener("input", (e) => { data.adresse = e.target.value; });
+  document.getElementById("sd-association").addEventListener("change", (e) => {
+    data.association = e.target.value;
+    data.groupe = "";
+    renderEdit(dOriginal, data);
+  });
+  document.getElementById("sd-groupe")?.addEventListener("change", (e) => { data.groupe = e.target.value; });
 
   mountedContainer.querySelectorAll("[data-urg-service]").forEach(inp => inp.addEventListener("input", () => { data.urgences[inp.dataset.urgService].service = inp.value; }));
   mountedContainer.querySelectorAll("[data-urg-mission]").forEach(inp => inp.addEventListener("input", () => { data.urgences[inp.dataset.urgMission].mission = inp.value; }));
