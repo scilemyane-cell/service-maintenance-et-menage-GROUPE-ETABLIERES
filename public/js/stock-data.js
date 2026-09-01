@@ -110,3 +110,19 @@ export async function enregistrerInventaire(produitId, quantiteAvant, quantiteAp
     produitId, quantiteAvant, quantiteApres, uid, date: serverTimestamp(),
   });
 }
+
+// Historique des commandes passées à un fournisseur (marquage manuel après
+// envoi de l'email de demande de devis).
+export function watchCommandesHistorique(callback) {
+  return onSnapshot(collection(db, "stock-commandes"), (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    callback(list.sort((a, b) => (b.date?.toMillis?.() || 0) - (a.date?.toMillis?.() || 0)));
+  }, (err) => { console.error("watchCommandesHistorique:", err); callback([]); });
+}
+
+export async function enregistrerCommande(fournisseurNom, fournisseurEmail, lignes, uid) {
+  await addDoc(collection(db, "stock-commandes"), {
+    fournisseurNom, fournisseurEmail, lignes, uid, date: serverTimestamp(), statut: "envoyee",
+  });
+}
