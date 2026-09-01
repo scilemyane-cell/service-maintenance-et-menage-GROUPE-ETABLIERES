@@ -98,7 +98,9 @@ function photoGalleryHTML(section, sectionIndex, editable) {
       ${photos.map((p, pi) => `
         <div style="position:relative">
           ${p.isImage !== false
-            ? `<img data-resolve-img="${esc(p.itemId)}" data-lightbox-photo="${esc(p.itemId)}" alt="${esc(p.name || 'Photo')}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--panel-alt)" onerror="this.style.opacity=0.3">`
+            ? (p.itemId
+                ? `<img data-resolve-img="${esc(p.itemId)}" data-lightbox-photo="${esc(p.itemId)}" alt="${esc(p.name || 'Photo')}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--panel-alt)" onerror="this.style.opacity=0.3">`
+                : `<img src="${esc(p.url)}" data-lightbox-static="${esc(p.url)}" alt="${esc(p.name || 'Photo')}" style="width:76px;height:76px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border)" onerror="this.style.opacity=0.3">`)
             : `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="width:76px;height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);text-decoration:none;color:var(--text);font-size:22px;padding:4px;text-align:center">
                 📄<span style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${esc(p.name || 'Document')}</span>
               </a>`}
@@ -127,6 +129,9 @@ function lightboxHTML() {
 }
 
 function attachLightboxListeners(container) {
+  container.querySelectorAll("[data-lightbox-static]").forEach(img => {
+    img.addEventListener("click", () => { ui.lightbox = img.dataset.lightboxStatic; render(); });
+  });
   document.getElementById("sd-lightbox-overlay")?.addEventListener("click", () => { ui.lightbox = null; render(); });
 }
 
@@ -137,6 +142,7 @@ function attachLightboxListeners(container) {
 async function resolveGalleryImages(container) {
   const nodes = [...container.querySelectorAll("[data-resolve-img]")];
   const itemIds = [...new Set(nodes.map(n => n.dataset.resolveImg).filter(Boolean))];
+  if (itemIds.length === 0) return;
   await Promise.all(itemIds.map(async (itemId) => {
     let url;
     try {
@@ -235,7 +241,9 @@ function renderView(d) {
             ${s.emplacement ? `<p style="font-size:11px;margin:0 0 2px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
             ${s.procedure ? `<p style="font-size:11px;margin:0 0 4px;color:#555"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
             ${(s.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${s.photos.map(p => p.isImage !== false
-              ? `<img data-resolve-img="${esc(p.itemId)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`
+              ? (p.itemId
+                  ? `<img data-resolve-img="${esc(p.itemId)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`
+                  : `<img src="${esc(p.url)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`)
               : `<span style="display:inline-block;padding:6px 10px;border:1px solid #999;border-radius:4px;font-size:10px">📄 ${esc(p.name || 'Document')}</span>`
             ).join("")}</div>` : ""}
           </div>
