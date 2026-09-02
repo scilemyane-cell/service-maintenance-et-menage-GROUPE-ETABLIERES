@@ -140,12 +140,12 @@ export async function configurerArticlesSiteDepuisCatalogue(dossierId, existants
     if (d.concerne) {
       if (existant) {
         ops.push(updateDoc(doc(db, COLLECTION, existant.id), {
-          nom: d.nom, unite: d.unite, quantiteCible: d.quantiteCible, seuilMin: d.seuilMin,
+          nom: d.nom, unite: d.unite, quantiteCible: d.quantiteCible,
         }));
       } else {
         ops.push(addDoc(collection(db, COLLECTION), {
           dossierId, produitId: d.produitId, catalogueOrigine: origine, nom: d.nom, unite: d.unite,
-          quantite: 0, quantiteCible: d.quantiteCible, seuilMin: d.seuilMin,
+          quantite: 0, quantiteCible: d.quantiteCible,
         }));
       }
     } else if (existant) {

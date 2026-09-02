@@ -65,7 +65,7 @@ function render() {
 // Liste
 // =================================================================
 function renderListe() {
-  const alertesTotal = state.items.filter(it => (it.quantite ?? 0) <= (it.seuilMin ?? 0)).length;
+  const alertesTotal = state.items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -83,15 +83,14 @@ function renderListe() {
           ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
             <div class="table-wrap" style="border:none">
               <table>
-                <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th>Seuil min.</th><th></th></tr></thead>
+                <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
                 <tbody>
                   ${items.map(it => `
                     <tr>
                       <td>${esc(it.nom)}</td>
                       <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
-                      <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) <= (it.seuilMin ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
-                      <td style="font-size:12px;color:var(--text-dim)">${it.quantiteCible ?? "—"}</td>
-                      <td><input type="number" min="0" step="1" value="${it.seuilMin ?? 0}" data-seuil="${it.id}" style="width:70px"></td>
+                      <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
+                      <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px"></td>
                       <td style="white-space:nowrap">
                         <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
                         <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px">📤 Sortie/Ajuster</button>
@@ -129,11 +128,11 @@ function renderListe() {
       catch (e) { alert("Échec : " + (e.message || e)); }
     });
   });
-  mountedContainer.querySelectorAll("[data-seuil]").forEach(inp => {
+  mountedContainer.querySelectorAll("[data-cible]").forEach(inp => {
     inp.addEventListener("change", async () => {
       const val = parseFloat(inp.value);
       if (isNaN(val) || val < 0) { inp.value = 0; return; }
-      try { await modifierArticleSite(inp.dataset.seuil, { seuilMin: val }); await load(); }
+      try { await modifierArticleSite(inp.dataset.cible, { quantiteCible: val }); await load(); }
       catch (e) { alert("Échec : " + (e.message || e)); }
     });
   });
@@ -220,7 +219,7 @@ function renderAddForm(site) {
           </select>
         </label>
         <label>Quantité<input type="number" min="0" step="1" id="ssx-catalogue-qte-${site.id}" value="1"></label>
-        <label>Seuil minimum<input type="number" min="0" step="1" id="ssx-catalogue-seuil-${site.id}" value="1"></label>
+        <label>Quantité à avoir en permanence<input type="number" min="0" step="1" id="ssx-catalogue-cible-${site.id}" value="1"></label>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="add-btn" data-catalogue-valider="${site.id}">✓ Ajouter</button>
@@ -233,7 +232,7 @@ function renderAddForm(site) {
     <div class="form-grid">
       <label>Nom de l'article<input id="ssx-libre-nom-${site.id}" placeholder="ex. pièce spécifique à ce site"></label>
       <label>Quantité<input type="number" min="0" step="1" id="ssx-libre-qte-${site.id}" value="1"></label>
-      <label>Seuil minimum<input type="number" min="0" step="1" id="ssx-libre-seuil-${site.id}" value="1"></label>
+      <label>Quantité à avoir en permanence<input type="number" min="0" step="1" id="ssx-libre-cible-${site.id}" value="1"></label>
       <label>Unité<input id="ssx-libre-unite-${site.id}" placeholder="pièce, lot…" value="pièce"></label>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
@@ -258,7 +257,6 @@ function attachAddFormListeners() {
         produitId: p.id, nom: p.nom, unite: p.unite || "",
         concerne: cb?.checked || false,
         quantiteCible: parseFloat(cible?.value) || 0,
-        seuilMin: Math.max(1, Math.round((parseFloat(cible?.value) || 0) * 0.3)),
       };
     });
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
@@ -276,10 +274,10 @@ function attachAddFormListeners() {
     const produitId = document.getElementById(`ssx-catalogue-produit-${siteId}`).value;
     const produit = (state.catalogueCentral || []).find(p => p.id === produitId);
     const qte = parseFloat(document.getElementById(`ssx-catalogue-qte-${siteId}`).value) || 0;
-    const seuil = parseFloat(document.getElementById(`ssx-catalogue-seuil-${siteId}`).value) || 0;
+    const cible = parseFloat(document.getElementById(`ssx-catalogue-cible-${siteId}`).value) || 0;
     if (!produit) return;
     try {
-      await ajouterArticleSite(siteId, { produitId: produit.id, catalogueOrigine: "central", nom: produit.nom, unite: produit.unite || "", quantite: qte, seuilMin: seuil });
+      await ajouterArticleSite(siteId, { produitId: produit.id, catalogueOrigine: "central", nom: produit.nom, unite: produit.unite || "", quantite: qte, quantiteCible: cible });
       ui.addingSiteId = null; ui.addingMode = null;
       await load();
     } catch (e) {
@@ -291,11 +289,11 @@ function attachAddFormListeners() {
     const statusEl = document.getElementById(`ssx-status-${siteId}`);
     const nom = document.getElementById(`ssx-libre-nom-${siteId}`).value.trim();
     const qte = parseFloat(document.getElementById(`ssx-libre-qte-${siteId}`).value) || 0;
-    const seuil = parseFloat(document.getElementById(`ssx-libre-seuil-${siteId}`).value) || 0;
+    const cible = parseFloat(document.getElementById(`ssx-libre-cible-${siteId}`).value) || 0;
     const unite = document.getElementById(`ssx-libre-unite-${siteId}`).value.trim() || "pièce";
     if (!nom) { statusEl.innerHTML = `<span style="color:var(--red)">Le nom est obligatoire.</span>`; return; }
     try {
-      await ajouterArticleSite(siteId, { produitId: null, nom, unite, quantite: qte, seuilMin: seuil });
+      await ajouterArticleSite(siteId, { produitId: null, nom, unite, quantite: qte, quantiteCible: cible });
       ui.addingSiteId = null; ui.addingMode = null;
       await load();
     } catch (e) {
