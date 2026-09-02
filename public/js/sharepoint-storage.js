@@ -132,12 +132,23 @@ export async function uploadToDrive(file, token, folderSegments = [], rootFolder
   // s'en tient à ce nom et on remplace l'ancien fichier au même endroit.
   const itemPath = fixedFilename ? `${folder}/${safeName}` : `${folder}/${Date.now()}-${safeName}`;
 
+  // En mode "remplacer" (nom fixe), on supprime d'abord tout fichier déjà
+  // présent à cet emplacement avant de créer la session d'envoi — une
+  // tentative précédente interrompue peut laisser une session bloquée que
+  // Microsoft refuse de remplacer directement (erreur 409).
+  if (conflictBehavior === "replace") {
+    await fetch(`${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {}); // ignore si le fichier n'existait pas encore
+  }
+
   const sessionRes = await fetch(
     `${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior } }),
+      body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior === "replace" ? "fail" : conflictBehavior } }),
     }
   );
   if (!sessionRes.ok) throw new Error(`Échec de la création de la session d'envoi (${sessionRes.status})`);
