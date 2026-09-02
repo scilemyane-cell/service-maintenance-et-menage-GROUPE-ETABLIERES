@@ -4,6 +4,9 @@ import {
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem } from "./sharepoint-storage.js";
+import {
+  watchStockSite, ajouterArticleSite, modifierArticleSite, supprimerArticleSite, listerCatalogueCentral,
+} from "./stock-site-data.js";
 import { watchAssociations } from "./associations-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
@@ -13,7 +16,11 @@ let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+let stockSiteState = { dossierId: null, items: [], catalogue: null };
+let stockSiteUnsub = null;
+
+function unsubStockSite() { if (stockSiteUnsub) { stockSiteUnsub(); stockSiteUnsub = null; stockSiteState = { dossierId: null, items: [], catalogue: null }; } }
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; unsubStockSite(); }
 function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 export function mountSitesDossiers(container, user) {
@@ -376,11 +383,13 @@ function renderView(d) {
 
       <!-- Version imprimable, en dessous, cachée à l'écran mais utilisée pour l'export PDF -->
       ${printFicheHtml(d)}
+
+      ${d.stockDeporte ? `<div id="sd-stock-site">${stockSiteSectionHTML()}</div>` : ""}
     </div>
     ${lightboxHTML()}
   `;
 
-  document.getElementById("sd-back").addEventListener("click", () => { ui.openId = null; render(); });
+  document.getElementById("sd-back").addEventListener("click", () => { unsubStockSite(); ui.openId = null; render(); });
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; render(); });
   document.getElementById("sd-print").addEventListener("click", () => { window.print(); });
   document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
@@ -398,8 +407,152 @@ function renderView(d) {
   });
   attachLightboxListeners(mountedContainer);
   resolveGalleryImages(mountedContainer);
+  if (d.stockDeporte) initStockSite(d);
 }
 
+// =================================================================
+// Stock déporté (produits gardés localement sur ce site)
+// =================================================================
+function initStockSite(d) {
+  if (stockSiteState.dossierId === d.id) { attachStockSiteListeners(d); return; } // déjà abonné, juste ré-attacher les écouteurs après un re-rendu
+  unsubStockSite();
+  stockSiteState = { dossierId: d.id, items: [], catalogue: null, adding: null };
+  stockSiteUnsub = watchStockSite(d.id, (items) => {
+    stockSiteState.items = items;
+    rerenderStockSiteSection();
+  });
+  attachStockSiteListeners(d);
+}
+
+function rerenderStockSiteSection() {
+  const container = document.getElementById("sd-stock-site");
+  if (!container) return; // écran quitté entre temps
+  container.innerHTML = stockSiteSectionHTML();
+  attachStockSiteListeners({ id: stockSiteState.dossierId });
+}
+
+function stockSiteSectionHTML() {
+  const items = stockSiteState.items;
+  return `
+    <div class="form-card">
+      <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📦 Stock déporté sur ce site</h3>
+      ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant.</p>` : `
+        <div class="table-wrap" style="border:none">
+          <table>
+            <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th></th></tr></thead>
+            <tbody>
+              ${items.map(it => `
+                <tr>
+                  <td>${esc(it.nom)}</td>
+                  <td style="font-size:11px;color:var(--text-dim)">${it.produitId ? "Catalogue central" : "Propre au site"}</td>
+                  <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:80px"> ${esc(it.unite || "")}</td>
+                  <td><button class="del-btn" data-del-article="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `}
+
+      ${stockSiteState.adding === "catalogue" ? `
+        <div class="form-grid" style="margin-top:12px">
+          <label>Produit du catalogue
+            <select id="ss-catalogue-produit">
+              ${(stockSiteState.catalogue || []).map(p => `<option value="${p.id}">${esc(p.nom)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Quantité<input type="number" min="0" step="1" id="ss-catalogue-qte" value="1"></label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="add-btn" id="ss-catalogue-valider">✓ Ajouter</button>
+          <button class="nav-btn" id="ss-annuler">✕ Annuler</button>
+        </div>
+      ` : stockSiteState.adding === "libre" ? `
+        <div class="form-grid" style="margin-top:12px">
+          <label>Nom de l'article<input id="ss-libre-nom" placeholder="ex. pièce spécifique à ce site"></label>
+          <label>Quantité<input type="number" min="0" step="1" id="ss-libre-qte" value="1"></label>
+          <label>Unité<input id="ss-libre-unite" placeholder="pièce, lot…" value="pièce"></label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="add-btn" id="ss-libre-valider">✓ Ajouter</button>
+          <button class="nav-btn" id="ss-annuler">✕ Annuler</button>
+        </div>
+      ` : `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="nav-btn" id="ss-add-catalogue">➕ Depuis le catalogue central</button>
+          <button class="nav-btn" id="ss-add-libre">➕ Article propre à ce site</button>
+        </div>
+      `}
+      <div id="ss-status" style="font-size:12px;margin-top:8px"></div>
+    </div>
+  `;
+}
+
+function attachStockSiteListeners(d) {
+  const container = document.getElementById("sd-stock-site");
+  if (!container) return;
+
+  container.querySelectorAll("[data-qte]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      const val = parseFloat(inp.value);
+      if (isNaN(val) || val < 0) { inp.value = 0; return; }
+      try { await modifierArticleSite(inp.dataset.qte, { quantite: val }); }
+      catch (e) { alert("Échec : " + (e.message || e)); }
+    });
+  });
+  container.querySelectorAll("[data-del-article]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Retirer cet article du stock du site ?")) return;
+      try { await supprimerArticleSite(btn.dataset.delArticle); }
+      catch (e) { alert("Échec : " + (e.message || e)); }
+    });
+  });
+
+  document.getElementById("ss-add-catalogue")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("ss-status");
+    if (!stockSiteState.catalogue) {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Chargement du catalogue…</span>`;
+      try { stockSiteState.catalogue = await listerCatalogueCentral(); }
+      catch (e) { statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`; return; }
+    }
+    stockSiteState.adding = "catalogue";
+    rerenderStockSiteSection();
+  });
+  document.getElementById("ss-add-libre")?.addEventListener("click", () => {
+    stockSiteState.adding = "libre";
+    rerenderStockSiteSection();
+  });
+  document.getElementById("ss-annuler")?.addEventListener("click", () => {
+    stockSiteState.adding = null;
+    rerenderStockSiteSection();
+  });
+  document.getElementById("ss-catalogue-valider")?.addEventListener("click", async () => {
+    const produitId = document.getElementById("ss-catalogue-produit").value;
+    const produit = (stockSiteState.catalogue || []).find(p => p.id === produitId);
+    const qte = parseFloat(document.getElementById("ss-catalogue-qte").value) || 0;
+    if (!produit) return;
+    try {
+      await ajouterArticleSite(d.id, { produitId: produit.id, nom: produit.nom, unite: produit.unite || "", quantite: qte });
+      stockSiteState.adding = null;
+      rerenderStockSiteSection();
+    } catch (e) {
+      document.getElementById("ss-status").innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
+  document.getElementById("ss-libre-valider")?.addEventListener("click", async () => {
+    const nom = document.getElementById("ss-libre-nom").value.trim();
+    const qte = parseFloat(document.getElementById("ss-libre-qte").value) || 0;
+    const unite = document.getElementById("ss-libre-unite").value.trim() || "pièce";
+    if (!nom) { document.getElementById("ss-status").innerHTML = `<span style="color:var(--red)">Le nom est obligatoire.</span>`; return; }
+    try {
+      await ajouterArticleSite(d.id, { produitId: null, nom, unite, quantite: qte });
+      stockSiteState.adding = null;
+      rerenderStockSiteSection();
+    } catch (e) {
+      document.getElementById("ss-status").innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
+}
 // =================================================================
 // Édition
 // =================================================================
@@ -437,6 +590,10 @@ function renderEdit(dOriginal, workingCopy) {
             </label>`;
           })()}
         </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+          <input type="checkbox" id="sd-stock-deporte" ${data.stockDeporte ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)">
+          📦 Ce site a un stock déporté (produits gardés sur place, en plus du stock central)
+        </label>
       </div>
 
       <div class="form-card">
@@ -490,6 +647,7 @@ function renderEdit(dOriginal, workingCopy) {
 
   document.getElementById("sd-nom").addEventListener("input", (e) => { data.nom = e.target.value; });
   document.getElementById("sd-adresse").addEventListener("input", (e) => { data.adresse = e.target.value; });
+  document.getElementById("sd-stock-deporte").addEventListener("change", (e) => { data.stockDeporte = e.target.checked; });
   document.getElementById("sd-association").addEventListener("change", (e) => {
     data.association = e.target.value;
     data.groupe = "";
