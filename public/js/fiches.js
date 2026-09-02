@@ -1,4 +1,4 @@
-import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
+import { addDays, dateKey, fmtShort, esc, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
@@ -258,6 +258,7 @@ function render() {
   mountedContainer.querySelectorAll("[data-chambre-field]").forEach(inp => {
     inp.addEventListener("input", () => {
       const idx = parseInt(inp.dataset.chambreIdx, 10);
+      if (inp.dataset.chambreField === "date" && inp.value && !isPlausibleDate(inp.value)) return; // année incomplète, on n'enregistre pas encore
       data.chambres[idx][inp.dataset.chambreField] = inp.value;
       scheduleSave(id, data);
     });

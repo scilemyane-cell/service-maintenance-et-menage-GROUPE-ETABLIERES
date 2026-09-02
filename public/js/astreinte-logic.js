@@ -142,6 +142,16 @@ export function esc(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Les navigateurs peuvent valider un <input type="date"> avec une année
+// tronquée (ex. "0020" au lieu de "2026") si le focus quitte le champ
+// avant que les 4 chiffres de l'année soient tapés. Utilisée pour ignorer
+// ces valeurs manifestement invalides plutôt que de les enregistrer.
+export function isPlausibleDate(value) {
+  if (!value) return false;
+  const year = parseInt(String(value).slice(0, 4), 10);
+  return year >= 2000 && year <= 2100;
+}
+
 export function initials(name) {
   return name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
 }

@@ -1,4 +1,4 @@
-import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
+import { addDays, dateKey, fmtShort, esc, isPlausibleDate } from "./astreinte-logic.js";
 import { watchHeures, addHeures, validateHeures, deleteHeures, watchHeuresParams, saveHeuresParams } from "./heures-data.js";
 
 // Les seuils par défaut ci-dessous ne servent que tant qu'aucun paramètre
@@ -155,6 +155,7 @@ function renderSelf(container, user) {
 
   document.getElementById("add-heures").addEventListener("click", async () => {
     if (!ui.form.date || !ui.form.heuresInterne) return;
+    if (!isPlausibleDate(ui.form.date)) { alert("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
     await addHeures({
       uid: user.uid,
       personNom: user.nom || user.email,

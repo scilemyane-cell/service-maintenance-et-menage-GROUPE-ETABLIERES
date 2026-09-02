@@ -1,4 +1,4 @@
-import { esc, addDays, dateKey, fmtShort } from "./astreinte-logic.js";
+import { esc, addDays, dateKey, fmtShort, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
@@ -325,6 +325,7 @@ function renderInvites(container, user) {
 
   document.getElementById("pi-generate").addEventListener("click", async () => {
     if (!invForm.label.trim()) { alert("Indique un nom ou une société pour ce remplaçant."); return; }
+    if (!isPlausibleDate(invForm.weekStart)) { alert("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
     const site = invState.sites.find(s => s.id === invForm.siteId);
     const weeks = [];
     let cur = new Date(invForm.weekStart);

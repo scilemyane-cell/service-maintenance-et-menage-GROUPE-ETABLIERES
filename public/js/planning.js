@@ -1,7 +1,7 @@
 import {
   addDays, dateKey, sameDay, fmtLong, fmtShort, HOLIDAYS,
   YEAR_START, YEAR_END, computeWeeklyTitulaires, resolveDayN1, resolveDayN2,
-  isAbsentOnDate, esc, initials, colorForPerson, nextHandover,
+  isAbsentOnDate, esc, initials, colorForPerson, nextHandover, isPlausibleDate,
 } from "./astreinte-logic.js";
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
@@ -504,6 +504,10 @@ function renderAbsences(container, perms) {
     });
     document.getElementById("add-abs").addEventListener("click", async () => {
       if (!ui.absForm.start || !ui.absForm.end) return;
+      if (!isPlausibleDate(ui.absForm.start) || !isPlausibleDate(ui.absForm.end)) {
+        alert("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
+        return;
+      }
       if (ui.absForm.end < ui.absForm.start) { alert("La date de fin doit être après la date de début."); return; }
       await addAbsence({ person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, createdBy: mountedUser.uid });
       ui.absForm.note = "";
@@ -695,6 +699,7 @@ function renderInterventions(container, perms) {
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
     document.getElementById("f-date").addEventListener("change", (e) => {
+      if (!isPlausibleDate(e.target.value)) { e.target.value = ui.form.date; return; }
       ui.form.date = e.target.value;
       const indicator = document.getElementById("interv-nuit-indicator");
       if (indicator) indicator.innerHTML = nuitIndicatorHTML();
@@ -803,9 +808,21 @@ function renderInterventions(container, perms) {
 
   if (perms.isEditor) {
     document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
-    document.getElementById("doc-start").addEventListener("change", (e) => { ui.docForm.start = e.target.value; if (ui.docForm.generated) renderAll(); });
-    document.getElementById("doc-end").addEventListener("change", (e) => { ui.docForm.end = e.target.value; if (ui.docForm.generated) renderAll(); });
-    document.getElementById("doc-generate").addEventListener("click", () => { ui.docForm.generated = true; renderAll(); });
+    document.getElementById("doc-start").addEventListener("change", (e) => {
+      if (!isPlausibleDate(e.target.value)) { e.target.value = ui.docForm.start; return; }
+      ui.docForm.start = e.target.value; if (ui.docForm.generated) renderAll();
+    });
+    document.getElementById("doc-end").addEventListener("change", (e) => {
+      if (!isPlausibleDate(e.target.value)) { e.target.value = ui.docForm.end; return; }
+      ui.docForm.end = e.target.value; if (ui.docForm.generated) renderAll();
+    });
+    document.getElementById("doc-generate").addEventListener("click", () => {
+      if (!isPlausibleDate(ui.docForm.start) || !isPlausibleDate(ui.docForm.end)) {
+        alert("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
+        return;
+      }
+      ui.docForm.generated = true; renderAll();
+    });
     container.querySelectorAll("[data-period]").forEach(btn => {
       btn.addEventListener("click", () => {
         const today = new Date();
