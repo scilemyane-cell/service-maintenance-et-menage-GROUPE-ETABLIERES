@@ -44,6 +44,16 @@ function heuresDeNuit(heureDebut, heureFin) {
 function estDimanche(dateStr) {
   return new Date(dateStr).getDay() === 0;
 }
+
+// Durée totale entre l'heure de départ et l'heure de retour, en gérant le
+// passage à minuit (retour le lendemain).
+function dureeHeures(depart, retour) {
+  const start = toMinutes(depart);
+  let end = toMinutes(retour);
+  if (start === null || end === null) return null;
+  if (end <= start) end += 1440;
+  return Math.round(((end - start) / 60) * 100) / 100;
+}
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 
 let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [], releves: [] };
@@ -156,7 +166,7 @@ function renderArchiveReleves(container) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Historique des relevés d'heures générés puis validés (transmis aux RH pour paiement).</p>
+      <p class="hint">Historique des relevés d'heures générés puis validés (transmis au manager pour paiement).</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Intervenant</th><th>Période</th><th>Interventions</th><th>Total</th><th>Dont nuit</th><th>Primes dim.</th><th>Validé par</th><th>Le</th></tr></thead>
@@ -238,6 +248,16 @@ function renderCoordonnees(container, perms) {
 // =================================================================
 // Historique des transferts de ligne
 // =================================================================
+function nuitIndicatorHTML() {
+  const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
+  const dimanche = ui.form.date && estDimanche(ui.form.date);
+  if (!nuit && !dimanche) return "";
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    ${nuit > 0 ? `<span class="tag" style="background:#3A3160">🌙 ${nuit.toFixed(2)}h de nuit (21h-6h, indicatif)</span>` : ""}
+    ${dimanche ? `<span class="tag" style="background:#8F5FBF">🌞 Dimanche — prime +${PRIME_DIMANCHE}€</span>` : ""}
+  </div>`;
+}
+
 function renderTransferts(container, user) {
   const sorted = [...state.transferts].sort((a, b) => (a.date < b.date ? 1 : -1));
   const isSuperAdmin = user?.role === "super_admin";
@@ -494,7 +514,7 @@ function renderDocPreview() {
   return `
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
-      <button class="nav-btn" id="doc-valider" style="border-color:var(--teal)">✅ Valider ce relevé (transmis RH)</button>
+      <button class="nav-btn" id="doc-valider" style="border-color:var(--teal)">✅ Valider ce relevé (transmis au manager)</button>
       <button class="nav-btn" id="doc-close">✕ Fermer l'aperçu</button>
     </div>
     <div id="doc-valid-status" style="font-size:12px;margin:6px 0"></div>
@@ -596,20 +616,12 @@ function renderInterventions(container, perms) {
             </select>
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
-          <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="ex. 1.5"></label>
-          <label>Heure d'arrivée<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
-          <label>Heure de départ<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
+          <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calculé automatiquement"></label>
+          <label>Heure de départ<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
+          <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
-        ${(() => {
-          const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
-          const dimanche = ui.form.date && estDimanche(ui.form.date);
-          if (!nuit && !dimanche) return "";
-          return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-            ${nuit > 0 ? `<span class="tag" style="background:#3A3160">🌙 ${nuit.toFixed(2)}h de nuit (21h-6h, indicatif)</span>` : ""}
-            ${dimanche ? `<span class="tag" style="background:#8F5FBF">🌞 Dimanche — prime +${PRIME_DIMANCHE}€</span>` : ""}
-          </div>`;
-        })()}
+        <div id="interv-nuit-indicator">${nuitIndicatorHTML()}</div>
         <button class="add-btn" id="add-interv">${ui.editingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'intervention"}</button>
         ${ui.editingId ? `<button class="nav-btn" id="cancel-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
         <div id="interv-status" style="margin-top:8px;font-size:12px"></div>
@@ -637,7 +649,7 @@ function renderInterventions(container, perms) {
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis RH</th>' : ''}<th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis au manager</th>' : ''}<th></th></tr></thead>
           <tbody>
             ${sorted.length === 0 ? `<tr><td colspan="9" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
               sorted.map(i => {
@@ -665,8 +677,23 @@ function renderInterventions(container, perms) {
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
     document.getElementById("f-date").addEventListener("change", (e) => { ui.form.date = e.target.value; renderAll(); });
-    document.getElementById("f-heure-debut").addEventListener("change", (e) => { ui.form.heureDebut = e.target.value; renderAll(); });
-    document.getElementById("f-heure-fin").addEventListener("change", (e) => { ui.form.heureFin = e.target.value; renderAll(); });
+    function onHeureChange() {
+      // Mise à jour ciblée seulement (pas de renderAll) : un ré-affichage
+      // complet du formulaire à chaque frappe faisait perdre le focus du
+      // champ et provoquait des bugs de saisie sur les heures.
+      ui.form.heureDebut = document.getElementById("f-heure-debut").value;
+      ui.form.heureFin = document.getElementById("f-heure-fin").value;
+      const indicator = document.getElementById("interv-nuit-indicator");
+      if (indicator) indicator.innerHTML = nuitIndicatorHTML();
+      const duree = dureeHeures(ui.form.heureDebut, ui.form.heureFin);
+      if (duree !== null) {
+        ui.form.heures = String(duree);
+        const heuresInput = document.getElementById("f-heures");
+        if (heuresInput) heuresInput.value = duree;
+      }
+    }
+    document.getElementById("f-heure-debut").addEventListener("input", onHeureChange);
+    document.getElementById("f-heure-fin").addEventListener("input", onHeureChange);
     document.getElementById("f-association").addEventListener("change", (e) => {
       ui.form.association = e.target.value;
       ui.form.groupe = "";
