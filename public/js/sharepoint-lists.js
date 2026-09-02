@@ -108,6 +108,11 @@ async function obtenirMappingColonnes(token, listId) {
     if (col.readOnly || col.hidden) return;
     mapping[col.displayName] = col.name;
   });
+  // La colonne "Titre" par défaut de SharePoint a toujours le nom
+  // technique "Title", quelle que soit la langue d'affichage du tenant
+  // (ex. "Titre" en français) — on force cette correspondance plutôt que
+  // de dépendre du nom affiché, qui varie selon la langue.
+  mapping["Title"] = "Title";
   return mapping;
 }
 
