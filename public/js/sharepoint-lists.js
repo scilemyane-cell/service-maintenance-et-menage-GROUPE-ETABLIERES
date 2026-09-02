@@ -79,12 +79,48 @@ async function viderListe(token, listId) {
   }
 }
 
+// Récupère la correspondance nom affiché -> nom technique interne pour
+// chaque colonne d'une liste. Indispensable : quand une liste est créée à
+// la main dans l'interface SharePoint, le nom technique utilisé par l'API
+// peut différer du nom affiché tapé au clavier — deviner ce nom mène à des
+// erreurs "Field 'X' is not recognized".
+async function obtenirMappingColonnes(token, listId) {
+  const site = await siteId(token);
+  const res = await fetch(`${GRAPH_ROOT}/sites/${site}/lists/${listId}/columns`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Lecture des colonnes échouée (${res.status})`);
+  const data = await res.json();
+  const mapping = {};
+  (data.value || []).forEach(col => { mapping[col.displayName] = col.name; });
+  return mapping;
+}
+
+// Traduit une ligne (clés = noms affichés) vers les noms techniques réels.
+function traduireLigne(ligne, mapping) {
+  const traduite = {};
+  for (const [affiche, valeur] of Object.entries(ligne)) {
+    const technique = mapping[affiche];
+    if (technique) {
+      traduite[technique] = valeur;
+    } else {
+      // Colonne absente de la liste SharePoint (pas encore créée, ou nom
+      // mal orthographié) — on ignore ce champ plutôt que de faire
+      // échouer toute la ligne, mais on le signale dans la console.
+      console.warn(`Colonne "${affiche}" introuvable dans la liste SharePoint, valeur ignorée.`);
+    }
+  }
+  return traduite;
+}
+
 async function remplirListe(token, listId, lignes) {
   const site = await siteId(token);
+  const mapping = await obtenirMappingColonnes(token, listId);
+  const lignesTraduites = lignes.map(l => traduireLigne(l, mapping));
   const LOT = 10;
   let premiereErreur = null;
-  for (let i = 0; i < lignes.length; i += LOT) {
-    const resultats = await Promise.all(lignes.slice(i, i + LOT).map(async fields => {
+  for (let i = 0; i < lignesTraduites.length; i += LOT) {
+    const resultats = await Promise.all(lignesTraduites.slice(i, i + LOT).map(async fields => {
       const res = await fetch(`${GRAPH_ROOT}/sites/${site}/lists/${listId}/items`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
