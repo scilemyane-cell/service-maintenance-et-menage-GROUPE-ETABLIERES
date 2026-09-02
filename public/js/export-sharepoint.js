@@ -30,6 +30,7 @@ async function extraireStockProduits() {
     const p = d.data();
     if (p.supprimeLe) return;
     lignes.push({
+      Title: p.nom || "(sans nom)",
       Nom: p.nom || "", Categorie: p.categorie || "", Unite: p.unite || "",
       StockActuel: p.stockActuel ?? 0, StockCible: p.stockCible ?? 0, SeuilMin: p.stockMin ?? 0,
       Fournisseur: p.fournisseurNom || "", EmailFournisseur: p.fournisseurEmail || "", RefFournisseur: p.refFournisseur || "",
@@ -54,6 +55,7 @@ async function extraireStockSites() {
   itemsSnap.forEach(d => {
     const it = d.data();
     lignes.push({
+      Title: it.nom || "(sans nom)",
       Site: nomsSites.get(it.dossierId) || it.dossierId || "",
       Article: it.nom || "", Unite: it.unite || "", Quantite: it.quantite ?? 0,
       CiblePermanente: it.quantiteCible ?? 0,
@@ -73,6 +75,7 @@ async function extraireInterventions() {
   snap.forEach(d => {
     const i = d.data();
     lignes.push({
+      Title: `${i.date || ""} - ${i.technicien || ""}`.trim() || "(intervention)",
       Date: i.date || "", Intervenant: i.technicien || "", Association: i.association || "", Groupe: i.groupe || "", Site: i.site || "",
       Type: i.type || "", Heures: i.heures ?? 0, HeureDepart: i.heureDebut || "", HeureRetour: i.heureFin || "",
       Description: i.description || "", TransmisAuManager: !!i.transmis,
@@ -94,6 +97,7 @@ async function extraireDossiersSite() {
     const dd = d.data();
     if (dd.supprimeLe) return;
     lignes.push({
+      Title: dd.nom || "(sans nom)",
       Nom: dd.nom || "", Adresse: dd.adresse || "", Association: dd.association || "", Groupe: dd.groupe || "",
       StockDeporte: !!dd.stockDeporte,
       NbEquipementsConcernes: (dd.sections || []).filter(s => s.concerne).length,
