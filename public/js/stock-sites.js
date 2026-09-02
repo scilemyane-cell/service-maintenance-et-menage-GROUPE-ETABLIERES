@@ -1,28 +1,29 @@
 // stock-sites.js
-// Vue centralisée (onglet "Sites" du module Stock maintenance) : tous les
-// sites ayant un stock déporté activé, avec leurs articles, quantités et
-// seuils d'alerte. Chaque article a un QR code (scannable directement avec
-// l'appareil photo du téléphone) menant à un écran d'actualisation ou de
-// sortie de produit avec le logement concerné.
+// Vue centralisée et unique du stock déporté (onglet "Sites" du module
+// Stock maintenance) : tous les sites ayant le stock déporté activé, avec
+// leurs articles, quantités, seuils, QR codes et sorties de produit. Toute
+// la gestion se fait ici — la fiche "Dossier de site" ne fait plus que
+// porter la case "a un stock déporté".
 
 import { esc } from "./astreinte-logic.js";
 import {
   listerSitesAvecStockDeporte, listerTousLesArticlesSite,
-  modifierArticleSite, supprimerArticleSite,
+  ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
+  configurerArticlesSiteDepuisCatalogue, listerCatalogueSite, listerCatalogueCentral,
   qrPayloadForSite, getArticleSiteAvecResidence, actualiserStockSite, enregistrerSortieSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
-let state = { sites: [], items: [], loading: true };
-let ui = { screen: "liste", qrId: null, ajusteId: null, scanning: false };
+let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null };
 let scanner = null;
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
-  state = { sites: [], items: [], loading: true };
-  ui = { screen: "liste", qrId: null, ajusteId: null, scanning: false };
+  state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -43,7 +44,6 @@ async function load() {
   ]);
   state.sites = sites;
   state.items = items;
-  state.loading = false;
   if (ui.screen === "liste") render();
 }
 
@@ -103,7 +103,16 @@ function renderListe() {
               </table>
             </div>
           `}
-          <p class="hint" style="margin-top:8px">Pour ajouter un article sur ce site, ouvre sa fiche depuis Dossiers de site.</p>
+          <div id="ssx-add-zone-${site.id}" style="margin-top:10px">
+            ${ui.addingSiteId === site.id ? renderAddForm(site) : `
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="nav-btn" data-open-config="${site.id}">🗂️ Configurer depuis la liste type</button>
+                <button class="nav-btn" data-open-catalogue="${site.id}">➕ Depuis le catalogue central</button>
+                <button class="nav-btn" data-open-libre="${site.id}">➕ Article propre à ce site</button>
+              </div>
+            `}
+          </div>
+          <div id="ssx-status-${site.id}" style="font-size:12px;margin-top:8px"></div>
         </div>
       `;}).join("")}
     </div>
@@ -135,6 +144,164 @@ function renderListe() {
       catch (e) { alert("Échec : " + (e.message || e)); }
     });
   });
+
+  mountedContainer.querySelectorAll("[data-open-config]").forEach(btn => btn.addEventListener("click", async () => {
+    const statusEl = document.getElementById(`ssx-status-${btn.dataset.openConfig}`);
+    if (!state.catalogueSite) {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Chargement de la liste type…</span>`;
+      try { state.catalogueSite = await listerCatalogueSite(); }
+      catch (e) { statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`; return; }
+    }
+    if (state.catalogueSite.length === 0) {
+      statusEl.innerHTML = `<span style="color:var(--red)">La liste type des sites est vide — ajoute d'abord des produits dans l'onglet "Catalogue sites".</span>`;
+      return;
+    }
+    statusEl.innerHTML = "";
+    ui.addingSiteId = btn.dataset.openConfig; ui.addingMode = "config";
+    render();
+  }));
+  mountedContainer.querySelectorAll("[data-open-catalogue]").forEach(btn => btn.addEventListener("click", async () => {
+    const statusEl = document.getElementById(`ssx-status-${btn.dataset.openCatalogue}`);
+    if (!state.catalogueCentral) {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Chargement…</span>`;
+      try { state.catalogueCentral = await listerCatalogueCentral(); }
+      catch (e) { statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`; return; }
+    }
+    statusEl.innerHTML = "";
+    ui.addingSiteId = btn.dataset.openCatalogue; ui.addingMode = "catalogue";
+    render();
+  }));
+  mountedContainer.querySelectorAll("[data-open-libre]").forEach(btn => btn.addEventListener("click", () => {
+    ui.addingSiteId = btn.dataset.openLibre; ui.addingMode = "libre";
+    render();
+  }));
+
+  attachAddFormListeners();
+}
+
+// =================================================================
+// Formulaires d'ajout (liste type / catalogue central / article libre)
+// =================================================================
+function renderAddForm(site) {
+  if (ui.addingMode === "config") {
+    const items = state.items.filter(it => it.dossierId === site.id);
+    const parProduitId = new Map(items.filter(it => it.produitId).map(it => [it.produitId, it]));
+    const categories = [...new Set((state.catalogueSite || []).map(p => p.categorie || "Autre"))];
+    return `
+      <p class="hint" style="margin:0 0 10px">Coche les produits que ce site doit garder en permanence, et indique la quantité à toujours avoir sur place.</p>
+      ${categories.map(cat => `
+        <p style="font-size:12px;font-weight:700;color:var(--gold);margin:12px 0 6px">${esc(cat)}</p>
+        ${(state.catalogueSite || []).filter(p => (p.categorie || "Autre") === cat).map(p => {
+          const existant = parProduitId.get(p.id);
+          return `
+          <div style="display:flex;align-items:center;gap:10px;padding:4px 0;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px">
+              <input type="checkbox" data-cfg-concerne="${p.id}" ${existant ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--gold)">
+              ${esc(p.nom)}
+            </label>
+            <label style="font-size:11px;color:var(--text-dim)">Cible perm.
+              <input type="number" min="0" step="1" data-cfg-cible="${p.id}" value="${existant?.quantiteCible ?? 1}" style="width:60px;margin-left:4px">
+            </label>
+          </div>`;
+        }).join("")}
+      `).join("")}
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="add-btn" data-config-valider="${site.id}">✓ Enregistrer la configuration</button>
+        <button class="nav-btn" data-add-annuler="${site.id}">✕ Annuler</button>
+      </div>
+    `;
+  }
+  if (ui.addingMode === "catalogue") {
+    return `
+      <div class="form-grid">
+        <label>Produit du catalogue
+          <select id="ssx-catalogue-produit-${site.id}">
+            ${(state.catalogueCentral || []).map(p => `<option value="${p.id}">${esc(p.nom)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Quantité<input type="number" min="0" step="1" id="ssx-catalogue-qte-${site.id}" value="1"></label>
+        <label>Seuil minimum<input type="number" min="0" step="1" id="ssx-catalogue-seuil-${site.id}" value="1"></label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="add-btn" data-catalogue-valider="${site.id}">✓ Ajouter</button>
+        <button class="nav-btn" data-add-annuler="${site.id}">✕ Annuler</button>
+      </div>
+    `;
+  }
+  // libre
+  return `
+    <div class="form-grid">
+      <label>Nom de l'article<input id="ssx-libre-nom-${site.id}" placeholder="ex. pièce spécifique à ce site"></label>
+      <label>Quantité<input type="number" min="0" step="1" id="ssx-libre-qte-${site.id}" value="1"></label>
+      <label>Seuil minimum<input type="number" min="0" step="1" id="ssx-libre-seuil-${site.id}" value="1"></label>
+      <label>Unité<input id="ssx-libre-unite-${site.id}" placeholder="pièce, lot…" value="pièce"></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="add-btn" data-libre-valider="${site.id}">✓ Ajouter</button>
+      <button class="nav-btn" data-add-annuler="${site.id}">✕ Annuler</button>
+    </div>
+  `;
+}
+
+function attachAddFormListeners() {
+  mountedContainer.querySelectorAll("[data-add-annuler]").forEach(btn => btn.addEventListener("click", () => {
+    ui.addingSiteId = null; ui.addingMode = null; render();
+  }));
+  mountedContainer.querySelectorAll("[data-config-valider]").forEach(btn => btn.addEventListener("click", async () => {
+    const siteId = btn.dataset.configValider;
+    const statusEl = document.getElementById(`ssx-status-${siteId}`);
+    const items = state.items.filter(it => it.dossierId === siteId);
+    const decisions = (state.catalogueSite || []).map(p => {
+      const cb = document.querySelector(`[data-cfg-concerne="${p.id}"]`);
+      const cible = document.querySelector(`[data-cfg-cible="${p.id}"]`);
+      return {
+        produitId: p.id, nom: p.nom, unite: p.unite || "",
+        concerne: cb?.checked || false,
+        quantiteCible: parseFloat(cible?.value) || 0,
+        seuilMin: Math.max(1, Math.round((parseFloat(cible?.value) || 0) * 0.3)),
+      };
+    });
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    try {
+      await configurerArticlesSiteDepuisCatalogue(siteId, items, decisions, "site");
+      ui.addingSiteId = null; ui.addingMode = null;
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
+  mountedContainer.querySelectorAll("[data-catalogue-valider]").forEach(btn => btn.addEventListener("click", async () => {
+    const siteId = btn.dataset.catalogueValider;
+    const statusEl = document.getElementById(`ssx-status-${siteId}`);
+    const produitId = document.getElementById(`ssx-catalogue-produit-${siteId}`).value;
+    const produit = (state.catalogueCentral || []).find(p => p.id === produitId);
+    const qte = parseFloat(document.getElementById(`ssx-catalogue-qte-${siteId}`).value) || 0;
+    const seuil = parseFloat(document.getElementById(`ssx-catalogue-seuil-${siteId}`).value) || 0;
+    if (!produit) return;
+    try {
+      await ajouterArticleSite(siteId, { produitId: produit.id, catalogueOrigine: "central", nom: produit.nom, unite: produit.unite || "", quantite: qte, seuilMin: seuil });
+      ui.addingSiteId = null; ui.addingMode = null;
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
+  mountedContainer.querySelectorAll("[data-libre-valider]").forEach(btn => btn.addEventListener("click", async () => {
+    const siteId = btn.dataset.libreValider;
+    const statusEl = document.getElementById(`ssx-status-${siteId}`);
+    const nom = document.getElementById(`ssx-libre-nom-${siteId}`).value.trim();
+    const qte = parseFloat(document.getElementById(`ssx-libre-qte-${siteId}`).value) || 0;
+    const seuil = parseFloat(document.getElementById(`ssx-libre-seuil-${siteId}`).value) || 0;
+    const unite = document.getElementById(`ssx-libre-unite-${siteId}`).value.trim() || "pièce";
+    if (!nom) { statusEl.innerHTML = `<span style="color:var(--red)">Le nom est obligatoire.</span>`; return; }
+    try {
+      await ajouterArticleSite(siteId, { produitId: null, nom, unite, quantite: qte, seuilMin: seuil });
+      ui.addingSiteId = null; ui.addingMode = null;
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
 }
 
 // =================================================================
