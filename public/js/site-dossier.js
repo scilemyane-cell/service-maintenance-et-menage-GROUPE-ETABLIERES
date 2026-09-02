@@ -6,7 +6,7 @@ import {
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem } from "./sharepoint-storage.js";
 import {
   watchStockSite, ajouterArticleSite, modifierArticleSite, supprimerArticleSite, listerCatalogueCentral,
-  configurerArticlesSiteDepuisCatalogue,
+  configurerArticlesSiteDepuisCatalogue, listerCatalogueSite,
 } from "./stock-site-data.js";
 import { watchAssociations } from "./associations-data.js";
 
@@ -445,7 +445,7 @@ function stockSiteSectionHTML() {
               ${items.map(it => `
                 <tr>
                   <td>${esc(it.nom)}</td>
-                  <td style="font-size:11px;color:var(--text-dim)">${it.produitId ? "Catalogue central" : "Propre au site"}</td>
+                  <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
                   <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) <= (it.seuilMin ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${it.quantiteCible ?? "—"}</td>
                   <td><input type="number" min="0" step="1" value="${it.seuilMin ?? 0}" data-seuil="${it.id}" style="width:70px"></td>
@@ -495,7 +495,7 @@ function stockSiteSectionHTML() {
 }
 
 function renderConfigListeType() {
-  const catalogue = stockSiteState.catalogue || [];
+  const catalogue = stockSiteState.catalogueSite || [];
   const parProduitId = new Map(stockSiteState.items.filter(it => it.produitId).map(it => [it.produitId, it]));
   const categories = [...new Set(catalogue.map(p => p.categorie || "Autre"))];
 
@@ -513,7 +513,7 @@ function renderConfigListeType() {
               ${esc(p.nom)}
             </label>
             <label style="font-size:11px;color:var(--text-dim)">Cible perm.
-              <input type="number" min="0" step="1" data-cfg-cible="${p.id}" value="${existant?.quantiteCible ?? p.stockCible ?? 1}" style="width:60px;margin-left:4px">
+              <input type="number" min="0" step="1" data-cfg-cible="${p.id}" value="${existant?.quantiteCible ?? 1}" style="width:60px;margin-left:4px">
             </label>
           </div>`;
         }).join("")}
@@ -556,10 +556,14 @@ function attachStockSiteListeners(d) {
 
   document.getElementById("ss-add-config")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("ss-status");
-    if (!stockSiteState.catalogue) {
-      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Chargement du catalogue…</span>`;
-      try { stockSiteState.catalogue = await listerCatalogueCentral(); }
+    if (!stockSiteState.catalogueSite) {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Chargement de la liste type…</span>`;
+      try { stockSiteState.catalogueSite = await listerCatalogueSite(); }
       catch (e) { statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`; return; }
+      if (stockSiteState.catalogueSite.length === 0) {
+        statusEl.innerHTML = `<span style="color:var(--red)">La liste type des sites est vide — ajoute d'abord des produits dans Stock maintenance > Catalogue sites.</span>`;
+        return;
+      }
     }
     stockSiteState.adding = "config";
     rerenderStockSiteSection();
@@ -580,7 +584,7 @@ function attachStockSiteListeners(d) {
   });
   document.getElementById("ss-config-valider")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("ss-status");
-    const decisions = (stockSiteState.catalogue || []).map(p => {
+    const decisions = (stockSiteState.catalogueSite || []).map(p => {
       const cb = document.querySelector(`[data-cfg-concerne="${p.id}"]`);
       const cible = document.querySelector(`[data-cfg-cible="${p.id}"]`);
       return {
@@ -592,7 +596,7 @@ function attachStockSiteListeners(d) {
     });
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await configurerArticlesSiteDepuisCatalogue(d.id, stockSiteState.items, decisions);
+      await configurerArticlesSiteDepuisCatalogue(d.id, stockSiteState.items, decisions, "site");
       stockSiteState.adding = null;
       rerenderStockSiteSection();
     } catch (e) {
@@ -610,7 +614,7 @@ function attachStockSiteListeners(d) {
     const seuil = parseFloat(document.getElementById("ss-catalogue-seuil").value) || 0;
     if (!produit) return;
     try {
-      await ajouterArticleSite(d.id, { produitId: produit.id, nom: produit.nom, unite: produit.unite || "", quantite: qte, seuilMin: seuil });
+      await ajouterArticleSite(d.id, { produitId: produit.id, catalogueOrigine: "central", nom: produit.nom, unite: produit.unite || "", quantite: qte, seuilMin: seuil });
       stockSiteState.adding = null;
       rerenderStockSiteSection();
     } catch (e) {

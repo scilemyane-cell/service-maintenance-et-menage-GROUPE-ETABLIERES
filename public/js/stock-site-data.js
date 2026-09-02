@@ -11,6 +11,37 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const COLLECTION = "stock-site-items";
+const CATALOGUE_SITE = "stock-site-catalogue";
+
+// Catalogue type des sites — indépendant du catalogue central (stock
+// central de maintenance). Vide au départ, alimenté au fur et à mesure
+// selon ce que les sites doivent réellement garder sur place.
+export function watchCatalogueSite(callback) {
+  return onSnapshot(collection(db, CATALOGUE_SITE), (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    callback(list.sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || "")));
+  }, (err) => { console.error("watchCatalogueSite:", err); callback([]); });
+}
+
+export async function listerCatalogueSite() {
+  const snap = await getDocs(collection(db, CATALOGUE_SITE));
+  const list = [];
+  snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+  return list.sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || ""));
+}
+
+export async function ajouterProduitCatalogueSite(item) {
+  await addDoc(collection(db, CATALOGUE_SITE), item);
+}
+
+export async function modifierProduitCatalogueSite(id, fields) {
+  await updateDoc(doc(db, CATALOGUE_SITE, id), fields);
+}
+
+export async function supprimerProduitCatalogueSite(id) {
+  await deleteDoc(doc(db, CATALOGUE_SITE, id));
+}
 const MOUVEMENTS = "stock-site-mouvements";
 
 // QR encodant un lien direct vers l'écran d'ajustement/sortie de cet
@@ -101,7 +132,7 @@ export async function supprimerArticleSite(id) {
 // produits décochés qui avaient déjà un article sur ce site sont retirés ;
 // les produits cochés déjà présents ne sont que mis à jour (la quantité
 // actuelle comptée n'est jamais écrasée par cette opération).
-export async function configurerArticlesSiteDepuisCatalogue(dossierId, existants, decisions) {
+export async function configurerArticlesSiteDepuisCatalogue(dossierId, existants, decisions, origine = "site") {
   const parProduitId = new Map(existants.filter(e => e.produitId).map(e => [e.produitId, e]));
   const ops = [];
   for (const d of decisions) {
@@ -113,7 +144,7 @@ export async function configurerArticlesSiteDepuisCatalogue(dossierId, existants
         }));
       } else {
         ops.push(addDoc(collection(db, COLLECTION), {
-          dossierId, produitId: d.produitId, nom: d.nom, unite: d.unite,
+          dossierId, produitId: d.produitId, catalogueOrigine: origine, nom: d.nom, unite: d.unite,
           quantite: 0, quantiteCible: d.quantiteCible, seuilMin: d.seuilMin,
         }));
       }

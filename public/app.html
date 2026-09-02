@@ -23,6 +23,7 @@
   import { mountStockInventaire } from "./js/stock-inventaire.js";
   import { mountStockCommandes } from "./js/stock-commandes.js";
   import { mountStockSites } from "./js/stock-sites.js";
+  import { mountStockCatalogueSite } from "./js/stock-site-catalogue.js";
   import { mountDashboard } from "./js/home.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
@@ -104,6 +105,7 @@
           { id: "inventaire", label: "Inventaire", icon: "📷", roles: [...GESTION,"technicien"], mount: mountStockInventaire },
           { id: "commandes",  label: "Commandes",  icon: "📧", roles: [...GESTION,"direction"],  mount: mountStockCommandes },
           { id: "sites",      label: "Sites",       icon: "🏢", roles: [...GESTION,"technicien"], mount: mountStockSites },
+          { id: "catalogue-sites", label: "Catalogue sites", icon: "🗂️", roles: GESTION, mount: mountStockCatalogueSite },
         ],
       },
     ];
