@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
@@ -33,6 +34,8 @@
   import { mountTracabilite, mountTracabiliteForDispositif } from "./js/tracabilite.js";
   import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif, mountAssociationsSites } from "./js/parametres.js";
   import { mountMigrationTool } from "./js/migration-tool.js";
+  import { runDailyExportIfNeeded } from "./js/export-sharepoint.js";
+  import { mountExportSharepointAdmin } from "./js/export-sharepoint-admin.js";
   import { mountCorbeille } from "./js/corbeille.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
@@ -90,6 +93,7 @@
           { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ADMIN_ONLY, mount: mountAssociationsSites },
           { id: "corbeille", label: "Corbeille", icon: "🗑️", roles: ADMIN_ONLY, mount: mountCorbeille },
           { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },
+          { id: "export-sharepoint", label: "Export SharePoint", icon: "📤", roles: ADMIN_ONLY, mount: mountExportSharepointAdmin },
         ],
       },
       {
@@ -144,6 +148,10 @@
       });
       watchAccess((a) => { accessMap = a; render(); });
       watchDispositifSettings((s) => { dispositifSettings = s; render(); });
+      // Export quotidien automatique vers SharePoint, en arrière-plan, sans
+      // bloquer ni ralentir l'affichage. Ne fait rien si déjà fait
+      // aujourd'hui ou si aucune session Microsoft n'est déjà active.
+      runDailyExportIfNeeded();
     }
     render();
   });

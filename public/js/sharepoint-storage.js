@@ -12,6 +12,7 @@ const SITE_PATH = "/sites/appsmm";
 const ROOT_FOLDER = "DossiersDeSite";
 export const DOSSIERS_ROOT_FOLDER = ROOT_FOLDER;
 export const STOCK_ROOT_FOLDER = "StockMaintenance";
+export const EXPORTS_ROOT_FOLDER = "ExportsDonnees";
 
 let cachedDriveId = null;
 

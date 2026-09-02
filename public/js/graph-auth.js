@@ -68,3 +68,19 @@ export async function getGraphToken() {
     return result.accessToken;
   }
 }
+
+// Ne demande jamais de popup — utilisée pour les tâches automatiques en
+// arrière-plan (ex. export quotidien) qui ne doivent jamais interrompre la
+// personne avec une fenêtre de connexion inattendue. Retourne null si
+// aucune session Microsoft n'est déjà active dans ce navigateur.
+export async function getGraphTokenSilentOnly() {
+  try {
+    const instance = await ensureInitialized();
+    const account = getActiveAccount(instance);
+    if (!account) return null;
+    const result = await instance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account });
+    return result.accessToken;
+  } catch (e) {
+    return null;
+  }
+}
