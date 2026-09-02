@@ -22,12 +22,21 @@ async function siteId(token) {
 
 async function trouverListe(token, nomAffiche) {
   const site = await siteId(token);
-  const res = await fetch(`${GRAPH_ROOT}/sites/${site}/lists?$filter=displayName eq '${encodeURIComponent(nomAffiche)}'`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Recherche de la liste "${nomAffiche}" échouée (${res.status})`);
-  const data = await res.json();
-  return data.value?.[0] || null;
+  // Récupère toutes les listes et compare exactement côté code, plutôt que
+  // de s'appuyer sur un filtre OData ($filter=displayName eq '...') dont
+  // l'encodage des espaces dans l'URL s'est révélé peu fiable et pouvait
+  // faire correspondre la mauvaise liste (ex. confusion entre deux noms
+  // contenant tous deux un espace).
+  let url = `${GRAPH_ROOT}/sites/${site}/lists?$top=200`;
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`Recherche de la liste "${nomAffiche}" échouée (${res.status})`);
+    const data = await res.json();
+    const trouvee = (data.value || []).find(l => l.displayName === nomAffiche);
+    if (trouvee) return trouvee;
+    url = data["@odata.nextLink"] || null;
+  }
+  return null;
 }
 
 // colonnes : [{ nom, type }] avec type parmi "text" | "number" | "boolean"
