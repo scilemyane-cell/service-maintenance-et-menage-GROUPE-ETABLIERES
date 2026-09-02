@@ -694,7 +694,11 @@ function renderInterventions(container, perms) {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
-    document.getElementById("f-date").addEventListener("change", (e) => { ui.form.date = e.target.value; renderAll(); });
+    document.getElementById("f-date").addEventListener("change", (e) => {
+      ui.form.date = e.target.value;
+      const indicator = document.getElementById("interv-nuit-indicator");
+      if (indicator) indicator.innerHTML = nuitIndicatorHTML();
+    });
     function onHeureChange() {
       // Mise à jour ciblée seulement (pas de renderAll) : un ré-affichage
       // complet du formulaire à chaque frappe faisait perdre le focus du
