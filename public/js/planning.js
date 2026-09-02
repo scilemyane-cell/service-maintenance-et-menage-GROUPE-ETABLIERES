@@ -661,7 +661,9 @@ function renderInterventions(container, perms) {
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
                   </td>
-                  ${perms.isEditor ? `<td>${i.transmis ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>` : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</td>` : ''}
+                  ${perms.isEditor ? `<td>${i.transmis
+                    ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
+                    : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</td>` : ''}
                   <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
                 </tr>`;
               }).join("")}
@@ -763,6 +765,18 @@ function renderInterventions(container, perms) {
         state.interventions = state.interventions.filter(i => i.id !== id);
         renderAll();
         await deleteIntervention(id);
+      });
+    });
+    container.querySelectorAll("[data-remettre-attente]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Remettre cette intervention en attente ? Elle ne sera plus comptée comme transmise (le relevé déjà validé n'est pas modifié).")) return;
+        btn.disabled = true;
+        try {
+          await updateIntervention(btn.dataset.remettreAttente, { transmis: false });
+        } catch (e) {
+          alert("Échec : " + (e.message || e));
+          btn.disabled = false;
+        }
       });
     });
   }
