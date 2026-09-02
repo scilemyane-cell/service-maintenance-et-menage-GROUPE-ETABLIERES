@@ -17,9 +17,11 @@ export async function createReleve(record) {
 
 // Supprime un relevé archivé et libère les interventions qu'il contenait
 // (elles repassent "En attente", pour pouvoir être corrigées et incluses
-// dans un nouveau relevé). Réservé Super Admin côté règles Firestore.
+// dans un nouveau relevé). Une intervention déjà supprimée entre-temps est
+// simplement ignorée (pas d'échec de l'ensemble pour autant). Réservé
+// Super Admin côté règles Firestore.
 export async function deleteReleve(releveId, interventionIds) {
-  await Promise.all(
+  await Promise.allSettled(
     (interventionIds || []).map(id => updateDoc(doc(db, "interventions", id), { transmis: false }))
   );
   await deleteDoc(doc(db, "releves-interventions", releveId));
