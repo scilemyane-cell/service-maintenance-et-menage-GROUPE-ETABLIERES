@@ -83,13 +83,14 @@ function renderListe() {
           ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
             <div class="table-wrap" style="border:none">
               <table>
-                <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Seuil min.</th><th></th></tr></thead>
+                <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th>Seuil min.</th><th></th></tr></thead>
                 <tbody>
                   ${items.map(it => `
                     <tr>
                       <td>${esc(it.nom)}</td>
                       <td style="font-size:11px;color:var(--text-dim)">${it.produitId ? "Catalogue central" : "Propre au site"}</td>
                       <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) <= (it.seuilMin ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
+                      <td style="font-size:12px;color:var(--text-dim)">${it.quantiteCible ?? "—"}</td>
                       <td><input type="number" min="0" step="1" value="${it.seuilMin ?? 0}" data-seuil="${it.id}" style="width:70px"></td>
                       <td style="white-space:nowrap">
                         <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>

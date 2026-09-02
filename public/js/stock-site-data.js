@@ -95,6 +95,35 @@ export async function supprimerArticleSite(id) {
   await deleteDoc(doc(db, COLLECTION, id));
 }
 
+// Configuration en masse depuis la liste type (catalogue central) : pour
+// chaque produit, on décide s'il est "concerné" par ce site et, si oui,
+// la quantité à avoir en permanence sur place (quantiteCible). Les
+// produits décochés qui avaient déjà un article sur ce site sont retirés ;
+// les produits cochés déjà présents ne sont que mis à jour (la quantité
+// actuelle comptée n'est jamais écrasée par cette opération).
+export async function configurerArticlesSiteDepuisCatalogue(dossierId, existants, decisions) {
+  const parProduitId = new Map(existants.filter(e => e.produitId).map(e => [e.produitId, e]));
+  const ops = [];
+  for (const d of decisions) {
+    const existant = parProduitId.get(d.produitId);
+    if (d.concerne) {
+      if (existant) {
+        ops.push(updateDoc(doc(db, COLLECTION, existant.id), {
+          nom: d.nom, unite: d.unite, quantiteCible: d.quantiteCible, seuilMin: d.seuilMin,
+        }));
+      } else {
+        ops.push(addDoc(collection(db, COLLECTION), {
+          dossierId, produitId: d.produitId, nom: d.nom, unite: d.unite,
+          quantite: 0, quantiteCible: d.quantiteCible, seuilMin: d.seuilMin,
+        }));
+      }
+    } else if (existant) {
+      ops.push(deleteDoc(doc(db, COLLECTION, existant.id)));
+    }
+  }
+  await Promise.all(ops);
+}
+
 // Liste ponctuelle de tous les articles de stock déporté, tous sites
 // confondus — utilisée par la vue centralisée du module Stock maintenance.
 export async function listerTousLesArticlesSite() {

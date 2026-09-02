@@ -6,6 +6,7 @@ import {
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem } from "./sharepoint-storage.js";
 import {
   watchStockSite, ajouterArticleSite, modifierArticleSite, supprimerArticleSite, listerCatalogueCentral,
+  configurerArticlesSiteDepuisCatalogue,
 } from "./stock-site-data.js";
 import { watchAssociations } from "./associations-data.js";
 
@@ -439,13 +440,14 @@ function stockSiteSectionHTML() {
       ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant.</p>` : `
         <div class="table-wrap" style="border:none">
           <table>
-            <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Seuil min.</th><th></th></tr></thead>
+            <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th>Seuil min.</th><th></th></tr></thead>
             <tbody>
               ${items.map(it => `
                 <tr>
                   <td>${esc(it.nom)}</td>
                   <td style="font-size:11px;color:var(--text-dim)">${it.produitId ? "Catalogue central" : "Propre au site"}</td>
                   <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) <= (it.seuilMin ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
+                  <td style="font-size:12px;color:var(--text-dim)">${it.quantiteCible ?? "—"}</td>
                   <td><input type="number" min="0" step="1" value="${it.seuilMin ?? 0}" data-seuil="${it.id}" style="width:70px"></td>
                   <td><button class="del-btn" data-del-article="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button></td>
                 </tr>
@@ -455,7 +457,7 @@ function stockSiteSectionHTML() {
         </div>
       `}
 
-      ${stockSiteState.adding === "catalogue" ? `
+      ${stockSiteState.adding === "config" ? renderConfigListeType() : stockSiteState.adding === "catalogue" ? `
         <div class="form-grid" style="margin-top:12px">
           <label>Produit du catalogue
             <select id="ss-catalogue-produit">
@@ -482,11 +484,44 @@ function stockSiteSectionHTML() {
         </div>
       ` : `
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="nav-btn" id="ss-add-config">🗂️ Configurer depuis la liste type</button>
           <button class="nav-btn" id="ss-add-catalogue">➕ Depuis le catalogue central</button>
           <button class="nav-btn" id="ss-add-libre">➕ Article propre à ce site</button>
         </div>
       `}
       <div id="ss-status" style="font-size:12px;margin-top:8px"></div>
+    </div>
+  `;
+}
+
+function renderConfigListeType() {
+  const catalogue = stockSiteState.catalogue || [];
+  const parProduitId = new Map(stockSiteState.items.filter(it => it.produitId).map(it => [it.produitId, it]));
+  const categories = [...new Set(catalogue.map(p => p.categorie || "Autre"))];
+
+  return `
+    <div style="margin-top:12px">
+      <p class="hint" style="margin:0 0 10px">Coche les produits que ce site doit garder en permanence, et indique la quantité à toujours avoir sur place. Un produit déjà présent reste coché avec sa quantité cible actuelle ; sa quantité comptée n'est pas modifiée par cet écran.</p>
+      ${categories.map(cat => `
+        <p style="font-size:12px;font-weight:700;color:var(--gold);margin:12px 0 6px">${esc(cat)}</p>
+        ${catalogue.filter(p => (p.categorie || "Autre") === cat).map(p => {
+          const existant = parProduitId.get(p.id);
+          return `
+          <div style="display:flex;align-items:center;gap:10px;padding:4px 0;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px">
+              <input type="checkbox" data-cfg-concerne="${p.id}" ${existant ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--gold)">
+              ${esc(p.nom)}
+            </label>
+            <label style="font-size:11px;color:var(--text-dim)">Cible perm.
+              <input type="number" min="0" step="1" data-cfg-cible="${p.id}" value="${existant?.quantiteCible ?? p.stockCible ?? 1}" style="width:60px;margin-left:4px">
+            </label>
+          </div>`;
+        }).join("")}
+      `).join("")}
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="add-btn" id="ss-config-valider">✓ Enregistrer la configuration</button>
+        <button class="nav-btn" id="ss-annuler">✕ Annuler</button>
+      </div>
     </div>
   `;
 }
@@ -519,6 +554,16 @@ function attachStockSiteListeners(d) {
     });
   });
 
+  document.getElementById("ss-add-config")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("ss-status");
+    if (!stockSiteState.catalogue) {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Chargement du catalogue…</span>`;
+      try { stockSiteState.catalogue = await listerCatalogueCentral(); }
+      catch (e) { statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`; return; }
+    }
+    stockSiteState.adding = "config";
+    rerenderStockSiteSection();
+  });
   document.getElementById("ss-add-catalogue")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("ss-status");
     if (!stockSiteState.catalogue) {
@@ -532,6 +577,27 @@ function attachStockSiteListeners(d) {
   document.getElementById("ss-add-libre")?.addEventListener("click", () => {
     stockSiteState.adding = "libre";
     rerenderStockSiteSection();
+  });
+  document.getElementById("ss-config-valider")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("ss-status");
+    const decisions = (stockSiteState.catalogue || []).map(p => {
+      const cb = document.querySelector(`[data-cfg-concerne="${p.id}"]`);
+      const cible = document.querySelector(`[data-cfg-cible="${p.id}"]`);
+      return {
+        produitId: p.id, nom: p.nom, unite: p.unite || "",
+        concerne: cb?.checked || false,
+        quantiteCible: parseFloat(cible?.value) || 0,
+        seuilMin: Math.max(1, Math.round((parseFloat(cible?.value) || 0) * 0.3)),
+      };
+    });
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    try {
+      await configurerArticlesSiteDepuisCatalogue(d.id, stockSiteState.items, decisions);
+      stockSiteState.adding = null;
+      rerenderStockSiteSection();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
   });
   document.getElementById("ss-annuler")?.addEventListener("click", () => {
     stockSiteState.adding = null;
