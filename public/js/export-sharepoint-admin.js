@@ -41,15 +41,15 @@ function render() {
   `;
 
   document.getElementById("exa-run").addEventListener("click", async () => {
-    const statusEl = document.getElementById("exa-status");
     state.running = true; render();
     try {
       await exporterMaintenant(getGraphToken, (feuille) => { state.progress = feuille; render(); });
       state.statut = await getStatutExport();
-      statusEl.innerHTML = `<span style="color:var(--gold)">✓ Export terminé</span>`;
+      state.running = false; render();
+      document.getElementById("exa-status").innerHTML = `<span style="color:var(--gold)">✓ Export terminé</span>`;
     } catch (e) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+      state.running = false; render();
+      document.getElementById("exa-status").innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
     }
-    state.running = false; render();
   });
 }
