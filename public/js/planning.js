@@ -7,7 +7,7 @@ import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
   watchInterventions, addIntervention, updateIntervention, deleteIntervention,
 } from "./firestore-data.js";
-import { watchTransferts } from "./transfert-data.js";
+import { watchTransferts, annulerTransfert } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchReleves, createReleve } from "./releves-data.js";
@@ -131,7 +131,7 @@ function renderAll() {
   if (ui.subtab === "absences") return renderAbsences(mountedContainer, perms);
   if (ui.subtab === "interventions") return renderInterventions(mountedContainer, perms);
   if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
-  if (ui.subtab === "transferts") return renderTransferts(mountedContainer, perms);
+  if (ui.subtab === "transferts") return renderTransferts(mountedContainer, mountedUser);
   if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
   if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer);
 }
@@ -238,17 +238,18 @@ function renderCoordonnees(container, perms) {
 // =================================================================
 // Historique des transferts de ligne
 // =================================================================
-function renderTransferts(container) {
+function renderTransferts(container, user) {
   const sorted = [...state.transferts].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const isSuperAdmin = user?.role === "super_admin";
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Historique des transferts de ligne confirmés — qui a validé, et quand.</p>
+      <p class="hint">Historique des transferts de ligne confirmés — qui a validé, et quand.${isSuperAdmin ? " En tant que Super Admin, tu peux annuler une confirmation en cas d'erreur (le transfert redevient à faire)." : ""}</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>De</th><th>Vers</th><th>Confirmé par</th><th>Le</th></tr></thead>
+          <thead><tr><th>Date</th><th>De</th><th>Vers</th><th>Confirmé par</th><th>Le</th>${isSuperAdmin ? "<th></th>" : ""}</tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucun transfert confirmé pour l'instant.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="${isSuperAdmin ? 6 : 5}" class="empty-row">Aucun transfert confirmé pour l'instant.</td></tr>` :
               sorted.map(t => `
                 <tr>
                   <td>${new Date(t.date).toLocaleDateString("fr-FR")}</td>
@@ -256,6 +257,7 @@ function renderTransferts(container) {
                   <td>${esc(t.toPerson)}</td>
                   <td>${esc(t.confirmedByNom)}</td>
                   <td>${t.confirmedAt ? new Date(t.confirmedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                  ${isSuperAdmin ? `<td><button class="del-btn" data-annuler="${esc(t.date)}" style="padding:4px 10px;font-size:11px">🔄 Annuler</button></td>` : ""}
                 </tr>
               `).join("")}
           </tbody>
@@ -263,6 +265,19 @@ function renderTransferts(container) {
       </div>
     </div>
   `;
+
+  container.querySelectorAll("[data-annuler]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Annuler cette confirmation de transfert ? Le bandeau redeviendra actif pour le refaire.")) return;
+      btn.disabled = true;
+      try {
+        await annulerTransfert(btn.dataset.annuler);
+      } catch (e) {
+        alert("Échec de l'annulation : " + (e.message || e));
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 function renderCalendar(container, perms) {

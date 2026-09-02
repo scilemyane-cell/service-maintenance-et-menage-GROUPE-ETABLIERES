@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, setDoc, collection, onSnapshot,
+  doc, setDoc, deleteDoc, collection, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 // Un document par jour de bascule N1 : transferts-ligne/{YYYY-MM-DD}
@@ -19,4 +19,11 @@ export async function confirmTransfert(date, fromPerson, toPerson, user) {
     confirmedBy: user.uid, confirmedByNom: user.nom || user.email,
     confirmedAt: new Date().toISOString(),
   });
+}
+
+// Annule une confirmation de transfert (en cas d'erreur) — le transfert
+// redevient "à faire", rechargeable via le bandeau. Réservé Super Admin
+// côté règles Firestore.
+export async function annulerTransfert(date) {
+  await deleteDoc(doc(db, "transferts-ligne", date));
 }
