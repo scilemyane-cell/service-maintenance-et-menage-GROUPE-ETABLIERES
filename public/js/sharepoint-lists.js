@@ -82,15 +82,24 @@ async function viderListe(token, listId) {
 async function remplirListe(token, listId, lignes) {
   const site = await siteId(token);
   const LOT = 10;
+  let premiereErreur = null;
   for (let i = 0; i < lignes.length; i += LOT) {
-    await Promise.all(lignes.slice(i, i + LOT).map(fields =>
-      fetch(`${GRAPH_ROOT}/sites/${site}/lists/${listId}/items`, {
+    const resultats = await Promise.all(lignes.slice(i, i + LOT).map(async fields => {
+      const res = await fetch(`${GRAPH_ROOT}/sites/${site}/lists/${listId}/items`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ fields }),
-      })
-    ));
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        return detail?.error?.message || `HTTP ${res.status}`;
+      }
+      return null;
+    }));
+    const erreur = resultats.find(r => r);
+    if (erreur && !premiereErreur) premiereErreur = erreur;
   }
+  if (premiereErreur) throw new Error(`Échec de l'ajout des éléments : ${premiereErreur}`);
 }
 
 // Remplace entièrement le contenu d'une liste par les lignes fournies —
