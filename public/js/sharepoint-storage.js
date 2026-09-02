@@ -15,16 +15,26 @@ export const STOCK_ROOT_FOLDER = "StockMaintenance";
 export const EXPORTS_ROOT_FOLDER = "ExportsDonnees";
 
 let cachedDriveId = null;
+let cachedSiteId = null;
 
-async function resolveDriveId(token) {
-  if (cachedDriveId) return cachedDriveId;
+// Résout et met en cache l'id du site SharePoint (distinct de l'id de la
+// bibliothèque de documents) — nécessaire pour parler à l'API des listes.
+export async function resolveSiteId(token) {
+  if (cachedSiteId) return cachedSiteId;
   const siteRes = await fetch(`${GRAPH_ROOT}/sites/${SHAREPOINT_HOSTNAME}:${SITE_PATH}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!siteRes.ok) throw new Error(`Site SharePoint "appsmm" introuvable (${siteRes.status})`);
   const site = await siteRes.json();
+  cachedSiteId = site.id;
+  return cachedSiteId;
+}
 
-  const driveRes = await fetch(`${GRAPH_ROOT}/sites/${site.id}/drive`, {
+async function resolveDriveId(token) {
+  if (cachedDriveId) return cachedDriveId;
+  const siteId = await resolveSiteId(token);
+
+  const driveRes = await fetch(`${GRAPH_ROOT}/sites/${siteId}/drive`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!driveRes.ok) throw new Error(`Bibliothèque de documents introuvable (${driveRes.status})`);
