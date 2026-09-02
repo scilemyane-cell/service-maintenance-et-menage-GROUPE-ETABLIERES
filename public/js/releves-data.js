@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, setDoc, addDoc, collection, onSnapshot,
+  doc, setDoc, addDoc, deleteDoc, updateDoc, collection, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 export function watchReleves(callback) {
@@ -13,4 +13,14 @@ export function watchReleves(callback) {
 
 export async function createReleve(record) {
   await addDoc(collection(db, "releves-interventions"), record);
+}
+
+// Supprime un relevé archivé et libère les interventions qu'il contenait
+// (elles repassent "En attente", pour pouvoir être corrigées et incluses
+// dans un nouveau relevé). Réservé Super Admin côté règles Firestore.
+export async function deleteReleve(releveId, interventionIds) {
+  await Promise.all(
+    (interventionIds || []).map(id => updateDoc(doc(db, "interventions", id), { transmis: false }))
+  );
+  await deleteDoc(doc(db, "releves-interventions", releveId));
 }

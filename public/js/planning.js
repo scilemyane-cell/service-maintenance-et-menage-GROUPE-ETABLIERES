@@ -10,7 +10,7 @@ import {
 import { watchTransferts, annulerTransfert } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { watchAssociations } from "./associations-data.js";
-import { watchReleves, createReleve } from "./releves-data.js";
+import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
@@ -143,7 +143,7 @@ function renderAll() {
   if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
   if (ui.subtab === "transferts") return renderTransferts(mountedContainer, mountedUser);
   if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
-  if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer);
+  if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer, mountedUser);
 }
 
 // =================================================================
@@ -161,17 +161,18 @@ function monthGrid(year, month) {
 // =================================================================
 // Archive des relevés d'heures validés
 // =================================================================
-function renderArchiveReleves(container) {
+function renderArchiveReleves(container, user) {
   const sorted = [...state.releves].sort((a, b) => (a.validatedAt < b.validatedAt ? 1 : -1));
+  const isSuperAdmin = user?.role === "super_admin";
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Historique des relevés d'heures générés puis validés (transmis au manager pour paiement).</p>
+      <p class="hint">Historique des relevés d'heures générés puis validés (transmis au manager pour paiement).${isSuperAdmin ? " En tant que Super Admin, tu peux supprimer un relevé en cas d'erreur — les interventions concernées repassent alors \"En attente\"." : ""}</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Intervenant</th><th>Période</th><th>Interventions</th><th>Total</th><th>Dont nuit</th><th>Primes dim.</th><th>Validé par</th><th>Le</th></tr></thead>
+          <thead><tr><th>Intervenant</th><th>Période</th><th>Interventions</th><th>Total</th><th>Dont nuit</th><th>Primes dim.</th><th>Validé par</th><th>Le</th>${isSuperAdmin ? "<th></th>" : ""}</tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="8" class="empty-row">Aucun relevé validé pour l'instant.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="${isSuperAdmin ? 9 : 8}" class="empty-row">Aucun relevé validé pour l'instant.</td></tr>` :
               sorted.map(r => `
                 <tr>
                   <td>${esc(r.person)}</td>
@@ -182,6 +183,7 @@ function renderArchiveReleves(container) {
                   <td>${r.totalPrimes > 0 ? r.totalPrimes + "€" : "—"}</td>
                   <td>${esc(r.validatedByNom)}</td>
                   <td>${r.validatedAt ? new Date(r.validatedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                  ${isSuperAdmin ? `<td><button class="del-btn" data-del-releve="${r.id}" style="padding:4px 10px;font-size:11px">🗑️ Supprimer</button></td>` : ""}
                 </tr>
               `).join("")}
           </tbody>
@@ -189,6 +191,20 @@ function renderArchiveReleves(container) {
       </div>
     </div>
   `;
+
+  container.querySelectorAll("[data-del-releve]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const r = state.releves.find(x => x.id === btn.dataset.delReleve);
+      if (!confirm(`Supprimer ce relevé (${r.person}, ${r.nbInterventions} intervention(s)) ? Les interventions concernées repasseront "En attente".`)) return;
+      btn.disabled = true;
+      try {
+        await deleteReleve(r.id, r.interventionIds);
+      } catch (e) {
+        alert("Échec : " + (e.message || e));
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 // =================================================================

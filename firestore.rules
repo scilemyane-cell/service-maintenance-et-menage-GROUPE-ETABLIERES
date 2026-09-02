@@ -114,7 +114,8 @@ service cloud.firestore {
     // ---- Relevés d'heures d'interventions validés (archive) ----
     match /releves-interventions/{docId} {
       allow read: if isSignedIn();
-      allow write: if isEditor();
+      allow create, update: if isEditor();
+      allow delete: if isSuperAdmin();
     }
     // ---- Dossiers de site (sécurité, contacts, organes techniques) ----
     // La mise à la corbeille est une mise à jour (isEditor). La purge
