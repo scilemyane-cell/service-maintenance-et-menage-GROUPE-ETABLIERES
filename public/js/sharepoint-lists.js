@@ -92,7 +92,13 @@ async function obtenirMappingColonnes(token, listId) {
   if (!res.ok) throw new Error(`Lecture des colonnes échouée (${res.status})`);
   const data = await res.json();
   const mapping = {};
-  (data.value || []).forEach(col => { mapping[col.displayName] = col.name; });
+  (data.value || []).forEach(col => {
+    // Ignore les colonnes système de SharePoint (lecture seule ou cachées,
+    // ex. DocIcon, ContentType, Attachments...) — leur nom affiché peut
+    // par coïncidence être identique à l'une de nos colonnes personnalisées.
+    if (col.readOnly || col.hidden) return;
+    mapping[col.displayName] = col.name;
+  });
   return mapping;
 }
 
