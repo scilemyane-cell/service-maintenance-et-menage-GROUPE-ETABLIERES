@@ -6,11 +6,63 @@
 
 import { db } from "./firebase-init.js";
 import {
-  doc, addDoc, updateDoc, deleteDoc, getDocs,
-  collection, query, where, onSnapshot,
+  doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs,
+  collection, query, where, onSnapshot, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const COLLECTION = "stock-site-items";
+const MOUVEMENTS = "stock-site-mouvements";
+
+// QR encodant un lien direct vers l'écran d'ajustement/sortie de cet
+// article — scanné avec l'appareil photo normal du téléphone (hors appli),
+// ça ouvre directement la bonne fiche.
+export function qrPayloadForSite(itemId) {
+  return `https://service-maintenance-et-menage.web.app/app.html?stocksite=${itemId}`;
+}
+
+export async function getArticleSiteAvecResidence(itemId) {
+  const snap = await getDoc(doc(db, COLLECTION, itemId));
+  if (!snap.exists()) return null;
+  const item = { id: snap.id, ...snap.data() };
+  const siteSnap = await getDoc(doc(db, "sites-dossiers", item.dossierId));
+  item.siteNom = siteSnap.exists() ? siteSnap.data().nom : "Site inconnu";
+  return item;
+}
+
+// Actualise le stock à une quantité comptée (inventaire), sans notion de
+// logement — utilisé pour un recomptage.
+export async function actualiserStockSite(itemId, nouvelleQuantite, uid) {
+  const ref = doc(db, COLLECTION, itemId);
+  const snap = await getDoc(ref);
+  const avant = snap.exists() ? (snap.data().quantite ?? 0) : 0;
+  await updateDoc(ref, { quantite: nouvelleQuantite });
+  await addDoc(collection(db, MOUVEMENTS), {
+    itemId, type: "actualisation", quantiteAvant: avant, quantiteApres: nouvelleQuantite,
+    uid, date: serverTimestamp(),
+  });
+}
+
+// Enregistre une sortie de produit (consommation), avec le logement
+// concerné — décrémente automatiquement le stock et journalise.
+export async function enregistrerSortieSite(itemId, quantiteSortie, logement, uid) {
+  const ref = doc(db, COLLECTION, itemId);
+  const snap = await getDoc(ref);
+  const avant = snap.exists() ? (snap.data().quantite ?? 0) : 0;
+  const apres = Math.max(0, avant - quantiteSortie);
+  await updateDoc(ref, { quantite: apres });
+  await addDoc(collection(db, MOUVEMENTS), {
+    itemId, type: "sortie", quantiteAvant: avant, quantiteApres: apres,
+    quantiteSortie, logement: logement || "", uid, date: serverTimestamp(),
+  });
+}
+
+export async function listerMouvementsSite(itemId) {
+  const q = query(collection(db, MOUVEMENTS), where("itemId", "==", itemId));
+  const snap = await getDocs(q);
+  const list = [];
+  snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+  return list.sort((a, b) => (b.date?.toMillis?.() || 0) - (a.date?.toMillis?.() || 0));
+}
 
 // Liste ponctuelle des dossiers de site ayant le stock déporté activé —
 // utilisée par la vue centralisée du module Stock maintenance.

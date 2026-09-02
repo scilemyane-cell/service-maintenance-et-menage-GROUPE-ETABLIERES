@@ -146,9 +146,19 @@ service cloud.firestore {
       allow write: if isEditor();
     }
     // ---- Stock déporté par site (produits gardés localement) ----
+    // Ajout/suppression d'articles et modification du seuil : reserve aux
+    // editeurs. La quantite seule peut etre mise a jour par n'importe quel
+    // utilisateur connecte (scan/sortie sur le terrain par un technicien).
     match /stock-site-items/{docId} {
       allow read: if isSignedIn();
-      allow write: if isEditor();
+      allow create, delete: if isEditor();
+      allow update: if isEditor()
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantite']));
+    }
+    match /stock-site-mouvements/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isEditor();
     }
   }
 }

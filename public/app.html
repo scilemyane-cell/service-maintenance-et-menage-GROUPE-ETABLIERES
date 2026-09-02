@@ -103,7 +103,7 @@
           { id: "produits",   label: "Produits",   icon: "📦", roles: GESTION,              mount: mountStockProduits },
           { id: "inventaire", label: "Inventaire", icon: "📷", roles: [...GESTION,"technicien"], mount: mountStockInventaire },
           { id: "commandes",  label: "Commandes",  icon: "📧", roles: [...GESTION,"direction"],  mount: mountStockCommandes },
-          { id: "sites",      label: "Sites",       icon: "🏢", roles: GESTION,                    mount: mountStockSites },
+          { id: "sites",      label: "Sites",       icon: "🏢", roles: [...GESTION,"technicien"], mount: mountStockSites },
         ],
       },
     ];
@@ -124,6 +124,14 @@
       currentCategory = "stock";
       currentSubtab = "inventaire";
       window.stockDeepLinkProduitId = stockParam;
+      history.replaceState(null, "", window.location.pathname);
+    }
+    // Idem pour un article de stock déporté par site : .../app.html?stocksite=ID
+    const stockSiteParam = new URLSearchParams(window.location.search).get("stocksite");
+    if (stockSiteParam && currentCategory === null) {
+      currentCategory = "stock";
+      currentSubtab = "sites";
+      window.stockSiteDeepLinkId = stockSiteParam;
       history.replaceState(null, "", window.location.pathname);
     }
     if (!sitesSubscribed) {
