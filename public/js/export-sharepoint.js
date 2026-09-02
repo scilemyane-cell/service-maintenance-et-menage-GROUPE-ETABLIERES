@@ -1,16 +1,16 @@
 // export-sharepoint.js
-// Synchronisation quotidienne automatique des données de l'appli vers de
-// vraies listes SharePoint, en complément de Firestore (qui reste la base
-// de travail en temps réel). Consultable directement dans le navigateur
-// SharePoint, sans rien télécharger — répond à l'exigence de la charte
-// numérique sans réécrire toute l'architecture de données.
+// Export quotidien automatique des données de l'appli vers SharePoint, en
+// complément du stockage Firestore (qui reste la base de travail en temps
+// réel). Un fichier Excel par module, remplacé à chaque export — répond à
+// l'exigence de la charte numérique (stockage Office 365) sans réécrire
+// toute l'architecture de données.
 
 import { db } from "./firebase-init.js";
 import {
   doc, getDoc, setDoc, getDocs, collection,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
-import { synchroniserListe, urlListe } from "./sharepoint-lists.js";
+import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
 
 const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 
@@ -18,10 +18,31 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+function tsToStr(ts) {
+  if (!ts) return "";
+  if (ts.toDate) return ts.toDate().toLocaleString("fr-FR");
+  return String(ts);
+}
+
+// Construit un classeur Excel à partir de lignes déjà à plat (tableau
+// d'objets simples : clé = colonne, valeur = cellule).
+function construireClasseur(lignes, nomFeuille) {
+  const ws = window.XLSX.utils.json_to_sheet(lignes);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, nomFeuille.slice(0, 31)); // limite Excel
+  return wb;
+}
+
+async function exporterModule(token, nomFichier, lignes, nomFeuille) {
+  if (!window.XLSX) throw new Error("Librairie Excel non chargée (vérifier app.html)");
+  const wb = construireClasseur(lignes.length > 0 ? lignes : [{ Info: "Aucune donnée" }], nomFeuille);
+  const arrayBuffer = window.XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  const blob = new Blob([arrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const file = new File([blob], nomFichier, { type: blob.type });
+  await uploadToDrive(file, token, [], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+}
+
 // ---- Extraction et mise à plat des données, module par module ----
-// Noms de colonnes en un seul mot (PascalCase, sans espace/accent) pour
-// coller exactement aux noms de champs internes SharePoint et éviter tout
-// souci d'encodage entre le nom affiché et la clé technique.
 
 async function extraireStockProduits() {
   const snap = await getDocs(collection(db, "stock-produits"));
@@ -30,19 +51,13 @@ async function extraireStockProduits() {
     const p = d.data();
     if (p.supprimeLe) return;
     lignes.push({
-      Title: p.nom || "(sans nom)",
-      Nom: p.nom || "", Categorie: p.categorie || "", Unite: p.unite || "",
-      StockActuel: p.stockActuel ?? 0, StockCible: p.stockCible ?? 0, SeuilMin: p.stockMin ?? 0,
-      Fournisseur: p.fournisseurNom || "", EmailFournisseur: p.fournisseurEmail || "", RefFournisseur: p.refFournisseur || "",
+      Nom: p.nom, Catégorie: p.categorie, Unité: p.unite,
+      "Stock actuel": p.stockActuel, "Stock cible": p.stockCible, "Seuil min": p.stockMin,
+      Fournisseur: p.fournisseurNom, "Email fournisseur": p.fournisseurEmail, "Réf. fournisseur": p.refFournisseur,
     });
   });
   return lignes;
 }
-const COLONNES_STOCK_PRODUITS = [
-  { nom: "Nom", type: "text" }, { nom: "Categorie", type: "text" }, { nom: "Unite", type: "text" },
-  { nom: "StockActuel", type: "number" }, { nom: "StockCible", type: "number" }, { nom: "SeuilMin", type: "number" },
-  { nom: "Fournisseur", type: "text" }, { nom: "EmailFournisseur", type: "text" }, { nom: "RefFournisseur", type: "text" },
-];
 
 async function extraireStockSites() {
   const [itemsSnap, sitesSnap] = await Promise.all([
@@ -55,19 +70,14 @@ async function extraireStockSites() {
   itemsSnap.forEach(d => {
     const it = d.data();
     lignes.push({
-      Title: it.nom || "(sans nom)",
-      Site: nomsSites.get(it.dossierId) || it.dossierId || "",
-      Article: it.nom || "", Unite: it.unite || "", Quantite: it.quantite ?? 0,
-      CiblePermanente: it.quantiteCible ?? 0,
+      Site: nomsSites.get(it.dossierId) || it.dossierId,
+      Article: it.nom, Unité: it.unite, Quantité: it.quantite,
+      "Cible permanente": it.quantiteCible,
       Origine: it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site",
     });
   });
   return lignes;
 }
-const COLONNES_STOCK_SITES = [
-  { nom: "Site", type: "text" }, { nom: "Article", type: "text" }, { nom: "Unite", type: "text" },
-  { nom: "Quantite", type: "number" }, { nom: "CiblePermanente", type: "number" }, { nom: "Origine", type: "text" },
-];
 
 async function extraireInterventions() {
   const snap = await getDocs(collection(db, "interventions"));
@@ -75,20 +85,13 @@ async function extraireInterventions() {
   snap.forEach(d => {
     const i = d.data();
     lignes.push({
-      Title: `${i.date || ""} - ${i.technicien || ""}`.trim() || "(intervention)",
-      Date: i.date || "", Intervenant: i.technicien || "", Association: i.association || "", Groupe: i.groupe || "", Site: i.site || "",
-      Type: i.type || "", Heures: i.heures ?? 0, HeureDepart: i.heureDebut || "", HeureRetour: i.heureFin || "",
-      Description: i.description || "", TransmisAuManager: !!i.transmis,
+      Date: i.date, Intervenant: i.technicien, Association: i.association, Groupe: i.groupe, Site: i.site,
+      Type: i.type, Heures: i.heures, "Heure départ": i.heureDebut, "Heure retour": i.heureFin,
+      Description: i.description, "Transmis au manager": i.transmis ? "Oui" : "Non",
     });
   });
   return lignes;
 }
-const COLONNES_INTERVENTIONS = [
-  { nom: "Date", type: "text" }, { nom: "Intervenant", type: "text" }, { nom: "Association", type: "text" },
-  { nom: "Groupe", type: "text" }, { nom: "Site", type: "text" }, { nom: "Type", type: "text" },
-  { nom: "Heures", type: "number" }, { nom: "HeureDepart", type: "text" }, { nom: "HeureRetour", type: "text" },
-  { nom: "Description", type: "text", long: true }, { nom: "TransmisAuManager", type: "boolean" },
-];
 
 async function extraireDossiersSite() {
   const snap = await getDocs(collection(db, "sites-dossiers"));
@@ -97,31 +100,25 @@ async function extraireDossiersSite() {
     const dd = d.data();
     if (dd.supprimeLe) return;
     lignes.push({
-      Title: dd.nom || "(sans nom)",
-      Nom: dd.nom || "", Adresse: dd.adresse || "", Association: dd.association || "", Groupe: dd.groupe || "",
-      StockDeporte: !!dd.stockDeporte,
-      NbEquipementsConcernes: (dd.sections || []).filter(s => s.concerne).length,
-      NbNumerosUrgence: (dd.urgences || []).length,
+      Nom: dd.nom, Adresse: dd.adresse, Association: dd.association, Groupe: dd.groupe,
+      "Stock déporté": dd.stockDeporte ? "Oui" : "Non",
+      "Nb équipements concernés": (dd.sections || []).filter(s => s.concerne).length,
+      "Nb numéros d'urgence": (dd.urgences || []).length,
     });
   });
   return lignes;
 }
-const COLONNES_DOSSIERS_SITE = [
-  { nom: "Nom", type: "text" }, { nom: "Adresse", type: "text" }, { nom: "Association", type: "text" },
-  { nom: "Groupe", type: "text" }, { nom: "StockDeporte", type: "boolean" },
-  { nom: "NbEquipementsConcernes", type: "number" }, { nom: "NbNumerosUrgence", type: "number" },
-];
 
 // ---- Orchestration ----
 
-export const MODULES = [
-  { nom: "Stock central", colonnes: COLONNES_STOCK_PRODUITS, extraire: extraireStockProduits },
-  { nom: "Stock par site", colonnes: COLONNES_STOCK_SITES, extraire: extraireStockSites },
-  { nom: "Interventions", colonnes: COLONNES_INTERVENTIONS, extraire: extraireInterventions },
-  { nom: "Dossiers de site", colonnes: COLONNES_DOSSIERS_SITE, extraire: extraireDossiersSite },
+const MODULES = [
+  { fichier: "Stock_central.xlsx", feuille: "Stock central", extraire: extraireStockProduits },
+  { fichier: "Stock_par_site.xlsx", feuille: "Stock par site", extraire: extraireStockSites },
+  { fichier: "Interventions.xlsx", feuille: "Interventions", extraire: extraireInterventions },
+  { fichier: "Dossiers_de_site.xlsx", feuille: "Dossiers de site", extraire: extraireDossiersSite },
 ];
 
-// Déclenchée automatiquement à la connexion (voir app.html). Ne synchronise
+// Déclenchée automatiquement à la connexion (voir app.html). N'exporte
 // qu'une fois par jour, et seulement si une session Microsoft est déjà
 // active dans le navigateur (jamais de popup de connexion imposée).
 export async function runDailyExportIfNeeded() {
@@ -135,24 +132,24 @@ export async function runDailyExportIfNeeded() {
 
     for (const mod of MODULES) {
       const lignes = await mod.extraire();
-      await synchroniserListe(token, mod.nom, mod.colonnes, lignes);
+      await exporterModule(token, mod.fichier, lignes, mod.feuille);
     }
 
     await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString() }, { merge: true });
   } catch (e) {
-    console.error("Synchronisation quotidienne SharePoint échouée :", e);
+    console.error("Export quotidien SharePoint échoué :", e);
     // Échec silencieux — ne doit jamais bloquer l'usage normal de l'appli.
   }
 }
 
-// Déclenchement manuel (bouton "Synchroniser maintenant"), avec token
+// Déclenchement manuel (bouton "Exporter maintenant"), avec token
 // interactif si besoin (peut demander une connexion Microsoft).
 export async function exporterMaintenant(getTokenInteractif, onProgress) {
   const token = await getTokenInteractif();
   for (const mod of MODULES) {
-    onProgress?.(mod.nom);
+    onProgress?.(mod.feuille);
     const lignes = await mod.extraire();
-    await synchroniserListe(token, mod.nom, mod.colonnes, lignes);
+    await exporterModule(token, mod.fichier, lignes, mod.feuille);
   }
   await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString() }, { merge: true });
 }
@@ -161,5 +158,3 @@ export async function getStatutExport() {
   const snap = await getDoc(STATUS_DOC);
   return snap.exists() ? snap.data() : null;
 }
-
-export { urlListe };
