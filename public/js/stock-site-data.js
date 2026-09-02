@@ -12,6 +12,16 @@ import {
 
 const COLLECTION = "stock-site-items";
 
+// Liste ponctuelle des dossiers de site ayant le stock déporté activé —
+// utilisée par la vue centralisée du module Stock maintenance.
+export async function listerSitesAvecStockDeporte() {
+  const q = query(collection(db, "sites-dossiers"), where("stockDeporte", "==", true));
+  const snap = await getDocs(q);
+  const list = [];
+  snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom }); });
+  return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+}
+
 export function watchStockSite(dossierId, callback) {
   const q = query(collection(db, COLLECTION), where("dossierId", "==", dossierId));
   return onSnapshot(q, (snap) => {
@@ -31,6 +41,15 @@ export async function modifierArticleSite(id, fields) {
 
 export async function supprimerArticleSite(id) {
   await deleteDoc(doc(db, COLLECTION, id));
+}
+
+// Liste ponctuelle de tous les articles de stock déporté, tous sites
+// confondus — utilisée par la vue centralisée du module Stock maintenance.
+export async function listerTousLesArticlesSite() {
+  const snap = await getDocs(collection(db, COLLECTION));
+  const list = [];
+  snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+  return list;
 }
 
 // Liste ponctuelle du catalogue central (pour le sélecteur "Ajouter depuis

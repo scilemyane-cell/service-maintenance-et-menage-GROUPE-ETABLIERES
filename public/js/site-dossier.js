@@ -439,13 +439,14 @@ function stockSiteSectionHTML() {
       ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant.</p>` : `
         <div class="table-wrap" style="border:none">
           <table>
-            <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th></th></tr></thead>
+            <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Seuil min.</th><th></th></tr></thead>
             <tbody>
               ${items.map(it => `
                 <tr>
                   <td>${esc(it.nom)}</td>
                   <td style="font-size:11px;color:var(--text-dim)">${it.produitId ? "Catalogue central" : "Propre au site"}</td>
-                  <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:80px"> ${esc(it.unite || "")}</td>
+                  <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) <= (it.seuilMin ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
+                  <td><input type="number" min="0" step="1" value="${it.seuilMin ?? 0}" data-seuil="${it.id}" style="width:70px"></td>
                   <td><button class="del-btn" data-del-article="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button></td>
                 </tr>
               `).join("")}
@@ -462,6 +463,7 @@ function stockSiteSectionHTML() {
             </select>
           </label>
           <label>Quantité<input type="number" min="0" step="1" id="ss-catalogue-qte" value="1"></label>
+          <label>Seuil minimum (alerte)<input type="number" min="0" step="1" id="ss-catalogue-seuil" value="1"></label>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="add-btn" id="ss-catalogue-valider">✓ Ajouter</button>
@@ -471,6 +473,7 @@ function stockSiteSectionHTML() {
         <div class="form-grid" style="margin-top:12px">
           <label>Nom de l'article<input id="ss-libre-nom" placeholder="ex. pièce spécifique à ce site"></label>
           <label>Quantité<input type="number" min="0" step="1" id="ss-libre-qte" value="1"></label>
+          <label>Seuil minimum (alerte)<input type="number" min="0" step="1" id="ss-libre-seuil" value="1"></label>
           <label>Unité<input id="ss-libre-unite" placeholder="pièce, lot…" value="pièce"></label>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
@@ -497,6 +500,14 @@ function attachStockSiteListeners(d) {
       const val = parseFloat(inp.value);
       if (isNaN(val) || val < 0) { inp.value = 0; return; }
       try { await modifierArticleSite(inp.dataset.qte, { quantite: val }); }
+      catch (e) { alert("Échec : " + (e.message || e)); }
+    });
+  });
+  container.querySelectorAll("[data-seuil]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      const val = parseFloat(inp.value);
+      if (isNaN(val) || val < 0) { inp.value = 0; return; }
+      try { await modifierArticleSite(inp.dataset.seuil, { seuilMin: val }); }
       catch (e) { alert("Échec : " + (e.message || e)); }
     });
   });
@@ -530,9 +541,10 @@ function attachStockSiteListeners(d) {
     const produitId = document.getElementById("ss-catalogue-produit").value;
     const produit = (stockSiteState.catalogue || []).find(p => p.id === produitId);
     const qte = parseFloat(document.getElementById("ss-catalogue-qte").value) || 0;
+    const seuil = parseFloat(document.getElementById("ss-catalogue-seuil").value) || 0;
     if (!produit) return;
     try {
-      await ajouterArticleSite(d.id, { produitId: produit.id, nom: produit.nom, unite: produit.unite || "", quantite: qte });
+      await ajouterArticleSite(d.id, { produitId: produit.id, nom: produit.nom, unite: produit.unite || "", quantite: qte, seuilMin: seuil });
       stockSiteState.adding = null;
       rerenderStockSiteSection();
     } catch (e) {
@@ -542,10 +554,11 @@ function attachStockSiteListeners(d) {
   document.getElementById("ss-libre-valider")?.addEventListener("click", async () => {
     const nom = document.getElementById("ss-libre-nom").value.trim();
     const qte = parseFloat(document.getElementById("ss-libre-qte").value) || 0;
+    const seuil = parseFloat(document.getElementById("ss-libre-seuil").value) || 0;
     const unite = document.getElementById("ss-libre-unite").value.trim() || "pièce";
     if (!nom) { document.getElementById("ss-status").innerHTML = `<span style="color:var(--red)">Le nom est obligatoire.</span>`; return; }
     try {
-      await ajouterArticleSite(d.id, { produitId: null, nom, unite, quantite: qte });
+      await ajouterArticleSite(d.id, { produitId: null, nom, unite, quantite: qte, seuilMin: seuil });
       stockSiteState.adding = null;
       rerenderStockSiteSection();
     } catch (e) {
