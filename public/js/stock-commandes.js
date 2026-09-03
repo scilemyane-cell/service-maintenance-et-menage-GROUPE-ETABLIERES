@@ -53,12 +53,12 @@ function buildMailto(groupe) {
   // Lien direct vers Outlook sur le web (messagerie Office 365) plutôt
   // qu'un simple "mailto:", qui ouvrirait le client mail par défaut du
   // système (pas forcément la bonne boîte).
-  const params = new URLSearchParams({
-    to: groupe.email,
-    subject: "Demande de devis — réapprovisionnement stock maintenance",
-    body: corps,
-  });
-  return `https://outlook.office.com/mail/deeplink/compose?${params.toString()}`;
+  const params = [
+    ["to", groupe.email],
+    ["subject", "Demande de devis — réapprovisionnement stock maintenance"],
+    ["body", corps],
+  ].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+  return `https://outlook.office.com/mail/deeplink/compose?${params}`;
 }
 
 function render() {
