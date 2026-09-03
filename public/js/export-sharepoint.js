@@ -135,29 +135,12 @@ async function extraireInterventions() {
   return lignes;
 }
 
-async function extraireDossiersSite() {
-  const snap = await getDocs(collection(db, "sites-dossiers"));
-  const lignes = [];
-  snap.forEach(d => {
-    const dd = d.data();
-    if (dd.supprimeLe) return;
-    lignes.push({
-      Nom: dd.nom, Adresse: dd.adresse, Association: dd.association, Groupe: dd.groupe,
-      "Stock déporté": dd.stockDeporte ? "Oui" : "Non",
-      "Nb équipements concernés": (dd.sections || []).filter(s => s.concerne).length,
-      "Nb numéros d'urgence": (dd.urgences || []).length,
-    });
-  });
-  return lignes;
-}
-
 // ---- Orchestration ----
 
 const MODULES = [
   { fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
   { fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
   { fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
-  { fichier: "Dossiers_de_site.pdf", titre: "Dossiers de site", extraire: extraireDossiersSite },
 ];
 
 // Déclenchée automatiquement à la connexion (voir app.html). N'exporte
