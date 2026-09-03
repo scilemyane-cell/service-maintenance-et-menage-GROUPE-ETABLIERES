@@ -14,11 +14,13 @@ let onSelectRef = null;
 let onReorderRef = null;
 let clearCountdown = null;
 let debugForce = false;
+let modeReorganisation = false;
 
 function cleanup() {
   unsubs.forEach(u => u());
   unsubs = [];
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
+  modeReorganisation = false;
 }
 
 export function mountDashboard(container, user, categories, onSelect, onReorder) {
@@ -79,7 +81,7 @@ function render() {
 
       <div class="bubble-grid">
         ${catsRef.map((c, idx) => {
-          const peutReorganiser = mountedUser.role === "admin" || mountedUser.role === "super_admin";
+          const peutReorganiser = modeReorganisation && (mountedUser.role === "admin" || mountedUser.role === "super_admin");
           return `
           <div style="position:relative">
             <button class="bubble-card" data-cat="${c.id}">
@@ -96,6 +98,10 @@ function render() {
           </div>
         `;}).join("")}
       </div>
+
+      ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
+      <button class="nav-btn" id="toggle-reorg" style="width:fit-content;opacity:.7;font-size:11px">${modeReorganisation ? "✓ Terminé" : "🔧 Réorganiser les bulles"}</button>
+      ` : ""}
 
       ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
       <button class="nav-btn" id="debug-toggle" style="width:fit-content;opacity:.6;font-size:11px">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester l'affichage du bandeau de transfert"}</button>
@@ -115,6 +121,7 @@ function render() {
     });
   });
   document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
+  document.getElementById("toggle-reorg")?.addEventListener("click", () => { modeReorganisation = !modeReorganisation; render(); });
 
   clearCountdown = attachTransfertListeners(mountedContainer, next, mountedUser, () => render());
 }
