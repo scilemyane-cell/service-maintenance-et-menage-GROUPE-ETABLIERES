@@ -43,15 +43,22 @@ function lignesPourGroupe(groupe) {
 
 function buildMailto(groupe) {
   const lignes = lignesPourGroupe(groupe).map(l => `- ${l.nom} : ${l.quantite} ${l.unite}`).join("\n");
-  const subject = encodeURIComponent("Demande de devis — réapprovisionnement stock maintenance");
   // Retrouve le fournisseur (par id si connu, sinon par nom) pour utiliser
   // son message personnalisé s'il en a un — sinon message standard.
   const fournisseur = (groupe.fournisseurId && state.fournisseurs.find(f => f.id === groupe.fournisseurId))
     || state.fournisseurs.find(f => f.nom === groupe.nom);
   const intro = fournisseur?.messageDevis?.trim()
     || "Bonjour,\n\nMerci de nous transmettre un devis pour les produits suivants, afin de reconstituer notre stock :";
-  const body = encodeURIComponent(`${intro}\n\n${lignes}\n\nCordialement,`);
-  return `mailto:${groupe.email}?subject=${subject}&body=${body}`;
+  const corps = `${intro}\n\n${lignes}\n\nCordialement,`;
+  // Lien direct vers Outlook sur le web (messagerie Office 365) plutôt
+  // qu'un simple "mailto:", qui ouvrirait le client mail par défaut du
+  // système (pas forcément la bonne boîte).
+  const params = new URLSearchParams({
+    to: groupe.email,
+    subject: "Demande de devis — réapprovisionnement stock maintenance",
+    body: corps,
+  });
+  return `https://outlook.office.com/mail/deeplink/compose?${params.toString()}`;
 }
 
 function render() {
@@ -73,7 +80,7 @@ function render() {
             <h3 style="margin:0;font-size:14px;color:var(--gold)">${esc(g.nom)}${g.email ? ` · ${esc(g.email)}` : ""}</h3>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               ${g.email
-                ? `<a class="add-btn" href="${buildMailto(g)}" style="text-decoration:none">📧 Générer l'email</a>`
+                ? `<a class="add-btn" href="${buildMailto(g)}" target="_blank" rel="noopener" style="text-decoration:none">📧 Ouvrir dans Outlook</a>`
                 : `<span class="hint" style="color:var(--red)">Email fournisseur manquant</span>`}
               <button class="nav-btn" data-marquer="${gi}">✓ Marquer comme commandée</button>
             </div>
