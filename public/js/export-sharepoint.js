@@ -24,6 +24,20 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+// Empreinte compacte du contenu des lignes — sert à détecter si les
+// données ont changé depuis le dernier export, pour ne créer une archive
+// datée que quand c'est réellement utile (pas de doublon si rien n'a
+// bougé). Simple hash (FNV-1a), pas une empreinte cryptographique.
+function empreinte(lignes) {
+  const texte = JSON.stringify(lignes);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texte.length; i++) {
+    h ^= texte.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36) + ":" + texte.length;
+}
+
 // Construit un rapport HTML soigné (titre, date, tableau) à partir de
 // lignes déjà à plat (tableau d'objets simples : clé = colonne).
 function construireRapportHTML(titre, lignes) {
@@ -45,7 +59,7 @@ function construireRapportHTML(titre, lignes) {
   `;
 }
 
-async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
+async function genererPdf(titre, lignes) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
 
   const hidden = document.createElement("div");
@@ -63,12 +77,11 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
   // encore vide (page blanche) juste après l'insertion dans le DOM.
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  let blob;
   try {
-    blob = await window.html2pdf()
+    return await window.html2pdf()
       .set({
         margin: 10,
-        filename: nomFichier,
+        filename: `${titre}.pdf`,
         image: { type: "jpeg", quality: 0.92 },
         html2canvas: { scale: 2, backgroundColor: "#ffffff" },
         jsPDF: { unit: "mm", format: "a4", orientation: lignes.length > 0 && Object.keys(lignes[0]).length > 6 ? "landscape" : "portrait" },
@@ -78,9 +91,25 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
   } finally {
     hidden.remove();
   }
+}
 
-  const file = new File([blob], nomFichier, { type: "application/pdf" });
-  await uploadToDrive(file, token, [], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+// Envoie la version "actuelle" (nom fixe, toujours remplacée — accès
+// rapide au dernier état) et, si les données ont changé depuis le dernier
+// export, archive aussi une copie datée (jamais écrasée — conserve un
+// historique consultable dans le temps, sans dupliquer inutilement quand
+// rien n'a bougé).
+async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes, dernieresEmpreintes) {
+  const blob = await genererPdf(titre, lignes);
+  const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
+  await uploadToDrive(fileActuel, token, [], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+
+  const emp = empreinte(lignes);
+  if (dernieresEmpreintes[nomFichier] !== emp) {
+    const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
+    const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
+    await uploadToDrive(fileArchive, token, ["Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
+    dernieresEmpreintes[nomFichier] = emp;
+  }
 }
 
 // ---- Extraction et mise à plat des données, module par module ----
@@ -148,18 +177,19 @@ const MODULES = [
 export async function runDailyExportIfNeeded() {
   try {
     const snap = await getDoc(STATUS_DOC);
-    const last = snap.exists() ? snap.data().lastExportDate : null;
-    if (last === todayStr()) return; // déjà fait aujourd'hui
+    const statut = snap.exists() ? snap.data() : {};
+    if (statut.lastExportDate === todayStr()) return; // déjà fait aujourd'hui
 
     const token = await getGraphTokenSilentOnly();
     if (!token) return; // pas de session Microsoft active, on retentera au prochain login
 
+    const dernieresEmpreintes = { ...(statut.empreintes || {}) };
     for (const mod of MODULES) {
       const lignes = await mod.extraire();
-      await genererEtEnvoyerPdf(token, mod.fichier, mod.titre, lignes);
+      await genererEtEnvoyerPdf(token, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
     }
 
-    await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString() }, { merge: true });
+    await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
   } catch (e) {
     console.error("Export quotidien SharePoint échoué :", e);
     // Échec silencieux — ne doit jamais bloquer l'usage normal de l'appli.
@@ -170,12 +200,15 @@ export async function runDailyExportIfNeeded() {
 // interactif si besoin (peut demander une connexion Microsoft).
 export async function exporterMaintenant(getTokenInteractif, onProgress) {
   const token = await getTokenInteractif();
+  const snap = await getDoc(STATUS_DOC);
+  const statut = snap.exists() ? snap.data() : {};
+  const dernieresEmpreintes = { ...(statut.empreintes || {}) };
   for (const mod of MODULES) {
     onProgress?.(mod.titre);
     const lignes = await mod.extraire();
-    await genererEtEnvoyerPdf(token, mod.fichier, mod.titre, lignes);
+    await genererEtEnvoyerPdf(token, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
   }
-  await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString() }, { merge: true });
+  await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
 }
 
 export async function getStatutExport() {
