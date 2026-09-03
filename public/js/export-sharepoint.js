@@ -54,8 +54,13 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
 
   const hidden = document.createElement("div");
   hidden.style.cssText = "position:fixed;left:-9999px;top:0;width:1000px;";
-  hidden.innerHTML = construireRapportHTML(titre, lignes);
   document.body.appendChild(hidden);
+  hidden.innerHTML = construireRapportHTML(titre, lignes);
+  // On capture l'élément de contenu réel (position statique, à l'intérieur
+  // du conteneur hors-écran) plutôt que le conteneur position:fixed
+  // lui-même — html2canvas peut produire une capture blanche quand la
+  // cible capturée a elle-même position:fixed.
+  const cible = hidden.firstElementChild;
 
   // Laisse le navigateur mettre en page le contenu ajouté avant de le
   // capturer — sans ce délai, html2canvas peut photographier une zone
@@ -73,7 +78,7 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
         jsPDF: { unit: "mm", format: "a4", orientation: lignes.length > 0 && Object.keys(lignes[0]).length > 6 ? "landscape" : "portrait" },
         pagebreak: { mode: ["css", "avoid-all"] },
       })
-      .from(hidden)
+      .from(cible)
       .outputPdf("blob");
   } finally {
     hidden.remove();
