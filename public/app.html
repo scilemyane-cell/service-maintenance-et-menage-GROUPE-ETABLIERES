@@ -60,7 +60,7 @@
     return dispositifsList
       .filter(d => hasAccess(accessMap, d, user))
       .map(d => ({
-        id: "disp-" + d, label: d, icon: "🧹", desc: "Fiches, traçabilité",
+        id: "disp-" + d, label: d, icon: "🧽", desc: "Fiches, traçabilité",
         subtabs: [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
           ...(heuresEnabled(dispositifSettings, d) ? [
@@ -100,7 +100,7 @@
         ],
       },
       {
-        id: "sites", label: "Dossiers de site", icon: "🏢", desc: "Sécurité, contacts, organes techniques",
+        id: "sites", label: "Dossiers de site", icon: "🏠", desc: "Sécurité, contacts, organes techniques",
         subtabs: [
           { id: "liste", label: "Dossiers", icon: "🏢", roles: ALL, mount: mountSitesDossiers },
         ],
