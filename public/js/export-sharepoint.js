@@ -163,12 +163,37 @@ async function extraireInterventions() {
   return lignes;
 }
 
+async function extraireFichesMenage() {
+  const [sitesSnap, fichesSnap] = await Promise.all([
+    getDoc(doc(db, "config", "menage-sites")),
+    getDocs(collection(db, "fiches")),
+  ]);
+  const sites = sitesSnap.exists() ? (sitesSnap.data().sites || []) : [];
+  const parSiteId = new Map(sites.map(s => [s.id, s]));
+  const lignes = [];
+  fichesSnap.forEach(d => {
+    const f = d.data();
+    const site = parSiteId.get(f.siteId);
+    lignes.push({
+      Dispositif: site?.dispositif || "Dispositif MNA",
+      Site: f.siteName || site?.name || "",
+      Agent: f.agentNom,
+      "Semaine du": f.weekStart, "Semaine au": f.weekEnd,
+      Terminée: f.submitted ? "Oui" : "Non",
+      "Nb chambres suivies": (f.chambres || []).length,
+      "Observations générales": f.observationsGenerales || "",
+    });
+  });
+  return lignes;
+}
+
 // ---- Orchestration ----
 
 const MODULES = [
   { fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
   { fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
   { fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
+  { fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
 ];
 
 // Déclenchée automatiquement à la connexion (voir app.html). N'exporte
