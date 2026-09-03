@@ -36,20 +36,14 @@ function construireRapportHTML(titre, lignes) {
       </div>
       <p style="font-size:11px;color:#666;margin:0 0 18px">Généré le ${esc(new Date().toLocaleString("fr-FR"))} · ${lignes.length} ligne(s)</p>
       ${lignes.length === 0 ? `<p style="font-size:13px;color:#666">Aucune donnée pour l'instant.</p>` : `
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr>
-              ${colonnes.map(c => `<th style="border:1px solid #999;background:#B08D46;color:#fff;padding:5px 7px;font-size:10px;text-align:left;white-space:nowrap">${esc(c)}</th>`).join("")}
-            </tr>
-          </thead>
-          <tbody>
-            ${lignes.map((ligne, i) => `
-              <tr style="background:${i % 2 === 0 ? '#fff' : '#F5F3EE'}">
-                ${colonnes.map(c => `<td style="border:1px solid #ccc;padding:4px 7px;font-size:10px">${esc(ligne[c] == null ? '' : String(ligne[c]))}</td>`).join("")}
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
+        <div style="display:flex;background:#B08D46">
+          ${colonnes.map(c => `<div style="flex:1;border:1px solid #999;padding:5px 7px;font-size:10px;font-weight:700;color:#fff">${esc(c)}</div>`).join("")}
+        </div>
+        ${lignes.map((ligne, i) => `
+          <div style="display:flex;background:${i % 2 === 0 ? '#ffffff' : '#F5F3EE'}">
+            ${colonnes.map(c => `<div style="flex:1;border:1px solid #ccc;padding:4px 7px;font-size:10px">${esc(ligne[c] == null ? '' : String(ligne[c]))}</div>`).join("")}
+          </div>
+        `).join("")}
       `}
     </div>
   `;
@@ -75,7 +69,7 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
         margin: 10,
         filename: nomFichier,
         image: { type: "jpeg", quality: 0.92 },
-        html2canvas: { scale: 2 },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
         jsPDF: { unit: "mm", format: "a4", orientation: lignes.length > 0 && Object.keys(lignes[0]).length > 6 ? "landscape" : "portrait" },
         pagebreak: { mode: ["css", "avoid-all"] },
       })
