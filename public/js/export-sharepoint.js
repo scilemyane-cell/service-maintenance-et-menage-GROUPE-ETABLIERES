@@ -163,6 +163,31 @@ async function extraireInterventions() {
   return lignes;
 }
 
+async function extraireHistoriqueInventaires() {
+  const [mouvSnap, produitsSnap, usersSnap] = await Promise.all([
+    getDocs(collection(db, "stock-mouvements")),
+    getDocs(collection(db, "stock-produits")),
+    getDocs(collection(db, "users")),
+  ]);
+  const nomsProduits = new Map();
+  produitsSnap.forEach(d => nomsProduits.set(d.id, d.data().nom));
+  const nomsUsers = new Map();
+  usersSnap.forEach(d => nomsUsers.set(d.id, d.data().nom || d.data().email));
+  const lignes = [];
+  mouvSnap.forEach(d => {
+    const m = d.data();
+    lignes.push({
+      Date: m.date?.toDate ? m.date.toDate().toLocaleString("fr-FR") : "",
+      Produit: nomsProduits.get(m.produitId) || m.produitId,
+      "Quantité avant": m.quantiteAvant, "Quantité après": m.quantiteApres,
+      "Compté par": nomsUsers.get(m.uid) || m.uid || "",
+    });
+  });
+  // Plus récent en premier.
+  lignes.sort((a, b) => (b.Date || "").localeCompare(a.Date || ""));
+  return lignes;
+}
+
 async function extraireFichesMenage() {
   const [sitesSnap, fichesSnap] = await Promise.all([
     getDoc(doc(db, "config", "menage-sites")),
@@ -192,6 +217,7 @@ async function extraireFichesMenage() {
 const MODULES = [
   { fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
   { fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
+  { fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
   { fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
   { fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
 ];
