@@ -53,7 +53,7 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
 
   const hidden = document.createElement("div");
-  hidden.style.cssText = "position:fixed;left:-9999px;top:0;width:1000px;";
+  hidden.style.cssText = "position:fixed;top:0;left:0;width:1000px;opacity:0.01;pointer-events:none;z-index:-1;";
   document.body.appendChild(hidden);
   hidden.innerHTML = construireRapportHTML(titre, lignes);
   // On capture l'élément de contenu réel (position statique, à l'intérieur
