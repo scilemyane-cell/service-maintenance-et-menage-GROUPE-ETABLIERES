@@ -20,7 +20,7 @@ export function mountStockCatalogueSite(container) {
   mountedContainer = container;
   ui = { editId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsub = watchCatalogueSite((p) => { state.produits = p; render(); });
+  unsub = watchCatalogueSite((p) => { state.produits = p; if (!ui.editId) render(); });
 }
 
 function render() {

@@ -24,6 +24,7 @@ export function mountStockInventaire(container, user) {
   ui = { scanning: false, ajusteId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchStockProduits((p) => {
+    const dejaEnAjustement = !!ui.ajusteId;
     state.produits = p;
     // Lien direct depuis un QR scanné avec l'appareil photo du téléphone
     // (hors appli) — voir app.html, paramètre ?stock=
@@ -32,7 +33,11 @@ export function mountStockInventaire(container, user) {
       window.stockDeepLinkProduitId = null;
       if (cible) ui.ajusteId = cible.id;
     }
-    render();
+    // Ne pas reconstruire l'écran d'ajustement par-dessus une saisie déjà
+    // en cours (perte de la quantité en train d'être tapée si quelqu'un
+    // d'autre modifie le stock en même temps) — mais on affiche bien le
+    // tout premier passage sur cet écran (ouverture normale ou lien QR).
+    if (!dejaEnAjustement) render();
   }));
 }
 

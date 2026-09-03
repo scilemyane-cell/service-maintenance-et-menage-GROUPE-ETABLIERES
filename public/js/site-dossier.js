@@ -23,7 +23,7 @@ export function mountSitesDossiers(container, user) {
   ui.openId = null; ui.mode = "view"; ui.lightbox = null;
   paramsWorking = null;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; render(); }));
+  unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; if (ui.mode !== "edit") render(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; render(); }));
   unsubs.push(watchSectionsOrder((s) => { state.sectionsOrder = s; render(); }));
 }

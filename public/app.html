@@ -24,6 +24,7 @@
   import { mountStockCommandes } from "./js/stock-commandes.js";
   import { mountStockSites } from "./js/stock-sites.js";
   import { mountStockCatalogueSite } from "./js/stock-site-catalogue.js";
+  import { mountFournisseurs } from "./js/fournisseurs.js";
   import { mountDashboard } from "./js/home.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
@@ -109,6 +110,7 @@
           { id: "commandes",  label: "Commandes",  icon: "📧", roles: [...GESTION,"direction"],  mount: mountStockCommandes },
           { id: "sites",      label: "Sites",       icon: "🏢", roles: [...GESTION,"technicien"], mount: mountStockSites },
           { id: "catalogue-sites", label: "Catalogue sites", icon: "🗂️", roles: GESTION, mount: mountStockCatalogueSite },
+          { id: "fournisseurs", label: "Fournisseurs", icon: "🏭", roles: GESTION, mount: mountFournisseurs },
         ],
       },
     ];

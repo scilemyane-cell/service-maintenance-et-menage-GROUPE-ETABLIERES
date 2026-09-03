@@ -1,8 +1,9 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, envoyerProduitCorbeille, seedProduitsType } from "./stock-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { watchFournisseurs } from "./fournisseurs-data.js";
 
-let state = { produits: [] };
+let state = { produits: [], fournisseurs: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -14,7 +15,8 @@ export function mountStockProduits(container) {
   mountedContainer = container;
   ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchStockProduits((p) => { state.produits = p; render(); }));
+  unsubs.push(watchStockProduits((p) => { state.produits = p; if (!ui.editId && !ui.qrId) render(); }));
+  unsubs.push(watchFournisseurs((f) => { state.fournisseurs = f; if (!ui.editId) render(); }));
 }
 
 function categories() {
@@ -111,7 +113,9 @@ async function resolvePhotos(container) {
 }
 
 function renderEditForm(p, workingCopy) {
-  const data = workingCopy || (p ? { ...p } : { nom: "", categorie: "", unite: "pièce", stockCible: 10, stockMin: 3, stockActuel: 0, fournisseurNom: "", fournisseurEmail: "", refFournisseur: "", photo: null });
+  const data = workingCopy || (p ? { ...p } : { nom: "", categorie: "", unite: "pièce", stockCible: 10, stockMin: 3, stockActuel: 0, fournisseurId: null, fournisseurNom: "", fournisseurEmail: "", fournisseurCommercial: "", refFournisseur: "", photo: null });
+  // "" = aucun ; "__autre__" = saisie libre (fournisseur ponctuel non listé) ; sinon id d'un fournisseur de la liste
+  const selectionFournisseur = data.fournisseurId || (data.fournisseurNom ? "__autre__" : "");
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -125,8 +129,22 @@ function renderEditForm(p, workingCopy) {
           <label>Stock actuel<input id="sk-actuel" type="number" min="0" value="${data.stockActuel ?? 0}"></label>
           <label>Stock cible (niveau normal)<input id="sk-cible" type="number" min="0" value="${data.stockCible ?? 0}"></label>
           <label>Seuil minimum (déclenche la commande)<input id="sk-min" type="number" min="0" value="${data.stockMin ?? 0}"></label>
-          <label>Fournisseur<input id="sk-fournisseur-nom" value="${esc(data.fournisseurNom || '')}" placeholder="ex. Cedeo, Rexel…"></label>
-          <label>Email fournisseur<input id="sk-fournisseur-email" type="email" value="${esc(data.fournisseurEmail || '')}" placeholder="commandes@fournisseur.fr"></label>
+          <label>Fournisseur
+            <select id="sk-fournisseur-select">
+              <option value="" ${selectionFournisseur === "" ? "selected" : ""}>— Aucun —</option>
+              ${state.fournisseurs.map(f => `<option value="${f.id}" ${selectionFournisseur === f.id ? "selected" : ""}>${esc(f.nom)}</option>`).join("")}
+              <option value="__autre__" ${selectionFournisseur === "__autre__" ? "selected" : ""}>✏️ Autre (saisie libre, non listé)</option>
+            </select>
+          </label>
+          ${selectionFournisseur && selectionFournisseur !== "__autre__" ? `
+            <label style="display:flex;flex-direction:column;justify-content:center">Commercial / contact
+              <span style="font-size:13px;padding-top:6px">${esc(data.fournisseurCommercial || "—")}${data.fournisseurEmail ? ` · ${esc(data.fournisseurEmail)}` : ""}</span>
+            </label>
+          ` : ""}
+          ${selectionFournisseur === "__autre__" ? `
+            <label>Nom du fournisseur<input id="sk-fournisseur-nom" value="${esc(data.fournisseurNom || '')}" placeholder="ex. Cedeo, Rexel…"></label>
+            <label>Email fournisseur<input id="sk-fournisseur-email" type="email" value="${esc(data.fournisseurEmail || '')}" placeholder="commandes@fournisseur.fr"></label>
+          ` : ""}
           <label>Référence fournisseur<input id="sk-ref-fournisseur" value="${esc(data.refFournisseur || '')}" placeholder="ex. réf. catalogue"></label>
         </div>
 
@@ -159,10 +177,29 @@ function renderEditForm(p, workingCopy) {
     data.stockActuel = document.getElementById("sk-actuel").value;
     data.stockCible = document.getElementById("sk-cible").value;
     data.stockMin = document.getElementById("sk-min").value;
-    data.fournisseurNom = document.getElementById("sk-fournisseur-nom").value;
-    data.fournisseurEmail = document.getElementById("sk-fournisseur-email").value;
+    const nomInput = document.getElementById("sk-fournisseur-nom");
+    const emailInput = document.getElementById("sk-fournisseur-email");
+    if (nomInput) data.fournisseurNom = nomInput.value;
+    if (emailInput) data.fournisseurEmail = emailInput.value;
     data.refFournisseur = document.getElementById("sk-ref-fournisseur").value;
   }
+
+  document.getElementById("sk-fournisseur-select").addEventListener("change", (e) => {
+    syncFieldsIntoData();
+    const val = e.target.value;
+    if (val === "" ) {
+      data.fournisseurId = null; data.fournisseurNom = ""; data.fournisseurEmail = ""; data.fournisseurCommercial = "";
+    } else if (val === "__autre__") {
+      data.fournisseurId = null;
+    } else {
+      const f = state.fournisseurs.find(x => x.id === val);
+      data.fournisseurId = val;
+      data.fournisseurNom = f?.nom || "";
+      data.fournisseurEmail = f?.email || "";
+      data.fournisseurCommercial = f?.commercial || "";
+    }
+    renderEditForm(p, data);
+  });
 
   document.getElementById("sk-back").addEventListener("click", () => { ui.editId = null; render(); });
 
@@ -216,6 +253,7 @@ function renderEditForm(p, workingCopy) {
 
   document.getElementById("sk-save").addEventListener("click", async () => {
     const statusEl = document.getElementById("sk-status");
+    syncFieldsIntoData(); // récupère notamment les champs fournisseur en saisie libre, s'ils sont affichés
     const payload = {
       nom: document.getElementById("sk-nom").value.trim(),
       categorie: document.getElementById("sk-categorie").value.trim(),
@@ -223,8 +261,10 @@ function renderEditForm(p, workingCopy) {
       stockActuel: parseInt(document.getElementById("sk-actuel").value, 10) || 0,
       stockCible: parseInt(document.getElementById("sk-cible").value, 10) || 0,
       stockMin: parseInt(document.getElementById("sk-min").value, 10) || 0,
-      fournisseurNom: document.getElementById("sk-fournisseur-nom").value.trim(),
-      fournisseurEmail: document.getElementById("sk-fournisseur-email").value.trim(),
+      fournisseurId: data.fournisseurId || null,
+      fournisseurNom: (data.fournisseurNom || "").trim(),
+      fournisseurEmail: (data.fournisseurEmail || "").trim(),
+      fournisseurCommercial: (data.fournisseurCommercial || "").trim(),
       refFournisseur: document.getElementById("sk-ref-fournisseur").value.trim(),
       photo: data.photo || null,
     };

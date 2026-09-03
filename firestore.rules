@@ -136,6 +136,10 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
       allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockActuel', 'dateDernierInventaire']);
     }
+    match /fournisseurs/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
     match /stock-mouvements/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
