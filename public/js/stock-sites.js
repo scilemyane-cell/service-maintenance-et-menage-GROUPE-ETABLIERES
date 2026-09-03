@@ -339,7 +339,7 @@ function renderScan() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="ssx-cancel-scan">✕ Annuler</button>
-      <div id="ssx-reader" style="max-width:360px;border-radius:10px;overflow:hidden"></div>
+      <div id="ssx-reader" style="width:300px;max-width:100%;height:300px;border-radius:10px;overflow:hidden;background:#000"></div>
       <p class="hint" id="ssx-scan-hint">Pointe la caméra vers l'étiquette QR de l'article.</p>
     </div>
   `;
@@ -349,25 +349,37 @@ function renderScan() {
     document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">Librairie de scan non chargée.</span>`;
     return;
   }
+
+  const onDecoded = (decodedText) => {
+    let itemId = null;
+    try { itemId = new URL(decodedText).searchParams.get("stocksite"); } catch (e) {}
+    const item = itemId ? state.items.find(it => it.id === itemId) : null;
+    if (item) {
+      stopScanner();
+      ui.screen = "ajuste"; ui.ajusteId = item.id;
+      render();
+    } else {
+      document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">QR non reconnu — ce n'est pas une étiquette de stock déporté.</span>`;
+    }
+  };
+
   scanner = new window.Html5Qrcode("ssx-reader");
-  scanner.start(
-    { facingMode: "environment" }, { fps: 10, qrbox: 220 },
-    (decodedText) => {
-      let itemId = null;
-      try { itemId = new URL(decodedText).searchParams.get("stocksite"); } catch (e) {}
-      const item = itemId ? state.items.find(it => it.id === itemId) : null;
-      if (item) {
-        stopScanner();
-        ui.screen = "ajuste"; ui.ajusteId = item.id;
-        render();
-      } else {
-        document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">QR non reconnu — ce n'est pas une étiquette de stock déporté.</span>`;
-      }
-    },
-    () => {}
-  ).catch((err) => {
-    document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">Impossible d'accéder à la caméra : ${esc(err.message || String(err))}</span>`;
-  });
+  const config = { fps: 10, qrbox: 220, aspectRatio: 1.0 };
+
+  // Certains téléphones Android affichent un flux noir avec la simple
+  // contrainte { facingMode: "environment" } (bug connu de compatibilité
+  // caméra) — démarrer sur l'identifiant précis de la caméra arrière est
+  // plus fiable, avec repli sur facingMode si l'énumération échoue.
+  window.Html5Qrcode.getCameras()
+    .then((cameras) => {
+      const arriere = cameras.find(c => /back|rear|arrière|environment/i.test(c.label || "")) || cameras[cameras.length - 1];
+      const cible = arriere ? arriere.id : { facingMode: "environment" };
+      return scanner.start(cible, config, onDecoded, () => {});
+    })
+    .catch(() => scanner.start({ facingMode: "environment" }, config, onDecoded, () => {}))
+    .catch((err) => {
+      document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">Impossible d'accéder à la caméra : ${esc(err.message || String(err))}</span>`;
+    });
 }
 
 // =================================================================

@@ -119,7 +119,7 @@ function renderScan() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="sk-cancel-scan">✕ Annuler</button>
-      <div id="sk-reader" style="max-width:360px;border-radius:10px;overflow:hidden"></div>
+      <div id="sk-reader" style="width:300px;max-width:100%;height:300px;border-radius:10px;overflow:hidden;background:#000"></div>
       <p class="hint" id="sk-scan-hint">Pointe la caméra vers l'étiquette QR collée sur le produit.</p>
     </div>
   `;
@@ -130,33 +130,44 @@ function renderScan() {
     return;
   }
 
+  const onDecoded = (decodedText) => {
+    let produitId = null;
+    try {
+      const url = new URL(decodedText);
+      produitId = url.searchParams.get("stock");
+    } catch (e) {
+      const match = decodedText.match(/^ETAB-STOCK:(.+)$/); // ancien format, compatibilité
+      produitId = match ? match[1] : null;
+    }
+    const produit = produitId ? state.produits.find(p => p.id === produitId) : null;
+    if (produit) {
+      stopScanner();
+      ui.scanning = false;
+      ui.ajusteId = produit.id;
+      render();
+    } else {
+      document.getElementById("sk-scan-hint").innerHTML = `<span style="color:var(--red)">QR non reconnu — ce n'est pas une étiquette produit de l'appli.</span>`;
+    }
+  };
+
   scanner = new window.Html5Qrcode("sk-reader");
-  scanner.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 220 },
-    (decodedText) => {
-      let produitId = null;
-      try {
-        const url = new URL(decodedText);
-        produitId = url.searchParams.get("stock");
-      } catch (e) {
-        const match = decodedText.match(/^ETAB-STOCK:(.+)$/); // ancien format, compatibilité
-        produitId = match ? match[1] : null;
-      }
-      const produit = produitId ? state.produits.find(p => p.id === produitId) : null;
-      if (produit) {
-        stopScanner();
-        ui.scanning = false;
-        ui.ajusteId = produit.id;
-        render();
-      } else {
-        document.getElementById("sk-scan-hint").innerHTML = `<span style="color:var(--red)">QR non reconnu — ce n'est pas une étiquette produit de l'appli.</span>`;
-      }
-    },
-    () => {} // erreurs de frame ignorées (normal en continu tant qu'aucun QR n'est détecté)
-  ).catch((err) => {
-    document.getElementById("sk-scan-hint").innerHTML = `<span style="color:var(--red)">Impossible d'accéder à la caméra : ${esc(err.message || String(err))}</span>`;
-  });
+  const config = { fps: 10, qrbox: 220, aspectRatio: 1.0 };
+
+  // Certains téléphones Android affichent un flux noir avec la simple
+  // contrainte { facingMode: "environment" } (bug connu de compatibilité
+  // caméra). Énumérer les caméras et démarrer sur l'identifiant précis de
+  // la caméra arrière est plus fiable — on ne retombe sur facingMode que
+  // si l'énumération échoue ou ne trouve rien.
+  window.Html5Qrcode.getCameras()
+    .then((cameras) => {
+      const arriere = cameras.find(c => /back|rear|arrière|environment/i.test(c.label || "")) || cameras[cameras.length - 1];
+      const cible = arriere ? arriere.id : { facingMode: "environment" };
+      return scanner.start(cible, config, onDecoded, () => {});
+    })
+    .catch(() => scanner.start({ facingMode: "environment" }, config, onDecoded, () => {}))
+    .catch((err) => {
+      document.getElementById("sk-scan-hint").innerHTML = `<span style="color:var(--red)">Impossible d'accéder à la caméra : ${esc(err.message || String(err))}</span>`;
+    });
 }
 
 function renderRapide() {
