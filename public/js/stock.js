@@ -23,6 +23,10 @@ function categories() {
   return [...new Set(state.produits.map(p => p.categorie).filter(Boolean))].sort();
 }
 
+function compteParCategorie(cat) {
+  return state.produits.filter(p => p.categorie === cat).length;
+}
+
 function stockStatus(p) {
   if (p.stockActuel <= p.stockMin) return "danger";
   if (p.stockActuel <= p.stockMin * 1.5) return "warn";
@@ -52,7 +56,7 @@ function render() {
       </div>
       <div class="filters-row">
         <input id="sk-search" placeholder="Rechercher un produit…" value="${esc(ui.filtre)}" style="flex:1;min-width:160px">
-        <select id="sk-cat"><option value="toutes">Toutes catégories</option>${categories().map(c => `<option value="${esc(c)}" ${ui.categorie === c ? 'selected' : ''}>${esc(c)}</option>`).join("")}</select>
+        <select id="sk-cat"><option value="toutes">Toutes catégories (${state.produits.length})</option>${categories().map(c => `<option value="${esc(c)}" ${ui.categorie === c ? 'selected' : ''}>${esc(c)} (${compteParCategorie(c)})</option>`).join("")}</select>
       </div>
       <div class="table-wrap">
         <table>
