@@ -141,6 +141,9 @@ function renderEditForm(p, workingCopy) {
   const data = workingCopy || (p ? { ...p } : { nom: "", categorie: "", unite: "pièce", stockCible: 10, stockMin: 3, stockActuel: 0, fournisseurId: null, fournisseurNom: "", fournisseurEmail: "", fournisseurCommercial: "", refFournisseur: "", photo: null });
   // "" = aucun ; "__autre__" = saisie libre (fournisseur ponctuel non listé) ; sinon id d'un fournisseur de la liste
   const selectionFournisseur = data.fournisseurId || (data.fournisseurNom ? "__autre__" : "");
+  const catsExistantes = categories();
+  // "__nouvelle__" si la catégorie du produit n'existe pas encore dans la liste (nouveau produit, ou catégorie tapée manuellement avant cette mise à jour)
+  const selectionCategorie = data.categorie && catsExistantes.includes(data.categorie) ? data.categorie : (data.categorie ? "__nouvelle__" : "");
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -149,7 +152,14 @@ function renderEditForm(p, workingCopy) {
         <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">${p ? "Modifier" : "Nouveau"} produit</h3>
         <div class="form-grid">
           <label>Nom<input id="sk-nom" value="${esc(data.nom)}"></label>
-          <label>Catégorie<input id="sk-categorie" value="${esc(data.categorie)}" placeholder="ex. Robinetterie"></label>
+          <label>Catégorie
+            <select id="sk-categorie-select">
+              <option value="" ${selectionCategorie === "" ? "selected" : ""}>— Choisir —</option>
+              ${catsExistantes.map(c => `<option value="${esc(c)}" ${selectionCategorie === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+              <option value="__nouvelle__" ${selectionCategorie === "__nouvelle__" ? "selected" : ""}>✏️ Nouvelle catégorie…</option>
+            </select>
+          </label>
+          ${selectionCategorie === "__nouvelle__" ? `<label>Nom de la nouvelle catégorie<input id="sk-categorie-nouvelle" value="${esc(catsExistantes.includes(data.categorie) ? '' : data.categorie)}" placeholder="ex. Robinetterie"></label>` : ""}
           <label>Unité<input id="sk-unite" value="${esc(data.unite)}" placeholder="pièce, lot, boîte…"></label>
           <label>Stock actuel<input id="sk-actuel" type="number" min="0" value="${data.stockActuel ?? 0}"></label>
           <label>Stock cible (niveau normal)<input id="sk-cible" type="number" min="0" value="${data.stockCible ?? 0}"></label>
@@ -197,7 +207,9 @@ function renderEditForm(p, workingCopy) {
   // de photo, pour ne rien perdre au ré-affichage du formulaire.
   function syncFieldsIntoData() {
     data.nom = document.getElementById("sk-nom").value;
-    data.categorie = document.getElementById("sk-categorie").value;
+    const catSelect = document.getElementById("sk-categorie-select");
+    const catNouvelle = document.getElementById("sk-categorie-nouvelle");
+    data.categorie = catSelect.value === "__nouvelle__" ? (catNouvelle?.value || "") : catSelect.value;
     data.unite = document.getElementById("sk-unite").value;
     data.stockActuel = document.getElementById("sk-actuel").value;
     data.stockCible = document.getElementById("sk-cible").value;
@@ -209,6 +221,10 @@ function renderEditForm(p, workingCopy) {
     data.refFournisseur = document.getElementById("sk-ref-fournisseur").value;
   }
 
+  document.getElementById("sk-categorie-select").addEventListener("change", () => {
+    syncFieldsIntoData();
+    renderEditForm(p, data);
+  });
   document.getElementById("sk-fournisseur-select").addEventListener("change", (e) => {
     syncFieldsIntoData();
     const val = e.target.value;
@@ -281,7 +297,7 @@ function renderEditForm(p, workingCopy) {
     syncFieldsIntoData(); // récupère notamment les champs fournisseur en saisie libre, s'ils sont affichés
     const payload = {
       nom: document.getElementById("sk-nom").value.trim(),
-      categorie: document.getElementById("sk-categorie").value.trim(),
+      categorie: (data.categorie || "").trim(),
       unite: document.getElementById("sk-unite").value.trim() || "pièce",
       stockActuel: parseInt(document.getElementById("sk-actuel").value, 10) || 0,
       stockCible: parseInt(document.getElementById("sk-cible").value, 10) || 0,
