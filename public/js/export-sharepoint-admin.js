@@ -28,7 +28,7 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Un export Excel des données (stock central, stock par site, interventions, dossiers de site) est envoyé automatiquement vers SharePoint (dossier "ExportsDonnees") à la connexion, une fois par jour maximum — en plus du stockage principal dans l'appli, pas à la place. Nécessite qu'une session Microsoft soit déjà active dans le navigateur pour se déclencher tout seul.</p>
+      <p class="hint">Un rapport PDF des données (stock central, stock par site, interventions, dossiers de site) est envoyé automatiquement vers SharePoint (dossier "ExportsDonnees") à la connexion, une fois par jour maximum — en plus du stockage principal dans l'appli, pas à la place. Nécessite qu'une session Microsoft soit déjà active dans le navigateur pour se déclencher tout seul.</p>
 
       <div class="stat-chip ${fait ? 'ok' : 'warn'}" style="width:fit-content">
         ${fait ? `✓ Export effectué aujourd'hui (${state.statut.lastExportAt ? new Date(state.statut.lastExportAt).toLocaleTimeString('fr-FR') : ''})` : "⚠️ Pas encore effectué aujourd'hui"}
