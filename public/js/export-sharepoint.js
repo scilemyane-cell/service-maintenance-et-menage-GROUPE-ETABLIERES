@@ -76,7 +76,6 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
         image: { type: "jpeg", quality: 0.92 },
         html2canvas: { scale: 2, backgroundColor: "#ffffff" },
         jsPDF: { unit: "mm", format: "a4", orientation: lignes.length > 0 && Object.keys(lignes[0]).length > 6 ? "landscape" : "portrait" },
-        pagebreak: { mode: ["css", "avoid-all"] },
       })
       .from(cible)
       .outputPdf("blob");
