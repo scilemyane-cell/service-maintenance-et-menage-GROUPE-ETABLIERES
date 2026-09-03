@@ -63,6 +63,11 @@ async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes) {
   hidden.innerHTML = construireRapportHTML(titre, lignes);
   document.body.appendChild(hidden);
 
+  // Laisse le navigateur mettre en page le contenu ajouté avant de le
+  // capturer — sans ce délai, html2canvas peut photographier une zone
+  // encore vide (page blanche) juste après l'insertion dans le DOM.
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
   let blob;
   try {
     blob = await window.html2pdf()
