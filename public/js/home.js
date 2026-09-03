@@ -11,6 +11,7 @@ let mountedContainer = null;
 let mountedUser = null;
 let catsRef = [];
 let onSelectRef = null;
+let onReorderRef = null;
 let clearCountdown = null;
 let debugForce = false;
 
@@ -20,12 +21,13 @@ function cleanup() {
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
 }
 
-export function mountDashboard(container, user, categories, onSelect) {
+export function mountDashboard(container, user, categories, onSelect, onReorder) {
   cleanup();
   mountedContainer = container;
   mountedUser = user;
   catsRef = categories;
   onSelectRef = onSelect;
+  onReorderRef = onReorder;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchPeople((p) => { people = p; render(); }));
   unsubs.push(watchAbsences((a) => { absences = a; render(); }));
@@ -76,13 +78,23 @@ function render() {
       </div>
 
       <div class="bubble-grid">
-        ${catsRef.map(c => `
-          <button class="bubble-card" data-cat="${c.id}">
-            <span class="bubble-icon">${c.icon}</span>
-            <span class="bubble-label">${esc(c.label)}</span>
-            <span class="bubble-desc">${esc(c.desc || "")}</span>
-          </button>
-        `).join("")}
+        ${catsRef.map((c, idx) => {
+          const peutReorganiser = mountedUser.role === "admin" || mountedUser.role === "super_admin";
+          return `
+          <div style="position:relative">
+            <button class="bubble-card" data-cat="${c.id}">
+              <span class="bubble-icon">${c.icon}</span>
+              <span class="bubble-label">${esc(c.label)}</span>
+              <span class="bubble-desc">${esc(c.desc || "")}</span>
+            </button>
+            ${peutReorganiser ? `
+              <div style="position:absolute;top:6px;right:6px;display:flex;gap:2px">
+                <button class="nav-btn" data-reorder-left="${c.id}" style="padding:2px 6px;font-size:10px" ${idx === 0 ? "disabled" : ""}>◀</button>
+                <button class="nav-btn" data-reorder-right="${c.id}" style="padding:2px 6px;font-size:10px" ${idx === catsRef.length - 1 ? "disabled" : ""}>▶</button>
+              </div>
+            ` : ""}
+          </div>
+        `;}).join("")}
       </div>
 
       ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
@@ -93,6 +105,14 @@ function render() {
 
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => onSelectRef(btn.dataset.cat));
+  });
+  mountedContainer.querySelectorAll("[data-reorder-left], [data-reorder-right]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.reorderLeft || btn.dataset.reorderRight;
+      const sens = btn.dataset.reorderLeft ? -1 : 1;
+      onReorderRef?.(id, sens);
+    });
   });
   document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
 

@@ -26,6 +26,7 @@
   import { mountStockCatalogueSite } from "./js/stock-site-catalogue.js";
   import { mountFournisseurs } from "./js/fournisseurs.js";
   import { mountDashboard } from "./js/home.js";
+  import { watchHomeOrder, saveHomeOrder } from "./js/home-order-data.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
   import { mountRepartitionForDispositif } from "./js/heures-repartition.js";
@@ -47,6 +48,8 @@
   let accessMap = {};
   let dispositifSettings = {};
   let sitesSubscribed = false;
+  let homeOrder = [];
+  let homeOrderSubscribed = false;
 
   const ALL = ["super_admin","admin","n1","technicien","menage","mi_temps","direction"];
   const MENAGE_ROLES = ["super_admin","admin","n1","direction","menage","mi_temps"];
@@ -163,6 +166,10 @@
       // aujourd'hui ou si aucune session Microsoft n'est déjà active.
       runDailyExportIfNeeded();
     }
+    if (!homeOrderSubscribed) {
+      homeOrderSubscribed = true;
+      watchHomeOrder((o) => { homeOrder = o; render(); });
+    }
     render();
   });
 
@@ -170,7 +177,16 @@
     return category.subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {
-    return allCategories(user).filter(c => categorySubtabsFor(c, user).length > 0);
+    const visibles = allCategories(user).filter(c => categorySubtabsFor(c, user).length > 0);
+    if (homeOrder.length === 0) return visibles;
+    // Catégories déjà classées, dans l'ordre sauvegardé, puis toute
+    // catégorie nouvelle (pas encore dans l'ordre — ex. nouveau
+    // dispositif) à la suite, dans son ordre naturel.
+    const parId = new Map(visibles.map(c => [c.id, c]));
+    const classees = homeOrder.map(id => parId.get(id)).filter(Boolean);
+    const idsClasses = new Set(classees.map(c => c.id));
+    const nouvelles = visibles.filter(c => !idsClasses.has(c.id));
+    return [...classees, ...nouvelles];
   }
 
   function render() {
@@ -236,6 +252,15 @@
         const subs = categorySubtabsFor(cat, currentUser);
         currentSubtab = subs[0]?.id || null;
         render();
+      }, (catId, sens) => {
+        // Échange la position de cette catégorie avec sa voisine dans
+        // l'ordre courant, puis sauvegarde le nouvel ordre complet.
+        const ids = cats.map(c => c.id);
+        const idx = ids.indexOf(catId);
+        const cible = idx + sens;
+        if (cible < 0 || cible >= ids.length) return;
+        [ids[idx], ids[cible]] = [ids[cible], ids[idx]];
+        saveHomeOrder(ids);
       });
       return;
     }
