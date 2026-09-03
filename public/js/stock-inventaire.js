@@ -166,13 +166,24 @@ function decoderImageQr(fichier) {
     if (!window.jsQR) { reject(new Error("Librairie de lecture QR non chargée")); return; }
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-      const donnees = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const resultat = window.jsQR(donnees.data, donnees.width, donnees.height);
+      // Les photos de téléphone sont souvent énormes (plusieurs millions
+      // de pixels) — les réduire accélère nettement l'analyse et évite des
+      // soucis de performance/mémoire pouvant faire échouer la détection.
+      // On tente d'abord une version réduite, puis la taille d'origine en
+      // repli si rien n'est trouvé.
+      const tentative = (largeurMax) => {
+        const ratio = Math.min(1, largeurMax / Math.max(img.width, img.height));
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        const donnees = ctx.getImageData(0, 0, w, h);
+        return window.jsQR(donnees.data, donnees.width, donnees.height, { inversionAttempts: "attemptBoth" });
+      };
+      const resultat = tentative(1200) || tentative(Math.max(img.width, img.height));
       resolve(resultat ? resultat.data : null);
     };
     img.onerror = () => reject(new Error("Image illisible"));
