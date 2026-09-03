@@ -17,7 +17,6 @@ let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
 let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null };
-let scanner = null;
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
@@ -47,13 +46,9 @@ async function load() {
   if (ui.screen === "liste") render();
 }
 
-function stopScanner() {
-  if (scanner) { scanner.stop().catch(() => {}).finally(() => { scanner.clear?.(); scanner = null; }); }
-}
-
 function render() {
   if (!mountedContainer) return;
-  if (!document.contains(mountedContainer)) { stopScanner(); return; }
+  if (!document.contains(mountedContainer)) { return; }
 
   if (ui.screen === "qr") return renderQr();
   if (ui.screen === "ajuste") return renderAjuste();
@@ -339,47 +334,65 @@ function renderScan() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="ssx-cancel-scan">✕ Annuler</button>
-      <div id="ssx-reader" style="width:300px;max-width:100%;height:300px;border-radius:10px;overflow:hidden;background:#000"></div>
-      <p class="hint" id="ssx-scan-hint">Pointe la caméra vers l'étiquette QR de l'article.</p>
+      <div class="form-card" style="text-align:center;max-width:360px">
+        <p class="hint" style="margin:0 0 14px">Prends une photo nette de l'étiquette QR de l'article — l'appareil photo habituel de ton téléphone va s'ouvrir.</p>
+        <input type="file" accept="image/*" capture="environment" id="ssx-scan-input" style="display:none">
+        <button class="add-btn" id="ssx-scan-open" style="width:100%;padding:16px;font-size:15px">📷 Prendre la photo</button>
+      </div>
+      <p class="hint" id="ssx-scan-hint"></p>
     </div>
   `;
-  document.getElementById("ssx-cancel-scan").addEventListener("click", () => { ui.screen = "liste"; stopScanner(); render(); });
-
-  if (!window.Html5Qrcode) {
-    document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">Librairie de scan non chargée.</span>`;
-    return;
-  }
+  document.getElementById("ssx-cancel-scan").addEventListener("click", () => { ui.screen = "liste"; render(); });
 
   const onDecoded = (decodedText) => {
     let itemId = null;
     try { itemId = new URL(decodedText).searchParams.get("stocksite"); } catch (e) {}
     const item = itemId ? state.items.find(it => it.id === itemId) : null;
     if (item) {
-      stopScanner();
       ui.screen = "ajuste"; ui.ajusteId = item.id;
       render();
     } else {
-      document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">QR non reconnu — ce n'est pas une étiquette de stock déporté.</span>`;
+      document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">QR non reconnu — ce n'est pas une étiquette de stock déporté. Réessaie avec la photo plus nette/plus proche.</span>`;
     }
   };
 
-  scanner = new window.Html5Qrcode("ssx-reader");
-  const config = { fps: 10, qrbox: 220, aspectRatio: 1.0 };
+  const inputEl = document.getElementById("ssx-scan-input");
+  document.getElementById("ssx-scan-open").addEventListener("click", () => inputEl.click());
+  inputEl.addEventListener("change", () => {
+    const fichier = inputEl.files?.[0];
+    if (!fichier) return;
+    const hintEl = document.getElementById("ssx-scan-hint");
+    hintEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Lecture du QR…</span>`;
+    decoderImageQr(fichier)
+      .then((texte) => {
+        if (texte) onDecoded(texte);
+        else hintEl.innerHTML = `<span style="color:var(--red)">Aucun QR détecté sur cette photo — réessaie en te rapprochant.</span>`;
+      })
+      .catch(() => { hintEl.innerHTML = `<span style="color:var(--red)">Échec de lecture de la photo.</span>`; })
+      .finally(() => { inputEl.value = ""; });
+  });
+}
 
-  // Certains téléphones Android affichent un flux noir avec la simple
-  // contrainte { facingMode: "environment" } (bug connu de compatibilité
-  // caméra) — démarrer sur l'identifiant précis de la caméra arrière est
-  // plus fiable, avec repli sur facingMode si l'énumération échoue.
-  window.Html5Qrcode.getCameras()
-    .then((cameras) => {
-      const arriere = cameras.find(c => /back|rear|arrière|environment/i.test(c.label || "")) || cameras[cameras.length - 1];
-      const cible = arriere ? arriere.id : { facingMode: "environment" };
-      return scanner.start(cible, config, onDecoded, () => {});
-    })
-    .catch(() => scanner.start({ facingMode: "environment" }, config, onDecoded, () => {}))
-    .catch((err) => {
-      document.getElementById("ssx-scan-hint").innerHTML = `<span style="color:var(--red)">Impossible d'accéder à la caméra : ${esc(err.message || String(err))}</span>`;
-    });
+// Décode un QR code à partir d'une photo statique (plutôt qu'un flux
+// vidéo en direct, qui s'est révélé peu fiable — écran noir — sur
+// certains téléphones Android malgré l'autorisation caméra accordée).
+function decoderImageQr(fichier) {
+  return new Promise((resolve, reject) => {
+    if (!window.jsQR) { reject(new Error("Librairie de lecture QR non chargée")); return; }
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const donnees = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const resultat = window.jsQR(donnees.data, donnees.width, donnees.height);
+      resolve(resultat ? resultat.data : null);
+    };
+    img.onerror = () => reject(new Error("Image illisible"));
+    img.src = URL.createObjectURL(fichier);
+  });
 }
 
 // =================================================================
