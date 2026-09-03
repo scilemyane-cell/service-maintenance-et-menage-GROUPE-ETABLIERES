@@ -37,11 +37,11 @@ function construireRapportHTML(titre, lignes) {
       <p style="font-size:11px;color:#666;margin:0 0 18px">Généré le ${esc(new Date().toLocaleString("fr-FR"))} · ${lignes.length} ligne(s)</p>
       ${lignes.length === 0 ? `<p style="font-size:13px;color:#666">Aucune donnée pour l'instant.</p>` : `
         <div style="display:flex;background:#B08D46">
-          ${colonnes.map(c => `<div style="flex:1;border:1px solid #999;padding:5px 7px;font-size:10px;font-weight:700;color:#fff">${esc(c)}</div>`).join("")}
+          ${colonnes.map(c => `<div style="flex:1;min-width:0;border:1px solid #999;padding:5px 7px;font-size:10px;font-weight:700;color:#fff;overflow-wrap:break-word;word-break:break-word">${esc(c)}</div>`).join("")}
         </div>
         ${lignes.map((ligne, i) => `
           <div style="display:flex;background:${i % 2 === 0 ? '#ffffff' : '#F5F3EE'}">
-            ${colonnes.map(c => `<div style="flex:1;border:1px solid #ccc;padding:4px 7px;font-size:10px">${esc(ligne[c] == null ? '' : String(ligne[c]))}</div>`).join("")}
+            ${colonnes.map(c => `<div style="flex:1;min-width:0;border:1px solid #ccc;padding:4px 7px;font-size:10px;overflow-wrap:break-word;word-break:break-word">${esc(ligne[c] == null ? '' : String(ligne[c]))}</div>`).join("")}
           </div>
         `).join("")}
       `}
