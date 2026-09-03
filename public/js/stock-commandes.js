@@ -1,7 +1,8 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, watchCommandesHistorique, enregistrerCommande } from "./stock-data.js";
+import { watchFournisseurs } from "./fournisseurs-data.js";
 
-let state = { produits: [], historique: [] };
+let state = { produits: [], historique: [], fournisseurs: [] };
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
@@ -15,6 +16,7 @@ export function mountStockCommandes(container, user) {
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchStockProduits((p) => { state.produits = p; render(); }));
   unsubs.push(watchCommandesHistorique((h) => { state.historique = h; render(); }));
+  unsubs.push(watchFournisseurs((f) => { state.fournisseurs = f; render(); }));
 }
 
 function produitsACommander() {
@@ -25,7 +27,7 @@ function groupesParFournisseur(liste) {
   const groupes = new Map();
   liste.forEach(p => {
     const key = p.fournisseurEmail || p.fournisseurNom || "__sans_fournisseur__";
-    if (!groupes.has(key)) groupes.set(key, { nom: p.fournisseurNom || "Fournisseur non renseigné", email: p.fournisseurEmail || "", produits: [] });
+    if (!groupes.has(key)) groupes.set(key, { nom: p.fournisseurNom || "Fournisseur non renseigné", email: p.fournisseurEmail || "", fournisseurId: p.fournisseurId || null, produits: [] });
     groupes.get(key).produits.push(p);
   });
   return [...groupes.values()];
@@ -42,9 +44,13 @@ function lignesPourGroupe(groupe) {
 function buildMailto(groupe) {
   const lignes = lignesPourGroupe(groupe).map(l => `- ${l.nom} : ${l.quantite} ${l.unite}`).join("\n");
   const subject = encodeURIComponent("Demande de devis — réapprovisionnement stock maintenance");
-  const body = encodeURIComponent(
-    `Bonjour,\n\nMerci de nous transmettre un devis pour les produits suivants, afin de reconstituer notre stock :\n\n${lignes}\n\nCordialement,`
-  );
+  // Retrouve le fournisseur (par id si connu, sinon par nom) pour utiliser
+  // son message personnalisé s'il en a un — sinon message standard.
+  const fournisseur = (groupe.fournisseurId && state.fournisseurs.find(f => f.id === groupe.fournisseurId))
+    || state.fournisseurs.find(f => f.nom === groupe.nom);
+  const intro = fournisseur?.messageDevis?.trim()
+    || "Bonjour,\n\nMerci de nous transmettre un devis pour les produits suivants, afin de reconstituer notre stock :";
+  const body = encodeURIComponent(`${intro}\n\n${lignes}\n\nCordialement,`);
   return `mailto:${groupe.email}?subject=${subject}&body=${body}`;
 }
 

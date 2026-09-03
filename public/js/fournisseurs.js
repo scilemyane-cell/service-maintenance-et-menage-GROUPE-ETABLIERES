@@ -73,6 +73,10 @@ function renderForm(f) {
           <label>Contact commercial<input id="fr-commercial" value="${esc(f?.commercial || '')}" placeholder="ex. Jean Dupont"></label>
           <label>Email<input id="fr-email" type="email" value="${esc(f?.email || '')}" placeholder="commandes@fournisseur.fr"></label>
         </div>
+        <label style="display:block;margin-top:10px">Message accompagnant la demande de devis (optionnel)
+          <textarea id="fr-message" rows="4" placeholder="Laisse vide pour utiliser le message standard. Ex. : « Bonjour Jérémie, pouvez-vous nous transmettre un devis pour : »">${esc(f?.messageDevis || '')}</textarea>
+        </label>
+        <p class="hint" style="margin:4px 0 0">La liste des produits et quantités est toujours ajoutée automatiquement après ce message, dans l'email pré-rempli (Stock maintenance > Commandes).</p>
         <button class="add-btn" id="fr-save">💾 Enregistrer</button>
         <span id="fr-status" style="font-size:12px;margin-left:8px"></span>
       </div>
@@ -87,6 +91,7 @@ function renderForm(f) {
       nom,
       commercial: document.getElementById("fr-commercial").value.trim(),
       email: document.getElementById("fr-email").value.trim(),
+      messageDevis: document.getElementById("fr-message").value.trim(),
     };
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
