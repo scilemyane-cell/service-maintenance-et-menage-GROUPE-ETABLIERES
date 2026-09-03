@@ -1,5 +1,5 @@
 import { esc } from "./astreinte-logic.js";
-import { watchStockProduits, createProduit, saveProduit, envoyerProduitCorbeille, seedProduitsType } from "./stock-data.js";
+import { watchStockProduits, createProduit, saveProduit, envoyerProduitCorbeille, seedProduitsType, definirOrdreProduits } from "./stock-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { watchFournisseurs } from "./fournisseurs-data.js";
 
@@ -41,9 +41,11 @@ function render() {
     (ui.filtre.trim() === "" || (p.nom || "").toLowerCase().includes(ui.filtre.toLowerCase()))
   );
 
+  const sansFiltre = ui.categorie === "toutes" && ui.filtre.trim() === "";
+
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Produits de maintenance en stock — définis un stock cible et un seuil minimum par produit ; l'onglet "Commandes" liste automatiquement ce qui repasse sous le seuil.</p>
+      <p class="hint">Produits de maintenance en stock — définis un stock cible et un seuil minimum par produit ; l'onglet "Commandes" liste automatiquement ce qui repasse sous le seuil.${sansFiltre ? " Utilise les flèches pour ranger la liste dans le même ordre que les étagères — utile pour l'inventaire rapide." : ""}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="sk-new">➕ Ajouter un produit</button>
         ${state.produits.length === 0 ? `<button class="nav-btn" id="sk-seed">📦 Charger la liste type (50 produits)</button>` : ""}
@@ -54,14 +56,18 @@ function render() {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Stock</th><th>Fournisseur</th><th></th></tr></thead>
+          <thead><tr>${sansFiltre ? "<th></th>" : ""}<th></th><th>Produit</th><th>Catégorie</th><th>Stock</th><th>Fournisseur</th><th></th></tr></thead>
           <tbody>
             ${filtered.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun produit.</td></tr>` :
-              filtered.map(p => {
+              filtered.map((p, idx) => {
                 const status = stockStatus(p);
                 const color = status === "danger" ? "var(--red)" : status === "warn" ? "var(--gold)" : "var(--text)";
                 return `
                 <tr>
+                  ${sansFiltre ? `<td style="white-space:nowrap">
+                    <button class="nav-btn" data-up="${p.id}" style="padding:2px 6px;font-size:11px" ${idx === 0 ? "disabled" : ""}>▲</button>
+                    <button class="nav-btn" data-down="${p.id}" style="padding:2px 6px;font-size:11px" ${idx === filtered.length - 1 ? "disabled" : ""}>▼</button>
+                  </td>` : ""}
                   <td>${p.photo?.itemId ? `<img data-resolve-photo="${esc(p.photo.itemId)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">` : p.photo?.url ? `<img src="${esc(p.photo.url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">` : `<span style="display:inline-block;width:36px;height:36px;border-radius:6px;background:var(--panel-alt)"></span>`}</td>
                   <td>${esc(p.nom)}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.categorie || "—")}</td>
@@ -90,6 +96,21 @@ function render() {
   document.getElementById("sk-cat").addEventListener("change", (e) => { ui.categorie = e.target.value; render(); });
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => { ui.editId = btn.dataset.edit; render(); }));
+  mountedContainer.querySelectorAll("[data-up], [data-down]").forEach(btn => btn.addEventListener("click", async () => {
+    const id = btn.dataset.up || btn.dataset.down;
+    const sens = btn.dataset.up ? -1 : 1;
+    // La toute première utilisation : personne n'a encore d'ordre défini,
+    // on les numérote selon l'ordre d'affichage actuel avant d'échanger.
+    const liste = [...state.produits];
+    if (liste.some(p => p.ordre == null)) {
+      await definirOrdreProduits(liste.map((p, i) => ({ id: p.id, ordre: i })));
+      liste.forEach((p, i) => { p.ordre = i; });
+    }
+    const idx = liste.findIndex(p => p.id === id);
+    const voisin = liste[idx + sens];
+    if (!voisin) return;
+    await definirOrdreProduits([{ id: liste[idx].id, ordre: voisin.ordre }, { id: voisin.id, ordre: liste[idx].ordre }]);
+  }));
   mountedContainer.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", async () => {
     const p = state.produits.find(x => x.id === btn.dataset.del);
     if (confirm(`Mettre "${p.nom}" à la corbeille ? Récupérable 60 jours (Administration > Corbeille).`)) await envoyerProduitCorbeille(p.id);

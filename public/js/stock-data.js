@@ -75,8 +75,18 @@ export function watchStockProduits(callback) {
   return onSnapshot(collection(db, "stock-produits"), (snap) => {
     const list = [];
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
-    callback(list.sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || "")));
+    callback(list.sort((a, b) =>
+      (a.ordre ?? 999999) - (b.ordre ?? 999999)
+      || (a.categorie || "").localeCompare(b.categorie || "")
+      || (a.nom || "").localeCompare(b.nom || "")
+    ));
   }, (err) => { console.error("watchStockProduits:", err); callback([]); });
+}
+
+// Enregistre un nouvel ordre d'affichage (correspondant à l'ordre de
+// rangement sur les étagères) pour une liste de produits d'un coup.
+export async function definirOrdreProduits(paires) {
+  await Promise.all(paires.map(({ id, ordre }) => updateDoc(doc(db, "stock-produits", id), { ordre })));
 }
 
 export async function createProduit(data) {

@@ -141,6 +141,15 @@
       window.stockSiteDeepLinkId = stockSiteParam;
       history.replaceState(null, "", window.location.pathname);
     }
+    // QR unique menant directement au mode rapide de l'inventaire :
+    // .../app.html?stockrapide=1
+    const stockRapideParam = new URLSearchParams(window.location.search).get("stockrapide");
+    if (stockRapideParam && currentCategory === null) {
+      currentCategory = "stock";
+      currentSubtab = "inventaire";
+      window.stockRapideDeepLink = true;
+      history.replaceState(null, "", window.location.pathname);
+    }
     if (!sitesSubscribed) {
       sitesSubscribed = true;
       watchSites((sitesList) => {
