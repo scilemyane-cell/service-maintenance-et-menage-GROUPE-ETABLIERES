@@ -344,7 +344,7 @@ function renderQr(p) {
     </div>
   `;
   document.getElementById("sk-back").addEventListener("click", () => { ui.qrId = null; render(); });
-  document.getElementById("sk-print").addEventListener("click", () => printQrCard());
+  document.getElementById("sk-print").addEventListener("click", () => printQrCard(document.getElementById("sk-qr-print")));
 
   const holder = document.getElementById("sk-qr-canvas");
   renderQrWithLogo(holder, qrPayloadFor(p.id), 220);

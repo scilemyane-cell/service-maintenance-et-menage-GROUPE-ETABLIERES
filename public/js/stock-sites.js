@@ -184,7 +184,9 @@ function renderListe() {
       holder.style.display = "none";
     }
   }));
-  mountedContainer.querySelectorAll("[data-qr-rapide-print]").forEach(btn => btn.addEventListener("click", () => printQrCard()));
+  mountedContainer.querySelectorAll("[data-qr-rapide-print]").forEach(btn => btn.addEventListener("click", () => {
+    printQrCard(document.getElementById(`ssx-qr-rapide-holder-${btn.dataset.qrRapidePrint}`));
+  }));
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "qr"; ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "ajuste"; ui.ajusteId = btn.dataset.ajuste; render(); }));
   mountedContainer.querySelectorAll("[data-qte]").forEach(inp => {
@@ -472,7 +474,7 @@ function renderQr() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="ssx-back">← Retour</button>
-      <div class="form-card qr-print-card" style="text-align:center;max-width:320px">
+      <div class="form-card qr-print-card" id="ssx-qr-print-card" style="text-align:center;max-width:320px">
         <p style="font-weight:700;margin:0 0 4px">${esc(item.nom)}</p>
         <p class="hint" style="margin:0 0 12px">${esc(site?.nom || "")}</p>
         <div id="ssx-qr-holder" style="width:220px;height:220px;margin:0 auto"></div>
@@ -481,7 +483,7 @@ function renderQr() {
     </div>
   `;
   document.getElementById("ssx-back").addEventListener("click", () => { ui.screen = "liste"; render(); });
-  document.getElementById("ssx-print").addEventListener("click", () => printQrCard());
+  document.getElementById("ssx-print").addEventListener("click", () => printQrCard(document.getElementById("ssx-qr-print-card")));
 
   const holder = document.getElementById("ssx-qr-holder");
   renderQrWithLogo(holder, qrPayloadForSite(item.id), 220);

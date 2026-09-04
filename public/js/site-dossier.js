@@ -586,7 +586,7 @@ function renderView(d) {
       holder.style.display = "none";
     }
   });
-  document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard());
+  document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard(document.getElementById("sd-qr-holder")));
   document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération et envoi du PDF…</span>`;

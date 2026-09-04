@@ -102,7 +102,7 @@ function render() {
       holder.style.display = "none";
     }
   });
-  document.getElementById("sk-qr-rapide-print").addEventListener("click", () => printQrCard());
+  document.getElementById("sk-qr-rapide-print").addEventListener("click", () => printQrCard(document.getElementById("sk-qr-rapide-holder")));
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.ajusteId = btn.dataset.ajuste; render(); }));
 }
 

@@ -32,11 +32,19 @@ export async function renderQrWithLogo(container, text, size = 220) {
     // rend alors en <table>) — le QR reste valide, simplement sans logo.
     if (!canvas || !container.isConnected) return;
     const ctx = canvas.getContext("2d");
-    const logoSize = size * 0.22;
-    const pad = size * 0.035;
-    const x = (size - logoSize) / 2;
-    const y = (size - logoSize) / 2;
-    const bx = x - pad, by = y - pad, bw = logoSize + pad * 2, bh = logoSize + pad * 2, r = 8;
+
+    // Le logo Établières est rectangulaire (large), pas carré : on le
+    // fait tenir dans une boîte carrée en conservant ses proportions
+    // (comme un "object-fit: contain") au lieu de l'étirer en carré, ce
+    // qui le déformait auparavant.
+    const boxSize = size * 0.26;
+    const ratio = logo.naturalWidth && logo.naturalHeight ? logo.naturalWidth / logo.naturalHeight : 1;
+    let logoW = boxSize, logoH = boxSize;
+    if (ratio > 1) logoH = boxSize / ratio; else logoW = boxSize * ratio;
+    const x = (size - logoW) / 2;
+    const y = (size - logoH) / 2;
+    const pad = size * 0.03;
+    const bx = (size - boxSize) / 2 - pad, by = (size - boxSize) / 2 - pad, bw = boxSize + pad * 2, bh = boxSize + pad * 2, r = 8;
 
     ctx.fillStyle = "#fff";
     ctx.beginPath();
@@ -47,23 +55,49 @@ export async function renderQrWithLogo(container, text, size = 220) {
     ctx.arcTo(bx, by, bx + bw, by, r);
     ctx.closePath();
     ctx.fill();
-    ctx.drawImage(logo, x, y, logoSize, logoSize);
+    ctx.drawImage(logo, x, y, logoW, logoH);
   } catch (e) {
     // Logo indisponible (hors-ligne, etc.) : le QR généré juste avant
     // reste parfaitement valide et scannable, simplement sans logo.
   }
 }
 
-// Imprime UNIQUEMENT la carte QR la plus proche (classe .qr-print-card,
-// voir style.css) même si l'écran contient aussi une fiche imprimable
-// cachée (ex. dossier de site) — sans cette exclusion mutuelle, les deux
-// s'imprimeraient superposées. La classe est retirée juste après
-// l'impression (ou après un court délai en repli, au cas où l'évènement
-// "afterprint" ne se déclenche pas de façon fiable sur tous navigateurs).
-export function printQrCard() {
+// Imprime UNIQUEMENT la carte QR passée en paramètre (élément portant la
+// classe .qr-print-card), même si l'écran contient par ailleurs une fiche
+// imprimable cachée (ex. dossier de site) ou énormément de contenu au-
+// dessus/en-dessous. Plutôt que de masquer tout le reste de la page en
+// CSS (fragile : le contenu masqué garde sa hauteur en layout, ce qui
+// provoquait un débordement sur plusieurs pages avec du vide), on clone
+// la carte dans un conteneur dédié ajouté directement à <body>, et on
+// masque le reste de l'application via #app pendant l'impression — une
+// seule page, propre, quelle que soit la taille de l'écran d'origine.
+// Le contenu du <canvas> du QR (dessiné en JS, jamais présent dans le
+// HTML) est converti en image avant le clonage, sinon il apparaîtrait
+// vide sur la copie.
+export function printQrCard(card) {
+  if (!card) { window.print(); return; }
+  const clone = card.cloneNode(true);
+  clone.style.display = "block";
+  clone.querySelectorAll("button").forEach(b => b.remove()); // inutile sur le papier
+
+  const sourceCanvas = card.querySelector("canvas");
+  const cloneCanvas = clone.querySelector("canvas");
+  if (sourceCanvas && cloneCanvas) {
+    const img = document.createElement("img");
+    img.src = sourceCanvas.toDataURL("image/png");
+    img.style.width = sourceCanvas.width + "px";
+    img.style.height = sourceCanvas.height + "px";
+    cloneCanvas.replaceWith(img);
+  }
+
+  const printRoot = document.createElement("div");
+  printRoot.id = "qr-print-root";
+  printRoot.appendChild(clone);
+  document.body.appendChild(printRoot);
   document.body.classList.add("printing-qr");
-  const cleanup = () => document.body.classList.remove("printing-qr");
+
+  const cleanup = () => { document.body.classList.remove("printing-qr"); printRoot.remove(); };
   window.addEventListener("afterprint", cleanup, { once: true });
   window.print();
-  setTimeout(cleanup, 2000);
+  setTimeout(cleanup, 3000); // filet de sécurité si "afterprint" ne se déclenche pas
 }
