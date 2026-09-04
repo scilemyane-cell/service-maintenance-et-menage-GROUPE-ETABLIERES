@@ -149,6 +149,15 @@
       window.stockSiteDeepLinkId = stockSiteParam;
       history.replaceState(null, "", window.location.pathname);
     }
+    // QR unique par résidence menant directement au mode rapide de
+    // l'inventaire de ce site : .../app.html?stocksiterapide=ID_DOSSIER
+    const stockSiteRapideParam = new URLSearchParams(window.location.search).get("stocksiterapide");
+    if (stockSiteRapideParam && currentCategory === null) {
+      currentCategory = "stock";
+      currentSubtab = "sites";
+      window.stockSiteRapideDeepLinkId = stockSiteRapideParam;
+      history.replaceState(null, "", window.location.pathname);
+    }
     // QR unique menant directement au mode rapide de l'inventaire :
     // .../app.html?stockrapide=1
     const stockRapideParam = new URLSearchParams(window.location.search).get("stockrapide");

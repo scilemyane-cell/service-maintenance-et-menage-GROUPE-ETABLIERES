@@ -16,13 +16,13 @@ import {
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set() };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set() };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -32,6 +32,15 @@ export async function mountStockSites(container, user) {
     window.stockSiteDeepLinkId = null;
     ui.screen = "ajuste";
     ui.ajusteId = id;
+    render();
+  }
+  // Lien direct vers le mode rapide d'un site (QR unique par résidence,
+  // imprimé une fois) — voir app.html, paramètre ?stocksiterapide=
+  if (window.stockSiteRapideDeepLinkId) {
+    const id = window.stockSiteRapideDeepLinkId;
+    window.stockSiteRapideDeepLinkId = null;
+    ui.rapideSiteId = id;
+    ui.rapideIndex = 0;
     render();
   }
 }
@@ -53,6 +62,7 @@ function render() {
   if (ui.screen === "qr") return renderQr();
   if (ui.screen === "ajuste") return renderAjuste();
   if (ui.screen === "scan") return renderScan();
+  if (ui.rapideSiteId) return renderRapide();
   renderListe();
 }
 
@@ -105,6 +115,14 @@ function renderListe() {
           </div>
           ${ouvert ? `
           <div style="padding:0 16px 16px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <button class="nav-btn" data-rapide-site="${site.id}">🚀 Mode rapide</button>
+              <button class="nav-btn" data-qr-rapide-site="${site.id}">🔳 QR inventaire rapide</button>
+            </div>
+            <div id="ssx-qr-rapide-holder-${site.id}" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
+              <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
+              <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois sur ce site — scanné avec l'appareil photo du téléphone, ouvre directement le mode rapide de <b>${esc(site.nom)}</b> uniquement.</p>
+            </div>
             ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
               <div class="table-wrap" style="border:none">
                 <table>
@@ -149,6 +167,25 @@ function renderListe() {
     const id = btn.dataset.toggleSite;
     if (ui.ouverts.has(id)) ui.ouverts.delete(id); else ui.ouverts.add(id);
     render();
+  }));
+  mountedContainer.querySelectorAll("[data-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
+    ui.rapideSiteId = btn.dataset.rapideSite; ui.rapideIndex = 0; render();
+  }));
+  mountedContainer.querySelectorAll("[data-qr-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
+    const id = btn.dataset.qrRapideSite;
+    const holder = document.getElementById(`ssx-qr-rapide-holder-${id}`);
+    const canvas = document.getElementById(`ssx-qr-rapide-canvas-${id}`);
+    if (holder.style.display === "none") {
+      holder.style.display = "block";
+      canvas.innerHTML = "";
+      if (window.QRCode) {
+        new window.QRCode(canvas, { text: `https://service-maintenance-et-menage.web.app/app.html?stocksiterapide=${id}`, width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M });
+      } else {
+        canvas.textContent = "Librairie QR non chargée.";
+      }
+    } else {
+      holder.style.display = "none";
+    }
   }));
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "qr"; ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "ajuste"; ui.ajusteId = btn.dataset.ajuste; render(); }));
@@ -208,6 +245,98 @@ function renderListe() {
   }));
 
   attachAddFormListeners();
+}
+
+// =================================================================
+// Mode rapide (défilement de tous les articles d'un site, sans revenir
+// à la liste entre chaque — QR unique imprimé une fois par résidence)
+// =================================================================
+function renderRapide() {
+  const site = state.sites.find(s => s.id === ui.rapideSiteId);
+  if (!site) { ui.rapideSiteId = null; render(); return; }
+  const liste = [...state.items].filter(it => it.dossierId === site.id).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+
+  if (liste.length === 0) {
+    mountedContainer.innerHTML = `
+      <div class="stack">
+        <button class="nav-btn" id="ssx-r-quitter">✕ Quitter le mode rapide</button>
+        <p class="hint">Aucun article pour l'instant sur ${esc(site.nom)}.</p>
+      </div>
+    `;
+    document.getElementById("ssx-r-quitter").addEventListener("click", () => { ui.rapideSiteId = null; render(); });
+    return;
+  }
+
+  if (ui.rapideIndex >= liste.length) {
+    mountedContainer.innerHTML = `
+      <div class="stack">
+        <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+          <p style="font-size:36px;margin:0 0 8px">✅</p>
+          <h3 style="margin:0 0 6px">Inventaire de ${esc(site.nom)} terminé</h3>
+          <p class="hint" style="margin:0 0 16px">${liste.length} article(s) passé(s) en revue.</p>
+          <button class="add-btn" id="ssx-r-fin" style="width:100%">← Retour à la liste</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("ssx-r-fin").addEventListener("click", () => { ui.rapideSiteId = null; render(); });
+    return;
+  }
+
+  const it = liste[ui.rapideIndex];
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <button class="nav-btn" id="ssx-r-quitter">✕ Quitter le mode rapide</button>
+        <span class="hint">${ui.rapideIndex + 1} / ${liste.length} · ${esc(site.nom)}</span>
+      </div>
+      <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+        <h3 style="margin:0 0 2px;font-size:17px">${esc(it.nom)}</h3>
+        <p class="hint" style="margin:0 0 16px">Cible permanente : ${it.quantiteCible ?? 0} ${esc(it.unite || "")} · Dernier stock : ${it.quantite ?? 0} ${esc(it.unite || "")}</p>
+
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Quantité comptée</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
+          <button id="ssx-r-moins" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">−</button>
+          <input id="ssx-r-qte" type="number" min="0" value="${it.quantite ?? 0}" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
+          <button id="ssx-r-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
+        </div>
+        <div id="ssx-r-indicateur" style="font-size:12px;font-weight:700;margin-bottom:14px"></div>
+
+        <button class="add-btn" id="ssx-r-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider et suivant →</button>
+        <button class="nav-btn" id="ssx-r-passer" style="width:100%;margin-top:8px">Passer sans modifier</button>
+        <div id="ssx-r-status" style="font-size:12px;margin-top:10px"></div>
+      </div>
+    </div>
+  `;
+
+  const qteInput = document.getElementById("ssx-r-qte");
+  const indicateur = document.getElementById("ssx-r-indicateur");
+  function updateIndicateur() {
+    const v = parseInt(qteInput.value, 10);
+    if (isNaN(v)) { indicateur.innerHTML = ""; return; }
+    indicateur.innerHTML = v < (it.quantiteCible ?? 0)
+      ? `<span style="color:var(--red)">⚠️ Sous la cible</span>`
+      : `<span style="color:var(--text-dim)">✓ Au niveau cible</span>`;
+  }
+  updateIndicateur();
+  qteInput.addEventListener("input", updateIndicateur);
+
+  document.getElementById("ssx-r-moins").addEventListener("click", () => { qteInput.value = Math.max(0, (parseInt(qteInput.value, 10) || 0) - 1); updateIndicateur(); });
+  document.getElementById("ssx-r-plus").addEventListener("click", () => { qteInput.value = (parseInt(qteInput.value, 10) || 0) + 1; updateIndicateur(); });
+  document.getElementById("ssx-r-quitter").addEventListener("click", () => { ui.rapideSiteId = null; render(); });
+  document.getElementById("ssx-r-passer").addEventListener("click", () => { ui.rapideIndex++; render(); });
+  document.getElementById("ssx-r-valider").addEventListener("click", async () => {
+    const statusEl = document.getElementById("ssx-r-status");
+    const nouvelle = parseInt(qteInput.value, 10);
+    if (isNaN(nouvelle) || nouvelle < 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
+    try {
+      await actualiserStockSite(it.id, nouvelle, mountedUser?.uid || null);
+      it.quantite = nouvelle; // reflète tout de suite dans state.items (même objet référencé)
+      ui.rapideIndex++;
+      render();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
 }
 
 // =================================================================
