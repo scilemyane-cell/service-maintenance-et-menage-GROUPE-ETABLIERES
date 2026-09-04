@@ -85,7 +85,12 @@ function render() {
           return `
           <div style="position:relative;height:100%">
             <button class="bubble-card" data-cat="${c.id}">
-              ${c.badge ? `<span style="position:absolute;top:8px;left:8px;background:var(--red);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">${c.badge > 99 ? "99+" : c.badge}</span>` : ""}
+              ${c.badgeAtelier || c.badgeSites ? `
+                <span style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
+                  ${c.badgeAtelier ? `<span title="Alertes stock atelier" style="background:var(--red);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">🔧${c.badgeAtelier > 99 ? "99+" : c.badgeAtelier}</span>` : ""}
+                  ${c.badgeSites ? `<span title="Alertes stock déporté (sites)" style="background:var(--orange,#e08a2e);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">🏢${c.badgeSites > 99 ? "99+" : c.badgeSites}</span>` : ""}
+                </span>
+              ` : c.badge ? `<span style="position:absolute;top:8px;left:8px;background:var(--red);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">${c.badge > 99 ? "99+" : c.badge}</span>` : ""}
               <span class="bubble-icon">${c.icon}</span>
               <span class="bubble-label">${esc(c.label)}</span>
               <span class="bubble-desc">${esc(c.desc || "")}</span>

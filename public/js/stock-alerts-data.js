@@ -10,7 +10,7 @@ import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14
 export function watchStockAlertCount(callback) {
   let central = 0;
   let deporte = 0;
-  const emettre = () => callback(central + deporte);
+  const emettre = () => callback({ central, deporte, total: central + deporte });
 
   const unsub1 = onSnapshot(collection(db, "stock-produits"), (snap) => {
     let n = 0;
