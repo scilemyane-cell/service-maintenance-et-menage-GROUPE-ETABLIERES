@@ -79,19 +79,30 @@ function renderListe() {
         <p class="hint">Aucun site n'a le stock déporté activé pour l'instant. Coche "Ce site a un stock déporté" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : sitesTries.map(site => {
         const items = state.items.filter(it => it.dossierId === site.id);
-        const alertesSite = items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
+        const itemsManquants = items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0));
+        const alertesSite = itemsManquants.length;
         const ouvert = ui.ouverts.has(site.id);
         return `
-        <div class="form-card" style="padding:0;overflow:hidden">
-          <button class="ssx-site-header" data-toggle-site="${site.id}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:none;border:none;cursor:pointer;text-align:left">
-            <span style="font-size:14px;color:var(--gold);font-weight:700">🏢 ${esc(site.nom)}</span>
+        <div class="form-card" style="padding:0;overflow:visible">
+          <div style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px">
+            <button data-toggle-site="${site.id}" style="flex:1;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;text-align:left;padding:0;min-width:0">
+              <span style="font-size:14px;color:var(--gold);font-weight:700">🏢 ${esc(site.nom)}</span>
+            </button>
             <span style="display:flex;align-items:center;gap:10px">
-              ${alertesSite > 0
-                ? `<span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800">⚠️ ${alertesSite} à réapprovisionner</span>`
-                : `<span style="font-size:11px;color:var(--text-dim)">${items.length} article(s)</span>`}
-              <span style="font-size:12px;color:var(--text-dim)">${ouvert ? "▲" : "▼"}</span>
+              ${alertesSite > 0 ? `
+                <span class="ssx-badge-tip" tabindex="0">
+                  <span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800;cursor:default">⚠️ ${alertesSite} à réapprovisionner</span>
+                  <div class="ssx-tip-content">
+                    <p style="margin:0 0 6px;font-size:11px;color:var(--text-dim);font-weight:700">Manque sur ${esc(site.nom)} :</p>
+                    <ul>
+                      ${itemsManquants.map(it => `<li><span>${esc(it.nom)}</span><b>${it.quantite ?? 0} / ${it.quantiteCible ?? 0} ${esc(it.unite || "")}</b></li>`).join("")}
+                    </ul>
+                  </div>
+                </span>
+              ` : `<span style="font-size:11px;color:var(--text-dim)">${items.length} article(s)</span>`}
+              <button data-toggle-site="${site.id}" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-dim);padding:0">${ouvert ? "▲" : "▼"}</button>
             </span>
-          </button>
+          </div>
           ${ouvert ? `
           <div style="padding:0 16px 16px">
             ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `

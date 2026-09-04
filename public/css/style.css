@@ -190,3 +190,19 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
   .print-fiche th, .print-fiche td{ border:1px solid #999 !important; color:#000 !important; }
   .print-fiche h3{ color:#000 !important; }
 }
+
+/* ---- Infobulle au survol (badges alerte stock déporté) ---- */
+.ssx-badge-tip{ position:relative; }
+.ssx-badge-tip .ssx-tip-content{
+  display:none;
+  position:absolute; z-index:50; bottom:calc(100% + 8px); right:0;
+  background:var(--panel-alt); border:1px solid var(--gold); border-radius:10px;
+  padding:10px 12px; min-width:220px; max-width:320px;
+  box-shadow:0 6px 20px rgba(0,0,0,.4);
+  font-weight:400; text-align:left; white-space:normal;
+}
+.ssx-badge-tip:hover .ssx-tip-content,
+.ssx-badge-tip:focus-within .ssx-tip-content{ display:block; }
+.ssx-tip-content ul{ list-style:none; margin:0; padding:0; }
+.ssx-tip-content li{ padding:2px 0; font-size:12px; color:var(--text); display:flex; justify-content:space-between; gap:10px; }
+.ssx-tip-content li b{ color:var(--red); }
