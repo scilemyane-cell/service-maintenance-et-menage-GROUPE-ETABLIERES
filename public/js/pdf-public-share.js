@@ -21,11 +21,26 @@ function pathFor(dossierId) {
   return `${FOLDER}/${dossierId}.pdf`;
 }
 
+// Empêche un appel Firebase Storage de rester bloqué indéfiniment sans
+// jamais répondre (succès ou échec) — vu en test : ni erreur ni résultat,
+// juste un "en cours…" figé pour toujours. Au-delà du délai, on abandonne
+// avec un message explicite plutôt qu'un blocage silencieux.
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
 // Renvoie l'URL publique déjà existante pour ce dossier, ou null si aucun
 // PDF n'a encore été publié (première fois).
 export async function getExistingPublicPdfUrl(dossierId) {
   try {
-    return await getDownloadURL(ref(storage, pathFor(dossierId)));
+    return await withTimeout(
+      getDownloadURL(ref(storage, pathFor(dossierId))),
+      15000,
+      "Firebase Storage ne répond pas (plus de 15 s). Vérifie qu'il est bien activé (Console Firebase > Storage > Commencer) et que les règles ont été publiées."
+    );
   } catch (e) {
     if (e.code === "storage/object-not-found") return null;
     throw e;
@@ -37,6 +52,14 @@ export async function getExistingPublicPdfUrl(dossierId) {
 // qui, sans compte.
 export async function publishPublicPdf(dossierId, blob) {
   const storageRef = ref(storage, pathFor(dossierId));
-  await uploadBytes(storageRef, blob, { contentType: "application/pdf" });
-  return getDownloadURL(storageRef);
+  await withTimeout(
+    uploadBytes(storageRef, blob, { contentType: "application/pdf" }),
+    30000,
+    "L'envoi vers Firebase Storage ne répond pas (plus de 30 s). Vérifie qu'il est bien activé (Console Firebase > Storage > Commencer) et que les règles ont été publiées."
+  );
+  return withTimeout(
+    getDownloadURL(storageRef),
+    15000,
+    "Le fichier a été envoyé mais Firebase Storage ne renvoie pas son lien (plus de 15 s). Réessaie."
+  );
 }

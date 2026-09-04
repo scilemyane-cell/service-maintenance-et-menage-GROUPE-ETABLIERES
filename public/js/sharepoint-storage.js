@@ -16,17 +16,34 @@ export const EXPORTS_ROOT_FOLDER = "ExportsDonnees";
 
 let cachedDriveId = null;
 
+// Toute requête réseau vers Microsoft Graph passe par ici — évite qu'un
+// appel reste bloqué indéfiniment sans jamais répondre (ni succès, ni
+// erreur), vu en test sur l'envoi d'un PDF volumineux : au-delà du délai,
+// la requête est abandonnée avec un message clair au lieu d'un blocage
+// silencieux qui laisse l'utilisateur face à un "en cours…" figé pour
+// toujours.
+function fetchWithTimeout(url, options = {}, ms = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...options, signal: controller.signal })
+    .catch((e) => {
+      if (e.name === "AbortError") throw new Error(`La requête vers Microsoft n'a pas répondu à temps (plus de ${Math.round(ms / 1000)} s).`);
+      throw e;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
 async function resolveDriveId(token) {
   if (cachedDriveId) return cachedDriveId;
-  const siteRes = await fetch(`${GRAPH_ROOT}/sites/${SHAREPOINT_HOSTNAME}:${SITE_PATH}`, {
+  const siteRes = await fetchWithTimeout(`${GRAPH_ROOT}/sites/${SHAREPOINT_HOSTNAME}:${SITE_PATH}`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 15000);
   if (!siteRes.ok) throw new Error(`Site SharePoint "appsmm" introuvable (${siteRes.status})`);
   const site = await siteRes.json();
 
-  const driveRes = await fetch(`${GRAPH_ROOT}/sites/${site.id}/drive`, {
+  const driveRes = await fetchWithTimeout(`${GRAPH_ROOT}/sites/${site.id}/drive`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 15000);
   if (!driveRes.ok) throw new Error(`Bibliothèque de documents introuvable (${driveRes.status})`);
   const drive = await driveRes.json();
   cachedDriveId = drive.id;
@@ -45,9 +62,10 @@ export async function ensureFolderPath(driveId, token, folderPath) {
     encodedSoFar.push(encodeURIComponent(segment));
     const currentEncoded = encodedSoFar.join("/");
 
-    const checkRes = await fetch(
+    const checkRes = await fetchWithTimeout(
       `${GRAPH_ROOT}/drives/${driveId}/root:/${currentEncoded}`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: `Bearer ${token}` } },
+      15000
     );
     if (checkRes.ok) continue; // ce niveau existe déjà, passer au suivant
 
@@ -137,19 +155,20 @@ export async function uploadToDrive(file, token, folderSegments = [], rootFolder
   // tentative précédente interrompue peut laisser une session bloquée que
   // Microsoft refuse de remplacer directement (erreur 409).
   if (conflictBehavior === "replace") {
-    await fetch(`${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}`, {
+    await fetchWithTimeout(`${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {}); // ignore si le fichier n'existait pas encore
+    }, 15000).catch(() => {}); // ignore si le fichier n'existait pas encore
   }
 
-  const sessionRes = await fetch(
+  const sessionRes = await fetchWithTimeout(
     `${GRAPH_ROOT}/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": conflictBehavior === "replace" ? "fail" : conflictBehavior } }),
-    }
+    },
+    20000
   );
   if (!sessionRes.ok) throw new Error(`Échec de la création de la session d'envoi (${sessionRes.status})`);
   const session = await sessionRes.json();
@@ -163,14 +182,14 @@ export async function uploadToDrive(file, token, folderSegments = [], rootFolder
   while (start < total) {
     const end = Math.min(start + chunkSize, total);
     const chunk = file.slice(start, end);
-    const chunkRes = await fetch(uploadUrl, {
+    const chunkRes = await fetchWithTimeout(uploadUrl, {
       method: "PUT",
       headers: {
         "Content-Length": String(end - start),
         "Content-Range": `bytes ${start}-${end - 1}/${total}`,
       },
       body: chunk,
-    });
+    }, 30000);
     if (!chunkRes.ok && chunkRes.status !== 202) {
       throw new Error(`Échec de l'envoi du fichier (${chunkRes.status})`);
     }

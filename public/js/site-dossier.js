@@ -387,21 +387,26 @@ async function generatePdfBlob(d, element, { rapide = false } = {}) {
   const clone = offscreen.firstElementChild;
 
   try {
-    await inlineImagesForPdf(clone, rapide ? 700 : 1400, rapide ? 0.65 : 0.85);
+    // Qualité par défaut (non "rapide") allégée par rapport aux réglages
+    // initiaux (1400px/scale 2/qualité .92) : sur une fiche avec beaucoup
+    // de photos (ex. une dizaine et plus), ces réglages faisaient
+    // régulièrement dépasser la limite de temps ci-dessous. Le rendu A4
+    // reste net avec ces valeurs, pour un gain de vitesse sensible.
+    await inlineImagesForPdf(clone, rapide ? 700 : 1100, rapide ? 0.65 : 0.8);
     const filename = `${d.nom} - Dossier technique.pdf`;
     const blob = await withTimeout(
       window.html2pdf()
         .set({
           margin: 10,
           filename,
-          image: { type: "jpeg", quality: rapide ? 0.7 : 0.92 },
-          html2canvas: { scale: rapide ? 1 : 2, useCORS: false, allowTaint: false },
+          image: { type: "jpeg", quality: rapide ? 0.7 : 0.88 },
+          html2canvas: { scale: rapide ? 1 : 1.5, useCORS: false, allowTaint: false },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(clone)
         .outputPdf("blob"),
-      45000,
-      "La génération du PDF prend trop de temps (plus de 45 s) et a été abandonnée. Réessaie ; si le problème persiste, il y a peut-être trop de photos ou une photo trop lourde sur cette fiche."
+      90000,
+      "La génération du PDF prend trop de temps (plus de 90 s) et a été abandonnée. Réessaie ; si le problème persiste, il y a peut-être trop de photos ou une photo trop lourde sur cette fiche."
     );
     return { blob, filename };
   } finally {
