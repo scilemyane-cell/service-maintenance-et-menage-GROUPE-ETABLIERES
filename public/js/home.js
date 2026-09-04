@@ -83,7 +83,7 @@ function render() {
         ${catsRef.map((c, idx) => {
           const peutReorganiser = modeReorganisation && (mountedUser.role === "admin" || mountedUser.role === "super_admin");
           return `
-          <div style="position:relative">
+          <div style="position:relative;height:100%">
             <button class="bubble-card" data-cat="${c.id}">
               <span class="bubble-icon">${c.icon}</span>
               <span class="bubble-label">${esc(c.label)}</span>
