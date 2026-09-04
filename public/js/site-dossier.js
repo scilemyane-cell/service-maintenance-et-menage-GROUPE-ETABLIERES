@@ -3,7 +3,7 @@ import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl, getAnonymousViewLink } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { getExistingPublicPdfUrl, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
@@ -582,51 +582,37 @@ function renderView(d) {
     const canvas = document.getElementById("sd-qr-canvas");
     if (holder.style.display !== "none") { holder.style.display = "none"; return; }
     holder.style.display = "block";
-    canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche d'un lien public déjà généré…</p>`;
+    canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche d'une copie publique déjà générée…</p>`;
     try {
-      // 1) Chemin normal (conforme charte) : lien de partage public
-      // SharePoint, si le tenant l'autorise. Retombe silencieusement sur
-      // Firebase (2) uniquement en cas d'erreur "partage désactivé" —
-      // dès qu'Atemis l'autorisera côté Microsoft 365, ce chemin
-      // redeviendra actif automatiquement, sans rien changer ici.
+      let publicUrl;
       try {
-        let existing = await getExistingFileUrl(pdfFolderSegments(d), pdfFileName(d));
-        if (!existing && isEditorUser(mountedUser)) {
-          canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Aucun PDF encore enregistré — génération et envoi vers SharePoint…</p>`;
-          const result = await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
-          existing = { id: result.itemId };
-        }
-        if (existing?.id) {
-          canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Création du lien de consultation public…</p>`;
-          const publicUrl = await getAnonymousViewLink(existing.id);
-          if (publicUrl) {
-            canvas.innerHTML = "";
-            await renderQrWithLogo(canvas, publicUrl, 200);
-            return;
-          }
-        }
+        publicUrl = await getExistingPublicPdfUrl(d.id);
       } catch (e) {
-        // Partage SharePoint indisponible (ou tout autre souci) — on
-        // bascule sur la copie publique Firebase ci-dessous.
+        throw new Error(`Impossible d'accéder à Firebase Storage (${e.code || e.message || e}). Vérifie que Firebase Storage est bien activé (Console Firebase > Storage > Commencer) et que les règles ont été publiées (fichier storage.rules).`);
       }
-
-      // 2) Repli (contournement validé) : copie publique du PDF sur
-      // Firebase Storage — voir pdf-public-share.js.
-      canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche d'une copie publique déjà générée…</p>`;
-      let publicUrl = await getExistingPublicPdfUrl(d.id);
       if (!publicUrl) {
         if (!isEditorUser(mountedUser)) {
           canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">Aucune copie publique encore générée pour cette fiche. Demande à un éditeur d'ouvrir cette fiche et de cliquer sur "🔳 QR fiche PDF" une première fois.</p>`;
           return;
         }
-        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Génération du PDF et publication d'une copie publique…</p>`;
-        const { blob } = await generatePdfBlob(d, mountedContainer.querySelector(".print-fiche"));
-        publicUrl = await publishPublicPdf(d.id, blob);
+        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Génération du PDF…</p>`;
+        let blob;
+        try {
+          ({ blob } = await generatePdfBlob(d, mountedContainer.querySelector(".print-fiche")));
+        } catch (e) {
+          throw new Error(`Échec de la génération du PDF : ${e.message || e}`);
+        }
+        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Publication de la copie publique…</p>`;
+        try {
+          publicUrl = await publishPublicPdf(d.id, blob);
+        } catch (e) {
+          throw new Error(`Échec de l'envoi vers Firebase Storage (${e.code || e.message || e}). Vérifie que Firebase Storage est bien activé et que les règles ont été publiées.`);
+        }
       }
       canvas.innerHTML = "";
       await renderQrWithLogo(canvas, publicUrl, 200);
     } catch (e) {
-      canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">❌ ${esc(e.message || String(e))}</p>`;
+      canvas.innerHTML = `<p style="margin:0;color:#a00;font-size:12px;text-align:left">❌ ${esc(e.message || String(e))}</p>`;
     }
   });
   document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard(document.getElementById("sd-qr-holder")));
