@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiche technique — Établières</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { mountGuestDossier } from "./js/site-dossier-guest.js";
+
+  const params = new URLSearchParams(location.search);
+  const dossierId = params.get("dossier");
+  const app = document.getElementById("app");
+
+  function showError(msg) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Accès invalide</div>
+          <h1>Impossible d'accéder</h1>
+          <p class="hint">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  if (!dossierId) {
+    showError("Ce lien ne contient pas de fiche valide. Scanne le QR code affiché sur le site.");
+  } else {
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        // Consultation en lecture seule, sans compte ni mot de passe —
+        // connexion anonyme automatique (aucune information saisie ici
+        // n'est modifiable).
+        try { await signInAnonymously(auth); } catch (e) { showError("Connexion impossible. Réessaie plus tard."); }
+        return;
+      }
+      app.innerHTML = `
+        <header class="topbar">
+          <div class="topbar-title">
+            <span class="topbar-eyebrow">Groupe Établières · Fiche technique & sécurité</span>
+            <h1>Consultation</h1>
+          </div>
+        </header>
+        <main class="content" id="content"></main>
+      `;
+      mountGuestDossier(document.getElementById("content"), dossierId);
+    });
+  }
+</script>
+</body>
+</html>

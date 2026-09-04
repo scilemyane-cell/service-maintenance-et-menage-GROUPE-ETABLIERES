@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, setDoc, deleteDoc, addDoc, updateDoc, getDocs, deleteField, serverTimestamp,
+  doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc, getDocs, deleteField, serverTimestamp,
   collection, onSnapshot,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -54,6 +54,15 @@ export function watchSitesDossiers(callback) {
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
     callback(list.sort((a, b) => (a.nom || "").localeCompare(b.nom || "")));
   }, (err) => { console.error("watchSitesDossiers:", err); callback([]); });
+}
+
+// Lecture ponctuelle d'un seul dossier — utilisée par la page invité en
+// lecture seule (QR "Fiche technique"), qui n'a pas besoin d'un flux
+// temps réel ni du reste de la liste.
+export async function getDossierUnique(id) {
+  const snap = await getDoc(doc(db, "sites-dossiers", id));
+  if (!snap.exists() || snap.data().supprimeLe) return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 export function nouveauDossier(sectionsOrder) {

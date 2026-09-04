@@ -337,10 +337,15 @@ function renderView(d) {
         <button class="nav-btn" id="sd-back">← Tous les dossiers</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
         <button class="add-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
+        <button class="nav-btn" id="sd-qr">🔳 QR fiche (lecture seule)</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
+      <div id="sd-qr-holder" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
+        <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
+        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre la fiche de <b>${esc(d.nom)}</b> en lecture seule, sans compte ni connexion.</p>
+      </div>
 
       <div class="form-card">
         <h2 style="margin:0 0 4px;font-size:20px">${esc(d.nom)}</h2>
@@ -383,6 +388,21 @@ function renderView(d) {
   document.getElementById("sd-back").addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; render(); });
   document.getElementById("sd-print").addEventListener("click", () => { window.print(); });
+  document.getElementById("sd-qr").addEventListener("click", () => {
+    const holder = document.getElementById("sd-qr-holder");
+    const canvas = document.getElementById("sd-qr-canvas");
+    if (holder.style.display === "none") {
+      holder.style.display = "block";
+      canvas.innerHTML = "";
+      if (window.QRCode) {
+        new window.QRCode(canvas, { text: `https://service-maintenance-et-menage.web.app/site-dossier-guest.html?dossier=${d.id}`, width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M });
+      } else {
+        canvas.textContent = "Librairie QR non chargée.";
+      }
+    } else {
+      holder.style.display = "none";
+    }
+  });
   document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération et envoi du PDF…</span>`;
