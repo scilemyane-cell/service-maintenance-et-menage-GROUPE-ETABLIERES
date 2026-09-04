@@ -304,24 +304,86 @@ async function waitForImages(element, timeoutMs = 10000) {
   ]);
 }
 
+// Les photos affichées viennent d'une URL de téléchargement SharePoint
+// temporaire (voir getImageDisplayUrl) : html2canvas, en essayant de les
+// lire pour les intégrer au PDF (mode useCORS), peut rester bloqué
+// indéfiniment si cette URL ne renvoie pas les en-têtes CORS attendus —
+// c'est ce qui provoquait un blocage sans fin de la génération. On
+// contourne le problème en récupérant nous-mêmes chaque image (fetch) et
+// en la convertissant en data URI (aucune restriction cross-origin
+// possible sur une donnée déjà intégrée au document) avant de lancer le
+// rendu. Une image qui échoue à se convertir est simplement retirée du
+// PDF plutôt que de bloquer tout le document.
+async function inlineImagesForPdf(element) {
+  const imgs = [...element.querySelectorAll("img")].filter(img => img.src && !img.src.startsWith("data:"));
+  await Promise.all(imgs.map(async (img) => {
+    try {
+      const res = await fetch(img.src);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const dataUri = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("Lecture de l'image échouée"));
+        reader.readAsDataURL(blob);
+      });
+      img.src = dataUri;
+    } catch (e) {
+      console.warn("PDF : image ignorée (non intégrable) —", e.message || e);
+      img.remove();
+    }
+  }));
+}
+
+// Empêche toute étape de rester bloquée indéfiniment (ex. génération
+// html2canvas qui ne se termine jamais) — au-delà du délai, on abandonne
+// avec un message clair plutôt que de laisser l'utilisateur face à un
+// écran figé sans aucun retour.
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
 // Génère uniquement le blob PDF (sans upload) à partir d'un élément
 // .print-fiche déjà présent dans le DOM, images résolues — utilisé à la
 // fois pour l'aperçu rapide et pour l'envoi vers SharePoint ci-dessous.
+// Travaille sur une COPIE hors-écran de l'élément (jamais l'original
+// affiché à l'écran), pour que l'intégration des images en data URI et
+// la suppression des photos non récupérables n'altèrent jamais ce que
+// l'utilisateur voit sur la page.
 async function generatePdfBlob(d, element) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
   await waitForImages(element);
-  const filename = `${d.nom} - Dossier technique.pdf`;
-  const blob = await window.html2pdf()
-    .set({
-      margin: 10,
-      filename,
-      image: { type: "jpeg", quality: 0.92 },
-      html2canvas: { scale: 2, useCORS: true, allowTaint: false },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    })
-    .from(element)
-    .outputPdf("blob");
-  return { blob, filename };
+
+  const offscreen = document.createElement("div");
+  offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:800px;";
+  offscreen.innerHTML = element.outerHTML;
+  document.body.appendChild(offscreen);
+  const clone = offscreen.firstElementChild;
+
+  try {
+    await inlineImagesForPdf(clone);
+    const filename = `${d.nom} - Dossier technique.pdf`;
+    const blob = await withTimeout(
+      window.html2pdf()
+        .set({
+          margin: 10,
+          filename,
+          image: { type: "jpeg", quality: 0.92 },
+          html2canvas: { scale: 2, useCORS: false, allowTaint: false },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(clone)
+        .outputPdf("blob"),
+      45000,
+      "La génération du PDF prend trop de temps (plus de 45 s) et a été abandonnée. Réessaie ; si le problème persiste, il y a peut-être trop de photos ou une photo trop lourde sur cette fiche."
+    );
+    return { blob, filename };
+  } finally {
+    offscreen.remove();
+  }
 }
 
 // Ouvre directement un aperçu du PDF dans un nouvel onglet, sans passer
