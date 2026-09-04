@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -41,6 +42,9 @@
   import { mountCorbeille } from "./js/corbeille.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
+  import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS } from "./js/theme.js";
+
+  initTheme();
 
   let currentUser = null;
   let currentCategory = null; // null = accueil (bulles)
@@ -238,6 +242,7 @@
         </div>
         <div class="topbar-user">
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
+          <button class="nav-btn" id="theme-btn" title="Changer l'apparence (propre à cet appareil)">${THEME_LABELS[getStoredTheme()]}</button>
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
       </header>
@@ -249,6 +254,10 @@
     `;
 
     document.getElementById("logout-btn").addEventListener("click", () => logout());
+    document.getElementById("theme-btn").addEventListener("click", (e) => {
+      cycleTheme();
+      e.currentTarget.textContent = THEME_LABELS[getStoredTheme()]; // mise à jour du libellé seule, sans re-render de l'écran en cours (évite de perdre une saisie non enregistrée)
+    });
     const backBtn = document.getElementById("back-home");
     if (backBtn) backBtn.addEventListener("click", () => { currentCategory = null; currentSubtab = null; render(); });
 
