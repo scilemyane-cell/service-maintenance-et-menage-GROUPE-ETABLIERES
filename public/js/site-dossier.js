@@ -330,19 +330,23 @@ async function generatePdfBlob(d, element) {
 // `win` doit être ouvert de façon synchrone dans le gestionnaire de clic
 // (window.open("", "_blank")) AVANT d'appeler cette fonction : ouvrir la
 // fenêtre seulement une fois le PDF généré (donc après un await) serait
-// bloqué par la plupart des navigateurs (bloqueur de pop-up).
+// bloqué par la plupart des navigateurs (bloqueur de pop-up). Le PDF est
+// affiché dans un <iframe> plutôt que de naviguer l'onglet directement
+// vers l'URL blob:, car Chrome bloque/bloque parfois silencieusement une
+// telle navigation directe depuis une autre fenêtre (chargement infini).
 export async function previewPdf(d, element, win) {
-  const { blob } = await generatePdfBlob(d, element);
+  const { blob, filename } = await generatePdfBlob(d, element);
   const url = URL.createObjectURL(blob);
-  if (win && !win.closed) {
-    win.location.href = url;
-  } else {
-    win = window.open(url, "_blank");
+  if (!win || win.closed) {
+    win = window.open("", "_blank");
     if (!win) throw new Error("Le navigateur a bloqué l'ouverture de l'aperçu (pop-up). Autorise les pop-ups pour ce site et réessaie.");
   }
-  // Libère la mémoire une fois l'onglet d'aperçu chargé (délai large pour
-  // laisser le temps au navigateur de charger le PDF depuis le blob).
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html><head><title>${filename.replace(/</g, "")}</title><style>html,body{margin:0;height:100%;background:#525659}iframe{border:0;width:100%;height:100%}</style></head><body><iframe src="${url}"></iframe></body></html>`);
+  win.document.close();
+  // Libère la mémoire une fois l'onglet d'aperçu fermé ou après un long
+  // délai (le temps que le PDF reste consultable dans l'iframe).
+  setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
 }
 
 // Génère un PDF à partir d'un élément .print-fiche déjà présent dans le DOM
@@ -426,7 +430,13 @@ function renderView(d) {
       await previewPdf(d, mountedContainer.querySelector(".print-fiche"), win);
       statusEl.innerHTML = "";
     } catch (e) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+      const msg = e.message || String(e);
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(msg)}</span>`;
+      if (win && !win.closed) {
+        win.document.open();
+        win.document.write(`<title>Échec de l'aperçu</title><body style="font-family:sans-serif;padding:20px;color:#a00">❌ ${esc(msg)}<br><br>Ferme cet onglet et réessaie depuis l'application.</body>`);
+        win.document.close();
+      }
     }
   });
   document.getElementById("sd-print").addEventListener("click", () => { window.print(); });
