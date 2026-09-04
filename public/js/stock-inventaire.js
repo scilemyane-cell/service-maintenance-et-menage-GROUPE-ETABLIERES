@@ -1,6 +1,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, enregistrerInventaire } from "./stock-data.js";
 import { getImageDisplayUrl } from "./sharepoint-storage.js";
+import { renderQrWithLogo } from "./qr-logo.js";
 
 let state = { produits: [] };
 let ui = { scanning: false, ajusteId: null, rapide: false, rapideIndex: 0 };
@@ -95,12 +96,7 @@ function render() {
     const canvas = document.getElementById("sk-qr-rapide-canvas");
     if (holder.style.display === "none") {
       holder.style.display = "block";
-      canvas.innerHTML = "";
-      if (window.QRCode) {
-        new window.QRCode(canvas, { text: "https://service-maintenance-et-menage.web.app/app.html?stockrapide=1", width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M });
-      } else {
-        canvas.textContent = "Librairie QR non chargée.";
-      }
+      renderQrWithLogo(canvas, "https://service-maintenance-et-menage.web.app/app.html?stockrapide=1", 200);
     } else {
       holder.style.display = "none";
     }

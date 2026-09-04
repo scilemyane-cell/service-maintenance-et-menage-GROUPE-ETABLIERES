@@ -6,6 +6,7 @@
 // porter la case "a un stock déporté".
 
 import { esc } from "./astreinte-logic.js";
+import { renderQrWithLogo } from "./qr-logo.js";
 import {
   listerSitesAvecStockDeporte, listerTousLesArticlesSite,
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
@@ -177,12 +178,7 @@ function renderListe() {
     const canvas = document.getElementById(`ssx-qr-rapide-canvas-${id}`);
     if (holder.style.display === "none") {
       holder.style.display = "block";
-      canvas.innerHTML = "";
-      if (window.QRCode) {
-        new window.QRCode(canvas, { text: `https://service-maintenance-et-menage.web.app/app.html?stocksiterapide=${id}`, width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M });
-      } else {
-        canvas.textContent = "Librairie QR non chargée.";
-      }
+      renderQrWithLogo(canvas, `https://service-maintenance-et-menage.web.app/app.html?stocksiterapide=${id}`, 200);
     } else {
       holder.style.display = "none";
     }
@@ -486,11 +482,7 @@ function renderQr() {
   document.getElementById("ssx-print").addEventListener("click", () => window.print());
 
   const holder = document.getElementById("ssx-qr-holder");
-  if (window.QRCode) {
-    new window.QRCode(holder, { text: qrPayloadForSite(item.id), width: 220, height: 220, correctLevel: window.QRCode.CorrectLevel.M });
-  } else {
-    holder.textContent = "Librairie QR non chargée (vérifier app.html).";
-  }
+  renderQrWithLogo(holder, qrPayloadForSite(item.id), 220);
 }
 
 // =================================================================

@@ -2,6 +2,7 @@ import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, envoyerProduitCorbeille, seedProduitsType, definirOrdreProduits } from "./stock-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { watchFournisseurs } from "./fournisseurs-data.js";
+import { renderQrWithLogo } from "./qr-logo.js";
 
 let state = { produits: [], fournisseurs: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -346,14 +347,5 @@ function renderQr(p) {
   document.getElementById("sk-print").addEventListener("click", () => window.print());
 
   const holder = document.getElementById("sk-qr-canvas");
-  if (window.QRCode) {
-    new window.QRCode(holder, {
-      text: qrPayloadFor(p.id),
-      width: 220,
-      height: 220,
-      correctLevel: window.QRCode.CorrectLevel.M,
-    });
-  } else {
-    holder.textContent = "Librairie QR non chargée (vérifier app.html).";
-  }
+  renderQrWithLogo(holder, qrPayloadFor(p.id), 220);
 }

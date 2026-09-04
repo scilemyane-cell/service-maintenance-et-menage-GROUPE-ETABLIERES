@@ -4,6 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
+import { renderQrWithLogo } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
@@ -579,12 +580,7 @@ function renderView(d) {
     const canvas = document.getElementById("sd-qr-canvas");
     if (holder.style.display === "none") {
       holder.style.display = "block";
-      canvas.innerHTML = "";
-      if (window.QRCode) {
-        new window.QRCode(canvas, { text: `https://service-maintenance-et-menage.web.app/site-dossier-guest.html?dossier=${d.id}`, width: 200, height: 200, correctLevel: window.QRCode.CorrectLevel.M });
-      } else {
-        canvas.textContent = "Librairie QR non chargée.";
-      }
+      renderQrWithLogo(canvas, `https://service-maintenance-et-menage.web.app/site-dossier-guest.html?dossier=${d.id}`, 200);
     } else {
       holder.style.display = "none";
     }
