@@ -27,6 +27,7 @@
   import { mountFournisseurs } from "./js/fournisseurs.js";
   import { mountDashboard } from "./js/home.js";
   import { watchHomeOrder, saveHomeOrder } from "./js/home-order-data.js";
+  import { watchStockAlertCount } from "./js/stock-alerts-data.js";
   import { mountFichesForDispositif } from "./js/fiches.js";
   import { mountHeures } from "./js/heures.js";
   import { mountRepartitionForDispositif } from "./js/heures-repartition.js";
@@ -50,6 +51,8 @@
   let sitesSubscribed = false;
   let homeOrder = [];
   let homeOrderSubscribed = false;
+  let stockAlertCount = 0;
+  let stockAlertSubscribed = false;
 
   const ALL = ["super_admin","admin","n1","technicien","menage","mi_temps","direction"];
   const MENAGE_ROLES = ["super_admin","admin","n1","direction","menage","mi_temps"];
@@ -107,6 +110,7 @@
       },
       {
         id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
+        badge: stockAlertCount > 0 ? stockAlertCount : null,
         subtabs: [
           { id: "produits",   label: "Produits",   icon: "📦", roles: GESTION,              mount: mountStockProduits },
           { id: "inventaire", label: "Inventaire", icon: "📷", roles: [...GESTION,"technicien"], mount: mountStockInventaire },
@@ -169,6 +173,10 @@
     if (!homeOrderSubscribed) {
       homeOrderSubscribed = true;
       watchHomeOrder((o) => { homeOrder = o; render(); });
+    }
+    if (!stockAlertSubscribed) {
+      stockAlertSubscribed = true;
+      watchStockAlertCount((n) => { stockAlertCount = n; render(); });
     }
     render();
   });
