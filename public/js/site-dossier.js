@@ -593,8 +593,9 @@ function renderView(d) {
         const result = await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
         existing = { url: result.url };
       }
+      if (!existing.url) throw new Error("Le PDF a été trouvé sur SharePoint mais son lien de consultation est vide (webUrl manquant) — réessaie, ou vérifie le fichier directement dans SharePoint.");
       canvas.innerHTML = "";
-      renderQrWithLogo(canvas, existing.url, 200);
+      await renderQrWithLogo(canvas, existing.url, 200);
     } catch (e) {
       canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">❌ ${esc(e.message || String(e))}</p>`;
     }
