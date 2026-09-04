@@ -503,8 +503,10 @@ function renderView(d) {
           </div>`;
         }).join("")}
 
-      <!-- Version imprimable, en dessous, cachée à l'écran mais utilisée pour l'export PDF -->
-      ${printFicheHtml(d)}
+      <!-- Version imprimable, cachée à l'écran (voir .print-only), utilisée
+           uniquement pour l'impression (window.print) et comme source pour
+           la génération du PDF (Aperçu / Enregistrer sur SharePoint) -->
+      <div class="print-only">${printFicheHtml(d)}</div>
     </div>
     ${lightboxHTML()}
   `;
