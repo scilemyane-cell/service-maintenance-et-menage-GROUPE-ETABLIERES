@@ -61,6 +61,13 @@ function render() {
 // =================================================================
 function renderListe() {
   const alertesTotal = state.items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
+  // Les sites ayant au moins une alerte remontent en haut de la liste,
+  // pour les repérer immédiatement sans avoir à parcourir toute la liste.
+  const sitesTries = [...state.sites].sort((a, b) => {
+    const alertesA = state.items.filter(it => it.dossierId === a.id && (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
+    const alertesB = state.items.filter(it => it.dossierId === b.id && (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
+    return alertesB - alertesA;
+  });
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -70,11 +77,12 @@ function renderListe() {
 
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a le stock déporté activé pour l'instant. Coche "Ce site a un stock déporté" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
-      ` : state.sites.map(site => {
+      ` : sitesTries.map(site => {
         const items = state.items.filter(it => it.dossierId === site.id);
+        const alertesSite = items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
         return `
         <div class="form-card">
-          <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🏢 ${esc(site.nom)}</h3>
+          <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🏢 ${esc(site.nom)}${alertesSite > 0 ? ` <span style="background:var(--red);color:#fff;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:800;vertical-align:middle">⚠️ ${alertesSite} à réapprovisionner</span>` : ""}</h3>
           ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
             <div class="table-wrap" style="border:none">
               <table>
