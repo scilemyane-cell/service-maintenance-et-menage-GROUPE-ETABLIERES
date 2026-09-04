@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mise à jour stock — Établières</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { mountStockGuest } from "./js/stock-guest.js";
+
+  const params = new URLSearchParams(location.search);
+  const itemId = params.get("stocksite");
+  const app = document.getElementById("app");
+
+  function showError(msg) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Accès invalide</div>
+          <h1>Impossible d'accéder</h1>
+          <p class="hint">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  if (!itemId) {
+    showError("Ce lien ne contient pas d'article valide. Scanne l'étiquette QR d'un article de stock déporté.");
+  } else {
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        // Aucune session (ni compte complet, ni invité) : connexion
+        // anonyme automatique, sans mot de passe — la sortie reste
+        // tout de même tracée avec cet identifiant.
+        try { await signInAnonymously(auth); } catch (e) { showError("Connexion impossible. Réessaie plus tard."); }
+        return;
+      }
+      app.innerHTML = `
+        <header class="topbar">
+          <div class="topbar-title">
+            <span class="topbar-eyebrow">Groupe Établières · Stock déporté</span>
+            <h1>Mise à jour rapide</h1>
+          </div>
+        </header>
+        <main class="content" id="content"></main>
+      `;
+      mountStockGuest(document.getElementById("content"), user, itemId);
+    });
+  }
+</script>
+</body>
+</html>

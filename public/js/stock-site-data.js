@@ -48,7 +48,7 @@ const MOUVEMENTS = "stock-site-mouvements";
 // article — scanné avec l'appareil photo normal du téléphone (hors appli),
 // ça ouvre directement la bonne fiche.
 export function qrPayloadForSite(itemId) {
-  return `https://service-maintenance-et-menage.web.app/app.html?stocksite=${itemId}`;
+  return `https://service-maintenance-et-menage.web.app/stock-guest.html?stocksite=${itemId}`;
 }
 
 export async function getArticleSiteAvecResidence(itemId) {
