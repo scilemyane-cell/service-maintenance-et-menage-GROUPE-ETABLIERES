@@ -208,19 +208,40 @@ export async function getImageDisplayUrl(itemId) {
 // Vérifie si un fichier à nom fixe (ex. le PDF récapitulatif d'un dossier,
 // enregistré via conflictBehavior "replace") existe déjà sur SharePoint à
 // l'emplacement attendu, et renvoie directement son lien de consultation
-// (webUrl) si oui — sans le télécharger ni le régénérer. Renvoie null s'il
-// n'existe pas encore (première fois, ou jamais enregistré).
+// (webUrl) si oui — sans le télécharger ni le régénérer. Si le nom exact
+// n'est pas trouvé (ex. un ancien fichier enregistré avant l'adoption du
+// nom fixe, encore horodaté à l'ancienne — voir uploadToDrive), on
+// retombe sur une recherche tolérante dans le même dossier : n'importe
+// quel fichier dont le nom se termine par le même suffixe est accepté, en
+// gardant le plus récemment modifié. Renvoie null si vraiment rien n'existe.
 export async function getExistingFileUrl(folderSegments, fixedFilename, rootFolder = ROOT_FOLDER) {
   const token = await getAccessToken();
   const driveId = await resolveDriveId(token);
   const folder = buildFolderPath(rootFolder, folderSegments);
   const safeName = sanitizeFilename(fixedFilename);
+
   const res = await fetch(
     `${GRAPH_ROOT}/drives/${driveId}/root:/${folder}/${safeName}?select=id,webUrl,lastModifiedDateTime`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Vérification SharePoint impossible (${res.status})`);
-  const item = await res.json();
-  return { url: item.webUrl, lastModified: item.lastModifiedDateTime };
+  if (res.ok) {
+    const item = await res.json();
+    return { url: item.webUrl, lastModified: item.lastModifiedDateTime };
+  }
+  if (res.status !== 404) throw new Error(`Vérification SharePoint impossible (${res.status})`);
+
+  // Repli tolérant : le dossier existe peut-être avec un fichier au nom
+  // légèrement différent (ancien horodatage, casse différente...).
+  const listRes = await fetch(
+    `${GRAPH_ROOT}/drives/${driveId}/root:/${folder}:/children?select=name,webUrl,lastModifiedDateTime&$top=200`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (listRes.status === 404) return null; // le dossier lui-même n'existe pas encore
+  if (!listRes.ok) throw new Error(`Vérification SharePoint impossible (${listRes.status})`);
+  const list = await listRes.json();
+  const suffix = safeName.toLowerCase();
+  const matches = (list.value || []).filter(it => (it.name || "").toLowerCase().endsWith(suffix));
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
+  return { url: matches[0].webUrl, lastModified: matches[0].lastModifiedDateTime };
 }
