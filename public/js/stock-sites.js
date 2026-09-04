@@ -16,13 +16,13 @@ import {
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set() };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set() };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -80,47 +80,65 @@ function renderListe() {
       ` : sitesTries.map(site => {
         const items = state.items.filter(it => it.dossierId === site.id);
         const alertesSite = items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
+        const ouvert = ui.ouverts.has(site.id);
         return `
-        <div class="form-card">
-          <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🏢 ${esc(site.nom)}${alertesSite > 0 ? ` <span style="background:var(--red);color:#fff;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:800;vertical-align:middle">⚠️ ${alertesSite} à réapprovisionner</span>` : ""}</h3>
-          ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
-            <div class="table-wrap" style="border:none">
-              <table>
-                <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
-                <tbody>
-                  ${items.map(it => `
-                    <tr>
-                      <td>${esc(it.nom)}</td>
-                      <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
-                      <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
-                      <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px"></td>
-                      <td style="white-space:nowrap">
-                        <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
-                        <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px">📤 Sortie/Ajuster</button>
-                        <button class="del-btn" data-del="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button>
-                      </td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-          `}
-          <div id="ssx-add-zone-${site.id}" style="margin-top:10px">
-            ${ui.addingSiteId === site.id ? renderAddForm(site) : `
-              <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="nav-btn" data-open-config="${site.id}">🗂️ Configurer depuis la liste type</button>
-                <button class="nav-btn" data-open-catalogue="${site.id}">➕ Depuis le catalogue central</button>
-                <button class="nav-btn" data-open-libre="${site.id}">➕ Article propre à ce site</button>
+        <div class="form-card" style="padding:0;overflow:hidden">
+          <button class="ssx-site-header" data-toggle-site="${site.id}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:none;border:none;cursor:pointer;text-align:left">
+            <span style="font-size:14px;color:var(--gold);font-weight:700">🏢 ${esc(site.nom)}</span>
+            <span style="display:flex;align-items:center;gap:10px">
+              ${alertesSite > 0
+                ? `<span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800">⚠️ ${alertesSite} à réapprovisionner</span>`
+                : `<span style="font-size:11px;color:var(--text-dim)">${items.length} article(s)</span>`}
+              <span style="font-size:12px;color:var(--text-dim)">${ouvert ? "▲" : "▼"}</span>
+            </span>
+          </button>
+          ${ouvert ? `
+          <div style="padding:0 16px 16px">
+            ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
+              <div class="table-wrap" style="border:none">
+                <table>
+                  <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
+                  <tbody>
+                    ${items.map(it => `
+                      <tr>
+                        <td>${esc(it.nom)}</td>
+                        <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
+                        <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
+                        <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px"></td>
+                        <td style="white-space:nowrap">
+                          <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
+                          <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px">📤 Sortie/Ajuster</button>
+                          <button class="del-btn" data-del="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button>
+                        </td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
               </div>
             `}
+            <div id="ssx-add-zone-${site.id}" style="margin-top:10px">
+              ${ui.addingSiteId === site.id ? renderAddForm(site) : `
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="nav-btn" data-open-config="${site.id}">🗂️ Configurer depuis la liste type</button>
+                  <button class="nav-btn" data-open-catalogue="${site.id}">➕ Depuis le catalogue central</button>
+                  <button class="nav-btn" data-open-libre="${site.id}">➕ Article propre à ce site</button>
+                </div>
+              `}
+            </div>
+            <div id="ssx-status-${site.id}" style="font-size:12px;margin-top:8px"></div>
           </div>
-          <div id="ssx-status-${site.id}" style="font-size:12px;margin-top:8px"></div>
+          ` : ""}
         </div>
       `;}).join("")}
     </div>
   `;
 
   document.getElementById("ssx-scan").addEventListener("click", () => { ui.screen = "scan"; render(); });
+  mountedContainer.querySelectorAll("[data-toggle-site]").forEach(btn => btn.addEventListener("click", () => {
+    const id = btn.dataset.toggleSite;
+    if (ui.ouverts.has(id)) ui.ouverts.delete(id); else ui.ouverts.add(id);
+    render();
+  }));
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "qr"; ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "ajuste"; ui.ajusteId = btn.dataset.ajuste; render(); }));
   mountedContainer.querySelectorAll("[data-qte]").forEach(inp => {
