@@ -4,6 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl, getAnonymousViewLink } from "./sharepoint-storage.js";
+import { getExistingPublicPdfUrl, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 
@@ -469,7 +470,7 @@ function renderView(d) {
       <div id="sd-pdf-status" style="font-size:12px"></div>
       <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
-        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b>, via un lien de consultation public. Utilisable par n'importe qui, y compris un prestataire externe <b>sans compte</b> Microsoft ni accès à SharePoint.</p>
+        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b>. Utilisable par n'importe qui, y compris un prestataire externe <b>sans compte</b> Microsoft ni accès à SharePoint.</p>
         <button class="nav-btn" id="sd-qr-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
 
@@ -581,25 +582,47 @@ function renderView(d) {
     const canvas = document.getElementById("sd-qr-canvas");
     if (holder.style.display !== "none") { holder.style.display = "none"; return; }
     holder.style.display = "block";
-    canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche du PDF sur SharePoint…</p>`;
+    canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche d'un lien public déjà généré…</p>`;
     try {
-      let existing = await getExistingFileUrl(pdfFolderSegments(d), pdfFileName(d));
-      if (!existing) {
+      // 1) Chemin normal (conforme charte) : lien de partage public
+      // SharePoint, si le tenant l'autorise. Retombe silencieusement sur
+      // Firebase (2) uniquement en cas d'erreur "partage désactivé" —
+      // dès qu'Atemis l'autorisera côté Microsoft 365, ce chemin
+      // redeviendra actif automatiquement, sans rien changer ici.
+      try {
+        let existing = await getExistingFileUrl(pdfFolderSegments(d), pdfFileName(d));
+        if (!existing && isEditorUser(mountedUser)) {
+          canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Aucun PDF encore enregistré — génération et envoi vers SharePoint…</p>`;
+          const result = await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
+          existing = { id: result.itemId };
+        }
+        if (existing?.id) {
+          canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Création du lien de consultation public…</p>`;
+          const publicUrl = await getAnonymousViewLink(existing.id);
+          if (publicUrl) {
+            canvas.innerHTML = "";
+            await renderQrWithLogo(canvas, publicUrl, 200);
+            return;
+          }
+        }
+      } catch (e) {
+        // Partage SharePoint indisponible (ou tout autre souci) — on
+        // bascule sur la copie publique Firebase ci-dessous.
+      }
+
+      // 2) Repli (contournement validé) : copie publique du PDF sur
+      // Firebase Storage — voir pdf-public-share.js.
+      canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche d'une copie publique déjà générée…</p>`;
+      let publicUrl = await getExistingPublicPdfUrl(d.id);
+      if (!publicUrl) {
         if (!isEditorUser(mountedUser)) {
-          canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">Aucun PDF encore enregistré sur SharePoint pour cette fiche. Demande à un éditeur de cliquer sur "💾 Enregistrer le PDF sur SharePoint" une première fois.</p>`;
+          canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">Aucune copie publique encore générée pour cette fiche. Demande à un éditeur d'ouvrir cette fiche et de cliquer sur "🔳 QR fiche PDF" une première fois.</p>`;
           return;
         }
-        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Aucun PDF encore enregistré — génération et envoi vers SharePoint (une seule fois)…</p>`;
-        const result = await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
-        existing = { id: result.itemId, url: result.url };
+        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Génération du PDF et publication d'une copie publique…</p>`;
+        const { blob } = await generatePdfBlob(d, mountedContainer.querySelector(".print-fiche"));
+        publicUrl = await publishPublicPdf(d.id, blob);
       }
-      if (!existing.id) throw new Error("Le PDF a été trouvé sur SharePoint mais son identifiant est manquant — réessaie, ou vérifie le fichier directement dans SharePoint.");
-      // Le QR est destiné à des prestataires externes SANS compte Microsoft
-      // @etablieres.fr : on encode un lien de partage PUBLIC ("Anyone with
-      // the link"), pas le webUrl normal qui exigerait une connexion.
-      canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Création du lien de consultation public…</p>`;
-      const publicUrl = await getAnonymousViewLink(existing.id);
-      if (!publicUrl) throw new Error("Le lien de partage public n'a pas pu être créé.");
       canvas.innerHTML = "";
       await renderQrWithLogo(canvas, publicUrl, 200);
     } catch (e) {
