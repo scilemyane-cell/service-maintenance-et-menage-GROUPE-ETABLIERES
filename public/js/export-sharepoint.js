@@ -180,10 +180,42 @@ async function extraireHistoriqueInventaires() {
       Date: m.date?.toDate ? m.date.toDate().toLocaleString("fr-FR") : "",
       Produit: nomsProduits.get(m.produitId) || m.produitId,
       "Quantité avant": m.quantiteAvant, "Quantité après": m.quantiteApres,
-      "Compté par": nomsUsers.get(m.uid) || m.uid || "",
+      "Compté par": nomsUsers.get(m.uid) || "Non identifié",
     });
   });
   // Plus récent en premier.
+  lignes.sort((a, b) => (b.Date || "").localeCompare(a.Date || ""));
+  return lignes;
+}
+
+async function extraireSortiesStockSites() {
+  const [mouvSnap, itemsSnap, sitesSnap, usersSnap] = await Promise.all([
+    getDocs(collection(db, "stock-site-mouvements")),
+    getDocs(collection(db, "stock-site-items")),
+    getDocs(collection(db, "sites-dossiers")),
+    getDocs(collection(db, "users")),
+  ]);
+  const nomsArticles = new Map();
+  const siteDeArticle = new Map();
+  itemsSnap.forEach(d => { nomsArticles.set(d.id, d.data().nom); siteDeArticle.set(d.id, d.data().dossierId); });
+  const nomsSites = new Map();
+  sitesSnap.forEach(d => nomsSites.set(d.id, d.data().nom));
+  const nomsUsers = new Map();
+  usersSnap.forEach(d => nomsUsers.set(d.id, d.data().nom || d.data().email));
+  const lignes = [];
+  mouvSnap.forEach(d => {
+    const m = d.data();
+    lignes.push({
+      Date: m.date?.toDate ? m.date.toDate().toLocaleString("fr-FR") : "",
+      Type: m.type === "sortie" ? "Sortie" : "Actualisation",
+      Site: nomsSites.get(siteDeArticle.get(m.itemId)) || "",
+      Article: nomsArticles.get(m.itemId) || m.itemId,
+      "Quantité avant": m.quantiteAvant, "Quantité après": m.quantiteApres,
+      "Quantité sortie": m.quantiteSortie ?? "",
+      "Logement concerné": m.logement || "",
+      "Effectué par": nomsUsers.get(m.uid) || "Non identifié",
+    });
+  });
   lignes.sort((a, b) => (b.Date || "").localeCompare(a.Date || ""));
   return lignes;
 }
@@ -218,6 +250,7 @@ const MODULES = [
   { fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
   { fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
   { fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
+  { fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
   { fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
   { fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
 ];
