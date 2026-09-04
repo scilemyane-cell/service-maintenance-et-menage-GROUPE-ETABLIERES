@@ -462,21 +462,15 @@ function renderView(d) {
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
         <button class="add-btn" id="sd-preview">👁️ Aperçu PDF</button>
         <button class="nav-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
-        <button class="nav-btn" id="sd-qr">🔳 QR fiche (lecture seule)</button>
-        <button class="nav-btn" id="sd-qr-pdf">🔳 QR PDF complet (avec photos)</button>
+        <button class="nav-btn" id="sd-qr">🔳 QR fiche (PDF SharePoint)</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
       <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
-        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre la fiche de <b>${esc(d.nom)}</b> en lecture seule, sans compte ni connexion. Ne contient pas les photos (voir l'autre QR ci-contre pour ça).</p>
+        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b> enregistré sur SharePoint. Nécessite d'être connecté avec un compte Microsoft @etablieres.fr ayant accès.</p>
         <button class="nav-btn" id="sd-qr-print" style="margin-top:10px">🖨️ Imprimer</button>
-      </div>
-      <div id="sd-qr-pdf-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
-        <div id="sd-qr-pdf-canvas" style="width:200px;height:200px;margin:0 auto"></div>
-        <p style="color:#111;font-size:11px;margin:8px 0 0">Ouvre le PDF complet (avec photos) enregistré sur SharePoint pour <b>${esc(d.nom)}</b>. Nécessite d'être connecté avec un compte Microsoft @etablieres.fr ayant accès — pas utilisable par un visiteur extérieur sans compte, contrairement au QR "lecture seule" ci-dessus.</p>
-        <button class="nav-btn" id="sd-qr-pdf-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
 
       <div class="form-card">
@@ -582,21 +576,9 @@ function renderView(d) {
     }
   });
   document.getElementById("sd-print").addEventListener("click", () => { window.print(); });
-  document.getElementById("sd-qr").addEventListener("click", () => {
+  document.getElementById("sd-qr").addEventListener("click", async () => {
     const holder = document.getElementById("sd-qr-holder");
     const canvas = document.getElementById("sd-qr-canvas");
-    if (holder.style.display === "none") {
-      holder.style.display = "block";
-      renderQrWithLogo(canvas, `https://service-maintenance-et-menage.web.app/site-dossier-guest.html?dossier=${d.id}`, 200);
-    } else {
-      holder.style.display = "none";
-    }
-  });
-  document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard(document.getElementById("sd-qr-holder")));
-
-  document.getElementById("sd-qr-pdf").addEventListener("click", async () => {
-    const holder = document.getElementById("sd-qr-pdf-holder");
-    const canvas = document.getElementById("sd-qr-pdf-canvas");
     if (holder.style.display !== "none") { holder.style.display = "none"; return; }
     holder.style.display = "block";
     canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche du PDF sur SharePoint…</p>`;
@@ -617,7 +599,7 @@ function renderView(d) {
       canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">❌ ${esc(e.message || String(e))}</p>`;
     }
   });
-  document.getElementById("sd-qr-pdf-print").addEventListener("click", () => printQrCard(document.getElementById("sd-qr-pdf-holder")));
+  document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard(document.getElementById("sd-qr-holder")));
   document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération et envoi du PDF…</span>`;
