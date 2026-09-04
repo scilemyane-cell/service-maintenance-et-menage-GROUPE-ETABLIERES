@@ -204,3 +204,23 @@ export async function getImageDisplayUrl(itemId) {
   const item = await res.json();
   return item["@microsoft.graph.downloadUrl"];
 }
+
+// Vérifie si un fichier à nom fixe (ex. le PDF récapitulatif d'un dossier,
+// enregistré via conflictBehavior "replace") existe déjà sur SharePoint à
+// l'emplacement attendu, et renvoie directement son lien de consultation
+// (webUrl) si oui — sans le télécharger ni le régénérer. Renvoie null s'il
+// n'existe pas encore (première fois, ou jamais enregistré).
+export async function getExistingFileUrl(folderSegments, fixedFilename, rootFolder = ROOT_FOLDER) {
+  const token = await getAccessToken();
+  const driveId = await resolveDriveId(token);
+  const folder = buildFolderPath(rootFolder, folderSegments);
+  const safeName = sanitizeFilename(fixedFilename);
+  const res = await fetch(
+    `${GRAPH_ROOT}/drives/${driveId}/root:/${folder}/${safeName}?select=id,webUrl,lastModifiedDateTime`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Vérification SharePoint impossible (${res.status})`);
+  const item = await res.json();
+  return { url: item.webUrl, lastModified: item.lastModifiedDateTime };
+}

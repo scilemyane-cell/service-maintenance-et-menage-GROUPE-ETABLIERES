@@ -3,7 +3,7 @@ import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { watchAssociations } from "./associations-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
@@ -428,6 +428,13 @@ export async function previewPdf(d, element, win) {
   setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
 }
 
+// Nom et emplacement fixes du PDF récapitulatif d'un dossier sur
+// SharePoint (mêmes valeurs que celles utilisées par generateAndUploadPdf
+// ci-dessous) — centralisés ici pour que la vérification d'existence et
+// l'enregistrement pointent toujours exactement au même endroit.
+function pdfFileName(d) { return `${d.nom} - Dossier technique.pdf`; }
+function pdfFolderSegments(d) { return [d.nom]; }
+
 // Génère un PDF à partir d'un élément .print-fiche déjà présent dans le DOM
 // (avec ses images déjà résolues, voir resolveGalleryImages) et l'envoie
 // vers SharePoint, à la racine du dossier de la résidence. Réutilisée par
@@ -437,7 +444,7 @@ export async function generateAndUploadPdf(d, element) {
   const token = await getAccessToken();
   const { blob, filename } = await generatePdfBlob(d, element);
   const file = new File([blob], filename, { type: "application/pdf" });
-  return uploadToDrive(file, token, [d.nom], undefined, { conflictBehavior: "replace", fixedFilename: filename });
+  return uploadToDrive(file, token, pdfFolderSegments(d), undefined, { conflictBehavior: "replace", fixedFilename: filename });
 }
 
 function renderView(d) {
@@ -502,9 +509,51 @@ function renderView(d) {
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; render(); });
   document.getElementById("sd-preview").addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
-    const win = window.open("", "_blank"); // ouverture synchrone, avant l'await, pour ne pas être bloquée
-    if (win) win.document.write("<title>Génération de l'aperçu…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Génération du PDF en cours… (quelques secondes, un peu plus s'il y a beaucoup de photos)</body>");
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération de l'aperçu…</span>`;
+    // Ouverture synchrone de l'onglet AVANT tout await (sinon bloquée par
+    // le bloqueur de pop-up, y compris pour naviguer vers un simple lien
+    // https:// une fois la vérification/génération terminée).
+    const win = window.open("", "_blank");
+    if (win) win.document.write("<title>Chargement…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Recherche d'un PDF déjà enregistré sur SharePoint…</body>");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification d'un PDF déjà enregistré sur SharePoint…</span>`;
+
+    // 1) Le plus rapide : si un PDF a déjà été enregistré sur SharePoint
+    // pour ce dossier (bouton "Enregistrer le PDF sur SharePoint"), on
+    // ouvre directement ce lien — quasi instantané, aucune génération.
+    try {
+      const existing = await getExistingFileUrl(pdfFolderSegments(d), pdfFileName(d));
+      if (existing) {
+        if (win && !win.closed) win.location.href = existing.url; else window.open(existing.url, "_blank");
+        statusEl.innerHTML = `<span style="color:var(--text-dim)">Ouverture du PDF déjà enregistré sur SharePoint (le ${new Date(existing.lastModified).toLocaleDateString('fr-FR')}). Utilise "💾 Enregistrer le PDF sur SharePoint" pour le mettre à jour si la fiche a changé depuis.</span>`;
+        return;
+      }
+    } catch (e) {
+      // La vérification a échoué (ex. pas connecté à Microsoft) — on
+      // bascule silencieusement sur la génération directe ci-dessous.
+    }
+
+    // 2) Éditeur, et rien d'enregistré pour l'instant : on génère et on
+    // enregistre sur SharePoint directement, puis on ouvre ce lien — la
+    // prochaine consultation sera alors instantanée (chemin 1 ci-dessus).
+    if (isEditorUser(mountedUser)) {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Aucun PDF encore enregistré — génération et envoi vers SharePoint (une seule fois)…</span>`;
+      if (win && !win.closed) { win.document.open(); win.document.write("<title>Génération…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Aucun PDF encore enregistré pour cette fiche — génération et envoi vers SharePoint en cours (une seule fois, les prochains aperçus seront instantanés)…</body>"); win.document.close(); }
+      try {
+        const result = await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
+        if (win && !win.closed) win.location.href = result.url; else window.open(result.url, "_blank");
+        statusEl.innerHTML = `<span style="color:var(--gold)">✓ PDF enregistré sur SharePoint et ouvert. Les prochains aperçus seront instantanés.</span>`;
+        return;
+      } catch (e) {
+        const msg = e.message || String(e);
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(msg)}</span>`;
+        if (win && !win.closed) { win.document.open(); win.document.write(`<title>Échec</title><body style="font-family:sans-serif;padding:20px;color:#a00">❌ ${esc(msg)}</body>`); win.document.close(); }
+        return;
+      }
+    }
+
+    // 3) Utilisateur non éditeur sans PDF déjà enregistré : génération
+    // locale à la volée (plus lente), sans rien écrire sur SharePoint.
+    if (win && !win.closed) { win.document.open(); win.document.write("<title>Génération de l'aperçu…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Génération du PDF en cours… (quelques secondes, un peu plus s'il y a beaucoup de photos)</body>"); win.document.close(); }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Aucun PDF enregistré pour l'instant — génération à la volée…</span>`;
     try {
       await previewPdf(d, mountedContainer.querySelector(".print-fiche"), win);
       statusEl.innerHTML = "";
