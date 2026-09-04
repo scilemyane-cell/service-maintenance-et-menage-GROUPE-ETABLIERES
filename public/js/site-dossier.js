@@ -304,15 +304,12 @@ async function waitForImages(element, timeoutMs = 10000) {
   ]);
 }
 
-// Génère un PDF à partir d'un élément .print-fiche déjà présent dans le DOM
-// (avec ses images déjà résolues, voir resolveGalleryImages) et l'envoie
-// vers SharePoint, à la racine du dossier de la résidence. Réutilisée par
-// l'outil de génération en masse (migration-tool.js) pour tous les
-// dossiers existants.
-export async function generateAndUploadPdf(d, element) {
+// Génère uniquement le blob PDF (sans upload) à partir d'un élément
+// .print-fiche déjà présent dans le DOM, images résolues — utilisé à la
+// fois pour l'aperçu rapide et pour l'envoi vers SharePoint ci-dessous.
+async function generatePdfBlob(d, element) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
   await waitForImages(element);
-  const token = await getAccessToken();
   const filename = `${d.nom} - Dossier technique.pdf`;
   const blob = await window.html2pdf()
     .set({
@@ -324,6 +321,38 @@ export async function generateAndUploadPdf(d, element) {
     })
     .from(element)
     .outputPdf("blob");
+  return { blob, filename };
+}
+
+// Ouvre directement un aperçu du PDF dans un nouvel onglet, sans passer
+// par la boîte de dialogue d'impression du navigateur ni par un envoi
+// SharePoint — pour un contrôle visuel rapide avant impression/envoi.
+// `win` doit être ouvert de façon synchrone dans le gestionnaire de clic
+// (window.open("", "_blank")) AVANT d'appeler cette fonction : ouvrir la
+// fenêtre seulement une fois le PDF généré (donc après un await) serait
+// bloqué par la plupart des navigateurs (bloqueur de pop-up).
+export async function previewPdf(d, element, win) {
+  const { blob } = await generatePdfBlob(d, element);
+  const url = URL.createObjectURL(blob);
+  if (win && !win.closed) {
+    win.location.href = url;
+  } else {
+    win = window.open(url, "_blank");
+    if (!win) throw new Error("Le navigateur a bloqué l'ouverture de l'aperçu (pop-up). Autorise les pop-ups pour ce site et réessaie.");
+  }
+  // Libère la mémoire une fois l'onglet d'aperçu chargé (délai large pour
+  // laisser le temps au navigateur de charger le PDF depuis le blob).
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+// Génère un PDF à partir d'un élément .print-fiche déjà présent dans le DOM
+// (avec ses images déjà résolues, voir resolveGalleryImages) et l'envoie
+// vers SharePoint, à la racine du dossier de la résidence. Réutilisée par
+// l'outil de génération en masse (migration-tool.js) pour tous les
+// dossiers existants.
+export async function generateAndUploadPdf(d, element) {
+  const token = await getAccessToken();
+  const { blob, filename } = await generatePdfBlob(d, element);
   const file = new File([blob], filename, { type: "application/pdf" });
   return uploadToDrive(file, token, [d.nom], undefined, { conflictBehavior: "replace", fixedFilename: filename });
 }
@@ -336,7 +365,8 @@ function renderView(d) {
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="nav-btn" id="sd-back">← Tous les dossiers</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
-        <button class="add-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
+        <button class="add-btn" id="sd-preview">👁️ Aperçu PDF</button>
+        <button class="nav-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
         <button class="nav-btn" id="sd-qr">🔳 QR fiche (lecture seule)</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
@@ -387,6 +417,18 @@ function renderView(d) {
 
   document.getElementById("sd-back").addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; render(); });
+  document.getElementById("sd-preview").addEventListener("click", async () => {
+    const statusEl = document.getElementById("sd-pdf-status");
+    const win = window.open("", "_blank"); // ouverture synchrone, avant l'await, pour ne pas être bloquée
+    if (win) win.document.write("<title>Génération de l'aperçu…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Génération du PDF en cours…</body>");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération de l'aperçu…</span>`;
+    try {
+      await previewPdf(d, mountedContainer.querySelector(".print-fiche"), win);
+      statusEl.innerHTML = "";
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
   document.getElementById("sd-print").addEventListener("click", () => { window.print(); });
   document.getElementById("sd-qr").addEventListener("click", () => {
     const holder = document.getElementById("sd-qr-holder");
