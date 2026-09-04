@@ -4,7 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
-import { getExistingPublicPdfUrl, publishPublicPdf } from "./pdf-public-share.js";
+import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 
@@ -587,20 +587,20 @@ function renderView(d) {
     const canvas = document.getElementById("sd-qr-canvas");
     if (holder.style.display !== "none") { holder.style.display = "none"; return; }
     holder.style.display = "block";
-    canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Recherche d'une copie publique déjà générée…</p>`;
+    canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Vérification d'une copie publique déjà générée…</p>`;
     try {
-      let publicUrl;
+      let exists;
       try {
-        publicUrl = await getExistingPublicPdfUrl(d.id);
+        exists = await hasPublicPdf(d.id);
       } catch (e) {
-        throw new Error(`Impossible d'accéder à Firebase Storage (${e.code || e.message || e}). Vérifie que Firebase Storage est bien activé (Console Firebase > Storage > Commencer) et que les règles ont été publiées (fichier storage.rules).`);
+        throw new Error(`Impossible d'accéder à Firestore (${e.code || e.message || e}).`);
       }
-      if (!publicUrl) {
+      if (!exists) {
         if (!isEditorUser(mountedUser)) {
           canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">Aucune copie publique encore générée pour cette fiche. Demande à un éditeur d'ouvrir cette fiche et de cliquer sur "🔳 QR fiche PDF" une première fois.</p>`;
           return;
         }
-        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Génération du PDF…</p>`;
+        canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Génération du PDF (peut prendre jusqu'à 1 min s'il y a beaucoup de photos)…</p>`;
         let blob;
         try {
           ({ blob } = await generatePdfBlob(d, mountedContainer.querySelector(".print-fiche")));
@@ -609,13 +609,15 @@ function renderView(d) {
         }
         canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Publication de la copie publique…</p>`;
         try {
-          publicUrl = await publishPublicPdf(d.id, blob);
+          await publishPublicPdf(d.id, blob);
         } catch (e) {
-          throw new Error(`Échec de l'envoi vers Firebase Storage (${e.code || e.message || e}). Vérifie que Firebase Storage est bien activé et que les règles ont été publiées.`);
+          throw new Error(`Échec de l'enregistrement dans Firestore : ${e.code || e.message || e}`);
         }
       }
       canvas.innerHTML = "";
-      await renderQrWithLogo(canvas, publicUrl, 200);
+      // Le QR encode un lien vers la page invité qui reconstitue le PDF à
+      // la volée à partir de Firestore (pas un lien direct de fichier).
+      await renderQrWithLogo(canvas, `https://service-maintenance-et-menage.web.app/dossier-pdf-guest.html?dossier=${d.id}`, 200);
     } catch (e) {
       canvas.innerHTML = `<p style="margin:0;color:#a00;font-size:12px;text-align:left">❌ ${esc(e.message || String(e))}</p>`;
     }

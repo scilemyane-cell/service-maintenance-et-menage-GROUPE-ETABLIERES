@@ -168,5 +168,22 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isEditor();
     }
+    // ---- Copie publique d'un PDF de dossier de site (contournement) ----
+    // Lecture PUBLIQUE (y compris en session anonyme, sans compte réel) :
+    // c'est tout l'intérêt — un prestataire externe sans compte Microsoft
+    // ni accès SharePoint doit pouvoir ouvrir le PDF via le QR "fiche PDF"
+    // (voir dossier-pdf-guest.html). Écriture réservée aux éditeurs
+    // (admin/n1/super_admin), qui seuls voient le bouton correspondant
+    // dans l'appli. Contournement ponctuel validé par Valentin, faute
+    // d'alternative SharePoint (partage public par lien désactivé sur le
+    // tenant) et de forfait Firebase Storage payant (Blaze, refusé).
+    match /dossiers-pdf-public/{dossierId} {
+      allow read: if true;
+      allow write: if isEditor();
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow write: if isEditor();
+      }
+    }
   }
 }

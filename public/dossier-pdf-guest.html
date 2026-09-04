@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiche PDF — Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  html,body{ height:100%; }
+  #pdf-frame{ position:fixed; inset:0; top:0; width:100%; height:100%; border:0; background:#525659; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  import { getExistingPublicPdf } from "./js/pdf-public-share.js";
+
+  const params = new URLSearchParams(location.search);
+  const dossierId = params.get("dossier");
+  const app = document.getElementById("app");
+
+  function showError(msg) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Accès invalide</div>
+          <h1>Impossible d'accéder</h1>
+          <p class="hint">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  if (!dossierId) {
+    showError("Ce lien ne contient pas de fiche valide. Scanne le QR code affiché sur le site.");
+  } else {
+    app.innerHTML = `<div class="login-screen"><div class="hint">Chargement du PDF…</div></div>`;
+    try {
+      const result = await getExistingPublicPdf(dossierId);
+      if (!result) {
+        showError("Ce PDF n'a pas encore été généré pour cette fiche. Contacte ton responsable.");
+      } else {
+        const url = URL.createObjectURL(result.blob);
+        app.innerHTML = `<iframe id="pdf-frame" src="${url}"></iframe>`;
+      }
+    } catch (e) {
+      showError(`Erreur lors du chargement du PDF : ${e.message || e}`);
+    }
+  }
+</script>
+</body>
+</html>
