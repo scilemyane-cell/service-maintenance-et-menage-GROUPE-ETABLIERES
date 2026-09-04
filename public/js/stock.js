@@ -2,7 +2,7 @@ import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, createProduit, saveProduit, envoyerProduitCorbeille, seedProduitsType, definirOrdreProduits } from "./stock-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { watchFournisseurs } from "./fournisseurs-data.js";
-import { renderQrWithLogo } from "./qr-logo.js";
+import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 let state = { produits: [], fournisseurs: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -335,7 +335,7 @@ function renderQr(p) {
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="sk-back">← Retour</button>
-      <div class="form-card" style="text-align:center;max-width:320px" id="sk-qr-print">
+      <div class="form-card qr-print-card" style="text-align:center;max-width:320px" id="sk-qr-print">
         <p style="font-weight:700;margin:0 0 4px">${esc(p.nom)}</p>
         <p class="hint" style="margin:0 0 12px">${esc(p.categorie || "")}</p>
         <div id="sk-qr-canvas" style="width:220px;height:220px;margin:0 auto"></div>
@@ -344,7 +344,7 @@ function renderQr(p) {
     </div>
   `;
   document.getElementById("sk-back").addEventListener("click", () => { ui.qrId = null; render(); });
-  document.getElementById("sk-print").addEventListener("click", () => window.print());
+  document.getElementById("sk-print").addEventListener("click", () => printQrCard());
 
   const holder = document.getElementById("sk-qr-canvas");
   renderQrWithLogo(holder, qrPayloadFor(p.id), 220);

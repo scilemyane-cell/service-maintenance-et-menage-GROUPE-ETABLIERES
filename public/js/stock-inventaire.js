@@ -1,7 +1,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchStockProduits, enregistrerInventaire } from "./stock-data.js";
 import { getImageDisplayUrl } from "./sharepoint-storage.js";
-import { renderQrWithLogo } from "./qr-logo.js";
+import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 let state = { produits: [] };
 let ui = { scanning: false, ajusteId: null, rapide: false, rapideIndex: 0 };
@@ -66,9 +66,10 @@ function render() {
         <button class="nav-btn" id="sk-scan" style="width:fit-content">📷 Scanner un produit</button>
         <button class="nav-btn" id="sk-qr-rapide" style="width:fit-content">🔳 QR du mode rapide</button>
       </div>
-      <div id="sk-qr-rapide-holder" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
+      <div id="sk-qr-rapide-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sk-qr-rapide-canvas" style="width:200px;height:200px;margin:0 auto"></div>
         <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois — scanné avec l'appareil photo du téléphone, ouvre directement le mode rapide.</p>
+        <button class="nav-btn" id="sk-qr-rapide-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -101,6 +102,7 @@ function render() {
       holder.style.display = "none";
     }
   });
+  document.getElementById("sk-qr-rapide-print").addEventListener("click", () => printQrCard());
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.ajusteId = btn.dataset.ajuste; render(); }));
 }
 

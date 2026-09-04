@@ -53,3 +53,17 @@ export async function renderQrWithLogo(container, text, size = 220) {
     // reste parfaitement valide et scannable, simplement sans logo.
   }
 }
+
+// Imprime UNIQUEMENT la carte QR la plus proche (classe .qr-print-card,
+// voir style.css) même si l'écran contient aussi une fiche imprimable
+// cachée (ex. dossier de site) — sans cette exclusion mutuelle, les deux
+// s'imprimeraient superposées. La classe est retirée juste après
+// l'impression (ou après un court délai en repli, au cas où l'évènement
+// "afterprint" ne se déclenche pas de façon fiable sur tous navigateurs).
+export function printQrCard() {
+  document.body.classList.add("printing-qr");
+  const cleanup = () => document.body.classList.remove("printing-qr");
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.print();
+  setTimeout(cleanup, 2000);
+}

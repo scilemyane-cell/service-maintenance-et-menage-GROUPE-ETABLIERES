@@ -6,7 +6,7 @@
 // porter la case "a un stock déporté".
 
 import { esc } from "./astreinte-logic.js";
-import { renderQrWithLogo } from "./qr-logo.js";
+import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import {
   listerSitesAvecStockDeporte, listerTousLesArticlesSite,
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
@@ -120,9 +120,10 @@ function renderListe() {
               <button class="nav-btn" data-rapide-site="${site.id}">🚀 Mode rapide</button>
               <button class="nav-btn" data-qr-rapide-site="${site.id}">🔳 QR inventaire rapide</button>
             </div>
-            <div id="ssx-qr-rapide-holder-${site.id}" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
+            <div id="ssx-qr-rapide-holder-${site.id}" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
               <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
               <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois sur ce site — scanné avec l'appareil photo du téléphone, ouvre directement le mode rapide de <b>${esc(site.nom)}</b> uniquement.</p>
+              <button class="nav-btn" data-qr-rapide-print="${site.id}" style="margin-top:10px">🖨️ Imprimer</button>
             </div>
             ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
               <div class="table-wrap" style="border:none">
@@ -183,6 +184,7 @@ function renderListe() {
       holder.style.display = "none";
     }
   }));
+  mountedContainer.querySelectorAll("[data-qr-rapide-print]").forEach(btn => btn.addEventListener("click", () => printQrCard()));
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "qr"; ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "ajuste"; ui.ajusteId = btn.dataset.ajuste; render(); }));
   mountedContainer.querySelectorAll("[data-qte]").forEach(inp => {
@@ -470,7 +472,7 @@ function renderQr() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <button class="nav-btn" id="ssx-back">← Retour</button>
-      <div class="form-card" style="text-align:center;max-width:320px">
+      <div class="form-card qr-print-card" style="text-align:center;max-width:320px">
         <p style="font-weight:700;margin:0 0 4px">${esc(item.nom)}</p>
         <p class="hint" style="margin:0 0 12px">${esc(site?.nom || "")}</p>
         <div id="ssx-qr-holder" style="width:220px;height:220px;margin:0 auto"></div>
@@ -479,7 +481,7 @@ function renderQr() {
     </div>
   `;
   document.getElementById("ssx-back").addEventListener("click", () => { ui.screen = "liste"; render(); });
-  document.getElementById("ssx-print").addEventListener("click", () => window.print());
+  document.getElementById("ssx-print").addEventListener("click", () => printQrCard());
 
   const holder = document.getElementById("ssx-qr-holder");
   renderQrWithLogo(holder, qrPayloadForSite(item.id), 220);

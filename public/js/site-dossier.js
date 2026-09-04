@@ -4,7 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
-import { renderQrWithLogo } from "./qr-logo.js";
+import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
@@ -467,9 +467,10 @@ function renderView(d) {
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
-      <div id="sd-qr-holder" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
+      <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
         <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre la fiche de <b>${esc(d.nom)}</b> en lecture seule, sans compte ni connexion.</p>
+        <button class="nav-btn" id="sd-qr-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
 
       <div class="form-card">
@@ -585,6 +586,7 @@ function renderView(d) {
       holder.style.display = "none";
     }
   });
+  document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard());
   document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération et envoi du PDF…</span>`;
