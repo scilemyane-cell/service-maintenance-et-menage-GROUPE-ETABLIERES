@@ -76,6 +76,15 @@ export async function renderQrWithLogo(container, text, size = 220) {
 // vide sur la copie.
 export function printQrCard(card) {
   if (!card) { window.print(); return; }
+
+  // Sécurité : si un précédent appel n'a pas été nettoyé à temps (double
+  // clic, dialogue d'impression rouvert avant la fin du délai de repli),
+  // on retire l'ancien conteneur avant d'en créer un nouveau — sinon les
+  // deux s'impriment superposés/à la suite (vu en test : QR dupliqué sur
+  // 2 pages).
+  document.body.classList.remove("printing-qr");
+  document.getElementById("qr-print-root")?.remove();
+
   const clone = card.cloneNode(true);
   clone.style.display = "block";
   clone.querySelectorAll("button").forEach(b => b.remove()); // inutile sur le papier
@@ -85,10 +94,19 @@ export function printQrCard(card) {
   if (sourceCanvas && cloneCanvas) {
     const img = document.createElement("img");
     img.src = sourceCanvas.toDataURL("image/png");
+    img.width = sourceCanvas.width;
+    img.height = sourceCanvas.height;
     img.style.width = sourceCanvas.width + "px";
     img.style.height = sourceCanvas.height + "px";
+    img.style.display = "block";
+    img.style.margin = "0 auto";
     cloneCanvas.replaceWith(img);
   }
+  // Le fallback interne de qrcodejs (une <img> cachée en display:none,
+  // utilisée pour la sauvegarde d'image sur d'anciens navigateurs) ne
+  // doit jamais apparaître à l'impression — retiré explicitement plutôt
+  // que de compter sur son display:none d'origine.
+  clone.querySelectorAll("img[alt='Scan me!']").forEach(el => el.remove());
 
   const printRoot = document.createElement("div");
   printRoot.id = "qr-print-root";

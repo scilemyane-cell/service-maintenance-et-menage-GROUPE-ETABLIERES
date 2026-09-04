@@ -232,9 +232,10 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
   }
   body.printing-qr #qr-print-root *{ visibility:visible !important; }
   body.printing-qr #qr-print-root .qr-print-card{
-    position:static !important; margin:60px auto !important; max-width:320px !important;
+    position:static !important; margin:40px auto !important; max-width:320px !important;
     text-align:center !important; background:#fff !important; color:#000 !important;
     border:1px solid #999 !important; border-radius:10px; padding:28px !important;
+    page-break-inside:avoid !important; break-inside:avoid !important;
   }
   body.printing-qr #qr-print-root .qr-print-card p{ color:#000 !important; }
 }
