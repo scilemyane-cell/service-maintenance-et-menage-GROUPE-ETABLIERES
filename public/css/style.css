@@ -11,24 +11,28 @@ html[data-theme="gris"]{
 }
 /* ---- Thème "Clair" ---- */
 html[data-theme="clair"]{
-  --bg:#E7EAF0; --bg-grad:#F4F5F8; --panel:#FFFFFF; --panel-alt:#EFF1F5; --border:#C7CDD9;
-  --text:#1B2330; --text-dim:#5B6472; --gold:#A87A12; --teal:#128077;
+  --bg:#D9DEE7; --bg-grad:#EDEFF3; --panel:#FFFFFF; --panel-alt:#EBEDF2; --border:#B7BFCE;
+  --text:#1B2330; --text-dim:#525B6B; --gold:#A87A12; --teal:#128077;
   --red:#C23B27; --violet:#6656C9; --alert-text:#9A2A18;
 }
 /* Sur fond clair, une simple bordure claire ne suffit pas à distinguer
    les cartes du fond (contrairement aux thèmes sombres, où panel/bg sont
-   naturellement plus contrastés) — on ajoute une légère ombre portée
-   pour que chaque carte/tuile se détache nettement. */
+   naturellement plus contrastés) — on ajoute une ombre portée nette
+   pour que chaque carte/tuile se détache clairement. */
 html[data-theme="clair"] .tile-card,
 html[data-theme="clair"] .bubble-card,
 html[data-theme="clair"] .form-card,
 html[data-theme="clair"] .login-card{
-  box-shadow:0 1px 2px rgba(30,40,60,.06), 0 4px 10px rgba(30,40,60,.07);
+  border-color:var(--border);
+  box-shadow:0 1px 3px rgba(20,28,45,.10), 0 6px 16px rgba(20,28,45,.13);
 }
 html[data-theme="clair"] .tile-card:hover,
 html[data-theme="clair"] .bubble-card:hover{
-  box-shadow:0 2px 4px rgba(30,40,60,.08), 0 8px 16px rgba(30,40,60,.10);
+  box-shadow:0 2px 5px rgba(20,28,45,.13), 0 10px 22px rgba(20,28,45,.17);
 }
+html[data-theme="clair"] .stat-chip{ box-shadow:0 1px 2px rgba(20,28,45,.08); }
+html[data-theme="clair"] .topbar,
+html[data-theme="clair"] .tabs{ box-shadow:0 1px 4px rgba(20,28,45,.08); }
 *{ box-sizing:border-box; }
 html,body{ margin:0; padding:0; }
 body{
