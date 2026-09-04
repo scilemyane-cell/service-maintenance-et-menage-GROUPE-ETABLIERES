@@ -94,10 +94,14 @@ function render() {
   document.getElementById("sd-new")?.addEventListener("click", async () => {
     const id = await createDossier(nouveauDossier(state.sectionsOrder));
     ui.openId = id; ui.mode = "edit"; render();
+    window.scrollTo(0, 0);
   });
   document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
-    btn.addEventListener("click", () => { ui.openId = btn.dataset.open; ui.mode = "view"; render(); });
+    btn.addEventListener("click", () => {
+      ui.openId = btn.dataset.open; ui.mode = "view"; render();
+      window.scrollTo(0, 0); // remonte en haut de la fiche, quelle que soit la position de défilement dans la liste (utile pour un dossier tout en bas)
+    });
   });
 }
 
