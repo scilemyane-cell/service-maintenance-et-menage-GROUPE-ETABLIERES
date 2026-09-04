@@ -314,20 +314,34 @@ async function waitForImages(element, timeoutMs = 10000) {
 // possible sur une donnée déjà intégrée au document) avant de lancer le
 // rendu. Une image qui échoue à se convertir est simplement retirée du
 // PDF plutôt que de bloquer tout le document.
-async function inlineImagesForPdf(element) {
+// Les photos de téléphone dépassent souvent plusieurs Mo en pleine
+// résolution — les redimensionner ici (maxDim) avant de les intégrer
+// accélère nettement à la fois le fetch/encodage et le rendu html2canvas,
+// sans perte visible sur un PDF A4.
+async function inlineImagesForPdf(element, maxDim = 1000, quality = 0.8) {
   const imgs = [...element.querySelectorAll("img")].filter(img => img.src && !img.src.startsWith("data:"));
   await Promise.all(imgs.map(async (img) => {
     try {
       const res = await fetch(img.src);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      const dataUri = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error || new Error("Lecture de l'image échouée"));
-        reader.readAsDataURL(blob);
+      const bitmap = await createImageBitmap(blob).catch(async () => {
+        // Repli si createImageBitmap n'est pas disponible/échoue : passer
+        // par un élément <img> classique pour obtenir les dimensions.
+        const tmp = new Image();
+        const url = URL.createObjectURL(blob);
+        await new Promise((resolve, reject) => { tmp.onload = resolve; tmp.onerror = reject; tmp.src = url; });
+        URL.revokeObjectURL(url);
+        return tmp;
       });
-      img.src = dataUri;
+      const w = bitmap.width || bitmap.naturalWidth;
+      const h = bitmap.height || bitmap.naturalHeight;
+      const ratio = Math.min(1, maxDim / Math.max(w, h));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(w * ratio));
+      canvas.height = Math.max(1, Math.round(h * ratio));
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      img.src = canvas.toDataURL("image/jpeg", quality);
     } catch (e) {
       console.warn("PDF : image ignorée (non intégrable) —", e.message || e);
       img.remove();
@@ -353,7 +367,10 @@ function withTimeout(promise, ms, message) {
 // affiché à l'écran), pour que l'intégration des images en data URI et
 // la suppression des photos non récupérables n'altèrent jamais ce que
 // l'utilisateur voit sur la page.
-async function generatePdfBlob(d, element) {
+// `rapide` (aperçu) réduit la résolution des photos et l'échelle du rendu
+// pour aller nettement plus vite ; l'enregistrement SharePoint garde la
+// qualité maximale.
+async function generatePdfBlob(d, element, { rapide = false } = {}) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
   await waitForImages(element);
 
@@ -364,15 +381,15 @@ async function generatePdfBlob(d, element) {
   const clone = offscreen.firstElementChild;
 
   try {
-    await inlineImagesForPdf(clone);
+    await inlineImagesForPdf(clone, rapide ? 700 : 1400, rapide ? 0.65 : 0.85);
     const filename = `${d.nom} - Dossier technique.pdf`;
     const blob = await withTimeout(
       window.html2pdf()
         .set({
           margin: 10,
           filename,
-          image: { type: "jpeg", quality: 0.92 },
-          html2canvas: { scale: 2, useCORS: false, allowTaint: false },
+          image: { type: "jpeg", quality: rapide ? 0.7 : 0.92 },
+          html2canvas: { scale: rapide ? 1 : 2, useCORS: false, allowTaint: false },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(clone)
@@ -397,7 +414,7 @@ async function generatePdfBlob(d, element) {
 // vers l'URL blob:, car Chrome bloque/bloque parfois silencieusement une
 // telle navigation directe depuis une autre fenêtre (chargement infini).
 export async function previewPdf(d, element, win) {
-  const { blob, filename } = await generatePdfBlob(d, element);
+  const { blob, filename } = await generatePdfBlob(d, element, { rapide: true });
   const url = URL.createObjectURL(blob);
   if (!win || win.closed) {
     win = window.open("", "_blank");
@@ -486,7 +503,7 @@ function renderView(d) {
   document.getElementById("sd-preview").addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     const win = window.open("", "_blank"); // ouverture synchrone, avant l'await, pour ne pas être bloquée
-    if (win) win.document.write("<title>Génération de l'aperçu…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Génération du PDF en cours…</body>");
+    if (win) win.document.write("<title>Génération de l'aperçu…</title><body style='font-family:sans-serif;padding:20px;color:#333'>Génération du PDF en cours… (quelques secondes, un peu plus s'il y a beaucoup de photos)</body>");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération de l'aperçu…</span>`;
     try {
       await previewPdf(d, mountedContainer.querySelector(".print-fiche"), win);
