@@ -226,14 +226,14 @@ export async function getExistingFileUrl(folderSegments, fixedFilename, rootFold
   );
   if (res.ok) {
     const item = await res.json();
-    return { url: item.webUrl, lastModified: item.lastModifiedDateTime };
+    return { id: item.id, url: item.webUrl, lastModified: item.lastModifiedDateTime };
   }
   if (res.status !== 404) throw new Error(`Vérification SharePoint impossible (${res.status})`);
 
   // Repli tolérant : le dossier existe peut-être avec un fichier au nom
   // légèrement différent (ancien horodatage, casse différente...).
   const listRes = await fetch(
-    `${GRAPH_ROOT}/drives/${driveId}/root:/${folder}:/children?select=name,webUrl,lastModifiedDateTime&$top=200`,
+    `${GRAPH_ROOT}/drives/${driveId}/root:/${folder}:/children?select=id,name,webUrl,lastModifiedDateTime&$top=200`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (listRes.status === 404) return null; // le dossier lui-même n'existe pas encore
@@ -243,5 +243,31 @@ export async function getExistingFileUrl(folderSegments, fixedFilename, rootFold
   const matches = (list.value || []).filter(it => (it.name || "").toLowerCase().endsWith(suffix));
   if (matches.length === 0) return null;
   matches.sort((a, b) => new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
-  return { url: matches[0].webUrl, lastModified: matches[0].lastModifiedDateTime };
+  return { id: matches[0].id, url: matches[0].webUrl, lastModified: matches[0].lastModifiedDateTime };
+}
+
+// Crée (ou récupère, si elle existe déjà — Graph renvoie le même lien pour
+// un type/scope identique plutôt que d'en dupliquer un) un lien de partage
+// SharePoint public de type "Anyone with the link" : consultable par
+// N'IMPORTE QUI, y compris un prestataire externe SANS compte Microsoft
+// @etablieres.fr — contrairement au webUrl "normal" (celui de
+// getExistingFileUrl/uploadToDrive), qui exige d'être connecté avec un
+// compte ayant accès au site. C'est ce lien-là qu'il faut encoder dans un
+// QR destiné à être scanné par un intervenant extérieur.
+export async function getAnonymousViewLink(itemId) {
+  const token = await getAccessToken();
+  const driveId = await resolveDriveId(token);
+  const res = await fetch(`${GRAPH_ROOT}/drives/${driveId}/items/${itemId}/createLink`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "view", scope: "anonymous" }),
+  });
+  if (!res.ok) {
+    if (res.status === 403) {
+      throw new Error("Le partage public par lien est désactivé sur ce tenant SharePoint (paramètre organisation). Un administrateur Microsoft 365 doit l'autoriser pour que ce QR fonctionne sans compte.");
+    }
+    throw new Error(`Impossible de créer le lien de partage public (${res.status})`);
+  }
+  const data = await res.json();
+  return data.link?.webUrl || null;
 }

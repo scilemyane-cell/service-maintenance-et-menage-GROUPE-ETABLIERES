@@ -3,7 +3,7 @@ import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder,
 } from "./site-dossier-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl, getAnonymousViewLink } from "./sharepoint-storage.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 
@@ -462,14 +462,14 @@ function renderView(d) {
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
         <button class="add-btn" id="sd-preview">👁️ Aperçu PDF</button>
         <button class="nav-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
-        <button class="nav-btn" id="sd-qr">🔳 QR fiche (PDF SharePoint)</button>
+        <button class="nav-btn" id="sd-qr">🔳 QR fiche PDF (lien public, sans compte)</button>
         ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
       <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
-        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b> enregistré sur SharePoint. Nécessite d'être connecté avec un compte Microsoft @etablieres.fr ayant accès.</p>
+        <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b>, via un lien de consultation public. Utilisable par n'importe qui, y compris un prestataire externe <b>sans compte</b> Microsoft ni accès à SharePoint.</p>
         <button class="nav-btn" id="sd-qr-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
 
@@ -591,11 +591,17 @@ function renderView(d) {
         }
         canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Aucun PDF encore enregistré — génération et envoi vers SharePoint (une seule fois)…</p>`;
         const result = await generateAndUploadPdf(d, mountedContainer.querySelector(".print-fiche"));
-        existing = { url: result.url };
+        existing = { id: result.itemId, url: result.url };
       }
-      if (!existing.url) throw new Error("Le PDF a été trouvé sur SharePoint mais son lien de consultation est vide (webUrl manquant) — réessaie, ou vérifie le fichier directement dans SharePoint.");
+      if (!existing.id) throw new Error("Le PDF a été trouvé sur SharePoint mais son identifiant est manquant — réessaie, ou vérifie le fichier directement dans SharePoint.");
+      // Le QR est destiné à des prestataires externes SANS compte Microsoft
+      // @etablieres.fr : on encode un lien de partage PUBLIC ("Anyone with
+      // the link"), pas le webUrl normal qui exigerait une connexion.
+      canvas.innerHTML = `<p class="hint" style="margin:0">⏳ Création du lien de consultation public…</p>`;
+      const publicUrl = await getAnonymousViewLink(existing.id);
+      if (!publicUrl) throw new Error("Le lien de partage public n'a pas pu être créé.");
       canvas.innerHTML = "";
-      await renderQrWithLogo(canvas, existing.url, 200);
+      await renderQrWithLogo(canvas, publicUrl, 200);
     } catch (e) {
       canvas.innerHTML = `<p class="hint" style="margin:0;color:var(--red)">❌ ${esc(e.message || String(e))}</p>`;
     }
