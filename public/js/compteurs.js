@@ -25,6 +25,21 @@ import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 const TYPE_ICONE = { eau: "💧", gaz: "🔥", elec: "⚡" };
 const TYPE_LABEL = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
+const ROLES_SUPERVISION = ["super_admin", "admin", "n1"]; // seuls eux peuvent antidater un relevé
+
+function peutAntidater(user) {
+  return ROLES_SUPERVISION.includes(user?.role);
+}
+
+// Convertit une date "YYYY-MM-DD" (valeur d'un <input type="date">) en
+// timestamp ms, à midi ce jour-là (évite tout souci de fuseau horaire
+// autour de minuit) — ou null si vide/invalide.
+function dateInputVersTimestamp(valeur) {
+  if (!valeur) return null;
+  const [y, m, d] = valeur.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d, 12, 0, 0).getTime();
+}
 
 let mountedContainer = null;
 let mountedUser = null;
@@ -348,7 +363,7 @@ function renderHistoriqueHTML(historique, compteur) {
             const photos = r.photos || (r.photoItemId ? { valeur: { itemId: r.photoItemId } } : {});
             return `
             <tr>
-              <td>${formatDate(r.createdAt)}</td>
+              <td>${formatDate(r.createdAt)}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
               <td>${compteur.type === "elec" ? INDEX_ELEC.map(k => `${k}\u00A0${r.valeurs?.[k] ?? "?"}`).join(" · ") : `${r.valeurs?.valeur ?? "?"} m³`}</td>
               <td>${esc(r.releveParNom || "")}</td>
               <td style="white-space:nowrap">
@@ -670,6 +685,13 @@ function renderReleve() {
 
         <div class="form-grid">${champs}</div>
 
+        ${peutAntidater(mountedUser) ? `
+          <label style="display:block;margin-top:10px">Date du relevé
+            <input type="date" id="cpt-r-date" value="${ui.releveEnCours.dateChoisie || new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}">
+          </label>
+          <p class="hint" style="margin:2px 0 0">Laisse aujourd'hui par défaut, ou choisis une date antérieure si ce relevé a été fait plus tôt et pas encore saisi.</p>
+        ` : ""}
+
         <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo du compteur (obligatoire)"}</label>
         <div id="cpt-r-photo-zone">${photosBlockHTML("cpt-r", compteur, photos)}</div>
 
@@ -693,14 +715,18 @@ function renderReleve() {
     if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
     render();
   });
+  document.getElementById("cpt-r-date")?.addEventListener("change", (e) => { ui.releveEnCours.dateChoisie = e.target.value; });
   wirePhotosBlock("cpt-r", compteur, photos, () => { syncValeurs(); render(); });
   document.getElementById("cpt-r-save").addEventListener("click", async () => {
     syncValeurs();
     const statusEl = document.getElementById("cpt-r-status");
     if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    const dateChoisie = peutAntidater(mountedUser) ? dateInputVersTimestamp(document.getElementById("cpt-r-date")?.value) : null;
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const estAnterieure = dateChoisie && document.getElementById("cpt-r-date").value !== aujourdHui;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerReleve(compteur, valeurs, photos, mountedUser);
+      await enregistrerReleve(compteur, valeurs, photos, mountedUser, estAnterieure ? dateChoisie : null);
       ui.screen = "liste"; ui.releveCompteurId = null; ui.releveEnCours = null;
       if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
       await load();
@@ -759,6 +785,12 @@ function renderRapide() {
 
         <div class="form-grid">${champs}</div>
 
+        ${peutAntidater(mountedUser) ? `
+          <label style="display:block;margin-top:10px">Date du relevé
+            <input type="date" id="cpt-rap-date" value="${ui.releveEnCours.dateChoisie || new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}">
+          </label>
+        ` : ""}
+
         <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo (obligatoire)"}</label>
         <div id="cpt-rap-photo-zone">${photosBlockHTML("cpt-rap", compteur, photos)}</div>
 
@@ -780,15 +812,19 @@ function renderRapide() {
 
   document.getElementById("cpt-rap-quitter").addEventListener("click", () => { ui.rapideSiteId = null; ui.releveEnCours = null; ui.ouverts.add(site.id); render(); });
   document.getElementById("cpt-rap-passer").addEventListener("click", () => { ui.rapideIndex++; ui.releveEnCours = null; render(); });
+  document.getElementById("cpt-rap-date")?.addEventListener("change", (e) => { ui.releveEnCours.dateChoisie = e.target.value; });
   wirePhotosBlock("cpt-rap", compteur, photos, () => { syncValeurs(); render(); });
   document.getElementById("cpt-rap-valider").addEventListener("click", async () => {
     syncValeurs();
     const statusEl = document.getElementById("cpt-rap-status");
     if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const dateSaisie = document.getElementById("cpt-rap-date")?.value;
+    const dateChoisie = peutAntidater(mountedUser) && dateSaisie && dateSaisie !== aujourdHui ? dateInputVersTimestamp(dateSaisie) : null;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerReleve(compteur, valeurs, photos, mountedUser);
-      compteur.dernierReleve = { at: Date.now(), valeurs, photos, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
+      await enregistrerReleve(compteur, valeurs, photos, mountedUser, dateChoisie);
+      compteur.dernierReleve = { at: dateChoisie || Date.now(), valeurs, photos, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
       ui.rapideIndex++;
       ui.releveEnCours = null;
       render();

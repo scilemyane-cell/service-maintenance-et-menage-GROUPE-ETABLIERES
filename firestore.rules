@@ -23,6 +23,15 @@ service cloud.firestore {
       return isSignedIn() && (myRole() == 'admin' || myRole() == 'super_admin' || myRole() == 'n1');
     }
 
+    // Un horodatage est jugé "proche du moment présent" avec une marge de
+    // 15 minutes (upload de photo, latence réseau...) — utilisé pour
+    // n'autoriser un relevé de compteur à une date choisie librement (donc
+    // potentiellement antérieure) qu'aux éditeurs (superviseurs/admins) ;
+    // un technicien ne peut enregistrer qu'à la date/heure du moment.
+    function estHorodatageRecent(ms) {
+      return ms >= request.time.toMillis() - 900000 && ms <= request.time.toMillis() + 900000;
+    }
+
     // ---- Profils utilisateurs ----
     // Chacun peut lire son propre profil et ceux des autres (pour afficher
     // les noms dans les listes). Admin/Super Admin peuvent créer/modifier
@@ -188,20 +197,24 @@ service cloud.firestore {
     // ---- Relevés de compteurs (eau, gaz, électricité) par site ----
     // Lecture ouverte à tous les connectés (techniciens sur le terrain).
     // Un compteur (sa fiche) : ajout/suppression/modif du nom réservés
-    // aux éditeurs, sauf le cache "dernierReleve" que n'importe quel
-    // utilisateur connecté peut mettre à jour (technicien effectuant le
-    // relevé). Un relevé (historique) : n'importe quel utilisateur
-    // connecté peut en créer, mais jamais le modifier/supprimer ensuite
-    // (intégrité de l'historique).
+    // aux éditeurs. Le cache "dernierReleve" et la création d'un relevé
+    // (historique) sont ouverts à tout utilisateur connecté, MAIS avec
+    // une date proche du moment présent seulement (technicien effectuant
+    // le relevé sur le terrain) — seul un éditeur (superviseur/admin)
+    // peut enregistrer une date choisie librement, donc antérieure, pour
+    // rattraper un relevé oublié. Un relevé, une fois créé, n'est jamais
+    // modifiable/supprimable (intégrité de l'historique).
     match /compteurs/{docId} {
       allow read: if isSignedIn();
       allow create, delete: if isEditor();
       allow update: if isEditor()
-        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dernierReleve']));
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dernierReleve'])
+            && estHorodatageRecent(request.resource.data.dernierReleve.at));
     }
     match /compteurs-releves/{docId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      allow create: if isEditor() || (isSignedIn() && estHorodatageRecent(request.resource.data.createdAt));
       allow update, delete: if isSuperAdmin();
     }
   }

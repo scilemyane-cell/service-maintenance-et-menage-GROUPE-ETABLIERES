@@ -122,8 +122,12 @@ export async function getCompteurUnique(id) {
 // les mêmes clés que `valeurs` (HPH/HCH/HPE/HCE pour l'électricité,
 // "valeur" pour eau/gaz) — une photo par index relevé, l'écran d'un
 // compteur multi-tarif n'affichant souvent qu'un seul index à la fois.
-export async function enregistrerReleve(compteur, valeurs, photos, user) {
-  const at = Date.now();
+// `dateAntidatee` (optionnel, en ms) permet à un superviseur/admin de
+// saisir un relevé à une date passée (ex. oublié la semaine dernière) —
+// réservé aux éditeurs côté interface ET côté règles Firestore, un
+// technicien ne pouvant enregistrer qu'à la date/heure du moment.
+export async function enregistrerReleve(compteur, valeurs, photos, user, dateAntidatee = null) {
+  const at = dateAntidatee || Date.now();
   await addDoc(collection(db, RELEVES), {
     compteurId: compteur.id,
     dossierId: compteur.dossierId,
@@ -135,6 +139,7 @@ export async function enregistrerReleve(compteur, valeurs, photos, user) {
     releveParUid: user?.uid || null,
     releveParNom: user?.nom || user?.email || "Inconnu",
     createdAt: at,
+    saisiHorsDate: !!dateAntidatee,
   });
   await updateDoc(doc(db, COMPTEURS, compteur.id), {
     dernierReleve: {
