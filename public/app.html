@@ -20,6 +20,7 @@
   import { watchAuth, logout, roleLabel } from "./js/auth.js";
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab } from "./js/planning.js";
   import { mountSitesDossiers } from "./js/site-dossier.js";
+  import { mountCompteurs } from "./js/compteurs.js";
   import { mountStockProduits } from "./js/stock.js";
   import { mountStockInventaire } from "./js/stock-inventaire.js";
   import { mountStockCommandes } from "./js/stock-commandes.js";
@@ -113,6 +114,12 @@
         ],
       },
       {
+        id: "compteurs", label: "Relevé compteur", icon: "🔢", desc: "Eau, gaz, électricité — avec photo et QR",
+        subtabs: [
+          { id: "liste", label: "Sites", icon: "🏢", roles: [...GESTION,"technicien"], mount: mountCompteurs },
+        ],
+      },
+      {
         id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
         badgeAtelier: stockAlertCount.central > 0 ? stockAlertCount.central : null,
         badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
@@ -129,8 +136,8 @@
   }
 
   function allCategories(user) {
-    const [astreinte, administration, sites, stock] = staticCategories();
-    return [astreinte, ...dispositifCategories(user), administration, sites, stock];
+    const [astreinte, administration, sites, compteurs, stock] = staticCategories();
+    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, stock];
   }
 
   watchAuth((user) => {
@@ -169,6 +176,15 @@
       currentCategory = "stock";
       currentSubtab = "inventaire";
       window.stockRapideDeepLink = true;
+      history.replaceState(null, "", window.location.pathname);
+    }
+    // QR unique par compteur menant directement à son formulaire de
+    // relevé : .../app.html?compteurrelever=ID_COMPTEUR
+    const compteurRelevParam = new URLSearchParams(window.location.search).get("compteurrelever");
+    if (compteurRelevParam && currentCategory === null) {
+      currentCategory = "compteurs";
+      currentSubtab = "liste";
+      window.compteurRelevDeepLinkId = compteurRelevParam;
       history.replaceState(null, "", window.location.pathname);
     }
     if (!sitesSubscribed) {

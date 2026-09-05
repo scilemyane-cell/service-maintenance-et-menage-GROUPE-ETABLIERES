@@ -681,6 +681,10 @@ function renderEdit(dOriginal, workingCopy) {
           <input type="checkbox" id="sd-stock-deporte" ${data.stockDeporte ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)">
           📦 Ce site a un stock déporté (produits gardés sur place, en plus du stock central)
         </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="sd-compteurs-actifs" ${data.compteursActifs ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)">
+          🔢 Ce site a des compteurs à relever (eau, gaz, électricité)
+        </label>
       </div>
 
       <div class="form-card">
@@ -735,6 +739,7 @@ function renderEdit(dOriginal, workingCopy) {
   document.getElementById("sd-nom").addEventListener("input", (e) => { data.nom = e.target.value; });
   document.getElementById("sd-adresse").addEventListener("input", (e) => { data.adresse = e.target.value; });
   document.getElementById("sd-stock-deporte").addEventListener("change", (e) => { data.stockDeporte = e.target.checked; });
+  document.getElementById("sd-compteurs-actifs").addEventListener("change", (e) => { data.compteursActifs = e.target.checked; });
   document.getElementById("sd-association").addEventListener("change", (e) => {
     data.association = e.target.value;
     data.groupe = "";

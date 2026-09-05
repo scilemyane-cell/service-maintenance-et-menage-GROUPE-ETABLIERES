@@ -73,6 +73,7 @@ export function nouveauDossier(sectionsOrder) {
     association: "",
     groupe: "",
     stockDeporte: false,
+    compteursActifs: false,
     urgences: JSON.parse(JSON.stringify(URGENCES_STANDARD)),
     sections: titres.map(titre => ({ titre, concerne: false, emplacement: "", procedure: "", photos: [] })),
   };

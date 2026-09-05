@@ -185,5 +185,24 @@ service cloud.firestore {
         allow write: if isEditor();
       }
     }
+    // ---- Relevés de compteurs (eau, gaz, électricité) par site ----
+    // Lecture ouverte à tous les connectés (techniciens sur le terrain).
+    // Un compteur (sa fiche) : ajout/suppression/modif du nom réservés
+    // aux éditeurs, sauf le cache "dernierReleve" que n'importe quel
+    // utilisateur connecté peut mettre à jour (technicien effectuant le
+    // relevé). Un relevé (historique) : n'importe quel utilisateur
+    // connecté peut en créer, mais jamais le modifier/supprimer ensuite
+    // (intégrité de l'historique).
+    match /compteurs/{docId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isEditor();
+      allow update: if isEditor()
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dernierReleve']));
+    }
+    match /compteurs-releves/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSuperAdmin();
+    }
   }
 }
