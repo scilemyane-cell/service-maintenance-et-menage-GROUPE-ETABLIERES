@@ -311,15 +311,15 @@ function renderAddForm(site) {
             <option value="elec" ${ui.addingType === "elec" ? "selected" : ""}>⚡ Électricité (4 index HPH/HCH/HPE/HCE)</option>
           </select>
         </label>
-        <label>Nom<input id="cpt-new-nom" placeholder="ex. Compteur général, Tableau local technique…"></label>
-        <label>Emplacement (optionnel)
-          <input id="cpt-new-emplacement" list="cpt-new-emplacement-list" placeholder="ex. sous-sol, local technique…" autocomplete="off">
-          <datalist id="cpt-new-emplacement-list">
+        <label>Nom
+          <input id="cpt-new-nom" list="cpt-new-nom-list" placeholder="ex. Compteur général, Tableau local technique…" autocomplete="off">
+          <datalist id="cpt-new-nom-list">
             ${suggestions.map(s => `<option value="${esc(s)}">`).join("")}
           </datalist>
         </label>
+        <label>Emplacement (optionnel)<input id="cpt-new-emplacement" placeholder="ex. sous-sol, local technique…"></label>
       </div>
-      ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
+      ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions de nom reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="add-btn" id="cpt-new-save">💾 Ajouter</button>
         <button class="nav-btn" id="cpt-new-cancel">Annuler</button>
