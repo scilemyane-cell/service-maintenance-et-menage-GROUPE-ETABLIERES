@@ -31,8 +31,9 @@ let mountedUser = null;
 let state = { sites: [], compteurs: [] };
 let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
-  addingSiteId: null, addingType: null, emplacementsSuggeres: {}, editingCompteurId: null,
+  addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
+  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null,
   releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
   rapideSiteId: null, rapideIndex: 0,
 };
@@ -43,8 +44,9 @@ export async function mountCompteurs(container, user) {
   state = { sites: [], compteurs: [] };
   ui = {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
-    addingSiteId: null, addingType: null, emplacementsSuggeres: {}, editingCompteurId: null,
+    addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
+  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null,
     releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
     rapideSiteId: null, rapideIndex: 0,
   };
@@ -175,16 +177,18 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
     const siteId = btn.dataset.openAdd;
-    ui.addingSiteId = siteId; ui.addingType = "eau"; render();
-    if (!ui.emplacementsSuggeres[siteId]) {
+    ui.addingSiteId = siteId; ui.addingType = "eau";
+    ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
+    if (!ui.sectionsParSite[siteId]) {
       try {
         const dossier = await getDossierUnique(siteId);
-        ui.emplacementsSuggeres[siteId] = (dossier?.sections || []).map(s => s.titre).filter(Boolean);
+        ui.sectionsParSite[siteId] = dossier?.sections || [];
       } catch (e) {
-        ui.emplacementsSuggeres[siteId] = [];
+        ui.sectionsParSite[siteId] = [];
       }
-      if (ui.addingSiteId === siteId) render();
     }
+    appliquerAutoRemplissage(siteId, ui.addingType);
+    render();
   }));
   mountedContainer.querySelectorAll("[data-relever]").forEach(btn => btn.addEventListener("click", () => {
     ouvrirReleve(btn.dataset.relever, btn.dataset.retourSite);
@@ -295,8 +299,39 @@ function renderHistoriqueHTML(historique, compteur) {
   `;
 }
 
+// Cherche, parmi les équipements déjà définis sur la fiche du dossier de
+// site, celui qui correspond le mieux au type de compteur choisi — pour
+// pré-remplir automatiquement le nom et reprendre son emplacement déjà
+// renseigné là-bas (ex. "Compteurs d'eau généraux" → "sous-sol, local
+// technique"). Priorité aux intitulés contenant à la fois "compteur" et
+// le mot du type ; à défaut, un intitulé contenant juste le mot du type.
+function trouverSectionCompteur(sections, type) {
+  const motsType = { eau: ["eau"], gaz: ["gaz"], elec: ["électri", "electri", "linky"] }[type] || [];
+  const contientMotType = (titre) => motsType.some(m => titre.includes(m));
+  let match = sections.find(s => {
+    const t = (s.titre || "").toLowerCase();
+    return t.includes("compteur") && contientMotType(t);
+  });
+  if (!match) match = sections.find(s => contientMotType((s.titre || "").toLowerCase()));
+  return match || null;
+}
+
+// Met à jour ui.addingNom/addingEmplacement pour le type sélectionné,
+// sans écraser une saisie manuelle de l'utilisateur (on ne remplace que
+// si le champ est vide ou égal à la précédente suggestion automatique).
+function appliquerAutoRemplissage(siteId, type) {
+  const sections = ui.sectionsParSite[siteId] || [];
+  const match = trouverSectionCompteur(sections, type);
+  const suggestionNom = match?.titre || "";
+  const suggestionEmplacement = match?.emplacement || "";
+  if (!ui.addingNom || ui.addingNom === ui.addingAutoNom) ui.addingNom = suggestionNom;
+  if (!ui.addingEmplacement || ui.addingEmplacement === ui.addingAutoEmplacement) ui.addingEmplacement = suggestionEmplacement;
+  ui.addingAutoNom = suggestionNom;
+  ui.addingAutoEmplacement = suggestionEmplacement;
+}
+
 function renderAddForm(site) {
-  const suggestions = ui.emplacementsSuggeres[site.id] || [];
+  const suggestions = (ui.sectionsParSite[site.id] || []).map(s => s.titre).filter(Boolean);
   const freq = ui.addingFrequence || "mensuel";
   return `
     <div class="form-card">
@@ -310,14 +345,15 @@ function renderAddForm(site) {
           </select>
         </label>
         <label>Nom
-          <input id="cpt-new-nom" list="cpt-new-nom-list" placeholder="ex. Compteur général, Tableau local technique…" autocomplete="off">
+          <input id="cpt-new-nom" list="cpt-new-nom-list" value="${esc(ui.addingNom || "")}" placeholder="ex. Compteur général, Tableau local technique…" autocomplete="off">
           <datalist id="cpt-new-nom-list">
             ${suggestions.map(s => `<option value="${esc(s)}">`).join("")}
           </datalist>
         </label>
-        <label>Emplacement (optionnel)<input id="cpt-new-emplacement" placeholder="ex. sous-sol, local technique…"></label>
+        <label>Emplacement (optionnel)<input id="cpt-new-emplacement" value="${esc(ui.addingEmplacement || "")}" placeholder="ex. sous-sol, local technique…"></label>
       </div>
       ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions de nom reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
+      ${ui.addingAutoNom ? `<p class="hint" style="margin:4px 0 0;color:var(--gold)">✓ Nom et emplacement repris automatiquement de "${esc(ui.addingAutoNom)}" (modifiable)</p>` : ""}
       <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🔁 Fréquence de relevé attendue</p>
       ${frequenceFieldsHTML("cpt-new", freq, ui.addingEcheanceJour || 1, ui.addingEcheanceMois || 1)}
       <div style="display:flex;gap:8px;margin-top:10px">
@@ -404,8 +440,20 @@ function attachEditFormListeners() {
 function attachAddFormListeners() {
   const typeSelect = document.getElementById("cpt-new-type");
   if (!typeSelect) return;
-  typeSelect.addEventListener("change", (e) => { ui.addingType = e.target.value; render(); });
+  document.getElementById("cpt-new-nom").addEventListener("input", (e) => { ui.addingNom = e.target.value; });
+  document.getElementById("cpt-new-emplacement").addEventListener("input", (e) => { ui.addingEmplacement = e.target.value; });
+  typeSelect.addEventListener("change", (e) => {
+    // Capture la saisie actuelle avant de changer de type, pour ne rien
+    // perdre si l'utilisateur avait déjà modifié le nom/emplacement.
+    ui.addingNom = document.getElementById("cpt-new-nom").value;
+    ui.addingEmplacement = document.getElementById("cpt-new-emplacement").value;
+    ui.addingType = e.target.value;
+    appliquerAutoRemplissage(ui.addingSiteId, ui.addingType);
+    render();
+  });
   document.getElementById("cpt-new-frequence").addEventListener("change", (e) => {
+    ui.addingNom = document.getElementById("cpt-new-nom").value;
+    ui.addingEmplacement = document.getElementById("cpt-new-emplacement").value;
     ui.addingFrequence = e.target.value;
     ui.addingEcheanceJour = parseInt(document.getElementById("cpt-new-echeance-jour")?.value, 10) || ui.addingEcheanceJour || 1;
     ui.addingEcheanceMois = parseInt(document.getElementById("cpt-new-echeance-mois")?.value, 10) || ui.addingEcheanceMois || 1;
@@ -432,6 +480,7 @@ function attachAddFormListeners() {
       await creerCompteur(site.id, site.nom, compteur);
       ui.addingSiteId = null;
       ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null;
+      ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
       await load();
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
