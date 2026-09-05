@@ -46,13 +46,22 @@ export async function mountCompteurs(container, user) {
     rapideSiteId: null, rapideIndex: 0,
   };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  await load();
+  try {
+    await load();
+  } catch (e) {
+    container.innerHTML = `<div class="hint" style="color:var(--red)">❌ ${esc(e.message || String(e))}${e.code === "permission-denied" ? " — les règles Firestore pour ce nouvel onglet (collections 'compteurs' / 'compteurs-releves') n'ont probablement pas encore été republiées (Console Firebase > Firestore Database > Règles)." : ""}</div>`;
+    return;
+  }
 
   // Lien direct depuis un QR scanné hors appli (voir app.html, ?compteurrelever=)
   if (window.compteurRelevDeepLinkId) {
     const id = window.compteurRelevDeepLinkId;
     window.compteurRelevDeepLinkId = null;
-    await ouvrirReleve(id, null);
+    try {
+      await ouvrirReleve(id, null);
+    } catch (e) {
+      container.innerHTML = `<div class="hint" style="color:var(--red)">❌ ${esc(e.message || String(e))}</div>`;
+    }
     return;
   }
   render();
@@ -203,13 +212,13 @@ function renderListe() {
     const nom = prompt("Nom du compteur :", c.nom);
     if (nom === null) return;
     const emplacement = prompt("Emplacement (optionnel) :", c.emplacement || "");
-    modifierCompteur(c.id, { nom: nom.trim() || c.nom, emplacement: (emplacement || "").trim() }).then(load);
+    modifierCompteur(c.id, { nom: nom.trim() || c.nom, emplacement: (emplacement || "").trim() }).then(load).catch(e => alert("Erreur : " + (e.message || e)));
   }));
   mountedContainer.querySelectorAll("[data-del-compteur]").forEach(btn => btn.addEventListener("click", () => {
     const c = state.compteurs.find(x => x.id === btn.dataset.delCompteur);
     if (!c) return;
     if (!confirm(`Mettre "${c.nom}" à la corbeille ? L'historique des relevés est conservé.`)) return;
-    envoyerCompteurCorbeille(c.id).then(load);
+    envoyerCompteurCorbeille(c.id).then(load).catch(e => alert("Erreur : " + (e.message || e)));
   }));
 
   attachAddFormListeners();
@@ -454,7 +463,7 @@ function renderRapide() {
         </div>
       </div>
     `;
-    document.getElementById("cpt-rap-fin").addEventListener("click", () => { ui.rapideSiteId = null; ui.ouverts.add(site.id); load(); });
+    document.getElementById("cpt-rap-fin").addEventListener("click", () => { ui.rapideSiteId = null; ui.ouverts.add(site.id); load().catch(e => alert("Erreur : " + (e.message || e))); });
     return;
   }
 
