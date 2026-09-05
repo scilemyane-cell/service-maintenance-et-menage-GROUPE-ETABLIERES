@@ -21,6 +21,7 @@
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab } from "./js/planning.js";
   import { mountSitesDossiers } from "./js/site-dossier.js";
   import { mountCompteurs } from "./js/compteurs.js";
+  import { watchCompteursAlertCount } from "./js/compteurs-data.js";
   import { mountStockProduits } from "./js/stock.js";
   import { mountStockInventaire } from "./js/stock-inventaire.js";
   import { mountStockCommandes } from "./js/stock-commandes.js";
@@ -58,6 +59,8 @@
   let homeOrderSubscribed = false;
   let stockAlertCount = { central: 0, deporte: 0, total: 0 };
   let stockAlertSubscribed = false;
+  let compteursAlertCount = 0;
+  let compteursAlertSubscribed = false;
 
   const ALL = ["super_admin","admin","n1","technicien","menage","mi_temps","direction"];
   const MENAGE_ROLES = ["super_admin","admin","n1","direction","menage","mi_temps"];
@@ -115,6 +118,7 @@
       },
       {
         id: "compteurs", label: "Relevé compteur", icon: "🔢", desc: "Eau, gaz, électricité — avec photo et QR",
+        badge: compteursAlertCount > 0 ? compteursAlertCount : null,
         subtabs: [
           { id: "liste", label: "Sites", icon: "🏢", roles: [...GESTION,"technicien"], mount: mountCompteurs },
         ],
@@ -207,6 +211,10 @@
     if (!stockAlertSubscribed) {
       stockAlertSubscribed = true;
       watchStockAlertCount((counts) => { stockAlertCount = counts; render(); });
+    }
+    if (!compteursAlertSubscribed) {
+      compteursAlertSubscribed = true;
+      watchCompteursAlertCount((n) => { compteursAlertCount = n; render(); });
     }
     render();
   });

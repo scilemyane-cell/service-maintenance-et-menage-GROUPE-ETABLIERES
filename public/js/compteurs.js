@@ -17,6 +17,7 @@ import {
   listerSitesAvecCompteurs, listerTousLesCompteurs, creerCompteur, modifierCompteur,
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
+  estEnRetard, prochaineEcheanceLabel, MOIS_LABELS,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { getDossierUnique } from "./site-dossier-data.js";
@@ -24,14 +25,14 @@ import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 const TYPE_ICONE = { eau: "💧", gaz: "🔥", elec: "⚡" };
 const TYPE_LABEL = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
-const JOURS_RETARD = 32; // au-delà, un relevé est considéré "en retard"
 
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], compteurs: [] };
 let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
-  addingSiteId: null, addingType: null, emplacementsSuggeres: {},
+  addingSiteId: null, addingType: null, emplacementsSuggeres: {}, editingCompteurId: null,
+  addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
   releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
   rapideSiteId: null, rapideIndex: 0,
 };
@@ -42,7 +43,8 @@ export async function mountCompteurs(container, user) {
   state = { sites: [], compteurs: [] };
   ui = {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
-    addingSiteId: null, addingType: null, emplacementsSuggeres: {},
+    addingSiteId: null, addingType: null, emplacementsSuggeres: {}, editingCompteurId: null,
+  addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
     releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
     rapideSiteId: null, rapideIndex: 0,
   };
@@ -81,11 +83,6 @@ function render() {
   if (ui.screen === "releve") return renderReleve();
   if (ui.rapideSiteId) return renderRapide();
   renderListe();
-}
-
-function estEnRetard(compteur) {
-  if (!compteur.dernierReleve?.at) return true;
-  return (Date.now() - compteur.dernierReleve.at) > JOURS_RETARD * 24 * 3600 * 1000;
 }
 
 function formatDate(ms) {
@@ -218,12 +215,9 @@ function renderListe() {
     }
   }));
   mountedContainer.querySelectorAll("[data-edit-compteur]").forEach(btn => btn.addEventListener("click", () => {
-    const c = state.compteurs.find(x => x.id === btn.dataset.editCompteur);
-    if (!c) return;
-    const nom = prompt("Nom du compteur :", c.nom);
-    if (nom === null) return;
-    const emplacement = prompt("Emplacement (optionnel) :", c.emplacement || "");
-    modifierCompteur(c.id, { nom: nom.trim() || c.nom, emplacement: (emplacement || "").trim() }).then(load).catch(e => alert("Erreur : " + (e.message || e)));
+    const id = btn.dataset.editCompteur;
+    ui.editingCompteurId = ui.editingCompteurId === id ? null : id;
+    render();
   }));
   mountedContainer.querySelectorAll("[data-del-compteur]").forEach(btn => btn.addEventListener("click", () => {
     const c = state.compteurs.find(x => x.id === btn.dataset.delCompteur);
@@ -233,6 +227,7 @@ function renderListe() {
   }));
 
   attachAddFormListeners();
+  attachEditFormListeners();
   resolvePhotos(mountedContainer);
 }
 
@@ -245,6 +240,7 @@ function renderCompteurRow(c) {
           <p style="margin:0;font-weight:700">${esc(c.nom)}${c.emplacement ? ` <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(c.emplacement)}</span>` : ""}</p>
           <p style="margin:2px 0 0;font-size:12px;${retard ? 'color:var(--red);font-weight:700' : 'color:var(--text-dim)'}">${retard ? '⚠️ ' : '✓ '}${formatDate(c.dernierReleve?.at)}${c.dernierReleve ? ` — ${c.dernierReleve.releveParNom}` : ""}</p>
           <p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">${formatValeurs(c)}</p>
+          <p style="margin:2px 0 0;font-size:11px;color:var(--text-dim)">🔁 Relevé attendu ${prochaineEcheanceLabel(c)}</p>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="add-btn" data-relever="${c.id}" data-retour-site="${c.dossierId}" style="padding:6px 12px;font-size:12px">📷 Relever</button>
@@ -254,6 +250,7 @@ function renderCompteurRow(c) {
           <button class="del-btn" data-del-compteur="${c.id}" style="padding:6px 10px;font-size:12px">🗑️</button>
         </div>
       </div>
+      ${ui.editingCompteurId === c.id ? renderEditForm(c) : ""}
       ${ui.qrOuverts.has(c.id) ? `
         <div id="cpt-qr-card-${c.id}" class="qr-print-card" style="background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-top:12px">
           <div id="cpt-qr-canvas-${c.id}" style="width:200px;height:200px;margin:0 auto"></div>
@@ -300,6 +297,7 @@ function renderHistoriqueHTML(historique, compteur) {
 
 function renderAddForm(site) {
   const suggestions = ui.emplacementsSuggeres[site.id] || [];
+  const freq = ui.addingFrequence || "mensuel";
   return `
     <div class="form-card">
       <h4 style="margin:0 0 10px;font-size:14px">Nouveau compteur — ${esc(site.nom)}</h4>
@@ -320,6 +318,8 @@ function renderAddForm(site) {
         <label>Emplacement (optionnel)<input id="cpt-new-emplacement" placeholder="ex. sous-sol, local technique…"></label>
       </div>
       ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions de nom reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
+      <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🔁 Fréquence de relevé attendue</p>
+      ${frequenceFieldsHTML("cpt-new", freq, ui.addingEcheanceJour || 1, ui.addingEcheanceMois || 1)}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="add-btn" id="cpt-new-save">💾 Ajouter</button>
         <button class="nav-btn" id="cpt-new-cancel">Annuler</button>
@@ -329,10 +329,88 @@ function renderAddForm(site) {
   `;
 }
 
+// Champs de fréquence, partagés entre le formulaire d'ajout et celui de
+// modification (même structure, préfixe d'id différent).
+function frequenceFieldsHTML(prefix, frequence, jour, mois) {
+  return `
+    <div class="form-grid">
+      <label>Fréquence
+        <select id="${prefix}-frequence">
+          <option value="mensuel" ${frequence === "mensuel" ? "selected" : ""}>Tous les mois</option>
+          <option value="annuel" ${frequence === "annuel" ? "selected" : ""}>Une fois par an, à date fixe</option>
+        </select>
+      </label>
+      ${frequence === "annuel" ? `
+        <label>Jour de l'échéance<input type="number" min="1" max="31" id="${prefix}-echeance-jour" value="${jour}"></label>
+        <label>Mois de l'échéance
+          <select id="${prefix}-echeance-mois">
+            ${MOIS_LABELS.map((m, i) => `<option value="${i + 1}" ${mois === i + 1 ? "selected" : ""}>${m}</option>`).join("")}
+          </select>
+        </label>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderEditForm(c) {
+  return `
+    <div class="form-card" style="margin-top:10px;background:var(--panel-alt)">
+      <h4 style="margin:0 0 10px;font-size:14px">Modifier — ${esc(c.nom)}</h4>
+      <div class="form-grid">
+        <label>Nom<input id="cpt-edit-nom" value="${esc(c.nom)}"></label>
+        <label>Emplacement (optionnel)<input id="cpt-edit-emplacement" value="${esc(c.emplacement || '')}"></label>
+      </div>
+      <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🔁 Fréquence de relevé attendue</p>
+      ${frequenceFieldsHTML("cpt-edit", c.frequence || "mensuel", c.echeanceJour || 1, c.echeanceMois || 1)}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="add-btn" id="cpt-edit-save" data-id="${c.id}">💾 Enregistrer</button>
+        <button class="nav-btn" id="cpt-edit-cancel">Annuler</button>
+      </div>
+      <div id="cpt-edit-status" style="font-size:12px;margin-top:8px"></div>
+    </div>
+  `;
+}
+
+function attachEditFormListeners() {
+  const freqSelect = document.getElementById("cpt-edit-frequence");
+  if (!freqSelect) return;
+  const c = state.compteurs.find(x => x.id === ui.editingCompteurId);
+  freqSelect.addEventListener("change", (e) => {
+    c.frequence = e.target.value; // reflet local le temps du re-render, pas encore enregistré
+    render();
+  });
+  document.getElementById("cpt-edit-cancel").addEventListener("click", () => { ui.editingCompteurId = null; render(); });
+  document.getElementById("cpt-edit-save").addEventListener("click", async () => {
+    const statusEl = document.getElementById("cpt-edit-status");
+    const nom = document.getElementById("cpt-edit-nom").value.trim();
+    const emplacement = document.getElementById("cpt-edit-emplacement").value.trim();
+    const frequence = document.getElementById("cpt-edit-frequence").value;
+    const patch = { nom: nom || c.nom, emplacement, frequence };
+    if (frequence === "annuel") {
+      patch.echeanceJour = parseInt(document.getElementById("cpt-edit-echeance-jour").value, 10) || 1;
+      patch.echeanceMois = parseInt(document.getElementById("cpt-edit-echeance-mois").value, 10) || 1;
+    }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    try {
+      await modifierCompteur(c.id, patch);
+      ui.editingCompteurId = null;
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
+}
+
 function attachAddFormListeners() {
   const typeSelect = document.getElementById("cpt-new-type");
   if (!typeSelect) return;
   typeSelect.addEventListener("change", (e) => { ui.addingType = e.target.value; render(); });
+  document.getElementById("cpt-new-frequence").addEventListener("change", (e) => {
+    ui.addingFrequence = e.target.value;
+    ui.addingEcheanceJour = parseInt(document.getElementById("cpt-new-echeance-jour")?.value, 10) || ui.addingEcheanceJour || 1;
+    ui.addingEcheanceMois = parseInt(document.getElementById("cpt-new-echeance-mois")?.value, 10) || ui.addingEcheanceMois || 1;
+    render();
+  });
   document.getElementById("cpt-new-cancel").addEventListener("click", () => { ui.addingSiteId = null; render(); });
   document.getElementById("cpt-new-save").addEventListener("click", async () => {
     const statusEl = document.getElementById("cpt-new-status");
@@ -340,13 +418,20 @@ function attachAddFormListeners() {
     const type = document.getElementById("cpt-new-type").value;
     const nomInput = document.getElementById("cpt-new-nom").value.trim();
     const emplacement = document.getElementById("cpt-new-emplacement").value.trim();
+    const frequence = document.getElementById("cpt-new-frequence").value;
     const compteur = nouveauCompteur(type);
     if (nomInput) compteur.nom = nomInput;
     compteur.emplacement = emplacement;
+    compteur.frequence = frequence;
+    if (frequence === "annuel") {
+      compteur.echeanceJour = parseInt(document.getElementById("cpt-new-echeance-jour").value, 10) || 1;
+      compteur.echeanceMois = parseInt(document.getElementById("cpt-new-echeance-mois").value, 10) || 1;
+    }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Ajout…</span>`;
     try {
       await creerCompteur(site.id, site.nom, compteur);
       ui.addingSiteId = null;
+      ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null;
       await load();
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;

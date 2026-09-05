@@ -9,7 +9,7 @@
 
 import { db } from "./firebase-init.js";
 import {
-  doc, addDoc, updateDoc, getDoc, getDocs,
+  doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot,
   collection, query, where,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -21,6 +21,7 @@ export const INDEX_LABELS = {
   HPH: "Heures Pleines Hiver", HCH: "Heures Creuses Hiver",
   HPE: "Heures Pleines Été", HCE: "Heures Creuses Été",
 };
+export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Clés d'index à relever (et donc à photographier) selon le type de
 // compteur — une seule pour eau/gaz, les 4 index tarifaires pour l'élec.
@@ -33,9 +34,47 @@ export function nouveauCompteur(type) {
     type, // "eau" | "gaz" | "elec"
     nom: type === "elec" ? "Tableau électrique" : type === "eau" ? "Compteur d'eau" : "Compteur de gaz",
     emplacement: "",
+    frequence: "mensuel", // "mensuel" | "annuel"
+    echeanceJour: 1,      // pour "annuel" uniquement : jour/mois de l'échéance chaque année
+    echeanceMois: 1,
     supprimeLe: null,
     dernierReleve: null, // { at, valeurs, releveParNom } — mis en cache pour affichage rapide
   };
+}
+
+const JOURS_TOLERANCE_MENSUEL = 32; // au-delà, un relevé mensuel est considéré "en retard"
+
+// Date de la dernière échéance déjà passée pour un compteur "annuel" (le
+// jour/mois configuré, cette année s'il est déjà passé, sinon l'an
+// dernier). Sert de référence : si le dernier relevé est antérieur à
+// cette date, l'échéance la plus récente n'a pas été honorée.
+function derniereEcheanceAnnuelle(compteur) {
+  const now = new Date();
+  const jour = compteur.echeanceJour || 1;
+  const mois = (compteur.echeanceMois || 1) - 1; // Date() : mois 0-indexé
+  let echeance = new Date(now.getFullYear(), mois, jour);
+  if (echeance > now) echeance = new Date(now.getFullYear() - 1, mois, jour);
+  return echeance;
+}
+
+// Un compteur est "en retard" si :
+// - fréquence mensuelle : aucun relevé depuis plus de ~32 jours ;
+// - fréquence annuelle : l'échéance (jour/mois) la plus récente est
+//   passée sans qu'un relevé n'ait été fait depuis.
+export function estEnRetard(compteur) {
+  if (compteur.frequence === "annuel") {
+    if (!compteur.dernierReleve?.at) return true;
+    return compteur.dernierReleve.at < derniereEcheanceAnnuelle(compteur).getTime();
+  }
+  if (!compteur.dernierReleve?.at) return true;
+  return (Date.now() - compteur.dernierReleve.at) > JOURS_TOLERANCE_MENSUEL * 24 * 3600 * 1000;
+}
+
+export function prochaineEcheanceLabel(compteur) {
+  if (compteur.frequence === "annuel") {
+    return `chaque année le ${String(compteur.echeanceJour || 1).padStart(2, "0")}/${String(compteur.echeanceMois || 1).padStart(2, "0")}`;
+  }
+  return "tous les mois";
 }
 
 // Liste ponctuelle des dossiers de site ayant les compteurs activés —
@@ -119,4 +158,18 @@ export async function listerHistoriqueCompteur(compteurId) {
 // ouvre directement le bon formulaire.
 export function qrPayloadForCompteur(compteurId) {
   return `https://service-maintenance-et-menage.web.app/app.html?compteurrelever=${compteurId}`;
+}
+
+// Nombre de compteurs "en retard", tous sites confondus — flux temps
+// réel utilisé pour le badge de la tuile "Relevé compteur" sur l'écran
+// d'accueil, sans avoir à ouvrir l'onglet.
+export function watchCompteursAlertCount(callback) {
+  return onSnapshot(collection(db, COMPTEURS), (snap) => {
+    let n = 0;
+    snap.forEach((d) => {
+      const c = d.data();
+      if (!c.supprimeLe && estEnRetard(c)) n++;
+    });
+    callback(n);
+  }, (err) => { console.error("watchCompteursAlertCount:", err); callback(0); });
 }
