@@ -19,6 +19,7 @@ import {
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { getDossierUnique } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 const TYPE_ICONE = { eau: "💧", gaz: "🔥", elec: "⚡" };
@@ -30,7 +31,7 @@ let mountedUser = null;
 let state = { sites: [], compteurs: [] };
 let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
-  addingSiteId: null, addingType: null,
+  addingSiteId: null, addingType: null, emplacementsSuggeres: {},
   releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
   rapideSiteId: null, rapideIndex: 0,
 };
@@ -41,7 +42,7 @@ export async function mountCompteurs(container, user) {
   state = { sites: [], compteurs: [] };
   ui = {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
-    addingSiteId: null, addingType: null,
+    addingSiteId: null, addingType: null, emplacementsSuggeres: {},
     releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
     rapideSiteId: null, rapideIndex: 0,
   };
@@ -175,8 +176,18 @@ function renderListe() {
   mountedContainer.querySelectorAll("[data-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.rapideSiteId = btn.dataset.rapideSite; ui.rapideIndex = 0; render();
   }));
-  mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", () => {
-    ui.addingSiteId = btn.dataset.openAdd; ui.addingType = "eau"; render();
+  mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
+    const siteId = btn.dataset.openAdd;
+    ui.addingSiteId = siteId; ui.addingType = "eau"; render();
+    if (!ui.emplacementsSuggeres[siteId]) {
+      try {
+        const dossier = await getDossierUnique(siteId);
+        ui.emplacementsSuggeres[siteId] = (dossier?.sections || []).map(s => s.titre).filter(Boolean);
+      } catch (e) {
+        ui.emplacementsSuggeres[siteId] = [];
+      }
+      if (ui.addingSiteId === siteId) render();
+    }
   }));
   mountedContainer.querySelectorAll("[data-relever]").forEach(btn => btn.addEventListener("click", () => {
     ouvrirReleve(btn.dataset.relever, btn.dataset.retourSite);
@@ -278,6 +289,7 @@ function renderHistoriqueHTML(historique, compteur) {
 }
 
 function renderAddForm(site) {
+  const suggestions = ui.emplacementsSuggeres[site.id] || [];
   return `
     <div class="form-card">
       <h4 style="margin:0 0 10px;font-size:14px">Nouveau compteur — ${esc(site.nom)}</h4>
@@ -290,8 +302,14 @@ function renderAddForm(site) {
           </select>
         </label>
         <label>Nom<input id="cpt-new-nom" placeholder="ex. Compteur général, Tableau local technique…"></label>
-        <label>Emplacement (optionnel)<input id="cpt-new-emplacement" placeholder="ex. sous-sol, local technique…"></label>
+        <label>Emplacement (optionnel)
+          <input id="cpt-new-emplacement" list="cpt-new-emplacement-list" placeholder="ex. sous-sol, local technique…" autocomplete="off">
+          <datalist id="cpt-new-emplacement-list">
+            ${suggestions.map(s => `<option value="${esc(s)}">`).join("")}
+          </datalist>
+        </label>
       </div>
+      ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="add-btn" id="cpt-new-save">💾 Ajouter</button>
         <button class="nav-btn" id="cpt-new-cancel">Annuler</button>
