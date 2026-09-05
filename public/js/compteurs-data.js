@@ -22,6 +22,12 @@ export const INDEX_LABELS = {
   HPE: "Heures Pleines Été", HCE: "Heures Creuses Été",
 };
 
+// Clés d'index à relever (et donc à photographier) selon le type de
+// compteur — une seule pour eau/gaz, les 4 index tarifaires pour l'élec.
+export function clesIndex(type) {
+  return type === "elec" ? INDEX_ELEC : ["valeur"];
+}
+
 export function nouveauCompteur(type) {
   return {
     type, // "eau" | "gaz" | "elec"
@@ -73,8 +79,11 @@ export async function getCompteurUnique(id) {
 
 // Enregistre un relevé (historique) et met à jour le cache "dernier
 // relevé" sur le compteur lui-même, pour un affichage rapide sans avoir
-// à interroger l'historique à chaque fois.
-export async function enregistrerReleve(compteur, valeurs, photo, user) {
+// à interroger l'historique à chaque fois. `photos` est un objet avec
+// les mêmes clés que `valeurs` (HPH/HCH/HPE/HCE pour l'électricité,
+// "valeur" pour eau/gaz) — une photo par index relevé, l'écran d'un
+// compteur multi-tarif n'affichant souvent qu'un seul index à la fois.
+export async function enregistrerReleve(compteur, valeurs, photos, user) {
   const at = Date.now();
   await addDoc(collection(db, RELEVES), {
     compteurId: compteur.id,
@@ -83,17 +92,15 @@ export async function enregistrerReleve(compteur, valeurs, photo, user) {
     type: compteur.type,
     nomCompteur: compteur.nom,
     valeurs,
-    photoItemId: photo?.itemId || null,
-    photoName: photo?.name || null,
+    photos, // { [clé]: { itemId, name } }
     releveParUid: user?.uid || null,
     releveParNom: user?.nom || user?.email || "Inconnu",
     createdAt: at,
   });
   await updateDoc(doc(db, COMPTEURS, compteur.id), {
     dernierReleve: {
-      at, valeurs,
+      at, valeurs, photos,
       releveParNom: user?.nom || user?.email || "Inconnu",
-      photoItemId: photo?.itemId || null,
     },
   });
 }

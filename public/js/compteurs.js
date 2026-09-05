@@ -16,7 +16,7 @@ import { esc } from "./astreinte-logic.js";
 import {
   listerSitesAvecCompteurs, listerTousLesCompteurs, creerCompteur, modifierCompteur,
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
-  qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS,
+  qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { getDossierUnique } from "./site-dossier-data.js";
@@ -272,16 +272,26 @@ function renderHistoriqueHTML(historique, compteur) {
   return `
     <div class="table-wrap" style="border:none">
       <table>
-        <thead><tr><th>Date</th><th>Valeur(s)</th><th>Relevé par</th><th>Photo</th></tr></thead>
+        <thead><tr><th>Date</th><th>Valeur(s)</th><th>Relevé par</th><th>Photo(s)</th></tr></thead>
         <tbody>
-          ${historique.map(r => `
+          ${historique.map(r => {
+            // Ancien format (avant la photo par index) : un seul
+            // photoItemId à la racine — conservé pour l'historique déjà
+            // enregistré avant cette évolution.
+            const photos = r.photos || (r.photoItemId ? { valeur: { itemId: r.photoItemId } } : {});
+            return `
             <tr>
               <td>${formatDate(r.createdAt)}</td>
               <td>${compteur.type === "elec" ? INDEX_ELEC.map(k => `${k}\u00A0${r.valeurs?.[k] ?? "?"}`).join(" · ") : `${r.valeurs?.valeur ?? "?"} m³`}</td>
               <td>${esc(r.releveParNom || "")}</td>
-              <td>${r.photoItemId ? `<img data-resolve-photo="${esc(r.photoItemId)}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.open(this.src,'_blank')" onerror="this.style.opacity=0.3">` : "—"}</td>
+              <td style="white-space:nowrap">
+                ${Object.entries(photos).map(([k, p]) => p?.itemId
+                  ? `<img data-resolve-photo="${esc(p.itemId)}" title="${esc(k)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:4px" onclick="window.open(this.src,'_blank')" onerror="this.style.opacity=0.3">`
+                  : ""
+                ).join("") || "—"}
+              </td>
             </tr>
-          `).join("")}
+          `;}).join("")}
         </tbody>
       </table>
     </div>
@@ -345,6 +355,86 @@ function attachAddFormListeners() {
 }
 
 // =================================================================
+// =================================================================
+// Bloc(s) photo — une photo par index relevé (4 pour l'élec, 1 pour
+// eau/gaz) : un tableau multi-tarif n'affiche souvent qu'un seul index
+// à la fois à l'écran, d'où une photo dédiée par index plutôt qu'une
+// photo unique pour tout le compteur.
+// =================================================================
+function labelPourCle(type, cle) {
+  if (type !== "elec") return "Photo du compteur";
+  return `${cle} — ${INDEX_LABELS[cle]}`;
+}
+
+function photosBlockHTML(prefix, compteur, photos) {
+  return clesIndex(compteur.type).map(cle => {
+    const photo = photos[cle];
+    return `
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">${esc(labelPourCle(compteur.type, cle))}${photo ? ' <span style="color:var(--gold)">✓</span>' : ' <span style="color:var(--red)">(obligatoire)</span>'}</label>
+        ${photo ? `
+          <div style="position:relative;width:fit-content">
+            <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.url)}"`} alt="" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
+            <button data-del-photo="${cle}" class="${prefix}-del-photo" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>
+          </div>
+        ` : `
+          <button data-photo-btn="${cle}" class="nav-btn ${prefix}-photo-btn">📷 Prendre une photo</button>
+        `}
+      </div>
+    `;
+  }).join("") + `<input type="file" accept="image/*" capture="environment" class="${prefix}-photo-input" style="display:none">`
+    + `<span class="${prefix}-photo-status" style="font-size:12px"></span>`;
+}
+
+// Attache les écouteurs du bloc photo ci-dessus. `photos` est l'objet
+// mutable dans lequel les photos prises sont stockées (une entrée par
+// clé d'index) ; `onChange` est appelée après chaque prise/suppression
+// pour re-render l'écran.
+function wirePhotosBlock(prefix, compteur, photos, onChange) {
+  const root = mountedContainer;
+  const fileInput = root.querySelector(`.${prefix}-photo-input`);
+  const statusEl = root.querySelector(`.${prefix}-photo-status`);
+
+  root.querySelectorAll(`[data-del-photo].${prefix}-del-photo`).forEach(btn => {
+    btn.addEventListener("click", () => { delete photos[btn.dataset.delPhoto]; onChange(); });
+  });
+  root.querySelectorAll(`.${prefix}-photo-btn`).forEach(btn => {
+    btn.addEventListener("click", async () => {
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
+      try {
+        const token = await getAccessToken(); // en réaction directe au clic, sinon bloqué par le navigateur
+        statusEl.innerHTML = "";
+        fileInput.dataset.readyToken = token;
+        fileInput.dataset.cle = btn.dataset.photoBtn;
+        fileInput.click();
+      } catch (err) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+      }
+    });
+  });
+  fileInput?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const cle = e.target.dataset.cle;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
+    try {
+      const sousDossier = compteur.type === "elec" ? `${compteur.nom} (${cle})` : compteur.nom;
+      const { url, itemId, isImage, name } = await uploadToDrive(
+        file, e.target.dataset.readyToken, [compteur.dossierNom, "Compteurs", sousDossier], DOSSIERS_ROOT_FOLDER
+      );
+      photos[cle] = { url, itemId, isImage, name };
+      onChange();
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
+    }
+  });
+}
+
+function photosCompletes(compteur, photos) {
+  return clesIndex(compteur.type).every(cle => photos[cle]);
+}
+
+// =================================================================
 // Écran de relevé (un seul compteur) — atteint par le bouton "Relever"
 // ou par un QR scanné hors appli
 // =================================================================
@@ -354,12 +444,13 @@ async function ouvrirReleve(compteurId, retourSiteId) {
   ui.screen = "releve";
   ui.releveCompteurId = compteurId;
   ui.releveRetourSiteId = retourSiteId;
-  ui.releveEnCours = { compteur, valeurs: {}, photo: null };
+  ui.releveEnCours = { compteur, valeurs: {}, photos: {} };
   render();
 }
 
 function renderReleve() {
-  const { compteur, valeurs, photo } = ui.releveEnCours;
+  const { compteur, valeurs, photos } = ui.releveEnCours;
+  const complet = photosCompletes(compteur, photos);
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
         <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
@@ -379,21 +470,10 @@ function renderReleve() {
 
         <div class="form-grid">${champs}</div>
 
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">Photo du compteur (obligatoire)</label>
-        <div id="cpt-r-photo-zone">
-          ${photo ? `
-            <div style="position:relative;width:fit-content">
-              <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.url)}"`} alt="" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
-              <button id="cpt-r-del-photo" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>
-            </div>
-          ` : `
-            <button class="nav-btn" id="cpt-r-photo-btn">📷 Prendre une photo</button>
-            <input type="file" accept="image/*" capture="environment" id="cpt-r-photo-input" style="display:none">
-          `}
-          <span id="cpt-r-photo-status" style="font-size:12px;margin-left:8px"></span>
-        </div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo du compteur (obligatoire)"}</label>
+        <div id="cpt-r-photo-zone">${photosBlockHTML("cpt-r", compteur, photos)}</div>
 
-        <button class="add-btn" id="cpt-r-save" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${photo ? "" : "disabled style=\"opacity:.5\""}>✓ Enregistrer le relevé</button>
+        <button class="add-btn" id="cpt-r-save" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${complet ? "" : "disabled style=\"opacity:.5\""}>✓ Enregistrer le relevé</button>
         <div id="cpt-r-status" style="font-size:12px;margin-top:10px"></div>
       </div>
     </div>
@@ -413,43 +493,14 @@ function renderReleve() {
     if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
     render();
   });
-  document.getElementById("cpt-r-del-photo")?.addEventListener("click", () => { ui.releveEnCours.photo = null; render(); });
-  document.getElementById("cpt-r-photo-btn")?.addEventListener("click", async () => {
-    const fileInput = document.getElementById("cpt-r-photo-input");
-    const statusEl = document.getElementById("cpt-r-photo-status");
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
-    try {
-      const token = await getAccessToken(); // en réaction directe au clic, sinon bloqué par le navigateur
-      statusEl.innerHTML = "";
-      fileInput.dataset.readyToken = token;
-      fileInput.click();
-    } catch (err) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
-    }
-  });
-  document.getElementById("cpt-r-photo-input")?.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    syncValeurs();
-    const statusEl = document.getElementById("cpt-r-photo-status");
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
-    try {
-      const { url, itemId, isImage, name } = await uploadToDrive(
-        file, e.target.dataset.readyToken, [compteur.dossierNom, "Compteurs", compteur.nom], DOSSIERS_ROOT_FOLDER
-      );
-      ui.releveEnCours.photo = { url, itemId, isImage, name };
-      render();
-    } catch (err) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
-    }
-  });
+  wirePhotosBlock("cpt-r", compteur, photos, () => { syncValeurs(); render(); });
   document.getElementById("cpt-r-save").addEventListener("click", async () => {
     syncValeurs();
     const statusEl = document.getElementById("cpt-r-status");
-    if (!ui.releveEnCours.photo) { statusEl.innerHTML = `<span style="color:var(--red)">Photo obligatoire.</span>`; return; }
+    if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerReleve(compteur, valeurs, ui.releveEnCours.photo, mountedUser);
+      await enregistrerReleve(compteur, valeurs, photos, mountedUser);
       ui.screen = "liste"; ui.releveCompteurId = null; ui.releveEnCours = null;
       if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
       await load();
@@ -486,8 +537,9 @@ function renderRapide() {
   }
 
   const compteur = liste[ui.rapideIndex];
-  ui.releveEnCours = ui.releveEnCours && ui.releveEnCours.compteur.id === compteur.id ? ui.releveEnCours : { compteur, valeurs: {}, photo: null };
-  const { valeurs, photo } = ui.releveEnCours;
+  ui.releveEnCours = ui.releveEnCours && ui.releveEnCours.compteur.id === compteur.id ? ui.releveEnCours : { compteur, valeurs: {}, photos: {} };
+  const { valeurs, photos } = ui.releveEnCours;
+  const complet = photosCompletes(compteur, photos);
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
         <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh"></label>
@@ -507,21 +559,10 @@ function renderRapide() {
 
         <div class="form-grid">${champs}</div>
 
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">Photo (obligatoire)</label>
-        <div id="cpt-rap-photo-zone">
-          ${photo ? `
-            <div style="position:relative;width:fit-content">
-              <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.url)}"`} alt="" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
-              <button id="cpt-rap-del-photo" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>
-            </div>
-          ` : `
-            <button class="nav-btn" id="cpt-rap-photo-btn">📷 Prendre une photo</button>
-            <input type="file" accept="image/*" capture="environment" id="cpt-rap-photo-input" style="display:none">
-          `}
-          <span id="cpt-rap-photo-status" style="font-size:12px;margin-left:8px"></span>
-        </div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo (obligatoire)"}</label>
+        <div id="cpt-rap-photo-zone">${photosBlockHTML("cpt-rap", compteur, photos)}</div>
 
-        <button class="add-btn" id="cpt-rap-valider" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${photo ? "" : "disabled style=\"opacity:.5\""}>✓ Valider et suivant →</button>
+        <button class="add-btn" id="cpt-rap-valider" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${complet ? "" : "disabled style=\"opacity:.5\""}>✓ Valider et suivant →</button>
         <button class="nav-btn" id="cpt-rap-passer" style="width:100%;margin-top:8px">Passer sans relever</button>
         <div id="cpt-rap-status" style="font-size:12px;margin-top:10px"></div>
       </div>
@@ -539,44 +580,15 @@ function renderRapide() {
 
   document.getElementById("cpt-rap-quitter").addEventListener("click", () => { ui.rapideSiteId = null; ui.releveEnCours = null; ui.ouverts.add(site.id); render(); });
   document.getElementById("cpt-rap-passer").addEventListener("click", () => { ui.rapideIndex++; ui.releveEnCours = null; render(); });
-  document.getElementById("cpt-rap-del-photo")?.addEventListener("click", () => { ui.releveEnCours.photo = null; render(); });
-  document.getElementById("cpt-rap-photo-btn")?.addEventListener("click", async () => {
-    const fileInput = document.getElementById("cpt-rap-photo-input");
-    const statusEl = document.getElementById("cpt-rap-photo-status");
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
-    try {
-      const token = await getAccessToken();
-      statusEl.innerHTML = "";
-      fileInput.dataset.readyToken = token;
-      fileInput.click();
-    } catch (err) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
-    }
-  });
-  document.getElementById("cpt-rap-photo-input")?.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    syncValeurs();
-    const statusEl = document.getElementById("cpt-rap-photo-status");
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
-    try {
-      const { url, itemId, isImage, name } = await uploadToDrive(
-        file, e.target.dataset.readyToken, [compteur.dossierNom, "Compteurs", compteur.nom], DOSSIERS_ROOT_FOLDER
-      );
-      ui.releveEnCours.photo = { url, itemId, isImage, name };
-      render();
-    } catch (err) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
-    }
-  });
+  wirePhotosBlock("cpt-rap", compteur, photos, () => { syncValeurs(); render(); });
   document.getElementById("cpt-rap-valider").addEventListener("click", async () => {
     syncValeurs();
     const statusEl = document.getElementById("cpt-rap-status");
-    if (!ui.releveEnCours.photo) { statusEl.innerHTML = `<span style="color:var(--red)">Photo obligatoire.</span>`; return; }
+    if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerReleve(compteur, valeurs, ui.releveEnCours.photo, mountedUser);
-      compteur.dernierReleve = { at: Date.now(), valeurs, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
+      await enregistrerReleve(compteur, valeurs, photos, mountedUser);
+      compteur.dernierReleve = { at: Date.now(), valeurs, photos, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
       ui.rapideIndex++;
       ui.releveEnCours = null;
       render();
