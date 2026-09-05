@@ -100,6 +100,68 @@ function formatValeurs(compteur) {
 }
 
 // =================================================================
+// Export PDF (impression) : récapitulatif des relevés d'un site —
+// réutilise le mécanisme générique .print-fiche/.print-only déjà en
+// place dans l'appli (ex. dossiers de site), donc directement
+// "Enregistrer en PDF" depuis la boîte de dialogue d'impression.
+// =================================================================
+function exporterPdfSite(siteId) {
+  const site = state.sites.find(s => s.id === siteId);
+  if (!site) return;
+  const compteurs = state.compteurs.filter(c => c.dossierId === siteId);
+
+  const ligneCompteur = (c) => `
+    <tr>
+      <td>${esc(c.nom)}</td>
+      <td>${esc(c.emplacement || "—")}</td>
+      <td>${formatDate(c.dernierReleve?.at)}</td>
+      <td>${formatValeurs(c)}</td>
+      <td>${esc(c.dernierReleve?.releveParNom || "—")}</td>
+    </tr>
+  `;
+
+  const tableauType = (type, label) => {
+    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+    if (liste.length === 0) return "";
+    return `
+      <h3 style="margin:16px 0 6px">${TYPE_ICONE[type]} ${label}</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Compteur</th>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Emplacement</th>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Dernier relevé</th>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Valeur(s)</th>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Relevé par</th>
+        </tr></thead>
+        <tbody>${liste.map(ligneCompteur).join("")}</tbody>
+      </table>
+    `;
+  };
+
+  const html = `
+    <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+      <div style="text-align:center;margin-bottom:16px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
+      </div>
+      <h2 style="margin:0 0 4px">Relevé de compteur — ${esc(site.nom)}</h2>
+      <p style="margin:0;color:#555;font-size:12px">Exporté le ${formatDate(Date.now())}</p>
+      ${tableauType("eau", "Eau")}
+      ${tableauType("gaz", "Gaz")}
+      ${tableauType("elec", "Électricité")}
+      ${compteurs.length === 0 ? `<p>Aucun compteur configuré sur ce site.</p>` : ""}
+    </div>
+  `;
+
+  const printRoot = document.createElement("div");
+  printRoot.id = "cpt-print-root";
+  printRoot.className = "print-only";
+  printRoot.innerHTML = html;
+  document.body.appendChild(printRoot);
+  window.print();
+  setTimeout(() => printRoot.remove(), 1000);
+}
+
+// =================================================================
 // Liste des sites (accordéon)
 // =================================================================
 function renderListe() {
@@ -145,6 +207,7 @@ function renderListe() {
           <div style="padding:0 16px 16px">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
               <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
+              <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
             </div>
             ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : ["eau", "gaz", "elec"].map(type => {
               const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
@@ -174,6 +237,9 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.rapideSiteId = btn.dataset.rapideSite; ui.rapideIndex = 0; render();
+  }));
+  mountedContainer.querySelectorAll("[data-export-pdf]").forEach(btn => btn.addEventListener("click", () => {
+    exporterPdfSite(btn.dataset.exportPdf);
   }));
   mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
     const siteId = btn.dataset.openAdd;
@@ -554,7 +620,7 @@ function wirePhotosBlock(prefix, compteur, photos, onChange) {
     try {
       const sousDossier = compteur.type === "elec" ? `${compteur.nom} (${cle})` : compteur.nom;
       const { url, itemId, isImage, name } = await uploadToDrive(
-        file, e.target.dataset.readyToken, [compteur.dossierNom, "Compteurs", sousDossier], DOSSIERS_ROOT_FOLDER
+        file, e.target.dataset.readyToken, [compteur.dossierNom, "Relevé de compteur", sousDossier], DOSSIERS_ROOT_FOLDER
       );
       photos[cle] = { url, itemId, isImage, name };
       onChange();
