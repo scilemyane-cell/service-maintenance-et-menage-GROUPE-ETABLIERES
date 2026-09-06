@@ -97,17 +97,19 @@ async function genererPdf(titre, lignes) {
 // rapide au dernier état) et, si les données ont changé depuis le dernier
 // export, archive aussi une copie datée (jamais écrasée — conserve un
 // historique consultable dans le temps, sans dupliquer inutilement quand
-// rien n'a bougé).
-async function genererEtEnvoyerPdf(token, nomFichier, titre, lignes, dernieresEmpreintes) {
+// rien n'a bougé). `dossier` : sous-dossier dédié à ce module dans
+// ExportsDonnees, pour ne pas tout mélanger à plat (ex. "Stock",
+// "Interventions", "Compteurs"...).
+async function genererEtEnvoyerPdf(token, dossier, nomFichier, titre, lignes, dernieresEmpreintes) {
   const blob = await genererPdf(titre, lignes);
   const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
-  await uploadToDrive(fileActuel, token, [], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+  await uploadToDrive(fileActuel, token, [dossier], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
 
   const emp = empreinte(lignes);
   if (dernieresEmpreintes[nomFichier] !== emp) {
     const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
     const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
-    await uploadToDrive(fileArchive, token, ["Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
+    await uploadToDrive(fileArchive, token, [dossier, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
     dernieresEmpreintes[nomFichier] = emp;
   }
 }
@@ -270,13 +272,13 @@ async function extraireRelevesCompteurs() {
 // ---- Orchestration ----
 
 const MODULES = [
-  { fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
-  { fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
-  { fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
-  { fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
-  { fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
-  { fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
-  { fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs", extraire: extraireRelevesCompteurs },
+  { dossier: "Stock", fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
+  { dossier: "Stock", fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
+  { dossier: "Stock", fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
+  { dossier: "Stock", fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
+  { dossier: "Interventions", fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
+  { dossier: "Menage", fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
+  { dossier: "Compteurs", fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs", extraire: extraireRelevesCompteurs },
 ];
 
 // Déclenchée automatiquement à la connexion (voir app.html). N'exporte
@@ -294,7 +296,7 @@ export async function runDailyExportIfNeeded() {
     const dernieresEmpreintes = { ...(statut.empreintes || {}) };
     for (const mod of MODULES) {
       const lignes = await mod.extraire();
-      await genererEtEnvoyerPdf(token, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
+      await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
     }
 
     await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
@@ -314,7 +316,7 @@ export async function exporterMaintenant(getTokenInteractif, onProgress) {
   for (const mod of MODULES) {
     onProgress?.(mod.titre);
     const lignes = await mod.extraire();
-    await genererEtEnvoyerPdf(token, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
+    await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
   }
   await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
 }
