@@ -244,6 +244,29 @@ async function extraireFichesMenage() {
   return lignes;
 }
 
+async function extraireRelevesCompteurs() {
+  const snap = await getDocs(collection(db, "compteurs-releves"));
+  const lignes = [];
+  const typeLabel = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
+  snap.forEach(d => {
+    const r = d.data();
+    const valeurs = r.type === "elec"
+      ? ["HPH", "HCH", "HPE", "HCE"].map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
+      : `${r.valeurs?.valeur ?? "?"} m³`;
+    lignes.push({
+      Date: r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "",
+      Site: r.dossierNom || "",
+      Compteur: r.nomCompteur || "",
+      Type: typeLabel[r.type] || r.type,
+      Valeur: valeurs,
+      "Relevé par": r.releveParNom || "",
+      Antidaté: r.saisiHorsDate ? "Oui" : "Non",
+    });
+  });
+  lignes.sort((a, b) => (b.Date || "").localeCompare(a.Date || ""));
+  return lignes;
+}
+
 // ---- Orchestration ----
 
 const MODULES = [
@@ -253,6 +276,7 @@ const MODULES = [
   { fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
   { fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
   { fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
+  { fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs", extraire: extraireRelevesCompteurs },
 ];
 
 // Déclenchée automatiquement à la connexion (voir app.html). N'exporte
