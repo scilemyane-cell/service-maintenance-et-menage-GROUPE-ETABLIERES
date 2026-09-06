@@ -105,6 +105,10 @@ function render() {
         `;}).join("")}
       </div>
 
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="https://etablieresfr.sharepoint.com/sites/appsmm" target="_blank" rel="noopener" class="nav-btn" style="text-decoration:none;display:inline-flex;align-items:center">🔗 Ouvrir SharePoint (appsmm)</a>
+      </div>
+
       ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
       <button class="nav-btn" id="toggle-reorg" style="width:fit-content;opacity:.7;font-size:11px">${modeReorganisation ? "✓ Terminé" : "🔧 Réorganiser les bulles"}</button>
       ` : ""}
