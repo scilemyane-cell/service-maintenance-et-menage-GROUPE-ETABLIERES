@@ -22,6 +22,9 @@ import {
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { getDossierUnique } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
+import {
+  enqueuePendingReleve, estErreurReseau, demarrerSyncAuto, countPendingReleves, onQueueChange,
+} from "./offline-queue.js";
 
 const TYPE_ICONE = { eau: "💧", gaz: "🔥", elec: "⚡" };
 const TYPE_LABEL = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
@@ -44,6 +47,8 @@ function dateInputVersTimestamp(valeur) {
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], compteurs: [] };
+let pendingCount = 0;
+let syncDemarre = false; // la synchro tourne en tache de fond, independamment de l'onglet ouvert
 let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
   addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
@@ -66,6 +71,14 @@ export async function mountCompteurs(container, user) {
     rapideSiteId: null, rapideIndex: 0,
   };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
+
+  if (!syncDemarre) {
+    syncDemarre = true;
+    onQueueChange(async () => { pendingCount = await countPendingReleves(); if (ui.screen === "liste" && !ui.rapideSiteId) render(); });
+    demarrerSyncAuto(traiterReleveEnAttente);
+  }
+  pendingCount = await countPendingReleves();
+
   try {
     await load();
   } catch (e) {
@@ -191,6 +204,11 @@ function renderListe() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <p class="hint">Relevés eau, gaz, électricité par site, avec photo obligatoire à chaque relevé — activable depuis la fiche d'un dossier de site ("📏 Ce site a des compteurs à relever").</p>
+      ${pendingCount > 0 ? `
+        <div class="stat-chip" style="width:fit-content;border-color:var(--gold);color:var(--gold)">
+          📡 ${pendingCount} relevé(s) enregistré(s) sur cet appareil, en attente d'envoi (pas de réseau au moment de la saisie) — envoi automatique dès le retour de connexion.
+        </div>
+      ` : ""}
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : sitesTries.map(site => {
@@ -647,7 +665,7 @@ function photosBlockHTML(prefix, compteur, photos) {
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">${esc(labelPourCle(compteur.type, cle))}${photo ? ' <span style="color:var(--gold)">✓</span>' : ' <span style="color:var(--red)">(obligatoire)</span>'}</label>
         ${photo ? `
           <div style="position:relative;width:fit-content">
-            <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.url)}"`} alt="" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
+            <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.previewUrl || photo.url)}"`} alt="" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
             <button data-del-photo="${cle}" class="${prefix}-del-photo" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:1">✕</button>
           </div>
         ` : `
@@ -659,52 +677,61 @@ function photosBlockHTML(prefix, compteur, photos) {
     + `<span class="${prefix}-photo-status" style="font-size:12px"></span>`;
 }
 
-// Attache les écouteurs du bloc photo ci-dessus. `photos` est l'objet
-// mutable dans lequel les photos prises sont stockées (une entrée par
-// clé d'index) ; `onChange` est appelée après chaque prise/suppression
-// pour re-render l'écran.
+// Attache les écouteurs du bloc photo ci-dessus. La photo est capturée
+// et gardée EN MÉMOIRE (fichier + aperçu local) sans jamais tenter de
+// l'envoyer à ce stade — l'envoi n'a lieu qu'au moment d'enregistrer le
+// relevé (voir plus bas), ce qui permet de prendre une photo même sans
+// réseau. `photos` est l'objet mutable dans lequel les fichiers pris sont
+// stockés (une entrée par clé d'index) ; `onChange` est appelée après
+// chaque prise/suppression pour re-render l'écran.
 function wirePhotosBlock(prefix, compteur, photos, onChange) {
   const root = mountedContainer;
   const fileInput = root.querySelector(`.${prefix}-photo-input`);
-  const statusEl = root.querySelector(`.${prefix}-photo-status`);
 
   root.querySelectorAll(`[data-del-photo].${prefix}-del-photo`).forEach(btn => {
-    btn.addEventListener("click", () => { delete photos[btn.dataset.delPhoto]; onChange(); });
-  });
-  root.querySelectorAll(`.${prefix}-photo-btn`).forEach(btn => {
-    btn.addEventListener("click", async () => {
-      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
-      try {
-        const token = await getAccessToken(); // en réaction directe au clic, sinon bloqué par le navigateur
-        statusEl.innerHTML = "";
-        fileInput.dataset.readyToken = token;
-        fileInput.dataset.cle = btn.dataset.photoBtn;
-        fileInput.click();
-      } catch (err) {
-        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
-      }
+    btn.addEventListener("click", () => {
+      const p = photos[btn.dataset.delPhoto];
+      if (p?.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      delete photos[btn.dataset.delPhoto];
+      onChange();
     });
   });
-  fileInput?.addEventListener("change", async (e) => {
+  root.querySelectorAll(`.${prefix}-photo-btn`).forEach(btn => {
+    btn.addEventListener("click", () => {
+      fileInput.dataset.cle = btn.dataset.photoBtn;
+      fileInput.click();
+    });
+  });
+  fileInput?.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const cle = e.target.dataset.cle;
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
-    try {
-      const sousDossier = compteur.type === "elec" ? `${compteur.nom} (${cle})` : compteur.nom;
-      const { url, itemId, isImage, name } = await uploadToDrive(
-        file, e.target.dataset.readyToken, [compteur.dossierNom, "Relevé de compteur", sousDossier], DOSSIERS_ROOT_FOLDER
-      );
-      photos[cle] = { url, itemId, isImage, name };
-      onChange();
-    } catch (err) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
-    }
+    photos[cle] = { file, previewUrl: URL.createObjectURL(file) };
+    onChange();
   });
 }
 
 function photosCompletes(compteur, photos) {
   return clesIndex(compteur.type).every(cle => photos[cle]);
+}
+
+// Envoie toutes les photos capturées (fichiers en mémoire) vers
+// SharePoint et renvoie l'objet `photos` final (avec itemId/url réels),
+// prêt pour enregistrerReleve(). Lève une erreur si un envoi échoue —
+// à l'appelant de distinguer une coupure réseau (mise en file d'attente,
+// voir offline-queue.js) d'une autre erreur.
+async function envoyerToutesLesPhotos(compteur, photos) {
+  const token = await getAccessToken(); // un seul jeton pour tous les envois de ce relevé
+  const resultat = {};
+  for (const [cle, photo] of Object.entries(photos)) {
+    if (photo.itemId) { resultat[cle] = photo; continue; } // déjà envoyée (repli après échec partiel)
+    const sousDossier = compteur.type === "elec" ? `${compteur.nom} (${cle})` : compteur.nom;
+    const { url, itemId, isImage, name } = await uploadToDrive(
+      photo.file, token, [compteur.dossierNom, "Relevé de compteur", sousDossier], DOSSIERS_ROOT_FOLDER
+    );
+    resultat[cle] = { url, itemId, isImage, name };
+  }
+  return resultat;
 }
 
 // Vérifie les anomalies avant enregistrement (baisse impossible, hausse
@@ -717,6 +744,38 @@ async function confirmerMalgreAnomalies(compteur, valeurs) {
   const anomalies = detecterAnomalies(compteur, valeurs, historiqueRecent);
   if (anomalies.length === 0) return true;
   return confirm(`⚠️ Anomalie détectée sur ce relevé :\n\n${anomalies.join("\n")}\n\nEnregistrer quand même ?`);
+}
+
+// Tente d'envoyer les photos puis d'enregistrer le relevé. En cas
+// d'échec RÉSEAU (pas d'autre type d'erreur), met tout le relevé en
+// file d'attente locale (voir offline-queue.js) au lieu de faire
+// échouer l'opération — l'utilisateur peut continuer son travail, la
+// synchronisation se fera automatiquement au retour de connexion.
+// Renvoie { statut: "envoye" | "en_attente" }, ou lève une erreur pour
+// tout autre problème (droits, etc.).
+async function finaliserEnregistrementReleve(compteur, valeurs, photos, dateAntidatee) {
+  try {
+    const photosEnvoyees = await envoyerToutesLesPhotos(compteur, photos);
+    await enregistrerReleve(compteur, valeurs, photosEnvoyees, mountedUser, dateAntidatee);
+    return { statut: "envoye" };
+  } catch (e) {
+    if (!estErreurReseau(e)) throw e;
+    const photosFiles = {};
+    for (const [cle, photo] of Object.entries(photos)) photosFiles[cle] = photo.file;
+    await enqueuePendingReleve({ compteur, valeurs, photosFiles, user: mountedUser, dateAntidatee });
+    return { statut: "en_attente" };
+  }
+}
+
+// Rejoue un relevé mis en file d'attente (voir demarrerSyncAuto ci-
+// dessous) — reconstruit un objet "photos" à partir des fichiers
+// conservés, puis suit exactement le même chemin que l'enregistrement
+// normal.
+async function traiterReleveEnAttente(entry) {
+  const photos = {};
+  for (const [cle, file] of Object.entries(entry.photosFiles)) photos[cle] = { file };
+  const photosEnvoyees = await envoyerToutesLesPhotos(entry.compteur, photos);
+  await enregistrerReleve(entry.compteur, entry.valeurs, photosEnvoyees, entry.user, entry.dateAntidatee);
 }
 
 // =================================================================
@@ -798,10 +857,15 @@ function renderReleve() {
     const estAnterieure = dateChoisie && document.getElementById("cpt-r-date").value !== aujourdHui;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerReleve(compteur, valeurs, photos, mountedUser, estAnterieure ? dateChoisie : null);
+      const { statut } = await finaliserEnregistrementReleve(compteur, valeurs, photos, estAnterieure ? dateChoisie : null);
       ui.screen = "liste"; ui.releveCompteurId = null; ui.releveEnCours = null;
       if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
-      await load();
+      if (statut === "en_attente") {
+        await load();
+        alert("📡 Pas de réseau : ce relevé a été enregistré sur cet appareil et sera envoyé automatiquement dès le retour de connexion.");
+      } else {
+        await load();
+      }
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
     }
@@ -897,8 +961,9 @@ function renderRapide() {
     const dateChoisie = peutAntidater(mountedUser) && dateSaisie && dateSaisie !== aujourdHui ? dateInputVersTimestamp(dateSaisie) : null;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerReleve(compteur, valeurs, photos, mountedUser, dateChoisie);
-      compteur.dernierReleve = { at: dateChoisie || Date.now(), valeurs, photos, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
+      const { statut } = await finaliserEnregistrementReleve(compteur, valeurs, photos, dateChoisie);
+      compteur.dernierReleve = { at: dateChoisie || Date.now(), valeurs, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
+      if (statut === "en_attente") statusEl.innerHTML = `<span style="color:var(--gold)">📡 Pas de réseau — enregistré localement, sera envoyé automatiquement.</span>`;
       ui.rapideIndex++;
       ui.releveEnCours = null;
       render();
