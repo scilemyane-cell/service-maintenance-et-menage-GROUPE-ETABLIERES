@@ -97,20 +97,22 @@ async function genererPdf(titre, lignes) {
 // rapide au dernier état) et, si les données ont changé depuis le dernier
 // export, archive aussi une copie datée (jamais écrasée — conserve un
 // historique consultable dans le temps, sans dupliquer inutilement quand
-// rien n'a bougé). `dossier` : sous-dossier dédié à ce module dans
-// ExportsDonnees, pour ne pas tout mélanger à plat (ex. "Stock",
-// "Interventions", "Compteurs"...).
-async function genererEtEnvoyerPdf(token, dossier, nomFichier, titre, lignes, dernieresEmpreintes) {
+// rien n'a bougé). `dossierSegments` : chemin de sous-dossiers dédié à ce
+// module/site dans ExportsDonnees, pour ne pas tout mélanger à plat (ex.
+// ["Stock"], ["Compteurs", "LE CAP"]...). `cleEmpreinte` distingue les
+// fichiers de même nom dans des dossiers différents (ex. plusieurs sites)
+// dans le suivi "a changé depuis le dernier export ?".
+async function genererEtEnvoyerPdf(token, dossierSegments, nomFichier, titre, lignes, dernieresEmpreintes, cleEmpreinte = nomFichier) {
   const blob = await genererPdf(titre, lignes);
   const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
-  await uploadToDrive(fileActuel, token, [dossier], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+  await uploadToDrive(fileActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
 
   const emp = empreinte(lignes);
-  if (dernieresEmpreintes[nomFichier] !== emp) {
+  if (dernieresEmpreintes[cleEmpreinte] !== emp) {
     const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
     const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
-    await uploadToDrive(fileArchive, token, [dossier, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
-    dernieresEmpreintes[nomFichier] = emp;
+    await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
+    dernieresEmpreintes[cleEmpreinte] = emp;
   }
 }
 
@@ -269,16 +271,56 @@ async function extraireRelevesCompteurs() {
   return lignes;
 }
 
+// Regroupe les mêmes données par site, sans la colonne "Site" (rendue
+// inutile puisque chaque site aura son propre fichier/dossier) — sert au
+// PDF détaillé par site, en plus du récapitulatif global ci-dessus.
+async function extraireRelevesParSite() {
+  const snap = await getDocs(collection(db, "compteurs-releves"));
+  const typeLabel = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
+  const parSite = new Map(); // nomSite -> lignes[]
+  snap.forEach(d => {
+    const r = d.data();
+    const nomSite = r.dossierNom || "Site inconnu";
+    const valeurs = r.type === "elec"
+      ? ["HPH", "HCH", "HPE", "HCE"].map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
+      : `${r.valeurs?.valeur ?? "?"} m³`;
+    if (!parSite.has(nomSite)) parSite.set(nomSite, []);
+    parSite.get(nomSite).push({
+      Date: r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "",
+      Compteur: r.nomCompteur || "",
+      Type: typeLabel[r.type] || r.type,
+      Valeur: valeurs,
+      "Relevé par": r.releveParNom || "",
+      Antidaté: r.saisiHorsDate ? "Oui" : "Non",
+    });
+  });
+  parSite.forEach(lignes => lignes.sort((a, b) => (b.Date || "").localeCompare(a.Date || "")));
+  return parSite;
+}
+
+// Génère, en plus du récapitulatif global (voir MODULES), un PDF détaillé
+// par site — chacun dans son propre sous-dossier (ExportsDonnees/
+// Compteurs/[Nom du site]/) plutôt que tout mélanger dans un seul fichier.
+async function exporterRelevesCompteursParSite(token, dernieresEmpreintes) {
+  const parSite = await extraireRelevesParSite();
+  for (const [nomSite, lignes] of parSite) {
+    await genererEtEnvoyerPdf(
+      token, ["Compteurs", nomSite], "Releves.pdf", `Relevés de compteurs — ${nomSite}`,
+      lignes, dernieresEmpreintes, `Compteurs/${nomSite}`
+    );
+  }
+}
+
 // ---- Orchestration ----
 
 const MODULES = [
-  { dossier: "Stock", fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
-  { dossier: "Stock", fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
-  { dossier: "Stock", fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
-  { dossier: "Stock", fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
-  { dossier: "Interventions", fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
-  { dossier: "Menage", fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
-  { dossier: "Compteurs", fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs", extraire: extraireRelevesCompteurs },
+  { dossier: ["Stock"], fichier: "Stock_central.pdf", titre: "Stock central", extraire: extraireStockProduits },
+  { dossier: ["Stock"], fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
+  { dossier: ["Stock"], fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
+  { dossier: ["Stock"], fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
+  { dossier: ["Interventions"], fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
+  { dossier: ["Menage"], fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
+  { dossier: ["Compteurs"], fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs (tous sites)", extraire: extraireRelevesCompteurs },
 ];
 
 // Déclenchée automatiquement à la connexion (voir app.html). N'exporte
@@ -298,6 +340,7 @@ export async function runDailyExportIfNeeded() {
       const lignes = await mod.extraire();
       await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
     }
+    await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
 
     await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
   } catch (e) {
@@ -318,6 +361,8 @@ export async function exporterMaintenant(getTokenInteractif, onProgress) {
     const lignes = await mod.extraire();
     await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
   }
+  onProgress?.("Relevés de compteurs (détail par site)");
+  await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
   await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
 }
 
