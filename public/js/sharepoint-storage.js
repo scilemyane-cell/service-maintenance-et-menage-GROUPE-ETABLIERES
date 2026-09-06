@@ -54,6 +54,27 @@ async function resolveDriveId(token) {
 // crée pas de façon fiable plusieurs niveaux de dossiers imbriqués en une
 // seule fois lors d'un envoi par session, contrairement à un envoi simple.
 // Idempotent : ne fait rien si le dossier existe déjà.
+// Lien de consultation SharePoint (webUrl) d'un dossier — pour un simple
+// bouton "Ouvrir sur SharePoint" dans l'appli, sans vouloir en lire ni
+// modifier le contenu par ailleurs. Si le dossier exact n'existe pas
+// encore (aucun fichier jamais envoyé à cet endroit), remonte niveau par
+// niveau jusqu'à en trouver un qui existe (au pire, la racine du site
+// SharePoint), pour ne jamais renvoyer un lien mort.
+export async function getFolderWebUrl(folderSegments, rootFolder = ROOT_FOLDER) {
+  const token = await getAccessToken();
+  const driveId = await resolveDriveId(token);
+  const segments = [rootFolder, ...(folderSegments || []).filter(Boolean).map(s => sanitizeFilename(String(s)).slice(0, 80))];
+
+  for (let n = segments.length; n >= 0; n--) {
+    const chemin = segments.slice(0, n).map(encodeURIComponent).join("/");
+    const url = chemin ? `${GRAPH_ROOT}/drives/${driveId}/root:/${chemin}?select=webUrl` : `${GRAPH_ROOT}/drives/${driveId}/root?select=webUrl`;
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, 15000);
+    if (res.ok) { const item = await res.json(); if (item.webUrl) return item.webUrl; }
+  }
+  // Dernier repli : l'accueil du site SharePoint lui-même.
+  return `https://${SHAREPOINT_HOSTNAME}${SITE_PATH}`;
+}
+
 export async function ensureFolderPath(driveId, token, folderPath) {
   const segments = folderPath.split("/").filter(Boolean);
   const encodedSoFar = [];

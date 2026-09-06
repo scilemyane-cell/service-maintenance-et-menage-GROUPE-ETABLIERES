@@ -19,7 +19,7 @@ import {
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
 } from "./compteurs-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import {
@@ -241,6 +241,7 @@ function renderListe() {
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
               <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
               <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
+              <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
             </div>
             ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : ["eau", "gaz", "elec"].map(type => {
               const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
@@ -273,6 +274,22 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-export-pdf]").forEach(btn => btn.addEventListener("click", () => {
     exporterPdfSite(btn.dataset.exportPdf);
+  }));
+  mountedContainer.querySelectorAll("[data-open-sharepoint]").forEach(btn => btn.addEventListener("click", async () => {
+    const original = btn.textContent;
+    btn.textContent = "⏳ Ouverture…"; btn.disabled = true;
+    // Ouverture synchrone d'un onglet vide AVANT l'await (sinon bloquée
+    // par le bloqueur de pop-up), redirigé une fois l'URL connue.
+    const win = window.open("", "_blank");
+    try {
+      const url = await getFolderWebUrl([btn.dataset.nomSite, "Relevé de compteur"]);
+      if (win) win.location.href = url; else window.open(url, "_blank");
+    } catch (e) {
+      win?.close();
+      alert("Impossible d'ouvrir SharePoint : " + (e.message || e));
+    } finally {
+      btn.textContent = original; btn.disabled = false;
+    }
   }));
   mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
     const siteId = btn.dataset.openAdd;
