@@ -158,6 +158,64 @@ export async function listerHistoriqueCompteur(compteurId) {
   return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
+// Écart entre deux relevés, index par index (utilisé pour "+142 m³
+// depuis le dernier relevé" et pour la détection d'anomalie). Renvoie
+// null pour un index si l'une des deux valeurs est absente/invalide, ou
+// si le résultat est négatif (compteur qui recule — traité séparément
+// comme anomalie, pas comme une consommation).
+export function calculerEcarts(valeursRecentes, valeursPrecedentes) {
+  if (!valeursPrecedentes) return null;
+  const ecarts = {};
+  for (const cle of Object.keys(valeursRecentes)) {
+    const recent = parseFloat(valeursRecentes[cle]);
+    const precedent = parseFloat(valeursPrecedentes[cle]);
+    if (isNaN(recent) || isNaN(precedent)) { ecarts[cle] = null; continue; }
+    ecarts[cle] = recent - precedent;
+  }
+  return ecarts;
+}
+
+// Repère les anomalies avant l'enregistrement d'un relevé : valeur en
+// baisse (impossible sur un compteur cumulatif, sauf remplacement du
+// compteur) ou hausse anormalement plus forte que la moyenne récente
+// (fuite, dérive...). `historiqueRecent` = quelques derniers relevés
+// (du plus récent au plus ancien, voir listerHistoriqueCompteur), utilisé
+// pour établir une moyenne de référence. Renvoie un tableau de messages
+// (vide = rien d'anormal détecté).
+export function detecterAnomalies(compteur, nouvellesValeurs, historiqueRecent = []) {
+  const messages = [];
+  const cles = clesIndex(compteur.type);
+  const derniereValeur = compteur.dernierReleve?.valeurs;
+
+  for (const cle of cles) {
+    const nouvelle = parseFloat(nouvellesValeurs[cle]);
+    if (isNaN(nouvelle)) continue;
+    const precedente = derniereValeur ? parseFloat(derniereValeur[cle]) : null;
+    if (precedente !== null && !isNaN(precedente)) {
+      if (nouvelle < precedente) {
+        messages.push(`${cle !== "valeur" ? cle + " : " : ""}la nouvelle valeur (${nouvelle}) est inférieure au dernier relevé (${precedente}) — normalement impossible sauf remplacement du compteur.`);
+        continue; // pas la peine de comparer à la moyenne si déjà signalé en baisse
+      }
+      const ecartActuel = nouvelle - precedente;
+      // Moyenne des écarts sur l'historique récent (au moins 2 relevés
+      // nécessaires pour établir une référence)
+      const valeursHist = historiqueRecent.map(r => parseFloat(r.valeurs?.[cle])).filter(v => !isNaN(v));
+      if (valeursHist.length >= 2) {
+        const ecarts = [];
+        for (let i = 0; i < valeursHist.length - 1; i++) ecarts.push(valeursHist[i] - valeursHist[i + 1]);
+        const ecartsPositifs = ecarts.filter(e => e > 0);
+        if (ecartsPositifs.length > 0) {
+          const moyenne = ecartsPositifs.reduce((a, b) => a + b, 0) / ecartsPositifs.length;
+          if (moyenne > 0 && ecartActuel > moyenne * 2.5 && ecartActuel > moyenne + 5) {
+            messages.push(`${cle !== "valeur" ? cle + " : " : ""}hausse de ${ecartActuel.toFixed(2)} depuis le dernier relevé, contre une moyenne habituelle de ${moyenne.toFixed(2)} — vérifie une fuite ou une erreur de saisie.`);
+          }
+        }
+      }
+    }
+  }
+  return messages;
+}
+
 // QR encodant un lien direct vers l'écran de relevé de ce compteur —
 // scanné avec l'appareil photo normal du téléphone (hors appli), ça
 // ouvre directement le bon formulaire.

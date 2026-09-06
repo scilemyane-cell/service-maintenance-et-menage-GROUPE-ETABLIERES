@@ -683,7 +683,7 @@ function renderEdit(dOriginal, workingCopy) {
         </label>
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">
           <input type="checkbox" id="sd-compteurs-actifs" ${data.compteursActifs ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)">
-          🔢 Ce site a des compteurs à relever (eau, gaz, électricité)
+          📏 Ce site a des compteurs à relever (eau, gaz, électricité)
         </label>
       </div>
 

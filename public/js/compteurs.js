@@ -1,5 +1,5 @@
 // compteurs.js
-// Nouvel onglet indépendant "🔢 Relevé compteur" : relevés eau/gaz/
+// Nouvel onglet indépendant "📏 Relevé compteur" : relevés eau/gaz/
 // électricité par site, avec photo obligatoire à chaque relevé et QR
 // code par compteur (ouvre directement le formulaire de relevé depuis
 // l'appareil photo du téléphone, hors appli). Historique complet
@@ -17,7 +17,7 @@ import {
   listerSitesAvecCompteurs, listerTousLesCompteurs, creerCompteur, modifierCompteur,
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
-  estEnRetard, prochaineEcheanceLabel, MOIS_LABELS,
+  estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { getDossierUnique } from "./site-dossier-data.js";
@@ -190,7 +190,7 @@ function renderListe() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Relevés eau, gaz, électricité par site, avec photo obligatoire à chaque relevé — activable depuis la fiche d'un dossier de site ("🔢 Ce site a des compteurs à relever").</p>
+      <p class="hint">Relevés eau, gaz, électricité par site, avec photo obligatoire à chaque relevé — activable depuis la fiche d'un dossier de site ("📏 Ce site a des compteurs à relever").</p>
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : sitesTries.map(site => {
@@ -294,9 +294,11 @@ function renderListe() {
     const holder = document.getElementById(`cpt-hist-${id}`);
     if (holder) {
       holder.innerHTML = `<p class="hint" style="margin:8px 0">⏳ Chargement…</p>`;
+      const compteur = state.compteurs.find(c => c.id === id);
       const historique = await listerHistoriqueCompteur(id);
-      holder.innerHTML = renderHistoriqueHTML(historique, state.compteurs.find(c => c.id === id));
+      holder.innerHTML = renderHistoriqueHTML(historique, compteur);
       resolvePhotos(holder);
+      dessinerGraphiqueHistorique(holder, historique, compteur);
     }
   }));
   mountedContainer.querySelectorAll("[data-edit-compteur]").forEach(btn => btn.addEventListener("click", () => {
@@ -348,23 +350,39 @@ function renderCompteurRow(c) {
   `;
 }
 
+function formatEcarts(compteur, ecarts) {
+  if (!ecarts) return `<span class="hint">—</span>`;
+  if (compteur.type === "elec") {
+    return INDEX_ELEC.map(k => {
+      const e = ecarts[k];
+      if (e === null || e === undefined || isNaN(e)) return `${k}\u00A0?`;
+      return `${k}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
+    }).join(" · ");
+  }
+  const e = ecarts.valeur;
+  if (e === null || e === undefined || isNaN(e)) return "?";
+  return `<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'};font-weight:600">${e >= 0 ? "+" : ""}${e.toFixed(2)} m³</span>`;
+}
+
 function renderHistoriqueHTML(historique, compteur) {
   if (!compteur) return `<p class="hint">Compteur introuvable.</p>`;
   if (historique.length === 0) return `<p class="hint" style="margin:8px 0">Aucun relevé enregistré pour l'instant.</p>`;
   return `
     <div class="table-wrap" style="border:none">
       <table>
-        <thead><tr><th>Date</th><th>Valeur(s)</th><th>Relevé par</th><th>Photo(s)</th></tr></thead>
+        <thead><tr><th>Date</th><th>Valeur(s)</th><th>Consommation</th><th>Relevé par</th><th>Photo(s)</th></tr></thead>
         <tbody>
-          ${historique.map(r => {
+          ${historique.map((r, i) => {
             // Ancien format (avant la photo par index) : un seul
             // photoItemId à la racine — conservé pour l'historique déjà
             // enregistré avant cette évolution.
             const photos = r.photos || (r.photoItemId ? { valeur: { itemId: r.photoItemId } } : {});
+            const ecarts = historique[i + 1] ? calculerEcarts(r.valeurs, historique[i + 1].valeurs) : null;
             return `
             <tr>
               <td>${formatDate(r.createdAt)}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
               <td>${compteur.type === "elec" ? INDEX_ELEC.map(k => `${k}\u00A0${r.valeurs?.[k] ?? "?"}`).join(" · ") : `${r.valeurs?.valeur ?? "?"} m³`}</td>
+              <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
               <td style="white-space:nowrap">
                 ${Object.entries(photos).map(([k, p]) => p?.itemId
@@ -377,7 +395,47 @@ function renderHistoriqueHTML(historique, compteur) {
         </tbody>
       </table>
     </div>
+    <canvas id="cpt-hist-chart-${esc(compteur.id)}" style="max-width:100%;margin-top:14px;background:#fff;border-radius:8px;padding:8px" height="180"></canvas>
   `;
+}
+
+let graphiquesActifs = {}; // conserve les instances Chart.js pour les détruire avant d'en recréer une
+
+function dessinerGraphiqueHistorique(holder, historique, compteur) {
+  const canvas = holder.querySelector(`#cpt-hist-chart-${compteur.id}`);
+  if (!canvas || !window.Chart || historique.length < 2) { if (canvas) canvas.style.display = "none"; return; }
+
+  // Chart.js veut les points du plus ancien au plus récent (l'historique
+  // Firestore est trié du plus récent au plus ancien).
+  const chrono = [...historique].reverse();
+  const labels = chrono.map(r => formatDate(r.createdAt));
+  const cles = clesIndex(compteur.type);
+  const couleurs = ["#D9B24C", "#3FB6AC", "#E5533D", "#8B7CF0"];
+  const datasets = cles.map((cle, i) => ({
+    label: cle === "valeur" ? (compteur.type === "eau" ? "Index (m³)" : "Index (m³)") : `${cle} (kWh)`,
+    data: chrono.map(r => { const v = parseFloat(r.valeurs?.[cle]); return isNaN(v) ? null : v; }),
+    borderColor: couleurs[i % couleurs.length],
+    backgroundColor: couleurs[i % couleurs.length],
+    tension: 0.2,
+    spanGaps: true,
+  }));
+
+  const idPrecedent = canvas.dataset.chartId;
+  if (idPrecedent && graphiquesActifs[idPrecedent]) { graphiquesActifs[idPrecedent].destroy(); delete graphiquesActifs[idPrecedent]; }
+  const chartId = compteur.id + "-" + Date.now();
+  canvas.dataset.chartId = chartId;
+  graphiquesActifs[chartId] = new window.Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: cles.length > 1 }, title: { display: true, text: "Évolution de l'index dans le temps", color: "#111" } },
+      scales: {
+        x: { ticks: { color: "#333" } },
+        y: { ticks: { color: "#333" }, beginAtZero: false },
+      },
+    },
+  });
 }
 
 // Cherche, parmi les équipements déjà définis sur la fiche du dossier de
@@ -649,6 +707,18 @@ function photosCompletes(compteur, photos) {
   return clesIndex(compteur.type).every(cle => photos[cle]);
 }
 
+// Vérifie les anomalies avant enregistrement (baisse impossible, hausse
+// anormale par rapport à l'historique récent) et demande confirmation à
+// l'utilisateur le cas échéant. Renvoie true si l'enregistrement peut se
+// poursuivre (aucune anomalie, ou l'utilisateur a confirmé malgré tout).
+async function confirmerMalgreAnomalies(compteur, valeurs) {
+  let historiqueRecent = [];
+  try { historiqueRecent = (await listerHistoriqueCompteur(compteur.id)).slice(0, 6); } catch (e) { /* si l'historique n'est pas joignable, on ignore juste la verification statistique */ }
+  const anomalies = detecterAnomalies(compteur, valeurs, historiqueRecent);
+  if (anomalies.length === 0) return true;
+  return confirm(`⚠️ Anomalie détectée sur ce relevé :\n\n${anomalies.join("\n")}\n\nEnregistrer quand même ?`);
+}
+
 // =================================================================
 // Écran de relevé (un seul compteur) — atteint par le bouton "Relever"
 // ou par un QR scanné hors appli
@@ -721,6 +791,8 @@ function renderReleve() {
     syncValeurs();
     const statusEl = document.getElementById("cpt-r-status");
     if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
+    if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const dateChoisie = peutAntidater(mountedUser) ? dateInputVersTimestamp(document.getElementById("cpt-r-date")?.value) : null;
     const aujourdHui = new Date().toISOString().slice(0, 10);
     const estAnterieure = dateChoisie && document.getElementById("cpt-r-date").value !== aujourdHui;
@@ -818,6 +890,8 @@ function renderRapide() {
     syncValeurs();
     const statusEl = document.getElementById("cpt-rap-status");
     if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
+    if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const aujourdHui = new Date().toISOString().slice(0, 10);
     const dateSaisie = document.getElementById("cpt-rap-date")?.value;
     const dateChoisie = peutAntidater(mountedUser) && dateSaisie && dateSaisie !== aujourdHui ? dateInputVersTimestamp(dateSaisie) : null;
