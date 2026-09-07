@@ -8,7 +8,7 @@
 import { esc } from "./astreinte-logic.js";
 import {
   listerSitesPourMasterlock, listerTousLesCodes, creerCode, modifierCode,
-  supprimerCode, nouveauCode, listerHistoriquePourSite,
+  supprimerCode, nouveauCode, listerHistoriquePourSite, importerCodesDepuisDossiers,
 } from "./masterlock-data.js";
 import { watchAssociations } from "./associations-data.js";
 
@@ -81,8 +81,10 @@ function renderListe() {
       <p class="hint">Codes des boîtes à clés Masterlock par site. Ils apparaissent aussi, en lecture seule, sur la fiche du dossier de site correspondant.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="nav-btn" id="mlk-choisir-site">➕ Ajouter un code sur un site</button>
+        <button class="nav-btn" id="mlk-import" style="border-color:var(--gold);color:var(--gold)">📥 Importer les codes déjà présents dans les dossiers de site</button>
         <button class="nav-btn" id="mlk-export-recap">🖨️ Exporter le récap complet (toutes résidences)</button>
       </div>
+      <div id="mlk-import-status" style="font-size:12px"></div>
       ${sitesAvecCodes.length === 0 ? `<p class="hint">Aucun code enregistré pour l'instant.</p>` : groupes.map(g => `
         <div>
           <h3 style="margin:12px 0 8px;font-size:15px;color:var(--gold)">${esc(g.assocLabel)}</h3>
@@ -103,6 +105,20 @@ function renderListe() {
     ui.addingSiteId = match.id; ui.ouverts.add(match.id); render();
   });
   document.getElementById("mlk-export-recap").addEventListener("click", () => exporterRecap(state.sites));
+  document.getElementById("mlk-import").addEventListener("click", async () => {
+    const statusEl = document.getElementById("mlk-import-status");
+    if (!confirm("Chercher, dans toutes les fiches de dossier de site, une section \"boîte à clés\" contenant un code (ex. \"CODE 8572\"), et créer automatiquement une entrée ici pour chaque site qui n'en a pas encore ?")) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Recherche et import en cours…</span>`;
+    try {
+      const n = await importerCodesDepuisDossiers(mountedUser);
+      statusEl.innerHTML = n > 0
+        ? `<span style="color:var(--gold)">✓ ${n} code(s) importé(s) depuis les dossiers de site.</span>`
+        : `<span class="hint">Aucun code supplémentaire trouvé à importer (soit déjà présents ici, soit aucune section "boîte à clés" avec un code détecté).</span>`;
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
 
   mountedContainer.querySelectorAll("[data-toggle-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.toggleSite;

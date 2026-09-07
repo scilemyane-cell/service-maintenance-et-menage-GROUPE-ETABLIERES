@@ -30,6 +30,44 @@ export function nouveauCode() {
   };
 }
 
+// Importe automatiquement les codes déjà présents en texte libre sur les
+// fiches de dossier de site (ex. section "Lieux des boîtes à clés",
+// procédure "CODE 8572") — pour ne pas obliger à tout retaper à la main
+// dans ce nouvel onglet alors que l'info existe déjà ailleurs. Ne crée
+// une entrée QUE pour un site qui n'en a encore aucune (jamais de
+// doublon ni d'écrasement d'un code déjà géré ici). Renvoie le nombre
+// d'entrées importées.
+export async function importerCodesDepuisDossiers(user) {
+  const [dossiersSnap, existants] = await Promise.all([
+    getDocs(collection(db, "sites-dossiers")),
+    listerTousLesCodes(),
+  ]);
+  const sitesAvecCodeDeja = new Set(existants.map(c => c.dossierId));
+  const motsCles = ["boîte", "boite", "clé", "cle", "masterlock"];
+  let importes = 0;
+
+  for (const d of dossiersSnap.docs) {
+    const data = d.data();
+    if (data.supprimeLe || sitesAvecCodeDeja.has(d.id)) continue;
+    const sections = data.sections || [];
+    for (const section of sections) {
+      const titre = (section.titre || "").toLowerCase();
+      if (!section.concerne || !motsCles.some(m => titre.includes(m))) continue;
+      const texte = `${section.procedure || ""} ${section.emplacement || ""}`;
+      const match = texte.match(/\d{3,}/); // au moins 3 chiffres à la suite = probablement un code
+      if (!match) continue;
+      const entry = nouveauCode();
+      entry.nom = section.titre || "Boîte à clés";
+      entry.code = match[0];
+      entry.notes = section.emplacement || "";
+      await creerCode(d.id, data.nom, entry, user);
+      importes++;
+      break; // un seul import par site pour cette passe, même s'il y a plusieurs sections correspondantes
+    }
+  }
+  return importes;
+}
+
 // Tous les dossiers de site (pas de réglage d'activation à cocher ici :
 // n'importe quel site peut avoir une ou plusieurs boîtes à clés).
 export async function listerSitesPourMasterlock() {
