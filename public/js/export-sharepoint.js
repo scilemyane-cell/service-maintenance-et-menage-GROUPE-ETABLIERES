@@ -100,7 +100,7 @@ async function genererPdf(titre, lignes) {
 // historique consultable dans le temps, sans dupliquer inutilement quand
 // rien n'a bougé). `dossierSegments` : chemin de sous-dossiers dédié à ce
 // module/site dans ExportsDonnees, pour ne pas tout mélanger à plat (ex.
-// ["Stock"], ["Compteurs", "LE CAP"]...). `cleEmpreinte` distingue les
+// ["Stock"], ["Relevé de compteur", "LE CAP"]...). `cleEmpreinte` distingue les
 // fichiers de même nom dans des dossiers différents (ex. plusieurs sites)
 // dans le suivi "a changé depuis le dernier export ?".
 async function genererEtEnvoyerPdf(token, dossierSegments, nomFichier, titre, lignes, dernieresEmpreintes, cleEmpreinte = nomFichier) {
@@ -305,13 +305,14 @@ async function extraireRelevesParSite() {
 
 // Génère, en plus du récapitulatif global (voir MODULES), un PDF détaillé
 // par site — chacun dans son propre sous-dossier (ExportsDonnees/
-// Compteurs/[Nom du site]/) plutôt que tout mélanger dans un seul fichier.
+// Relevé de compteur/[Nom du site]/) plutôt que tout mélanger dans un
+// seul fichier.
 async function exporterRelevesCompteursParSite(token, dernieresEmpreintes) {
   const parSite = await extraireRelevesParSite();
   for (const [nomSite, lignes] of parSite) {
     await genererEtEnvoyerPdf(
-      token, ["Compteurs", nomSite], "Releves.pdf", `Relevés de compteurs — ${nomSite}`,
-      lignes, dernieresEmpreintes, `Compteurs/${nomSite}`
+      token, ["Relevé de compteur", nomSite], "Releves.pdf", `Relevés de compteurs — ${nomSite}`,
+      lignes, dernieresEmpreintes, `RelevéDeCompteur/${nomSite}`
     );
   }
 }
@@ -335,7 +336,6 @@ async function genererPdfCompteur(compteur, releves) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
   const cles = clesIndex(compteur);
   const clesConso = cles;
-  const couleurs = ["#B08D46", "#3FB6AC", "#E5533D", "#8B7CF0"];
 
   const parAnnee = new Map();
   [...releves].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).forEach(r => {
@@ -383,22 +383,41 @@ async function genererPdfCompteur(compteur, releves) {
   const cible = hidden.firstElementChild;
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  // Graphique en bâtons de la consommation mensuelle sur 12 mois — pas de
-  // notion de "consommation" pour les index de puissance maximale
-  // (120/121/122/123), exclus ici (clesConso).
+  // Graphique en bâtons de la consommation mensuelle sur 12 mois.
   let chart = null;
   if (releves.length >= 2 && window.Chart) {
     const canvas = hidden.querySelector("#cpt-export-chart");
     const parCle = clesConso.map(cle => consommationMensuelle(releves, cle, 12));
+    const couleursChart = [
+      { fill: "rgba(176,141,70,.75)", bord: "#B08D46" },
+      { fill: "rgba(63,182,172,.75)", bord: "#3FB6AC" },
+      { fill: "rgba(229,83,61,.75)", bord: "#E5533D" },
+      { fill: "rgba(139,124,240,.75)", bord: "#8B7CF0" },
+    ];
     const datasets = clesConso.map((cle, i) => ({
-      label: cle === "valeur" ? `Conso. mensuelle (${UNITE_TYPE[compteur.type] || "m³"})` : `${cle} (kWh)`,
+      label: cle === "valeur" ? `Consommation (${UNITE_TYPE[compteur.type] || "m³"})` : `${cle} (kWh)`,
       data: parCle[i].map(m => m.valeur),
-      backgroundColor: couleurs[i % couleurs.length],
+      backgroundColor: couleursChart[i % couleursChart.length].fill,
+      borderColor: couleursChart[i % couleursChart.length].bord,
+      borderWidth: 1.5,
+      borderRadius: 5,
+      borderSkipped: false,
+      maxBarThickness: 34,
     }));
     chart = new window.Chart(canvas.getContext("2d"), {
       type: "bar",
       data: { labels: parCle[0].map(m => m.label), datasets },
-      options: { responsive: false, animation: false, plugins: { legend: { display: clesConso.length > 1 }, title: { display: true, text: "Consommation par mois (12 derniers mois)" } }, scales: { y: { beginAtZero: true } } },
+      options: {
+        responsive: false, animation: false,
+        plugins: {
+          legend: { display: clesConso.length > 1, position: "bottom", labels: { color: "#333", boxWidth: 12, boxHeight: 12, padding: 12, font: { size: 11 } } },
+          title: { display: true, text: "Consommation par mois — 12 derniers mois", color: "#1a1a1a", font: { size: 14, weight: "700" }, padding: { bottom: 12 } },
+        },
+        scales: {
+          x: { ticks: { color: "#555", font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: "#555", font: { size: 10 } }, beginAtZero: true, grid: { color: "rgba(0,0,0,.06)" } },
+        },
+      },
     });
     await new Promise(resolve => setTimeout(resolve, 200)); // laisse Chart.js finir de dessiner avant la capture
   }
@@ -440,7 +459,7 @@ async function exporterPdfParCompteur(token, dernieresEmpreintes) {
     const releves = relevesParCompteur.get(compteur.id) || [];
     const blob = await genererPdfCompteur(compteur, releves);
     const nomFichier = `${compteur.nom}.pdf`.replace(/[\\/:*?"<>|]/g, "-");
-    const dossierSegments = ["Compteurs", compteur.dossierNom, TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type];
+    const dossierSegments = ["Relevé de compteur", compteur.dossierNom, TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type];
 
     const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
     await uploadToDrive(fileActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
@@ -465,7 +484,7 @@ const MODULES = [
   { dossier: ["Stock"], fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
   { dossier: ["Interventions"], fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
   { dossier: ["Menage"], fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
-  { dossier: ["Compteurs"], fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs (tous sites)", extraire: extraireRelevesCompteurs },
+  { dossier: ["Relevé de compteur"], fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs (tous sites)", extraire: extraireRelevesCompteurs },
 ];
 
 // Déclenchée automatiquement à la connexion (voir app.html). N'exporte

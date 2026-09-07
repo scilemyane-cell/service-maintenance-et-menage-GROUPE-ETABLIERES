@@ -59,7 +59,7 @@ let ui = {
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
   addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null,
   releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
-  rapideSiteId: null, rapideIndex: 0,
+  rapideSiteId: null, rapideIndex: 0, rapportSiteId: null,
 };
 
 export async function mountCompteurs(container, user) {
@@ -72,7 +72,7 @@ export async function mountCompteurs(container, user) {
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
   addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null,
     releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
-    rapideSiteId: null, rapideIndex: 0,
+    rapideSiteId: null, rapideIndex: 0, rapportSiteId: null,
   };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
 
@@ -120,6 +120,7 @@ function render() {
   if (!document.contains(mountedContainer)) return;
   if (ui.screen === "releve") return renderReleve();
   if (ui.rapideSiteId) return renderRapide();
+  if (ui.rapportSiteId) return renderRapportSite();
   renderListe();
 }
 
@@ -250,6 +251,7 @@ function renderSiteCard(site) {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
           <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
           <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
+          <button class="add-btn" data-voir-rapport="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>📊 Voir le rapport</button>
           <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
         </div>
         ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : TYPES_COMPTEUR.map(type => {
@@ -330,6 +332,10 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-export-pdf]").forEach(btn => btn.addEventListener("click", () => {
     exporterPdfSite(btn.dataset.exportPdf);
+  }));
+  mountedContainer.querySelectorAll("[data-voir-rapport]").forEach(btn => btn.addEventListener("click", () => {
+    ui.rapportSiteId = btn.dataset.voirRapport;
+    render();
   }));
   mountedContainer.querySelectorAll("[data-open-sharepoint]").forEach(btn => btn.addEventListener("click", async () => {
     const original = btn.textContent;
@@ -487,7 +493,11 @@ function renderHistoriqueHTML(historique, compteur) {
         </tbody>
       </table>
     </div>
-    <canvas id="cpt-hist-chart-${esc(compteur.id)}" style="max-width:100%;margin-top:14px;background:#fff;border-radius:8px;padding:8px" height="180"></canvas>
+    <div id="cpt-hist-chart-card-${esc(compteur.id)}" style="margin-top:14px;background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <div style="position:relative;height:280px">
+        <canvas id="cpt-hist-chart-${esc(compteur.id)}"></canvas>
+      </div>
+    </div>
   `;
 }
 
@@ -502,16 +512,31 @@ let graphiquesActifs = {}; // conserve les instances Chart.js pour les détruire
 // restent visibles dans le tableau d'historique mais pas dans ce graphique.
 function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const canvas = holder.querySelector(`#cpt-hist-chart-${compteur.id}`);
-  if (!canvas || !window.Chart || historique.length < 2) { if (canvas) canvas.style.display = "none"; return; }
+  const carte = holder.querySelector(`#cpt-hist-chart-card-${compteur.id}`);
+  if (!canvas || !window.Chart || historique.length < 2) { if (carte) carte.style.display = "none"; return; }
+  if (carte) carte.style.display = "block";
 
   const clesConso = clesIndex(compteur);
-  const couleurs = ["#D9B24C", "#3FB6AC", "#E5533D", "#8B7CF0"];
+  // Palette reprise de l'identité de l'appli (or, sarcelle, rouge,
+  // violet) avec un peu de transparence sur le remplissage — plus doux
+  // que des aplats purs, tout en gardant un contour net.
+  const couleurs = [
+    { fill: "rgba(217,178,76,.75)", bord: "#D9B24C" },
+    { fill: "rgba(63,182,172,.75)", bord: "#3FB6AC" },
+    { fill: "rgba(229,83,61,.75)", bord: "#E5533D" },
+    { fill: "rgba(139,124,240,.75)", bord: "#8B7CF0" },
+  ];
   const parCle = clesConso.map(cle => consommationMensuelle(historique, cle, 12));
   const labels = parCle[0].map(m => m.label);
   const datasets = clesConso.map((cle, i) => ({
-    label: cle === "valeur" ? `Conso. mensuelle (${uniteValeur(compteur)})` : `${cle} (kWh)`,
+    label: cle === "valeur" ? `Consommation (${uniteValeur(compteur)})` : `${cle} (kWh)`,
     data: parCle[i].map(m => m.valeur),
-    backgroundColor: couleurs[i % couleurs.length],
+    backgroundColor: couleurs[i % couleurs.length].fill,
+    borderColor: couleurs[i % couleurs.length].bord,
+    borderWidth: 1.5,
+    borderRadius: 5,
+    borderSkipped: false,
+    maxBarThickness: 34,
   }));
 
   const idPrecedent = canvas.dataset.chartId;
@@ -523,10 +548,16 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
     data: { labels, datasets },
     options: {
       responsive: true,
-      plugins: { legend: { display: clesConso.length > 1 }, title: { display: true, text: "Consommation par mois (12 derniers mois)", color: "#111" } },
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: clesConso.length > 1, position: "bottom", labels: { color: "#333", boxWidth: 12, boxHeight: 12, padding: 14, font: { size: 12 } } },
+        title: { display: true, text: "Consommation par mois — 12 derniers mois", color: "#1a1a1a", font: { size: 14, weight: "700" }, padding: { bottom: 14 } },
+        tooltip: { backgroundColor: "#1a1a1a", padding: 10, cornerRadius: 6, titleFont: { size: 12 }, bodyFont: { size: 12 } },
+      },
       scales: {
-        x: { ticks: { color: "#333" } },
-        y: { ticks: { color: "#333" }, beginAtZero: true },
+        x: { ticks: { color: "#555", font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: "#555", font: { size: 11 } }, beginAtZero: true, grid: { color: "rgba(0,0,0,.06)" } },
       },
     },
   });
@@ -1080,6 +1111,65 @@ function renderRapide() {
   });
 
   resolvePhotos(mountedContainer);
+}
+
+// =================================================================
+// Rapport à l'écran (par site) — la même information que l'export PDF,
+// mais consultable directement dans l'appli sans avoir à imprimer/
+// télécharger quoi que ce soit : dernière valeur de chaque compteur et
+// sa courbe de consommation mensuelle, groupés par type.
+// =================================================================
+async function renderRapportSite() {
+  const site = state.sites.find(s => s.id === ui.rapportSiteId);
+  if (!site) { ui.rapportSiteId = null; render(); return; }
+  const compteurs = state.compteurs.filter(c => c.dossierId === site.id);
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="cpt-rapport-retour">← Retour</button>
+      <h2 style="margin:4px 0 0">📊 Rapport — ${esc(site.nom)}</h2>
+      <p class="hint" style="margin:0">Dernière valeur et consommation mensuelle de chaque compteur de ce site.</p>
+      ${compteurs.length === 0 ? `<p class="hint">Aucun compteur sur ce site.</p>` : `<div id="cpt-rapport-corps"><p class="hint">⏳ Chargement de l'historique…</p></div>`}
+    </div>
+  `;
+  document.getElementById("cpt-rapport-retour").addEventListener("click", () => { ui.rapportSiteId = null; ui.ouverts.add(site.id); render(); });
+  if (compteurs.length === 0) return;
+
+  const historiques = await Promise.all(compteurs.map(c => listerHistoriqueCompteur(c.id)));
+  const corps = document.getElementById("cpt-rapport-corps");
+  if (!corps) return; // l'utilisateur a peut-être déjà quitté l'écran entre-temps
+
+  corps.innerHTML = TYPES_COMPTEUR.map(type => {
+    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+    if (liste.length === 0) return "";
+    return `
+      <p style="font-size:13px;font-weight:700;color:var(--text-dim);margin:16px 0 8px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]}</p>
+      ${liste.map(c => {
+        const retard = estEnRetard(c);
+        return `
+        <div class="form-card" style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
+            <p style="margin:0;font-weight:700">${esc(c.nom)}</p>
+            <p style="margin:0;font-size:12px;${retard ? 'color:var(--red);font-weight:700' : 'color:var(--text-dim)'}">${retard ? '⚠️ ' : '✓ '}${formatDate(c.dernierReleve?.at)} — ${formatValeurs(c)}</p>
+          </div>
+          <div id="cpt-rapport-chart-holder-${c.id}"></div>
+        </div>
+      `;}).join("")}
+    `;
+  }).join("");
+
+  compteurs.forEach((c, i) => {
+    const holder = document.getElementById(`cpt-rapport-chart-holder-${c.id}`);
+    if (!holder) return;
+    holder.innerHTML = `
+      <div id="cpt-hist-chart-card-${esc(c.id)}" style="margin-top:10px;background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <div style="position:relative;height:220px">
+          <canvas id="cpt-hist-chart-${esc(c.id)}"></canvas>
+        </div>
+      </div>
+    `;
+    dessinerGraphiqueHistorique(holder, historiques[i], c);
+  });
 }
 
 // =================================================================
