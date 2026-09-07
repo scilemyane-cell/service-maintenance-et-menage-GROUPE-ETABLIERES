@@ -311,6 +311,144 @@ async function exporterRelevesCompteursParSite(token, dernieresEmpreintes) {
   }
 }
 
+// Année scolaire (1er septembre au 31 août) correspondant à une date —
+// utilisée pour découper l'historique de chaque compteur en sections,
+// plus parlant qu'une année civile pour un établissement.
+function anneeScolaire(ms) {
+  if (!ms) return "Date inconnue";
+  const d = new Date(ms);
+  const debut = d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1; // getMonth() : 8 = septembre
+  return `${debut}-${debut + 1}`;
+}
+
+const TYPE_LABEL_COMPTEUR = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
+const INDEX_ELEC_EXPORT = ["HPH", "HCH", "HPE", "HCE"];
+
+// PDF détaillé d'UN SEUL compteur : courbe d'évolution de l'index dans le
+// temps, puis l'historique complet des relevés découpé par année
+// scolaire (la plus récente en premier).
+async function genererPdfCompteur(compteur, releves) {
+  if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
+  const cles = compteur.type === "elec" ? INDEX_ELEC_EXPORT : ["valeur"];
+  const couleurs = ["#B08D46", "#3FB6AC", "#E5533D", "#8B7CF0"];
+  const chrono = [...releves].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+  const parAnnee = new Map();
+  [...releves].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).forEach(r => {
+    const annee = anneeScolaire(r.createdAt);
+    if (!parAnnee.has(annee)) parAnnee.set(annee, []);
+    parAnnee.get(annee).push(r);
+  });
+  const anneesTriees = [...parAnnee.keys()].sort().reverse();
+
+  const ligneStyle = (bg) => `border:1px solid #ccc;background:${bg};padding:4px 7px;font-size:10px`;
+  const enteteStyle = `border:1px solid #999;background:#B08D46;color:#fff;padding:5px 7px;font-size:10px;font-weight:700`;
+
+  const html = `
+    <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;padding:24px;width:100%">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span style="font-size:20px;font-weight:700">${esc(compteur.nom)} — ${esc(compteur.dossierNom)}</span>
+        <span style="font-size:11px;color:#666">Groupe Établières · Service Maintenance et Ménage</span>
+      </div>
+      <p style="font-size:11px;color:#666;margin:0 0 18px">${esc(TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type)}${compteur.emplacement ? " · " + esc(compteur.emplacement) : ""} · Généré le ${esc(new Date().toLocaleString("fr-FR"))}</p>
+      ${chrono.length >= 2 ? `<canvas id="cpt-export-chart" width="900" height="280" style="width:100%;max-width:900px;margin-bottom:20px"></canvas>` : ""}
+      ${releves.length === 0 ? `<p style="font-size:13px;color:#666">Aucun relevé enregistré pour l'instant.</p>` : anneesTriees.map(annee => `
+        <h3 style="font-size:14px;margin:18px 0 8px;border-bottom:2px solid #B08D46;padding-bottom:4px">Année scolaire ${esc(annee)}</h3>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);width:100%">
+          <div style="${enteteStyle}">Date</div><div style="${enteteStyle}">Valeur(s)</div>
+          <div style="${enteteStyle}">Relevé par</div><div style="${enteteStyle}">Antidaté</div>
+          ${parAnnee.get(annee).map((r, i) => {
+            const valeurs = compteur.type === "elec" ? cles.map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ") : `${r.valeurs?.valeur ?? "?"} m³`;
+            const bg = i % 2 === 0 ? "#ffffff" : "#F5F3EE";
+            return `
+              <div style="${ligneStyle(bg)}">${esc(r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "")}</div>
+              <div style="${ligneStyle(bg)}">${esc(valeurs)}</div>
+              <div style="${ligneStyle(bg)}">${esc(r.releveParNom || "")}</div>
+              <div style="${ligneStyle(bg)}">${r.saisiHorsDate ? "Oui" : "Non"}</div>
+            `;
+          }).join("")}
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  const hidden = document.createElement("div");
+  hidden.style.cssText = "position:fixed;top:0;left:0;width:1000px;opacity:0.01;pointer-events:none;z-index:-1;";
+  document.body.appendChild(hidden);
+  hidden.innerHTML = html;
+  const cible = hidden.firstElementChild;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  let chart = null;
+  if (chrono.length >= 2 && window.Chart) {
+    const canvas = hidden.querySelector("#cpt-export-chart");
+    const datasets = cles.map((cle, i) => ({
+      label: cle === "valeur" ? "Index (m³)" : `${cle} (kWh)`,
+      data: chrono.map(r => { const v = parseFloat(r.valeurs?.[cle]); return isNaN(v) ? null : v; }),
+      borderColor: couleurs[i % couleurs.length], backgroundColor: couleurs[i % couleurs.length],
+      tension: 0.2, spanGaps: true,
+    }));
+    chart = new window.Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: { labels: chrono.map(r => r.createdAt ? new Date(r.createdAt).toLocaleDateString("fr-FR") : ""), datasets },
+      options: { responsive: false, animation: false, plugins: { legend: { display: cles.length > 1 }, title: { display: true, text: "Évolution de l'index" } } },
+    });
+    await new Promise(resolve => setTimeout(resolve, 200)); // laisse Chart.js finir de dessiner avant la capture
+  }
+
+  try {
+    return await window.html2pdf()
+      .set({
+        margin: 10, filename: `${compteur.nom}.pdf`,
+        image: { type: "jpeg", quality: 0.92 },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(cible)
+      .outputPdf("blob");
+  } finally {
+    chart?.destroy();
+    hidden.remove();
+  }
+}
+
+// Un PDF PAR COMPTEUR (pas juste par site) : chacun dans
+// ExportsDonnees/Compteurs/[Site]/[Eau|Gaz|Électricité]/[Nom].pdf — un
+// compteur d'eau n'est ainsi jamais mélangé avec un compteur électrique.
+async function exporterPdfParCompteur(token, dernieresEmpreintes) {
+  const [compteursSnap, relevesSnap] = await Promise.all([
+    getDocs(collection(db, "compteurs")),
+    getDocs(collection(db, "compteurs-releves")),
+  ]);
+  const relevesParCompteur = new Map();
+  relevesSnap.forEach(d => {
+    const r = d.data();
+    if (!relevesParCompteur.has(r.compteurId)) relevesParCompteur.set(r.compteurId, []);
+    relevesParCompteur.get(r.compteurId).push(r);
+  });
+
+  for (const d of compteursSnap.docs) {
+    const compteur = { id: d.id, ...d.data() };
+    if (compteur.supprimeLe) continue;
+    const releves = relevesParCompteur.get(compteur.id) || [];
+    const blob = await genererPdfCompteur(compteur, releves);
+    const nomFichier = `${compteur.nom}.pdf`.replace(/[\\/:*?"<>|]/g, "-");
+    const dossierSegments = ["Compteurs", compteur.dossierNom, TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type];
+
+    const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
+    await uploadToDrive(fileActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+
+    const cleEmpreinte = `Compteur/${compteur.id}`;
+    const emp = empreinte(releves.map(r => ({ v: r.valeurs, d: r.createdAt })));
+    if (dernieresEmpreintes[cleEmpreinte] !== emp) {
+      const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
+      const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
+      await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
+      dernieresEmpreintes[cleEmpreinte] = emp;
+    }
+  }
+}
+
 // ---- Orchestration ----
 
 const MODULES = [
@@ -341,6 +479,7 @@ export async function runDailyExportIfNeeded() {
       await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
     }
     await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
+    await exporterPdfParCompteur(token, dernieresEmpreintes);
 
     await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
   } catch (e) {
@@ -363,6 +502,8 @@ export async function exporterMaintenant(getTokenInteractif, onProgress) {
   }
   onProgress?.("Relevés de compteurs (détail par site)");
   await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
+  onProgress?.("Relevés de compteurs (un PDF par compteur, avec courbe)");
+  await exporterPdfParCompteur(token, dernieresEmpreintes);
   await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
 }
 
