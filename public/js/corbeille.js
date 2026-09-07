@@ -10,6 +10,9 @@ import {
 import {
   listerProduitsCorbeille, restaurerProduit, purgerProduitDefinitivement,
 } from "./stock-data.js";
+import {
+  listerCompteursCorbeille, restaurerCompteur, purgerCompteurDefinitivement,
+} from "./compteurs-data.js";
 
 const RETENTION_JOURS = 60;
 
@@ -32,9 +35,10 @@ async function load() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
   const isSuperAdmin = mountedUser?.role === "super_admin";
 
-  const [dossiers, produits] = await Promise.all([
+  const [dossiers, produits, compteurs] = await Promise.all([
     listerDossiersCorbeille(),
     listerProduitsCorbeille(),
+    listerCompteursCorbeille(),
   ]);
 
   // Purge automatique de tout ce qui dépasse le délai de rétention — les
@@ -45,10 +49,12 @@ async function load() {
   if (isSuperAdmin) {
     const expiresDossiers = dossiers.filter(d => joursDepuis(d.supprimeLe) >= RETENTION_JOURS);
     const expiresProduits = produits.filter(p => joursDepuis(p.supprimeLe) >= RETENTION_JOURS);
-    if (expiresDossiers.length || expiresProduits.length) {
+    const expiresCompteurs = compteurs.filter(c => joursDepuis(c.supprimeLe) >= RETENTION_JOURS);
+    if (expiresDossiers.length || expiresProduits.length || expiresCompteurs.length) {
       await Promise.all([
         ...expiresDossiers.map(d => purgerDossierDefinitivement(d.id)),
         ...expiresProduits.map(p => purgerProduitDefinitivement(p.id)),
+        ...expiresCompteurs.map(c => purgerCompteurDefinitivement(c.id)),
       ]);
     }
   }
@@ -56,6 +62,7 @@ async function load() {
   const items = [
     ...dossiers.map(d => ({ type: "dossier", id: d.id, nom: d.nom, supprimeLe: d.supprimeLe })),
     ...produits.map(p => ({ type: "produit", id: p.id, nom: p.nom, supprimeLe: p.supprimeLe })),
+    ...compteurs.map(c => ({ type: "compteur", id: c.id, nom: `${c.nom} — ${c.dossierNom || "?"}`, supprimeLe: c.supprimeLe })),
   ].filter(it => isSuperAdmin || joursDepuis(it.supprimeLe) < RETENTION_JOURS)
    .sort((a, b) => joursDepuis(a.supprimeLe) - joursDepuis(b.supprimeLe));
 
@@ -78,7 +85,7 @@ function render(items) {
                 const expire = restant <= 0;
                 return `
                 <tr>
-                  <td>${it.type === "dossier" ? "🏢 Dossier de site" : "📦 Produit"}</td>
+                  <td>${it.type === "dossier" ? "🏢 Dossier de site" : it.type === "produit" ? "📦 Produit" : "🔢 Compteur"}</td>
                   <td>${esc(it.nom)}</td>
                   <td style="color:${expire ? 'var(--red)' : restant <= 7 ? 'var(--gold)' : 'var(--text-dim)'}">${expire ? "Expiré, en attente de purge" : `${restant} j`}</td>
                   <td style="white-space:nowrap">
@@ -98,16 +105,20 @@ function render(items) {
     btn.addEventListener("click", async () => {
       const [type, id] = btn.dataset.restore.split(":");
       btn.disabled = true;
-      if (type === "dossier") await restaurerDossier(id); else await restaurerProduit(id);
+      if (type === "dossier") await restaurerDossier(id);
+      else if (type === "produit") await restaurerProduit(id);
+      else await restaurerCompteur(id);
       await load();
     });
   });
   mountedContainer.querySelectorAll("[data-purge]").forEach(btn => {
     btn.addEventListener("click", async () => {
       const [type, id] = btn.dataset.purge.split(":");
-      if (!confirm("Suppression définitive et irréversible. Continuer ?")) return;
+      if (!confirm("Suppression définitive et irréversible" + (type === "compteur" ? " (le compteur ET tout son historique de relevés)" : "") + ". Continuer ?")) return;
       btn.disabled = true;
-      if (type === "dossier") await purgerDossierDefinitivement(id); else await purgerProduitDefinitivement(id);
+      if (type === "dossier") await purgerDossierDefinitivement(id);
+      else if (type === "produit") await purgerProduitDefinitivement(id);
+      else await purgerCompteurDefinitivement(id);
       await load();
     });
   });

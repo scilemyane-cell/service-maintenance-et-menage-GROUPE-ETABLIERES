@@ -9,7 +9,7 @@
 
 import { db } from "./firebase-init.js";
 import {
-  doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot,
+  doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
   collection, query, where,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
@@ -173,7 +173,30 @@ export async function modifierCompteur(id, fields) {
 }
 
 export async function envoyerCompteurCorbeille(id) {
-  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: Date.now() });
+  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: serverTimestamp() });
+}
+
+// Liste ponctuelle des compteurs actuellement à la corbeille — utilisée
+// par l'écran Administration > Corbeille.
+export async function listerCompteursCorbeille() {
+  const snap = await getDocs(collection(db, COMPTEURS));
+  const list = [];
+  snap.forEach((d) => { if (d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom, dossierNom: d.data().dossierNom, supprimeLe: d.data().supprimeLe }); });
+  return list;
+}
+
+export async function restaurerCompteur(id) {
+  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: deleteField() });
+}
+
+// Suppression définitive et irréversible : le compteur ET tout son
+// historique de relevés associé (sinon des relevés orphelins, sans
+// compteur correspondant, resteraient indéfiniment dans la base).
+export async function purgerCompteurDefinitivement(id) {
+  const q = query(collection(db, RELEVES), where("compteurId", "==", id));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, RELEVES, d.id))));
+  await deleteDoc(doc(db, COMPTEURS, id));
 }
 
 // Un seul compteur, pour le lien direct par QR (ouvre l'écran de relevé
