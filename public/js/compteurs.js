@@ -22,6 +22,7 @@ import {
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
+import { watchAssociations } from "./associations-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import {
   enqueuePendingReleve, estErreurReseau, demarrerSyncAuto, countPendingReleves, onQueueChange,
@@ -47,9 +48,10 @@ function dateInputVersTimestamp(valeur) {
 
 let mountedContainer = null;
 let mountedUser = null;
-let state = { sites: [], compteurs: [] };
+let state = { sites: [], compteurs: [], associations: [] };
 let pendingCount = 0;
 let syncDemarre = false; // la synchro tourne en tache de fond, independamment de l'onglet ouvert
+let associationsSubscribed = false;
 let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
   addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
@@ -62,7 +64,7 @@ let ui = {
 export async function mountCompteurs(container, user) {
   mountedContainer = container;
   mountedUser = user;
-  state = { sites: [], compteurs: [] };
+  state = { sites: [], compteurs: [], associations: [] };
   ui = {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
     addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
@@ -77,6 +79,10 @@ export async function mountCompteurs(container, user) {
     syncDemarre = true;
     onQueueChange(async () => { pendingCount = await countPendingReleves(); if (ui.screen === "liste" && !ui.rapideSiteId) render(); });
     demarrerSyncAuto(traiterReleveEnAttente);
+  }
+  if (!associationsSubscribed) {
+    associationsSubscribed = true;
+    watchAssociations((a) => { state.associations = a; if (ui.screen === "liste" && !ui.rapideSiteId) render(); });
   }
   pendingCount = await countPendingReleves();
 
@@ -193,14 +199,86 @@ function exporterPdfSite(siteId) {
 // =================================================================
 // Liste des sites (accordéon)
 // =================================================================
+function groupedSites(sites) {
+  const result = [];
+  const usedIds = new Set();
+  state.associations.forEach(assoc => {
+    const sitesForAssoc = sites.filter(s => s.association === assoc.nom);
+    if (sitesForAssoc.length === 0) return;
+    const groupeNames = [...new Set(sitesForAssoc.map(s => s.groupe).filter(Boolean))];
+    const groups = [];
+    const sansGroupe = sitesForAssoc.filter(s => !s.groupe);
+    if (sansGroupe.length) groups.push({ groupeLabel: null, sites: sansGroupe });
+    groupeNames.forEach(g => groups.push({ groupeLabel: g, sites: sitesForAssoc.filter(s => s.groupe === g) }));
+    result.push({ assocLabel: assoc.nom, groups });
+    sitesForAssoc.forEach(s => usedIds.add(s.id));
+  });
+  const orphans = sites.filter(s => !usedIds.has(s.id));
+  if (orphans.length) result.push({ assocLabel: "Sans association", groups: [{ groupeLabel: null, sites: orphans }] });
+  return result;
+}
+
+function renderSiteCard(site) {
+  const compteurs = state.compteurs.filter(c => c.dossierId === site.id);
+  const enRetard = compteurs.filter(estEnRetard);
+  const ouvert = ui.ouverts.has(site.id);
+  return `
+    <div class="form-card" style="padding:0;overflow:visible">
+      <div style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px">
+        <button data-toggle-site="${site.id}" style="flex:1;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;text-align:left;padding:0;min-width:0">
+          <span style="font-size:14px;color:var(--gold);font-weight:700">🏢 ${esc(site.nom)}</span>
+        </button>
+        <span style="display:flex;align-items:center;gap:10px">
+          ${enRetard.length > 0 ? `
+            <span class="ssx-badge-tip" tabindex="0">
+              <span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800;cursor:default">⚠️ ${enRetard.length} en retard</span>
+              <div class="ssx-tip-content">
+                <p style="margin:0 0 6px;font-size:11px;color:var(--text-dim);font-weight:700">En retard sur ${esc(site.nom)} :</p>
+                <ul>
+                  ${enRetard.map(c => `<li><span>${TYPE_ICONE[c.type]} ${esc(c.nom)}</span><b>${formatDate(c.dernierReleve?.at)}</b></li>`).join("")}
+                </ul>
+              </div>
+            </span>
+          ` : `<span style="font-size:11px;color:var(--text-dim)">${compteurs.length} compteur(s)</span>`}
+          <button data-toggle-site="${site.id}" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-dim);padding:0">${ouvert ? "▲" : "▼"}</button>
+        </span>
+      </div>
+      ${ouvert ? `
+      <div style="padding:0 16px 16px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
+          <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
+          <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
+        </div>
+        ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : ["eau", "gaz", "elec"].map(type => {
+          const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+          if (liste.length === 0) return "";
+          return `
+            <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]} (${liste.length})</p>
+            ${liste.map(c => renderCompteurRow(c)).join("")}
+          `;
+        }).join("")}
+        <div id="cpt-add-zone-${site.id}" style="margin-top:14px">
+          ${ui.addingSiteId === site.id ? renderAddForm(site) : `
+            <button class="nav-btn" data-open-add="${site.id}">➕ Ajouter un compteur</button>
+          `}
+        </div>
+        <div id="cpt-status-${site.id}" style="font-size:12px;margin-top:8px"></div>
+      </div>
+      ` : ""}
+    </div>
+  `;
+}
+
 function renderListe() {
-  const sitesTries = [...state.sites].sort((a, b) => {
+  const trierParRetard = (sites) => [...sites].sort((a, b) => {
     const aRetard = state.compteurs.filter(c => c.dossierId === a.id && estEnRetard(c)).length;
     const bRetard = state.compteurs.filter(c => c.dossierId === b.id && estEnRetard(c)).length;
     if (aRetard > 0 && bRetard === 0) return -1;
     if (bRetard > 0 && aRetard === 0) return 1;
     return (a.nom || "").localeCompare(b.nom || "");
   });
+  const groupes = groupedSites(state.sites);
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -216,56 +294,15 @@ function renderListe() {
       ` : ""}
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
-      ` : sitesTries.map(site => {
-        const compteurs = state.compteurs.filter(c => c.dossierId === site.id);
-        const enRetard = compteurs.filter(estEnRetard);
-        const ouvert = ui.ouverts.has(site.id);
-        return `
-        <div class="form-card" style="padding:0;overflow:visible">
-          <div style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px">
-            <button data-toggle-site="${site.id}" style="flex:1;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;text-align:left;padding:0;min-width:0">
-              <span style="font-size:14px;color:var(--gold);font-weight:700">🏢 ${esc(site.nom)}</span>
-            </button>
-            <span style="display:flex;align-items:center;gap:10px">
-              ${enRetard.length > 0 ? `
-                <span class="ssx-badge-tip" tabindex="0">
-                  <span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800;cursor:default">⚠️ ${enRetard.length} en retard</span>
-                  <div class="ssx-tip-content">
-                    <p style="margin:0 0 6px;font-size:11px;color:var(--text-dim);font-weight:700">En retard sur ${esc(site.nom)} :</p>
-                    <ul>
-                      ${enRetard.map(c => `<li><span>${TYPE_ICONE[c.type]} ${esc(c.nom)}</span><b>${formatDate(c.dernierReleve?.at)}</b></li>`).join("")}
-                    </ul>
-                  </div>
-                </span>
-              ` : `<span style="font-size:11px;color:var(--text-dim)">${compteurs.length} compteur(s)</span>`}
-              <button data-toggle-site="${site.id}" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-dim);padding:0">${ouvert ? "▲" : "▼"}</button>
-            </span>
-          </div>
-          ${ouvert ? `
-          <div style="padding:0 16px 16px">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-              <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
-              <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
-              <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
-            </div>
-            ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : ["eau", "gaz", "elec"].map(type => {
-              const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
-              if (liste.length === 0) return "";
-              return `
-                <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]} (${liste.length})</p>
-                ${liste.map(c => renderCompteurRow(c)).join("")}
-              `;
-            }).join("")}
-            <div id="cpt-add-zone-${site.id}" style="margin-top:14px">
-              ${ui.addingSiteId === site.id ? renderAddForm(site) : `
-                <button class="nav-btn" data-open-add="${site.id}">➕ Ajouter un compteur</button>
-              `}
-            </div>
-            <div id="cpt-status-${site.id}" style="font-size:12px;margin-top:8px"></div>
-          </div>
-          ` : ""}
+      ` : groupes.map(g => `
+        <div>
+          <h3 style="margin:12px 0 8px;font-size:15px;color:var(--gold)">${esc(g.assocLabel)}</h3>
+          ${g.groups.map(sub => `
+            ${sub.groupeLabel ? `<div style="font-size:12px;color:var(--text-dim);margin:6px 0 6px 4px">${esc(sub.groupeLabel)}</div>` : ""}
+            ${trierParRetard(sub.sites).map(site => renderSiteCard(site)).join("")}
+          `).join("")}
         </div>
-      `;}).join("")}
+      `).join("")}
     </div>
   `;
 

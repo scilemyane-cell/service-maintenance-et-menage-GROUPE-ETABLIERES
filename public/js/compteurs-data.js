@@ -128,7 +128,9 @@ export async function listerSitesAvecCompteurs() {
   const q = query(collection(db, "sites-dossiers"), where("compteursActifs", "==", true));
   const snap = await getDocs(q);
   const list = [];
-  snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom }); });
+  snap.forEach((d) => {
+    if (!d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom, association: d.data().association || "", groupe: d.data().groupe || "" });
+  });
   return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
 }
 
