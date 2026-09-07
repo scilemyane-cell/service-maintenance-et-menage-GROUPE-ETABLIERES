@@ -18,7 +18,7 @@ import {
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
-  trouverSectionPourType, consommationMensuelle, uniteValeur,
+  trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -388,15 +388,7 @@ function renderListe() {
     if (ui.historiqueOuverts.has(id)) { ui.historiqueOuverts.delete(id); render(); return; }
     ui.historiqueOuverts.add(id);
     render();
-    const holder = document.getElementById(`cpt-hist-${id}`);
-    if (holder) {
-      holder.innerHTML = `<p class="hint" style="margin:8px 0">⏳ Chargement…</p>`;
-      const compteur = state.compteurs.find(c => c.id === id);
-      const historique = await listerHistoriqueCompteur(id);
-      holder.innerHTML = renderHistoriqueHTML(historique, compteur);
-      resolvePhotos(holder);
-      dessinerGraphiqueHistorique(holder, historique, compteur);
-    }
+    await chargerEtAfficherHistorique(id);
   }));
   mountedContainer.querySelectorAll("[data-edit-compteur]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.editCompteur;
@@ -465,10 +457,11 @@ function formatEcarts(compteur, ecarts) {
 function renderHistoriqueHTML(historique, compteur) {
   if (!compteur) return `<p class="hint">Compteur introuvable.</p>`;
   if (historique.length === 0) return `<p class="hint" style="margin:8px 0">Aucun relevé enregistré pour l'instant.</p>`;
+  const estSuperAdmin = mountedUser?.role === "super_admin";
   return `
     <div class="table-wrap" style="border:none">
       <table>
-        <thead><tr><th>Date</th><th>Valeur(s)</th><th>Consommation</th><th>Relevé par</th><th>Photo(s)</th></tr></thead>
+        <thead><tr><th>Date</th><th>Valeur(s)</th><th>Consommation</th><th>Relevé par</th><th>Photo(s)</th>${estSuperAdmin ? "<th></th>" : ""}</tr></thead>
         <tbody>
           ${historique.map((r, i) => {
             // Ancien format (avant la photo par index) : un seul
@@ -488,6 +481,7 @@ function renderHistoriqueHTML(historique, compteur) {
                   : ""
                 ).join("") || "—"}
               </td>
+              ${estSuperAdmin ? `<td><button class="del-btn" data-del-releve="${r.id}" data-compteur-id="${compteur.id}" style="padding:3px 8px;font-size:11px" title="Supprimer ce relevé (ex. essai/test) — Super Admin uniquement">🗑️</button></td>` : ""}
             </tr>
           `;}).join("")}
         </tbody>
@@ -499,6 +493,31 @@ function renderHistoriqueHTML(historique, compteur) {
       </div>
     </div>
   `;
+}
+
+// Charge (ou recharge, après une suppression) et affiche l'historique
+// d'un compteur dans son emplacement dans la liste.
+async function chargerEtAfficherHistorique(compteurId) {
+  const holder = document.getElementById(`cpt-hist-${compteurId}`);
+  if (!holder) return;
+  holder.innerHTML = `<p class="hint" style="margin:8px 0">⏳ Chargement…</p>`;
+  const compteur = state.compteurs.find(c => c.id === compteurId);
+  const historique = await listerHistoriqueCompteur(compteurId);
+  holder.innerHTML = renderHistoriqueHTML(historique, compteur);
+  resolvePhotos(holder);
+  dessinerGraphiqueHistorique(holder, historique, compteur);
+  holder.querySelectorAll("[data-del-releve]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Supprimer définitivement ce relevé (ex. essai/test) ? Cette action est irréversible et ne peut pas être annulée.")) return;
+    btn.disabled = true;
+    try {
+      await supprimerReleve(btn.dataset.compteurId, btn.dataset.delReleve);
+      await load(); // recharge la liste (rafraîchit aussi le "dernier relevé" affiché sur la ligne du compteur) — se re-render déjà toute seule si l'écran est encore la liste
+      await chargerEtAfficherHistorique(compteurId);
+    } catch (e) {
+      alert("Erreur : " + (e.message || e));
+      btn.disabled = false;
+    }
+  }));
 }
 
 let graphiquesActifs = {}; // conserve les instances Chart.js pour les détruire avant d'en recréer une

@@ -249,6 +249,21 @@ export async function listerHistoriqueCompteur(compteurId) {
   return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
+// Supprime UN relevé individuel de l'historique (ex. essai/test) —
+// réservé au Super Admin par les règles Firestore, l'historique n'étant
+// normalement jamais modifiable (intégrité). Si le relevé supprimé était
+// le plus récent, recalcule et remet à jour le cache "dernierReleve" du
+// compteur à partir de ce qu'il reste, pour ne pas laisser un affichage
+// périmé sur la liste/l'historique.
+export async function supprimerReleve(compteurId, releveId) {
+  await deleteDoc(doc(db, RELEVES, releveId));
+  const restant = await listerHistoriqueCompteur(compteurId); // déjà trié du plus récent au plus ancien
+  const dernier = restant[0];
+  await updateDoc(doc(db, COMPTEURS, compteurId), {
+    dernierReleve: dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, releveParNom: dernier.releveParNom } : null,
+  });
+}
+
 // Écart entre deux relevés, index par index (utilisé pour "+142 m³
 // depuis le dernier relevé" et pour la détection d'anomalie). Renvoie
 // null pour un index si l'une des deux valeurs est absente/invalide, ou
