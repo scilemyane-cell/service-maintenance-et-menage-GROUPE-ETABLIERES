@@ -707,20 +707,33 @@ function renderEditeurBoites(dossierId, dossierNom) {
   return `
     <p class="hint" style="margin:0 0 8px">Chaque boîte est aussi visible dans l'onglet "Codes Masterlock", avec son historique de changements.</p>
     ${liste.length === 0 ? `<p class="hint" style="margin:0 0 8px">Aucune boîte à clés pour l'instant sur ce site.</p>` : liste.map(c => `
-      <div class="form-grid" data-boite-row="${c.id}" style="margin-bottom:8px;align-items:end">
-        <label>Catégorie
-          <select data-boite-nom="${c.id}">
-            <option value="">— Choisir —</option>
-            ${CATEGORIES_BOITE.map(cat => `<option value="${esc(cat)}" ${c.nom === cat ? "selected" : ""}>${esc(cat)}</option>`).join("")}
-            <option value="__autre__" ${!CATEGORIES_BOITE.includes(c.nom) ? "selected" : ""}>Autre (préciser)…</option>
-          </select>
-          <input data-boite-nom-autre="${c.id}" value="${!CATEGORIES_BOITE.includes(c.nom) ? esc(c.nom || "") : ""}" placeholder="Nom de la boîte" style="margin-top:4px;${CATEGORIES_BOITE.includes(c.nom) ? "display:none" : ""}">
-        </label>
-        <label>Code<input data-boite-code="${c.id}" value="${esc(c.code || "")}" inputmode="numeric"></label>
-        <label>Notes<input data-boite-notes="${c.id}" value="${esc(c.notes || "")}"></label>
-        <button class="del-btn" data-boite-del="${c.id}" style="height:38px">🗑️</button>
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px" data-boite-row="${c.id}">
+        <div class="form-grid" style="align-items:end">
+          <label>Catégorie
+            <select data-boite-nom="${c.id}">
+              <option value="">— Choisir —</option>
+              ${CATEGORIES_BOITE.map(cat => `<option value="${esc(cat)}" ${c.nom === cat ? "selected" : ""}>${esc(cat)}</option>`).join("")}
+              <option value="__autre__" ${!CATEGORIES_BOITE.includes(c.nom) ? "selected" : ""}>Autre (préciser)…</option>
+            </select>
+            <input data-boite-nom-autre="${c.id}" value="${!CATEGORIES_BOITE.includes(c.nom) ? esc(c.nom || "") : ""}" placeholder="Nom de la boîte" style="margin-top:4px;${CATEGORIES_BOITE.includes(c.nom) ? "display:none" : ""}">
+          </label>
+          <label>Code<input data-boite-code="${c.id}" value="${esc(c.code || "")}" inputmode="numeric"></label>
+          <label>Notes<input data-boite-notes="${c.id}" value="${esc(c.notes || "")}"></label>
+          <button class="del-btn" data-boite-del="${c.id}" style="height:38px">🗑️</button>
+        </div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:10px 0 6px">Photo(s) de cette boîte</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${(c.photos || []).map((p, pi) => `
+            <div style="position:relative">
+              <img data-resolve-img="${esc(p.itemId)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border);background:var(--panel-alt)" onerror="this.style.opacity=0.3">
+              <button data-boite-photo-del="${c.id}:${pi}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>
+            </div>
+          `).join("")}
+          <button class="nav-btn" data-boite-photo-add="${c.id}" style="padding:6px 10px;font-size:11px">📷 Ajouter une photo</button>
+        </div>
       </div>
     `).join("")}
+    <input type="file" accept="image/*" capture="environment" id="sd-boite-photo-input" style="display:none">
     <button class="nav-btn" id="sd-boite-add" data-dossier-id="${dossierId}" data-dossier-nom="${esc(dossierNom)}">➕ Ajouter une boîte à clés</button>
     <div id="sd-boite-status" style="font-size:12px;margin-top:6px"></div>
   `;
@@ -748,6 +761,58 @@ function attacherEditeurBoitesListeners(dOriginal, data) {
       await supprimerCodeMasterlock(btn.dataset.boiteDel, dOriginal.id);
       boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
       rafraichirSectionBoitesDansData(data, boitesEnEdition.liste);
+      renderEdit(dOriginal, data);
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
+
+  // Photo(s) par boîte — une galerie propre à chaque boîte, stockée sur
+  // son enregistrement Masterlock (pas sur la section partagée du
+  // dossier, qui ne pouvait avant afficher qu'une seule galerie commune
+  // à toutes les boîtes).
+  const photoInput = document.getElementById("sd-boite-photo-input");
+  mountedContainer.querySelectorAll("[data-boite-photo-add]").forEach(btn => btn.addEventListener("click", async () => {
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
+    try {
+      const token = await getAccessToken(); // en réaction directe au clic, sinon bloqué par le navigateur
+      statusEl.innerHTML = "";
+      photoInput.dataset.readyToken = token;
+      photoInput.dataset.boiteId = btn.dataset.boitePhotoAdd;
+      photoInput.click();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
+  photoInput?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const id = e.target.dataset.boiteId;
+    const entryActuel = boitesEnEdition.liste.find(c => c.id === id);
+    if (!entryActuel) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
+    try {
+      const { url, itemId, name } = await uploadToDrive(
+        file, e.target.dataset.readyToken, [dOriginal.nom, "Codes Masterlock", entryActuel.nom], undefined
+      );
+      const photos = [...(entryActuel.photos || []), { url, itemId, name }];
+      await modifierCodeMasterlock(entryActuel, { photos }, mountedUser);
+      boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
+      renderEdit(dOriginal, data);
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
+    }
+  });
+  mountedContainer.querySelectorAll("[data-boite-photo-del]").forEach(btn => btn.addEventListener("click", async () => {
+    const [id, indexStr] = btn.dataset.boitePhotoDel.split(":");
+    const entryActuel = boitesEnEdition.liste.find(c => c.id === id);
+    if (!entryActuel) return;
+    if (!confirm("Retirer cette photo de la boîte ?")) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Suppression…</span>`;
+    try {
+      const photos = (entryActuel.photos || []).filter((_, i) => i !== parseInt(indexStr, 10));
+      await modifierCodeMasterlock(entryActuel, { photos }, mountedUser);
+      boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
       renderEdit(dOriginal, data);
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;

@@ -65,6 +65,7 @@ export function nouveauCode() {
     nom: "Boîte à clés",
     code: "",
     notes: "",
+    photos: [], // [{ itemId, name, url }] — une ou plusieurs photos de CETTE boîte précisément
     supprimeLe: null,
     derniereMajAt: null,
     derniereMajParNom: "",
