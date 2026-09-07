@@ -320,42 +320,46 @@ function exporterRecap(sites) {
   const groupes = groupedSites(sites.filter(s => state.codes.some(c => c.dossierId === s.id)));
   if (groupes.length === 0) { alert("Aucun code à exporter pour le moment."); return; }
 
-  const ligne = (c) => `
-    <tr>
-      <td>${esc(c.nom)}</td>
-      <td style="font-weight:700;font-size:14px">${esc(c.code || "—")}</td>
-      <td>${esc(c.notes || "")}</td>
-    </tr>
+  const carteCode = (c) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 14px;border:1px solid #e2ddd0;border-radius:8px;background:#FAF8F3;margin-bottom:6px">
+      <div style="min-width:0">
+        <p style="margin:0;font-weight:700;font-size:13px;color:#222">${esc(c.nom)}</p>
+        ${c.notes ? `<p style="margin:2px 0 0;font-size:11px;color:#777">${esc(c.notes)}</p>` : ""}
+      </div>
+      <div style="flex:none;background:#B08D46;color:#fff;font-weight:800;font-size:20px;letter-spacing:3px;border-radius:6px;padding:6px 16px;white-space:nowrap">${esc(c.code || "—")}</div>
+    </div>
   `;
 
-  const html = `
-    <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
-      <div style="text-align:center;margin-bottom:16px">
-        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
+  const carteSite = (site) => {
+    const codes = state.codes.filter(c => c.dossierId === site.id);
+    if (codes.length === 0) return "";
+    return `
+      <div style="border:1px solid #ddd;border-radius:10px;padding:14px 16px;margin-bottom:12px;break-inside:avoid;page-break-inside:avoid">
+        <h4 style="margin:0 0 8px;font-size:14px;color:#111;border-bottom:2px solid #B08D46;padding-bottom:6px">🔐 ${esc(site.nom)}</h4>
+        ${codes.map(carteCode).join("")}
       </div>
-      <h2 style="margin:0 0 4px">Codes Masterlock — Récapitulatif</h2>
-      <p style="margin:0;color:#555;font-size:12px">Exporté le ${formatDate(Date.now())} — document sensible, à usage interne uniquement.</p>
-      ${groupes.map(g => `
-        <h3 style="margin:18px 0 6px">${esc(g.assocLabel)}</h3>
-        ${g.groups.map(sub => `
-          ${sub.groupeLabel ? `<p style="margin:8px 0 4px;font-weight:700;font-size:12px">${esc(sub.groupeLabel)}</p>` : ""}
-          ${sub.sites.map(site => {
-            const codes = state.codes.filter(c => c.dossierId === site.id);
-            if (codes.length === 0) return "";
-            return `
-              <p style="margin:10px 0 4px;font-weight:700">${esc(site.nom)}</p>
-              <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
-                <thead><tr>
-                  <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Boîte</th>
-                  <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Code</th>
-                  <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Notes</th>
-                </tr></thead>
-                <tbody>${codes.map(ligne).join("")}</tbody>
-              </table>
-            `;
-          }).join("")}
+    `;
+  };
+
+  const html = `
+    <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:0;color:#111;overflow:hidden">
+      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:24px 28px;display:flex;align-items:center;gap:18px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:56px;background:#fff;border-radius:8px;padding:6px">
+        <div>
+          <p style="margin:0;color:#D9B24C;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
+          <h1 style="margin:2px 0 0;color:#fff;font-size:22px">🔐 Codes Masterlock — Récapitulatif</h1>
+        </div>
+      </div>
+      <div style="padding:20px 28px">
+        <p style="margin:0 0 18px;font-size:11px;color:#a00;font-weight:700;background:#fdecea;border:1px solid #f5c6c1;border-radius:6px;padding:8px 12px;display:inline-block">⚠️ Document sensible — usage interne uniquement. Exporté le ${formatDate(Date.now())}.</p>
+        ${groupes.map(g => `
+          <h2 style="margin:20px 0 10px;font-size:16px;color:#B08D46;border-bottom:1px solid #eee;padding-bottom:6px">${esc(g.assocLabel)}</h2>
+          ${g.groups.map(sub => `
+            ${sub.groupeLabel ? `<p style="margin:8px 0 8px;font-weight:700;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.5px">${esc(sub.groupeLabel)}</p>` : ""}
+            ${sub.sites.map(carteSite).join("")}
+          `).join("")}
         `).join("")}
-      `).join("")}
+      </div>
     </div>
   `;
 
