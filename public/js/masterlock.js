@@ -231,12 +231,49 @@ function renderHistoriqueHTML(historique) {
   `;
 }
 
+// Catégories courantes proposées en menu déroulant pour nommer une boîte
+// à clés — évite de retaper à chaque fois un nom légèrement différent
+// pour la même chose d'un site à l'autre, tout en gardant "Autre" pour
+// les cas particuliers.
+const CATEGORIES_BOITE = [
+  "Accès bâtiment", "Accès chaufferie", "Accès parking", "Accès atelier",
+  "Accès salle de sport", "Accès local poubelles", "Boîte aux lettres",
+];
+
+function selectCategorieHTML(id, valeurActuelle) {
+  const estPreset = CATEGORIES_BOITE.includes(valeurActuelle);
+  return `
+    <select id="${id}">
+      <option value="">— Choisir une catégorie —</option>
+      ${CATEGORIES_BOITE.map(c => `<option value="${esc(c)}" ${valeurActuelle === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+      <option value="__autre__" ${!estPreset && valeurActuelle ? "selected" : ""}>Autre (préciser)…</option>
+    </select>
+    <input id="${id}-autre" placeholder="Nom de la boîte à clés" value="${!estPreset ? esc(valeurActuelle || "") : ""}" style="margin-top:6px;${estPreset || !valeurActuelle ? "display:none" : ""}">
+  `;
+}
+
+function wireSelectCategorie(id) {
+  const select = document.getElementById(id);
+  const autre = document.getElementById(`${id}-autre`);
+  if (!select || !autre) return;
+  const sync = () => { autre.style.display = select.value === "__autre__" ? "block" : "none"; };
+  select.addEventListener("change", sync);
+  sync();
+}
+
+function valeurCategorie(id) {
+  const select = document.getElementById(id);
+  const autre = document.getElementById(`${id}-autre`);
+  if (select.value === "__autre__") return (autre.value || "").trim();
+  return select.value;
+}
+
 function renderAddForm(site) {
   return `
     <div class="form-card">
       <h4 style="margin:0 0 10px;font-size:14px">Nouvelle boîte à clés — ${esc(site.nom)}</h4>
       <div class="form-grid">
-        <label>Nom<input id="mlk-new-nom" placeholder="ex. Boîte entrée principale, Boîte local technique…" value="Boîte à clés"></label>
+        <label>Catégorie${selectCategorieHTML("mlk-new-nom", "")}</label>
         <label>Code<input id="mlk-new-code" placeholder="ex. 1234" inputmode="numeric"></label>
         <label>Notes (optionnel)<input id="mlk-new-notes" placeholder="ex. accès sous le porche, à droite"></label>
       </div>
@@ -252,11 +289,12 @@ function renderAddForm(site) {
 function attachAddFormListeners() {
   const btn = document.getElementById("mlk-new-save");
   if (!btn) return;
+  wireSelectCategorie("mlk-new-nom");
   document.getElementById("mlk-new-cancel").addEventListener("click", () => { ui.addingSiteId = null; render(); });
   btn.addEventListener("click", async () => {
     const statusEl = document.getElementById("mlk-new-status");
     const site = state.sites.find(s => s.id === ui.addingSiteId);
-    const nom = document.getElementById("mlk-new-nom").value.trim() || "Boîte à clés";
+    const nom = valeurCategorie("mlk-new-nom") || "Boîte à clés";
     const code = document.getElementById("mlk-new-code").value.trim();
     const notes = document.getElementById("mlk-new-notes").value.trim();
     if (!code) { statusEl.innerHTML = `<span style="color:var(--red)">Le code est obligatoire.</span>`; return; }
@@ -278,7 +316,7 @@ function renderEditForm(c) {
     <div class="form-card" style="margin-top:10px;background:var(--panel-alt)">
       <h4 style="margin:0 0 10px;font-size:14px">Modifier — ${esc(c.nom)}</h4>
       <div class="form-grid">
-        <label>Nom<input id="mlk-edit-nom" value="${esc(c.nom)}"></label>
+        <label>Catégorie${selectCategorieHTML("mlk-edit-nom", c.nom)}</label>
         <label>Code<input id="mlk-edit-code" value="${esc(c.code || "")}" inputmode="numeric"></label>
         <label>Notes (optionnel)<input id="mlk-edit-notes" value="${esc(c.notes || "")}"></label>
       </div>
@@ -294,11 +332,12 @@ function renderEditForm(c) {
 function attachEditFormListeners() {
   const btn = document.getElementById("mlk-edit-save");
   if (!btn) return;
+  wireSelectCategorie("mlk-edit-nom");
   const c = state.codes.find(x => x.id === ui.editingCodeId);
   document.getElementById("mlk-edit-cancel").addEventListener("click", () => { ui.editingCodeId = null; render(); });
   btn.addEventListener("click", async () => {
     const statusEl = document.getElementById("mlk-edit-status");
-    const nom = document.getElementById("mlk-edit-nom").value.trim();
+    const nom = valeurCategorie("mlk-edit-nom");
     const code = document.getElementById("mlk-edit-code").value.trim();
     const notes = document.getElementById("mlk-edit-notes").value.trim();
     if (!code) { statusEl.innerHTML = `<span style="color:var(--red)">Le code est obligatoire.</span>`; return; }
