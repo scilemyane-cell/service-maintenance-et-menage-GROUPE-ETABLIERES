@@ -18,9 +18,10 @@ import {
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
+  trouverSectionPourType,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
-import { getDossierUnique } from "./site-dossier-data.js";
+import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import {
   enqueuePendingReleve, estErreurReseau, demarrerSyncAuto, countPendingReleves, onQueueChange,
@@ -209,6 +210,10 @@ function renderListe() {
           📡 ${pendingCount} relevé(s) enregistré(s) sur cet appareil, en attente d'envoi (pas de réseau au moment de la saisie) — envoi automatique dès le retour de connexion.
         </div>
       ` : ""}
+      ${peutAntidater(mountedUser) ? `
+        <button class="nav-btn" id="cpt-activer-tous" style="width:fit-content">🔧 Activer les compteurs sur tous les dossiers de site existants</button>
+        <div id="cpt-activer-tous-status" style="font-size:12px"></div>
+      ` : ""}
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : sitesTries.map(site => {
@@ -264,6 +269,18 @@ function renderListe() {
     </div>
   `;
 
+  document.getElementById("cpt-activer-tous")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("cpt-activer-tous-status");
+    if (!confirm("Activer les compteurs sur tous les dossiers de site qui ne les ont pas encore ? Ils apparaîtront ensuite ici (liste vide jusqu'à ce que tu y ajoutes des compteurs).")) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Activation en cours…</span>`;
+    try {
+      const n = await activerCompteursSurTousLesDossiers();
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ ${n} dossier(s) mis à jour.</span>`;
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
   mountedContainer.querySelectorAll("[data-toggle-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.toggleSite;
     if (ui.ouverts.has(id)) ui.ouverts.delete(id); else ui.ouverts.add(id);
@@ -479,23 +496,12 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
 // renseigné là-bas (ex. "Compteurs d'eau généraux" → "sous-sol, local
 // technique"). Priorité aux intitulés contenant à la fois "compteur" et
 // le mot du type ; à défaut, un intitulé contenant juste le mot du type.
-function trouverSectionCompteur(sections, type) {
-  const motsType = { eau: ["eau"], gaz: ["gaz"], elec: ["électri", "electri", "linky"] }[type] || [];
-  const contientMotType = (titre) => motsType.some(m => titre.includes(m));
-  let match = sections.find(s => {
-    const t = (s.titre || "").toLowerCase();
-    return t.includes("compteur") && contientMotType(t);
-  });
-  if (!match) match = sections.find(s => contientMotType((s.titre || "").toLowerCase()));
-  return match || null;
-}
-
 // Met à jour ui.addingNom/addingEmplacement pour le type sélectionné,
 // sans écraser une saisie manuelle de l'utilisateur (on ne remplace que
 // si le champ est vide ou égal à la précédente suggestion automatique).
 function appliquerAutoRemplissage(siteId, type) {
   const sections = ui.sectionsParSite[siteId] || [];
-  const match = trouverSectionCompteur(sections, type);
+  const match = trouverSectionPourType(sections, type);
   const suggestionNom = match?.titre || "";
   const suggestionEmplacement = match?.emplacement || "";
   if (!ui.addingNom || ui.addingNom === ui.addingAutoNom) ui.addingNom = suggestionNom;
@@ -596,6 +602,9 @@ function attachEditFormListeners() {
     const emplacement = document.getElementById("cpt-edit-emplacement").value.trim();
     const frequence = document.getElementById("cpt-edit-frequence").value;
     const patch = { nom: nom || c.nom, emplacement, frequence };
+    // Modifier l'emplacement à la main = ne plus vouloir qu'il soit
+    // écrasé automatiquement plus tard (voir synchroniserEmplacementsCompteurs()).
+    if (emplacement !== (c.emplacement || "")) patch.emplacementAuto = false;
     if (frequence === "annuel") {
       patch.echeanceJour = parseInt(document.getElementById("cpt-edit-echeance-jour").value, 10) || 1;
       patch.echeanceMois = parseInt(document.getElementById("cpt-edit-echeance-mois").value, 10) || 1;
@@ -644,6 +653,10 @@ function attachAddFormListeners() {
     const compteur = nouveauCompteur(type);
     if (nomInput) compteur.nom = nomInput;
     compteur.emplacement = emplacement;
+    // Reste "automatique" (suivra les futures modifications de la fiche du
+    // dossier de site) tant que l'utilisateur n'a pas tapé autre chose que
+    // la suggestion proposée — voir synchroniserEmplacementsCompteurs().
+    compteur.emplacementAuto = !emplacement || emplacement === (ui.addingAutoEmplacement || "");
     compteur.frequence = frequence;
     if (frequence === "annuel") {
       compteur.echeanceJour = parseInt(document.getElementById("cpt-new-echeance-jour").value, 10) || 1;

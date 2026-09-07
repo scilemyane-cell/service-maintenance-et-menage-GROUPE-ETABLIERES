@@ -7,6 +7,7 @@ import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, get
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
+import { synchroniserEmplacementsCompteurs } from "./compteurs-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
@@ -832,6 +833,12 @@ function renderEdit(dOriginal, workingCopy) {
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
       await saveDossier(dOriginal.id, data);
+      // Si un compteur a été créé avant que cette fiche ne soit complétée
+      // (ou modifiée depuis), met à jour son emplacement pour qu'il suive
+      // celui — désormais renseigné/modifié — de l'équipement correspondant.
+      // Échec silencieux : ne doit jamais empêcher l'enregistrement normal
+      // du dossier lui-même.
+      synchroniserEmplacementsCompteurs(dOriginal.id, data.sections).catch(e => console.error("Synchro emplacements compteurs échouée :", e));
       ui.mode = "view";
       render();
     } catch (e) {

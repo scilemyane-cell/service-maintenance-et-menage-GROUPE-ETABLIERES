@@ -73,7 +73,7 @@ export function nouveauDossier(sectionsOrder) {
     association: "",
     groupe: "",
     stockDeporte: false,
-    compteursActifs: false,
+    compteursActifs: true,
     urgences: JSON.parse(JSON.stringify(URGENCES_STANDARD)),
     sections: titres.map(titre => ({ titre, concerne: false, emplacement: "", procedure: "", photos: [] })),
   };
@@ -110,4 +110,21 @@ export async function listerDossiersCorbeille() {
   const list = [];
   snap.forEach((d) => { if (d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
   return list;
+}
+
+// Active les compteurs (compteursActifs: true) sur tous les dossiers de
+// site existants qui ne l'ont pas déjà — utile une seule fois pour
+// rattraper les dossiers créés avant l'introduction de ce réglage
+// (désormais activé par défaut pour les nouveaux, voir nouveauDossier()).
+// Renvoie le nombre de dossiers effectivement mis à jour.
+export async function activerCompteursSurTousLesDossiers() {
+  const snap = await getDocs(collection(db, "sites-dossiers"));
+  let n = 0;
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.supprimeLe || data.compteursActifs === true) continue;
+    await updateDoc(doc(db, "sites-dossiers", d.id), { compteursActifs: true });
+    n++;
+  }
+  return n;
 }

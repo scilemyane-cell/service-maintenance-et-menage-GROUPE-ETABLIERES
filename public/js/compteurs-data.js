@@ -34,12 +34,52 @@ export function nouveauCompteur(type) {
     type, // "eau" | "gaz" | "elec"
     nom: type === "elec" ? "Tableau électrique" : type === "eau" ? "Compteur d'eau" : "Compteur de gaz",
     emplacement: "",
+    emplacementAuto: true, // voir synchroniserEmplacementsCompteurs() : tant que vrai, l'emplacement suit automatiquement l'équipement correspondant du dossier de site
     frequence: "mensuel", // "mensuel" | "annuel"
     echeanceJour: 1,      // pour "annuel" uniquement : jour/mois de l'échéance chaque année
     echeanceMois: 1,
     supprimeLe: null,
     dernierReleve: null, // { at, valeurs, releveParNom } — mis en cache pour affichage rapide
   };
+}
+
+// Cherche, parmi les équipements d'un dossier de site, celui qui
+// correspond le mieux à un type de compteur — utilisé à la fois pour
+// suggérer nom/emplacement à la création (voir compteurs.js) et pour les
+// tenir à jour automatiquement par la suite (voir
+// synchroniserEmplacementsCompteurs ci-dessous). Priorité à un intitulé
+// contenant à la fois "compteur" et le mot du type ; à défaut, un
+// intitulé contenant juste le mot du type.
+export function trouverSectionPourType(sections, type) {
+  const motsType = { eau: ["eau"], gaz: ["gaz"], elec: ["électri", "electri", "linky"] }[type] || [];
+  const contientMotType = (titre) => motsType.some(m => titre.includes(m));
+  let match = (sections || []).find(s => {
+    const t = (s.titre || "").toLowerCase();
+    return t.includes("compteur") && contientMotType(t);
+  });
+  if (!match) match = (sections || []).find(s => contientMotType((s.titre || "").toLowerCase()));
+  return match || null;
+}
+
+// À appeler après l'enregistrement d'un dossier de site (voir
+// site-dossier.js) : si un compteur a été créé avant que la fiche du
+// dossier ne soit complétée (ou que son emplacement n'ait jamais été
+// personnalisé manuellement), met à jour son emplacement pour qu'il
+// reprenne celui — désormais renseigné ou modifié — de l'équipement
+// correspondant. Ne touche jamais un compteur dont l'emplacement a été
+// modifié à la main (emplacementAuto === false).
+export async function synchroniserEmplacementsCompteurs(dossierId, sections) {
+  const q = query(collection(db, COMPTEURS), where("dossierId", "==", dossierId));
+  const snap = await getDocs(q);
+  for (const d of snap.docs) {
+    const c = d.data();
+    if (c.supprimeLe || c.emplacementAuto === false) continue;
+    const match = trouverSectionPourType(sections, c.type);
+    const nouvelEmplacement = match?.emplacement || "";
+    if (nouvelEmplacement && nouvelEmplacement !== c.emplacement) {
+      await updateDoc(doc(db, COMPTEURS, d.id), { emplacement: nouvelEmplacement });
+    }
+  }
 }
 
 const JOURS_TOLERANCE_MENSUEL = 32; // au-delà, un relevé mensuel est considéré "en retard"
