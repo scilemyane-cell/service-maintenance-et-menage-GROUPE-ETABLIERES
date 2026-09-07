@@ -28,16 +28,34 @@ export const INDEX_LABELS = {
 };
 export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-// Clés d'index à relever (et donc à photographier) selon le type de
-// compteur — une seule pour eau/gaz, les 4 index tarifaires pour l'élec.
-export function clesIndex(type) {
-  return type === "elec" ? INDEX_ELEC : ["valeur"];
+// Clés d'index à relever (et donc à photographier) selon le compteur —
+// une seule pour eau/gaz/chauffage urbain ; pour l'électricité, 1 seule
+// (compteur "base", mono-index) ou les 4 index tarifaires (multi-tarif),
+// selon le champ nbIndex choisi à la création de CE compteur (certains
+// sites n'ont qu'un simple compteur de base, d'autres un tarif Jaune/Vert
+// à 4 index — ce n'est pas systématique).
+export function clesIndex(compteur) {
+  if (compteur.type === "elec" && (compteur.nbIndex || 4) === 1) return ["valeur"];
+  if (compteur.type === "elec") return INDEX_ELEC;
+  return ["valeur"];
+}
+
+// Unité affichée pour la valeur relevée — kWh pour l'électricité et le
+// chauffage urbain (facturé à l'énergie livrée), m³ pour l'eau et le gaz.
+export function uniteValeur(compteur) {
+  if (compteur.type === "elec" || compteur.type === "chauffage") return "kWh";
+  return "m³";
 }
 
 export function nouveauCompteur(type) {
+  const noms = {
+    elec: "Tableau électrique", eau: "Compteur d'eau",
+    gaz: "Compteur de gaz", chauffage: "Compteur de chauffage urbain",
+  };
   return {
-    type, // "eau" | "gaz" | "elec"
-    nom: type === "elec" ? "Tableau électrique" : type === "eau" ? "Compteur d'eau" : "Compteur de gaz",
+    type, // "eau" | "gaz" | "chauffage" | "elec"
+    nom: noms[type] || "Compteur",
+    nbIndex: type === "elec" ? 4 : 1, // pour l'élec uniquement : 1 (base) ou 4 (multi-tarif) — sans effet pour les autres types
     emplacement: "",
     emplacementAuto: true, // voir synchroniserEmplacementsCompteurs() : tant que vrai, l'emplacement suit automatiquement l'équipement correspondant du dossier de site
     frequence: "mensuel", // "mensuel" | "annuel"
@@ -56,7 +74,10 @@ export function nouveauCompteur(type) {
 // contenant à la fois "compteur" et le mot du type ; à défaut, un
 // intitulé contenant juste le mot du type.
 export function trouverSectionPourType(sections, type) {
-  const motsType = { eau: ["eau"], gaz: ["gaz"], elec: ["électri", "electri", "linky"] }[type] || [];
+  const motsType = {
+    eau: ["eau"], gaz: ["gaz"], elec: ["électri", "electri", "linky"],
+    chauffage: ["chauffage", "urbain", "cpcu", "sous-station", "sous station"],
+  }[type] || [];
   const contientMotType = (titre) => motsType.some(m => titre.includes(m));
   let match = (sections || []).find(s => {
     const t = (s.titre || "").toLowerCase();
@@ -231,7 +252,7 @@ export function calculerEcarts(valeursRecentes, valeursPrecedentes) {
 // (vide = rien d'anormal détecté).
 export function detecterAnomalies(compteur, nouvellesValeurs, historiqueRecent = []) {
   const messages = [];
-  const cles = clesIndex(compteur.type);
+  const cles = clesIndex(compteur);
   const derniereValeur = compteur.dernierReleve?.valeurs;
 
   for (const cle of cles) {

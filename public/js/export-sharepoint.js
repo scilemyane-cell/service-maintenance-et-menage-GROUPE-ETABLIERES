@@ -17,7 +17,7 @@ import {
 import { esc } from "./astreinte-logic.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
-import { INDEX_ELEC, consommationMensuelle } from "./compteurs-data.js";
+import { consommationMensuelle, clesIndex } from "./compteurs-data.js";
 
 const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 
@@ -249,21 +249,29 @@ async function extraireFichesMenage() {
   return lignes;
 }
 
+const TYPE_LABEL_RELEVE = { eau: "Eau", gaz: "Gaz", chauffage: "Chauffage urbain", elec: "Électricité" };
+const UNITE_TYPE = { eau: "m³", gaz: "m³", chauffage: "kWh", elec: "kWh" };
+
+// Ne dépend pas du type du compteur (qui peut avoir changé depuis, ex.
+// passage de 4 à 1 index) : regarde directement la forme des valeurs
+// enregistrées sur CE relevé — un seul "valeur" (eau/gaz/chauffage/élec
+// mono-index), ou plusieurs clés d'index (élec multi-tarif).
+function formatValeursReleve(r) {
+  if (r.valeurs?.valeur !== undefined) return `${r.valeurs.valeur ?? "?"} ${UNITE_TYPE[r.type] || ""}`;
+  return Object.entries(r.valeurs || {}).map(([k, v]) => `${k}=${v ?? "?"}`).join(" / ");
+}
+
 async function extraireRelevesCompteurs() {
   const snap = await getDocs(collection(db, "compteurs-releves"));
   const lignes = [];
-  const typeLabel = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
   snap.forEach(d => {
     const r = d.data();
-    const valeurs = r.type === "elec"
-      ? INDEX_ELEC.map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
-      : `${r.valeurs?.valeur ?? "?"} m³`;
     lignes.push({
       Date: r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "",
       Site: r.dossierNom || "",
       Compteur: r.nomCompteur || "",
-      Type: typeLabel[r.type] || r.type,
-      Valeur: valeurs,
+      Type: TYPE_LABEL_RELEVE[r.type] || r.type,
+      Valeur: formatValeursReleve(r),
       "Relevé par": r.releveParNom || "",
       Antidaté: r.saisiHorsDate ? "Oui" : "Non",
     });
@@ -277,20 +285,16 @@ async function extraireRelevesCompteurs() {
 // PDF détaillé par site, en plus du récapitulatif global ci-dessus.
 async function extraireRelevesParSite() {
   const snap = await getDocs(collection(db, "compteurs-releves"));
-  const typeLabel = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
   const parSite = new Map(); // nomSite -> lignes[]
   snap.forEach(d => {
     const r = d.data();
     const nomSite = r.dossierNom || "Site inconnu";
-    const valeurs = r.type === "elec"
-      ? INDEX_ELEC.map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
-      : `${r.valeurs?.valeur ?? "?"} m³`;
     if (!parSite.has(nomSite)) parSite.set(nomSite, []);
     parSite.get(nomSite).push({
       Date: r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "",
       Compteur: r.nomCompteur || "",
-      Type: typeLabel[r.type] || r.type,
-      Valeur: valeurs,
+      Type: TYPE_LABEL_RELEVE[r.type] || r.type,
+      Valeur: formatValeursReleve(r),
       "Relevé par": r.releveParNom || "",
       Antidaté: r.saisiHorsDate ? "Oui" : "Non",
     });
@@ -322,15 +326,15 @@ function anneeScolaire(ms) {
   return `${debut}-${debut + 1}`;
 }
 
-const TYPE_LABEL_COMPTEUR = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
+const TYPE_LABEL_COMPTEUR = { eau: "Eau", gaz: "Gaz", chauffage: "Chauffage urbain", elec: "Électricité" };
 
 // PDF détaillé d'UN SEUL compteur : graphique en bâtons de la
 // consommation mensuelle sur 12 mois, puis l'historique complet des
 // relevés découpé par année scolaire (la plus récente en premier).
 async function genererPdfCompteur(compteur, releves) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
-  const cles = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
-  const clesConso = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
+  const cles = clesIndex(compteur);
+  const clesConso = cles;
   const couleurs = ["#B08D46", "#3FB6AC", "#E5533D", "#8B7CF0"];
 
   const parAnnee = new Map();
@@ -358,7 +362,7 @@ async function genererPdfCompteur(compteur, releves) {
           <div style="${enteteStyle}">Date</div><div style="${enteteStyle}">Valeur(s)</div>
           <div style="${enteteStyle}">Relevé par</div><div style="${enteteStyle}">Antidaté</div>
           ${parAnnee.get(annee).map((r, i) => {
-            const valeurs = compteur.type === "elec" ? cles.map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ") : `${r.valeurs?.valeur ?? "?"} m³`;
+            const valeurs = formatValeursReleve(r);
             const bg = i % 2 === 0 ? "#ffffff" : "#F5F3EE";
             return `
               <div style="${ligneStyle(bg)}">${esc(r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "")}</div>
@@ -387,7 +391,7 @@ async function genererPdfCompteur(compteur, releves) {
     const canvas = hidden.querySelector("#cpt-export-chart");
     const parCle = clesConso.map(cle => consommationMensuelle(releves, cle, 12));
     const datasets = clesConso.map((cle, i) => ({
-      label: cle === "valeur" ? "Conso. mensuelle (m³)" : `${cle} (kWh)`,
+      label: cle === "valeur" ? `Conso. mensuelle (${UNITE_TYPE[compteur.type] || "m³"})` : `${cle} (kWh)`,
       data: parCle[i].map(m => m.valeur),
       backgroundColor: couleurs[i % couleurs.length],
     }));

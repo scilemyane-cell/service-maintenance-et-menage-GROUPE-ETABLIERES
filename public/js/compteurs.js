@@ -18,7 +18,7 @@ import {
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
-  trouverSectionPourType, consommationMensuelle,
+  trouverSectionPourType, consommationMensuelle, uniteValeur,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -28,8 +28,9 @@ import {
   enqueuePendingReleve, estErreurReseau, demarrerSyncAuto, countPendingReleves, onQueueChange,
 } from "./offline-queue.js";
 
-const TYPE_ICONE = { eau: "💧", gaz: "🔥", elec: "⚡" };
-const TYPE_LABEL = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
+const TYPE_ICONE = { eau: "💧", gaz: "🔥", chauffage: "🌡️", elec: "⚡" };
+const TYPE_LABEL = { eau: "Eau", gaz: "Gaz", chauffage: "Chauffage urbain", elec: "Électricité" };
+const TYPES_COMPTEUR = ["eau", "gaz", "chauffage", "elec"]; // ordre d'affichage partout (liste, groupement par type, formulaires)
 const ROLES_SUPERVISION = ["super_admin", "admin", "n1"]; // seuls eux peuvent antidater un relevé
 
 function peutAntidater(user) {
@@ -56,7 +57,7 @@ let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
   addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
-  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null,
+  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null,
   releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
   rapideSiteId: null, rapideIndex: 0,
 };
@@ -69,7 +70,7 @@ export async function mountCompteurs(container, user) {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
     addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
-  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null,
+  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null,
     releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
     rapideSiteId: null, rapideIndex: 0,
   };
@@ -130,8 +131,9 @@ function formatDate(ms) {
 function formatValeurs(compteur) {
   const v = compteur.dernierReleve?.valeurs;
   if (!v) return "—";
-  if (compteur.type === "elec") return INDEX_ELEC.map(k => `${k}\u00A0${v[k] ?? "?"}`).join(" · ");
-  return `${v.valeur ?? "?"} ${compteur.type === "eau" ? "m³" : "m³"}`;
+  const cles = clesIndex(compteur);
+  if (cles.length > 1) return cles.map(k => `${k}\u00A0${v[k] ?? "?"}`).join(" · ");
+  return `${v.valeur ?? "?"} ${uniteValeur(compteur)}`;
 }
 
 // =================================================================
@@ -250,7 +252,7 @@ function renderSiteCard(site) {
           <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
           <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
         </div>
-        ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : ["eau", "gaz", "elec"].map(type => {
+        ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : TYPES_COMPTEUR.map(type => {
           const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
           if (liste.length === 0) return "";
           return `
@@ -347,7 +349,7 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
     const siteId = btn.dataset.openAdd;
-    ui.addingSiteId = siteId; ui.addingType = "eau";
+    ui.addingSiteId = siteId; ui.addingType = "eau"; ui.addingNbIndex = null;
     ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
     if (!ui.sectionsParSite[siteId]) {
       try {
@@ -441,8 +443,9 @@ function renderCompteurRow(c) {
 
 function formatEcarts(compteur, ecarts) {
   if (!ecarts) return `<span class="hint">—</span>`;
-  if (compteur.type === "elec") {
-    return INDEX_ELEC.map(k => {
+  const cles = clesIndex(compteur);
+  if (cles.length > 1) {
+    return cles.map(k => {
       const e = ecarts[k];
       if (e === null || e === undefined || isNaN(e)) return `${k}\u00A0?`;
       return `${k}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
@@ -450,7 +453,7 @@ function formatEcarts(compteur, ecarts) {
   }
   const e = ecarts.valeur;
   if (e === null || e === undefined || isNaN(e)) return "?";
-  return `<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'};font-weight:600">${e >= 0 ? "+" : ""}${e.toFixed(2)} m³</span>`;
+  return `<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'};font-weight:600">${e >= 0 ? "+" : ""}${e.toFixed(2)} ${uniteValeur(compteur)}</span>`;
 }
 
 function renderHistoriqueHTML(historique, compteur) {
@@ -470,7 +473,7 @@ function renderHistoriqueHTML(historique, compteur) {
             return `
             <tr>
               <td>${formatDate(r.createdAt)}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
-              <td>${compteur.type === "elec" ? INDEX_ELEC.map(k => `${k}\u00A0${r.valeurs?.[k] ?? "?"}`).join(" · ") : `${r.valeurs?.valeur ?? "?"} m³`}</td>
+              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.valeurs?.[k] ?? "?"}`).join(" · ") : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`}</td>
               <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
               <td style="white-space:nowrap">
@@ -501,12 +504,12 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const canvas = holder.querySelector(`#cpt-hist-chart-${compteur.id}`);
   if (!canvas || !window.Chart || historique.length < 2) { if (canvas) canvas.style.display = "none"; return; }
 
-  const clesConso = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
+  const clesConso = clesIndex(compteur);
   const couleurs = ["#D9B24C", "#3FB6AC", "#E5533D", "#8B7CF0"];
   const parCle = clesConso.map(cle => consommationMensuelle(historique, cle, 12));
   const labels = parCle[0].map(m => m.label);
   const datasets = clesConso.map((cle, i) => ({
-    label: cle === "valeur" ? (compteur.type === "eau" ? "Conso. mensuelle (m³)" : "Conso. mensuelle (m³)") : `${cle} (kWh)`,
+    label: cle === "valeur" ? `Conso. mensuelle (${uniteValeur(compteur)})` : `${cle} (kWh)`,
     data: parCle[i].map(m => m.valeur),
     backgroundColor: couleurs[i % couleurs.length],
   }));
@@ -552,15 +555,18 @@ function appliquerAutoRemplissage(siteId, type) {
 function renderAddForm(site) {
   const suggestions = (ui.sectionsParSite[site.id] || []).map(s => s.titre).filter(Boolean);
   const freq = ui.addingFrequence || "mensuel";
+  const type = ui.addingType || "eau";
+  const nbIndex = ui.addingNbIndex || 4;
   return `
     <div class="form-card">
       <h4 style="margin:0 0 10px;font-size:14px">Nouveau compteur — ${esc(site.nom)}</h4>
       <div class="form-grid">
         <label>Type
           <select id="cpt-new-type">
-            <option value="eau" ${ui.addingType === "eau" ? "selected" : ""}>💧 Eau</option>
-            <option value="gaz" ${ui.addingType === "gaz" ? "selected" : ""}>🔥 Gaz</option>
-            <option value="elec" ${ui.addingType === "elec" ? "selected" : ""}>⚡ Électricité (4 index HPH/HCH/HPE/HCE)</option>
+            <option value="eau" ${type === "eau" ? "selected" : ""}>💧 Eau</option>
+            <option value="gaz" ${type === "gaz" ? "selected" : ""}>🔥 Gaz</option>
+            <option value="chauffage" ${type === "chauffage" ? "selected" : ""}>🌡️ Chauffage urbain</option>
+            <option value="elec" ${type === "elec" ? "selected" : ""}>⚡ Électricité</option>
           </select>
         </label>
         <label>Nom
@@ -571,6 +577,17 @@ function renderAddForm(site) {
         </label>
         <label>Emplacement (optionnel)<input id="cpt-new-emplacement" value="${esc(ui.addingEmplacement || "")}" placeholder="ex. sous-sol, local technique…"></label>
       </div>
+      ${type === "elec" ? `
+        <div class="form-grid" style="margin-top:10px">
+          <label>Nombre d'index de ce compteur
+            <select id="cpt-new-nbindex">
+              <option value="4" ${nbIndex === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPH/HCH/HPE/HCE)</option>
+              <option value="1" ${nbIndex === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint" style="margin:4px 0 0">Certains sites n'ont qu'un simple compteur électrique (1 index), d'autres un tarif Jaune/Vert à 4 index — à choisir selon ce que ce compteur affiche réellement.</p>
+      ` : ""}
       ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions de nom reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
       ${ui.addingAutoNom ? `<p class="hint" style="margin:4px 0 0;color:var(--gold)">✓ Nom et emplacement repris automatiquement de "${esc(ui.addingAutoNom)}" (modifiable)</p>` : ""}
       <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🔁 Fréquence de relevé attendue</p>
@@ -615,6 +632,16 @@ function renderEditForm(c) {
         <label>Nom<input id="cpt-edit-nom" value="${esc(c.nom)}"></label>
         <label>Emplacement (optionnel)<input id="cpt-edit-emplacement" value="${esc(c.emplacement || '')}"></label>
       </div>
+      ${c.type === "elec" ? `
+        <div class="form-grid" style="margin-top:10px">
+          <label>Nombre d'index de ce compteur
+            <select id="cpt-edit-nbindex">
+              <option value="4" ${(c.nbIndex || 4) === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPH/HCH/HPE/HCE)</option>
+              <option value="1" ${(c.nbIndex || 4) === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
+            </select>
+          </label>
+        </div>
+      ` : ""}
       <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🔁 Fréquence de relevé attendue</p>
       ${frequenceFieldsHTML("cpt-edit", c.frequence || "mensuel", c.echeanceJour || 1, c.echeanceMois || 1)}
       <div style="display:flex;gap:8px;margin-top:10px">
@@ -641,6 +668,7 @@ function attachEditFormListeners() {
     const emplacement = document.getElementById("cpt-edit-emplacement").value.trim();
     const frequence = document.getElementById("cpt-edit-frequence").value;
     const patch = { nom: nom || c.nom, emplacement, frequence };
+    if (c.type === "elec") patch.nbIndex = parseInt(document.getElementById("cpt-edit-nbindex")?.value, 10) || 4;
     // Modifier l'emplacement à la main = ne plus vouloir qu'il soit
     // écrasé automatiquement plus tard (voir synchroniserEmplacementsCompteurs()).
     if (emplacement !== (c.emplacement || "")) patch.emplacementAuto = false;
@@ -673,6 +701,10 @@ function attachAddFormListeners() {
     appliquerAutoRemplissage(ui.addingSiteId, ui.addingType);
     render();
   });
+  document.getElementById("cpt-new-nbindex")?.addEventListener("change", (e) => {
+    ui.addingNbIndex = parseInt(e.target.value, 10);
+    render();
+  });
   document.getElementById("cpt-new-frequence").addEventListener("change", (e) => {
     ui.addingNom = document.getElementById("cpt-new-nom").value;
     ui.addingEmplacement = document.getElementById("cpt-new-emplacement").value;
@@ -692,6 +724,7 @@ function attachAddFormListeners() {
     const compteur = nouveauCompteur(type);
     if (nomInput) compteur.nom = nomInput;
     compteur.emplacement = emplacement;
+    if (type === "elec") compteur.nbIndex = parseInt(document.getElementById("cpt-new-nbindex")?.value, 10) || 4;
     // Reste "automatique" (suivra les futures modifications de la fiche du
     // dossier de site) tant que l'utilisateur n'a pas tapé autre chose que
     // la suggestion proposée — voir synchroniserEmplacementsCompteurs().
@@ -705,7 +738,7 @@ function attachAddFormListeners() {
     try {
       await creerCompteur(site.id, site.nom, compteur);
       ui.addingSiteId = null;
-      ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null;
+      ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null; ui.addingNbIndex = null;
       ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
       await load();
     } catch (e) {
@@ -721,17 +754,17 @@ function attachAddFormListeners() {
 // à la fois à l'écran, d'où une photo dédiée par index plutôt qu'une
 // photo unique pour tout le compteur.
 // =================================================================
-function labelPourCle(type, cle) {
-  if (type !== "elec") return "Photo du compteur";
+function labelPourCle(compteur, cle) {
+  if (cle === "valeur") return "Photo du compteur";
   return `${cle} — ${INDEX_LABELS[cle]}`;
 }
 
 function photosBlockHTML(prefix, compteur, photos, optionnel = false) {
-  return clesIndex(compteur.type).map(cle => {
+  return clesIndex(compteur).map(cle => {
     const photo = photos[cle];
     return `
       <div style="margin-bottom:12px">
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">${esc(labelPourCle(compteur.type, cle))}${photo ? ' <span style="color:var(--gold)">✓</span>' : optionnel ? ' <span style="color:var(--text-dim)">(optionnelle)</span>' : ' <span style="color:var(--red)">(obligatoire)</span>'}</label>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">${esc(labelPourCle(compteur, cle))}${photo ? ' <span style="color:var(--gold)">✓</span>' : optionnel ? ' <span style="color:var(--text-dim)">(optionnelle)</span>' : ' <span style="color:var(--red)">(obligatoire)</span>'}</label>
         ${photo ? `
           <div style="position:relative;width:fit-content">
             <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.previewUrl || photo.url)}"`} alt="" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
@@ -786,7 +819,7 @@ function wirePhotosBlock(prefix, compteur, photos, onChange) {
 // les photos requises.
 function photosCompletes(compteur, photos, user) {
   if (peutAntidater(user)) return true;
-  return clesIndex(compteur.type).every(cle => photos[cle]);
+  return clesIndex(compteur).every(cle => photos[cle]);
 }
 
 // Envoie toutes les photos capturées (fichiers en mémoire) vers
@@ -799,7 +832,7 @@ async function envoyerToutesLesPhotos(compteur, photos) {
   const resultat = {};
   for (const [cle, photo] of Object.entries(photos)) {
     if (photo.itemId) { resultat[cle] = photo; continue; } // déjà envoyée (repli après échec partiel)
-    const sousDossier = compteur.type === "elec" ? `${compteur.nom} (${cle})` : compteur.nom;
+    const sousDossier = cle === "valeur" ? compteur.nom : `${compteur.nom} (${cle})`;
     const { url, itemId, isImage, name } = await uploadToDrive(
       photo.file, token, [compteur.dossierNom, "Relevé de compteur", sousDossier], DOSSIERS_ROOT_FOLDER
     );
@@ -869,13 +902,13 @@ async function ouvrirReleve(compteurId, retourSiteId) {
 function renderReleve() {
   const { compteur, valeurs, photos } = ui.releveEnCours;
   const complet = photosCompletes(compteur, photos, mountedUser);
-  const champs = compteur.type === "elec"
-    ? INDEX_ELEC.map(k => `
+  const champs = clesIndex(compteur).length > 1
+    ? clesIndex(compteur).map(k => `
         <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
           <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh">
         </label>
       `).join("")
-    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-r-valeur" value="${valeurs.valeur ?? ""}" placeholder="m³"></label>`;
+    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-r-valeur" value="${valeurs.valeur ?? ""}" placeholder="${uniteValeur(compteur)}"></label>`;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -895,7 +928,7 @@ function renderReleve() {
           <p class="hint" style="margin:2px 0 0">Laisse aujourd'hui par défaut, ou choisis une date antérieure si ce relevé a été fait plus tôt et pas encore saisi.</p>
         ` : ""}
 
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${peutAntidater(mountedUser) ? "Photo(s) — optionnelle(s) pour un superviseur/admin (utile pour compléter d'anciens relevés)" : compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo du compteur (obligatoire)"}</label>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${peutAntidater(mountedUser) ? "Photo(s) — optionnelle(s) pour un superviseur/admin (utile pour compléter d'anciens relevés)" : clesIndex(compteur).length > 1 ? `Une photo par index (${clesIndex(compteur).length} obligatoires)` : "Photo du compteur (obligatoire)"}</label>
         <div id="cpt-r-photo-zone">${photosBlockHTML("cpt-r", compteur, photos, peutAntidater(mountedUser))}</div>
 
         <button class="add-btn" id="cpt-r-save" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${complet ? "" : "disabled style=\"opacity:.5\""}>✓ Enregistrer le relevé</button>
@@ -905,8 +938,8 @@ function renderReleve() {
   `;
 
   function syncValeurs() {
-    if (compteur.type === "elec") {
-      INDEX_ELEC.forEach(k => { const el = document.getElementById(`cpt-r-${k}`); if (el) valeurs[k] = el.value; });
+    if (clesIndex(compteur).length > 1) {
+      clesIndex(compteur).forEach(k => { const el = document.getElementById(`cpt-r-${k}`); if (el) valeurs[k] = el.value; });
     } else {
       const el = document.getElementById("cpt-r-valeur"); if (el) valeurs.valeur = el.value;
     }
@@ -955,7 +988,7 @@ function renderRapide() {
   const site = state.sites.find(s => s.id === ui.rapideSiteId);
   if (!site) { ui.rapideSiteId = null; render(); return; }
   const liste = state.compteurs.filter(c => c.dossierId === site.id)
-    .sort((a, b) => (a.type === b.type ? (a.nom || "").localeCompare(b.nom || "") : ["eau", "gaz", "elec"].indexOf(a.type) - ["eau", "gaz", "elec"].indexOf(b.type)));
+    .sort((a, b) => (a.type === b.type ? (a.nom || "").localeCompare(b.nom || "") : TYPES_COMPTEUR.indexOf(a.type) - TYPES_COMPTEUR.indexOf(b.type)));
 
   if (ui.rapideIndex >= liste.length) {
     mountedContainer.innerHTML = `
@@ -976,11 +1009,11 @@ function renderRapide() {
   ui.releveEnCours = ui.releveEnCours && ui.releveEnCours.compteur.id === compteur.id ? ui.releveEnCours : { compteur, valeurs: {}, photos: {} };
   const { valeurs, photos } = ui.releveEnCours;
   const complet = photosCompletes(compteur, photos, mountedUser);
-  const champs = compteur.type === "elec"
-    ? INDEX_ELEC.map(k => `
+  const champs = clesIndex(compteur).length > 1
+    ? clesIndex(compteur).map(k => `
         <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh"></label>
       `).join("")
-    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-rap-valeur" value="${valeurs.valeur ?? ""}" placeholder="m³"></label>`;
+    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-rap-valeur" value="${valeurs.valeur ?? ""}" placeholder="${uniteValeur(compteur)}"></label>`;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -1001,7 +1034,7 @@ function renderRapide() {
           </label>
         ` : ""}
 
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${peutAntidater(mountedUser) ? "Photo(s) — optionnelle(s) pour un superviseur/admin" : compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo (obligatoire)"}</label>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${peutAntidater(mountedUser) ? "Photo(s) — optionnelle(s) pour un superviseur/admin" : clesIndex(compteur).length > 1 ? `Une photo par index (${clesIndex(compteur).length} obligatoires)` : "Photo (obligatoire)"}</label>
         <div id="cpt-rap-photo-zone">${photosBlockHTML("cpt-rap", compteur, photos, peutAntidater(mountedUser))}</div>
 
         <button class="add-btn" id="cpt-rap-valider" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${complet ? "" : "disabled style=\"opacity:.5\""}>✓ Valider et suivant →</button>
@@ -1012,8 +1045,8 @@ function renderRapide() {
   `;
 
   function syncValeurs() {
-    if (compteur.type === "elec") {
-      INDEX_ELEC.forEach(k => { const el = document.getElementById(`cpt-rap-${k}`); if (el) valeurs[k] = el.value; });
+    if (clesIndex(compteur).length > 1) {
+      clesIndex(compteur).forEach(k => { const el = document.getElementById(`cpt-rap-${k}`); if (el) valeurs[k] = el.value; });
     } else {
       const el = document.getElementById("cpt-rap-valeur"); if (el) valeurs.valeur = el.value;
     }
