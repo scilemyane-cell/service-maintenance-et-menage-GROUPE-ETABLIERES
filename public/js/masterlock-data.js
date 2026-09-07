@@ -140,7 +140,7 @@ export async function listerCodesPourSite(dossierId) {
 
 export const CATEGORIES_BOITE = [
   "Accès bâtiment", "Accès chaufferie", "Accès parking", "Accès atelier",
-  "Accès salle de sport", "Accès local poubelles", "Boîte aux lettres",
+  "Accès salle de sport", "Accès local poubelles", "Accès poste HT",
 ];
 
 export async function creerCode(dossierId, dossierNom, entry, user) {
