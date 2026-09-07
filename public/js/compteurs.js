@@ -689,12 +689,12 @@ function labelPourCle(type, cle) {
   return `${cle} — ${INDEX_LABELS[cle]}`;
 }
 
-function photosBlockHTML(prefix, compteur, photos) {
+function photosBlockHTML(prefix, compteur, photos, optionnel = false) {
   return clesIndex(compteur.type).map(cle => {
     const photo = photos[cle];
     return `
       <div style="margin-bottom:12px">
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">${esc(labelPourCle(compteur.type, cle))}${photo ? ' <span style="color:var(--gold)">✓</span>' : ' <span style="color:var(--red)">(obligatoire)</span>'}</label>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">${esc(labelPourCle(compteur.type, cle))}${photo ? ' <span style="color:var(--gold)">✓</span>' : optionnel ? ' <span style="color:var(--text-dim)">(optionnelle)</span>' : ' <span style="color:var(--red)">(obligatoire)</span>'}</label>
         ${photo ? `
           <div style="position:relative;width:fit-content">
             <img ${photo.itemId ? `data-resolve-photo="${esc(photo.itemId)}"` : `src="${esc(photo.previewUrl || photo.url)}"`} alt="" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">
@@ -743,7 +743,12 @@ function wirePhotosBlock(prefix, compteur, photos, onChange) {
   });
 }
 
-function photosCompletes(compteur, photos) {
+// Un superviseur/admin peut valider un relevé sans toutes les photos —
+// utile pour compléter le fichier avec d'anciens relevés (pas de photo
+// disponible a posteriori). Un technicien doit toujours fournir toutes
+// les photos requises.
+function photosCompletes(compteur, photos, user) {
+  if (peutAntidater(user)) return true;
   return clesIndex(compteur.type).every(cle => photos[cle]);
 }
 
@@ -826,7 +831,7 @@ async function ouvrirReleve(compteurId, retourSiteId) {
 
 function renderReleve() {
   const { compteur, valeurs, photos } = ui.releveEnCours;
-  const complet = photosCompletes(compteur, photos);
+  const complet = photosCompletes(compteur, photos, mountedUser);
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
         <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
@@ -853,8 +858,8 @@ function renderReleve() {
           <p class="hint" style="margin:2px 0 0">Laisse aujourd'hui par défaut, ou choisis une date antérieure si ce relevé a été fait plus tôt et pas encore saisi.</p>
         ` : ""}
 
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo du compteur (obligatoire)"}</label>
-        <div id="cpt-r-photo-zone">${photosBlockHTML("cpt-r", compteur, photos)}</div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${peutAntidater(mountedUser) ? "Photo(s) — optionnelle(s) pour un superviseur/admin (utile pour compléter d'anciens relevés)" : compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo du compteur (obligatoire)"}</label>
+        <div id="cpt-r-photo-zone">${photosBlockHTML("cpt-r", compteur, photos, peutAntidater(mountedUser))}</div>
 
         <button class="add-btn" id="cpt-r-save" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${complet ? "" : "disabled style=\"opacity:.5\""}>✓ Enregistrer le relevé</button>
         <div id="cpt-r-status" style="font-size:12px;margin-top:10px"></div>
@@ -881,7 +886,7 @@ function renderReleve() {
   document.getElementById("cpt-r-save").addEventListener("click", async () => {
     syncValeurs();
     const statusEl = document.getElementById("cpt-r-status");
-    if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    if (!photosCompletes(compteur, photos, mountedUser)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
     if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const dateChoisie = peutAntidater(mountedUser) ? dateInputVersTimestamp(document.getElementById("cpt-r-date")?.value) : null;
@@ -933,7 +938,7 @@ function renderRapide() {
   const compteur = liste[ui.rapideIndex];
   ui.releveEnCours = ui.releveEnCours && ui.releveEnCours.compteur.id === compteur.id ? ui.releveEnCours : { compteur, valeurs: {}, photos: {} };
   const { valeurs, photos } = ui.releveEnCours;
-  const complet = photosCompletes(compteur, photos);
+  const complet = photosCompletes(compteur, photos, mountedUser);
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
         <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh"></label>
@@ -959,8 +964,8 @@ function renderRapide() {
           </label>
         ` : ""}
 
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo (obligatoire)"}</label>
-        <div id="cpt-rap-photo-zone">${photosBlockHTML("cpt-rap", compteur, photos)}</div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:14px 0 6px">${peutAntidater(mountedUser) ? "Photo(s) — optionnelle(s) pour un superviseur/admin" : compteur.type === "elec" ? "Une photo par index (4 obligatoires)" : "Photo (obligatoire)"}</label>
+        <div id="cpt-rap-photo-zone">${photosBlockHTML("cpt-rap", compteur, photos, peutAntidater(mountedUser))}</div>
 
         <button class="add-btn" id="cpt-rap-valider" style="width:100%;margin-top:16px;font-size:15px;padding:12px" ${complet ? "" : "disabled style=\"opacity:.5\""}>✓ Valider et suivant →</button>
         <button class="nav-btn" id="cpt-rap-passer" style="width:100%;margin-top:8px">Passer sans relever</button>
@@ -985,7 +990,7 @@ function renderRapide() {
   document.getElementById("cpt-rap-valider").addEventListener("click", async () => {
     syncValeurs();
     const statusEl = document.getElementById("cpt-rap-status");
-    if (!photosCompletes(compteur, photos)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    if (!photosCompletes(compteur, photos, mountedUser)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
     if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const aujourdHui = new Date().toISOString().slice(0, 10);
