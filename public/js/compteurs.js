@@ -18,7 +18,7 @@ import {
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
-  trouverSectionPourType, consommationMensuelle, INDEX_ELEC_ENERGIE, INDEX_ELEC_PUISSANCE,
+  trouverSectionPourType, consommationMensuelle,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -405,10 +405,7 @@ function renderCompteurRow(c) {
 function formatEcarts(compteur, ecarts) {
   if (!ecarts) return `<span class="hint">—</span>`;
   if (compteur.type === "elec") {
-    // Uniquement l'énergie (HPH/HCH/HPE/HCE) : la puissance maximale
-    // appelée (120/121/122/123) peut se réinitialiser périodiquement,
-    // une "consommation" n'a pas de sens pour ces index-là.
-    return INDEX_ELEC_ENERGIE.map(k => {
+    return INDEX_ELEC.map(k => {
       const e = ecarts[k];
       if (e === null || e === undefined || isNaN(e)) return `${k}\u00A0?`;
       return `${k}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
@@ -467,7 +464,7 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const canvas = holder.querySelector(`#cpt-hist-chart-${compteur.id}`);
   if (!canvas || !window.Chart || historique.length < 2) { if (canvas) canvas.style.display = "none"; return; }
 
-  const clesConso = compteur.type === "elec" ? INDEX_ELEC_ENERGIE : ["valeur"];
+  const clesConso = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
   const couleurs = ["#D9B24C", "#3FB6AC", "#E5533D", "#8B7CF0"];
   const parCle = clesConso.map(cle => consommationMensuelle(historique, cle, 12));
   const labels = parCle[0].map(m => m.label);
@@ -692,10 +689,6 @@ function labelPourCle(type, cle) {
   return `${cle} — ${INDEX_LABELS[cle]}`;
 }
 
-function uniteIndex(cle) {
-  return INDEX_ELEC_PUISSANCE.includes(cle) ? "kW" : "kWh";
-}
-
 function photosBlockHTML(prefix, compteur, photos) {
   return clesIndex(compteur.type).map(cle => {
     const photo = photos[cle];
@@ -837,7 +830,7 @@ function renderReleve() {
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
         <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
-          <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="${uniteIndex(k)}">
+          <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh">
         </label>
       `).join("")
     : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-r-valeur" value="${valeurs.valeur ?? ""}" placeholder="m³"></label>`;
@@ -943,7 +936,7 @@ function renderRapide() {
   const complet = photosCompletes(compteur, photos);
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
-        <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="${uniteIndex(k)}"></label>
+        <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh"></label>
       `).join("")
     : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-rap-valeur" value="${valeurs.valeur ?? ""}" placeholder="m³"></label>`;
 

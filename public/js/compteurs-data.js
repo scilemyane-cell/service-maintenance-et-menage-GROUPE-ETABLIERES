@@ -16,27 +16,20 @@ import {
 const COMPTEURS = "compteurs";
 const RELEVES = "compteurs-releves";
 
-// Index énergie (kWh), consommation par période tarifaire — Tarif Jaune/
-// Vert (bâtiments tertiaires).
-export const INDEX_ELEC_ENERGIE = ["HPH", "HCH", "HPE", "HCE"];
-// Index puissance maximale appelée cumulée (kW), codes OBIS 1.2.0 à
-// 1.2.3 — souvent affichés sans les points sur l'écran du compteur
-// ("120", "121", "122", "123"). Donnée différente de la consommation :
-// sert à vérifier si la puissance souscrite a été dépassée (pénalités
-// sur les contrats Tarif Jaune/Vert en cas de dépassement).
-export const INDEX_ELEC_PUISSANCE = ["120", "121", "122", "123"];
-export const INDEX_ELEC = [...INDEX_ELEC_ENERGIE, ...INDEX_ELEC_PUISSANCE];
+// 4 index tarifaires pour l'électricité (Tarif Jaune/Vert, bâtiments
+// tertiaires) — "120/121/122/123" sont les codes affichés directement
+// sur l'écran du compteur (l'équivalent des libellés HPH/HCH/HPE/HCE),
+// pas une donnée différente : ce sont juste deux façons de nommer les
+// mêmes 4 périodes tarifaires.
+export const INDEX_ELEC = ["120", "121", "122", "123"];
 export const INDEX_LABELS = {
-  HPH: "Heures Pleines Hiver", HCH: "Heures Creuses Hiver",
-  HPE: "Heures Pleines Été", HCE: "Heures Creuses Été",
-  "120": "Puissance max. appelée (OBIS 1.2.0)", "121": "Puissance max. appelée (OBIS 1.2.1)",
-  "122": "Puissance max. appelée (OBIS 1.2.2)", "123": "Puissance max. appelée (OBIS 1.2.3)",
+  "120": "HPH — Heures Pleines Hiver", "121": "HCH — Heures Creuses Hiver",
+  "122": "HPE — Heures Pleines Été", "123": "HCE — Heures Creuses Été",
 };
 export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Clés d'index à relever (et donc à photographier) selon le type de
-// compteur — une seule pour eau/gaz, les 8 index (4 énergie + 4
-// puissance) pour l'élec.
+// compteur — une seule pour eau/gaz, les 4 index tarifaires pour l'élec.
 export function clesIndex(type) {
   return type === "elec" ? INDEX_ELEC : ["valeur"];
 }
@@ -236,11 +229,7 @@ export function calculerEcarts(valeursRecentes, valeursPrecedentes) {
 // (vide = rien d'anormal détecté).
 export function detecterAnomalies(compteur, nouvellesValeurs, historiqueRecent = []) {
   const messages = [];
-  // Les index de puissance maximale appelée (120/121/122/123) peuvent se
-  // réinitialiser périodiquement selon le compteur (contrairement à
-  // l'énergie cumulée) — une baisse n'y est donc pas une anomalie, on ne
-  // les inclut pas dans cette vérification.
-  const cles = clesIndex(compteur.type).filter(c => !INDEX_ELEC_PUISSANCE.includes(c));
+  const cles = clesIndex(compteur.type);
   const derniereValeur = compteur.dernierReleve?.valeurs;
 
   for (const cle of cles) {

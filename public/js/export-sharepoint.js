@@ -17,7 +17,7 @@ import {
 import { esc } from "./astreinte-logic.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
-import { INDEX_ELEC, INDEX_ELEC_ENERGIE, consommationMensuelle } from "./compteurs-data.js";
+import { INDEX_ELEC, consommationMensuelle } from "./compteurs-data.js";
 
 const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 
@@ -330,7 +330,7 @@ const TYPE_LABEL_COMPTEUR = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
 async function genererPdfCompteur(compteur, releves) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
   const cles = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
-  const clesConso = compteur.type === "elec" ? INDEX_ELEC_ENERGIE : ["valeur"];
+  const clesConso = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
   const couleurs = ["#B08D46", "#3FB6AC", "#E5533D", "#8B7CF0"];
 
   const parAnnee = new Map();
