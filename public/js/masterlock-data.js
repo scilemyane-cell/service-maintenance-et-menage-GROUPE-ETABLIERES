@@ -127,6 +127,22 @@ export async function listerTousLesCodes() {
   return list;
 }
 
+// Lecture ponctuelle (pas de flux temps réel) des codes d'UN site — pour
+// le formulaire d'édition d'un dossier de site, qui charge une fois puis
+// travaille sur une copie locale comme le reste du formulaire.
+export async function listerCodesPourSite(dossierId) {
+  const q = query(collection(db, CODES), where("dossierId", "==", dossierId));
+  const snap = await getDocs(q);
+  const list = [];
+  snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
+  return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+}
+
+export const CATEGORIES_BOITE = [
+  "Accès bâtiment", "Accès chaufferie", "Accès parking", "Accès atelier",
+  "Accès salle de sport", "Accès local poubelles", "Boîte aux lettres",
+];
+
 export async function creerCode(dossierId, dossierNom, entry, user) {
   const ref = await addDoc(collection(db, CODES), {
     dossierId, dossierNom, ...entry,

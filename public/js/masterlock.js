@@ -9,19 +9,20 @@ import { esc } from "./astreinte-logic.js";
 import {
   listerSitesPourMasterlock, listerTousLesCodes, creerCode, modifierCode,
   supprimerCode, nouveauCode, listerHistoriquePourSite, importerCodesDepuisDossiers,
+  CATEGORIES_BOITE,
 } from "./masterlock-data.js";
 import { watchAssociations } from "./associations-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], codes: [], associations: [] };
-let ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set() };
+let ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set(), modeMasse: false };
 
 export async function mountMasterlock(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], codes: [], associations: [] };
-  ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set() };
+  ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set(), modeMasse: false };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
 
   watchAssociations((a) => { state.associations = a; render(); });
@@ -66,6 +67,7 @@ function formatDate(ms) {
 
 function render() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
+  if (ui.modeMasse) return renderModeMasse();
   renderListe();
 }
 
@@ -78,9 +80,10 @@ function renderListe() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Codes des boîtes à clés Masterlock par site. Chaque ajout/modification écrit directement le code dans la section "Lieux des boîtes à clés" de la fiche du dossier de site correspondant (champ Procédure).</p>
+      <p class="hint">Codes des boîtes à clés Masterlock par site. Chaque ajout/modification écrit directement le code dans la section "Lieux des boîtes à clés" de la fiche du dossier de site correspondant (champ Procédure). Les boîtes se gèrent aussi directement depuis la fiche de chaque dossier de site (section "Lieux des boîtes à clés").</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="nav-btn" id="mlk-choisir-site">➕ Ajouter un code sur un site</button>
+        <button class="nav-btn" id="mlk-mode-masse" style="border-color:var(--violet);color:var(--violet)">🔁 Modifier plusieurs codes en même temps</button>
         <button class="nav-btn" id="mlk-import" style="border-color:var(--gold);color:var(--gold)">📥 Importer les codes déjà présents dans les dossiers de site</button>
         <button class="nav-btn" id="mlk-export-recap">🖨️ Exporter le récap complet (toutes résidences)</button>
       </div>
@@ -97,6 +100,7 @@ function renderListe() {
     </div>
   `;
 
+  document.getElementById("mlk-mode-masse").addEventListener("click", () => { ui.modeMasse = true; render(); });
   document.getElementById("mlk-choisir-site").addEventListener("click", () => {
     const nom = prompt("Nom du site (tape le début du nom pour chercher) :");
     if (!nom) return;
@@ -157,6 +161,74 @@ function renderListe() {
 
   attachAddFormListeners();
   attachEditFormListeners();
+}
+
+// Mode "modification en masse" : tous les codes de tous les sites dans
+// une seule liste éditable, pour un changement général de sécurité (ex.
+// rotation annuelle de tous les codes) sans avoir à ouvrir chaque site
+// un par un. Chaque ligne modifiée se sauvegarde individuellement au
+// clic sur "Enregistrer tout" (une seule confirmation pour tout).
+function renderModeMasse() {
+  const parSite = new Map();
+  for (const c of state.codes) {
+    const site = state.sites.find(s => s.id === c.dossierId);
+    const nomSite = site?.nom || c.dossierNom || "Site inconnu";
+    if (!parSite.has(nomSite)) parSite.set(nomSite, []);
+    parSite.get(nomSite).push(c);
+  }
+  const sitesTries = [...parSite.keys()].sort((a, b) => a.localeCompare(b));
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <p class="hint" style="margin:0">🔁 Mode modification en masse — change tous les codes concernés puis clique une seule fois sur "Enregistrer tout". Chaque changement reste tracé dans l'historique de son site.</p>
+        <button class="nav-btn" id="mlk-masse-quitter">✕ Quitter ce mode</button>
+      </div>
+      ${state.codes.length === 0 ? `<p class="hint">Aucun code enregistré pour l'instant.</p>` : sitesTries.map(nomSite => `
+        <div class="form-card">
+          <h4 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🏢 ${esc(nomSite)}</h4>
+          ${parSite.get(nomSite).map(c => `
+            <div class="form-grid" data-masse-row="${c.id}" style="margin-bottom:8px;align-items:end">
+              <label>${esc(c.nom)}<input data-masse-code="${c.id}" value="${esc(c.code || "")}" inputmode="numeric" placeholder="Nouveau code"></label>
+              <label>Notes<input data-masse-notes="${c.id}" value="${esc(c.notes || "")}"></label>
+            </div>
+          `).join("")}
+        </div>
+      `).join("")}
+      <button class="add-btn" id="mlk-masse-save" style="width:fit-content" ${state.codes.length === 0 ? 'disabled style="opacity:.4"' : ''}>💾 Enregistrer tout</button>
+      <div id="mlk-masse-status" style="font-size:12px"></div>
+    </div>
+  `;
+
+  document.getElementById("mlk-masse-quitter").addEventListener("click", () => { ui.modeMasse = false; render(); });
+  document.getElementById("mlk-masse-save")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("mlk-masse-status");
+    const modifies = state.codes.filter(c => {
+      const codeInput = mountedContainer.querySelector(`[data-masse-code="${c.id}"]`);
+      const notesInput = mountedContainer.querySelector(`[data-masse-notes="${c.id}"]`);
+      return codeInput.value.trim() !== (c.code || "") || notesInput.value.trim() !== (c.notes || "");
+    });
+    if (modifies.length === 0) { statusEl.innerHTML = `<span class="hint">Aucun changement à enregistrer.</span>`; return; }
+    if (!confirm(`Enregistrer ${modifies.length} changement(s) de code ? Chacun sera tracé dans l'historique de son site.`)) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement de ${modifies.length} changement(s)…</span>`;
+    let ok = 0;
+    for (const c of modifies) {
+      const code = mountedContainer.querySelector(`[data-masse-code="${c.id}"]`).value.trim();
+      const notes = mountedContainer.querySelector(`[data-masse-notes="${c.id}"]`).value.trim();
+      try {
+        await modifierCode(c, { code, notes }, mountedUser);
+        ok++;
+      } catch (e) {
+        console.error(`Échec de la mise à jour de ${c.nom} (${c.dossierNom}) :`, e);
+      }
+    }
+    statusEl.innerHTML = ok === modifies.length
+      ? `<span style="color:var(--gold)">✓ ${ok} code(s) mis à jour.</span>`
+      : `<span style="color:var(--red)">⚠️ ${ok}/${modifies.length} enregistrés — voir la console pour le détail des échecs.</span>`;
+    await load();
+    ui.modeMasse = false;
+    render();
+  });
 }
 
 function renderSiteCard(site) {
@@ -234,11 +306,8 @@ function renderHistoriqueHTML(historique) {
 // Catégories courantes proposées en menu déroulant pour nommer une boîte
 // à clés — évite de retaper à chaque fois un nom légèrement différent
 // pour la même chose d'un site à l'autre, tout en gardant "Autre" pour
-// les cas particuliers.
-const CATEGORIES_BOITE = [
-  "Accès bâtiment", "Accès chaufferie", "Accès parking", "Accès atelier",
-  "Accès salle de sport", "Accès local poubelles", "Boîte aux lettres",
-];
+// les cas particuliers. Liste centralisée dans masterlock-data.js pour
+// être partagée avec l'éditeur intégré au formulaire de dossier de site.
 
 function selectCategorieHTML(id, valeurActuelle) {
   const estPreset = CATEGORIES_BOITE.includes(valeurActuelle);

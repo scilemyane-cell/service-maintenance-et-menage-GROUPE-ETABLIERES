@@ -8,10 +8,18 @@ import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 import { synchroniserEmplacementsCompteurs } from "./compteurs-data.js";
-import { watchCodesForSite } from "./masterlock-data.js";
+import {
+  watchCodesForSite, listerCodesPourSite, creerCode as creerCodeMasterlock,
+  modifierCode as modifierCodeMasterlock, supprimerCode as supprimerCodeMasterlock,
+  nouveauCode as nouveauCodeMasterlock, CATEGORIES_BOITE,
+} from "./masterlock-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
+// Cache local des boîtes à clés en cours d'édition (voir renderEdit) —
+// chargé une fois par dossier ouvert en modification, puis mutable
+// localement comme le reste du formulaire.
+let boitesEnEdition = { dossierId: null, liste: [] };
 let paramsWorking = null; // copie de travail de l'ordre standard, pendant l'édition
 let unsubs = [];
 let mountedContainer = null;
@@ -97,7 +105,7 @@ function render() {
 
   document.getElementById("sd-new")?.addEventListener("click", async () => {
     const id = await createDossier(nouveauDossier(state.sectionsOrder));
-    ui.openId = id; ui.mode = "edit"; render();
+    ui.openId = id; ui.mode = "edit"; boitesEnEdition = { dossierId: null, liste: [] }; render();
     window.scrollTo(0, 0);
   });
   document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
@@ -528,7 +536,7 @@ function renderView(d) {
   `;
 
   document.getElementById("sd-back").addEventListener("click", () => { ui.openId = null; render(); });
-  document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; render(); });
+  document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; boitesEnEdition = { dossierId: null, liste: [] }; render(); });
   document.getElementById("sd-preview").addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     // Ouverture synchrone de l'onglet AVANT tout await (sinon bloquée par
@@ -668,9 +676,148 @@ function renderView(d) {
 // =================================================================
 // Édition
 // =================================================================
+// Recalcule localement le texte de la section "boîte à clés" à partir
+// d'une liste de codes à jour — reproduit exactement la même logique que
+// synchroniserVersDossier() (masterlock-data.js), pour que la copie
+// locale du formulaire (data.sections) ne redevienne jamais périmée
+// après un ajout/modif/suppression de boîte, et que le bouton
+// "Enregistrer" du bas n'écrase jamais la synchronisation qui vient
+// d'avoir lieu côté serveur avec une ancienne valeur.
+function texteSectionBoites(codes) {
+  return codes.length > 0 ? codes.map(c => `${c.nom} : CODE ${c.code}`).join("\n") : "";
+}
+
+function rafraichirSectionBoitesDansData(data, codes) {
+  const idx = data.sections.findIndex(s => /boîte|boite|clé|cle|masterlock/i.test(s.titre || ""));
+  if (idx === -1) return;
+  data.sections[idx].procedure = texteSectionBoites(codes);
+  data.sections[idx].concerne = true;
+}
+
+// =================================================================
+// Éditeur intégré des boîtes à clés (section "Lieux des boîtes à
+// clés") — chaque action écrit directement dans Firestore (comme dans
+// l'onglet dédié "Codes Masterlock"), pas seulement dans la copie
+// locale du formulaire : la section se resynchronise donc toute seule
+// après chaque changement (voir synchroniserVersDossier, dans
+// masterlock-data.js), sans attendre le bouton "Enregistrer" du bas.
+function renderEditeurBoites(dossierId, dossierNom) {
+  if (boitesEnEdition.liste === null) return `<p class="hint" style="margin:8px 0">⏳ Chargement des boîtes à clés…</p>`;
+  const liste = boitesEnEdition.liste;
+  return `
+    <p class="hint" style="margin:0 0 8px">Chaque boîte est aussi visible dans l'onglet "Codes Masterlock", avec son historique de changements.</p>
+    ${liste.length === 0 ? `<p class="hint" style="margin:0 0 8px">Aucune boîte à clés pour l'instant sur ce site.</p>` : liste.map(c => `
+      <div class="form-grid" data-boite-row="${c.id}" style="margin-bottom:8px;align-items:end">
+        <label>Catégorie
+          <select data-boite-nom="${c.id}">
+            <option value="">— Choisir —</option>
+            ${CATEGORIES_BOITE.map(cat => `<option value="${esc(cat)}" ${c.nom === cat ? "selected" : ""}>${esc(cat)}</option>`).join("")}
+            <option value="__autre__" ${!CATEGORIES_BOITE.includes(c.nom) ? "selected" : ""}>Autre (préciser)…</option>
+          </select>
+          <input data-boite-nom-autre="${c.id}" value="${!CATEGORIES_BOITE.includes(c.nom) ? esc(c.nom || "") : ""}" placeholder="Nom de la boîte" style="margin-top:4px;${CATEGORIES_BOITE.includes(c.nom) ? "display:none" : ""}">
+        </label>
+        <label>Code<input data-boite-code="${c.id}" value="${esc(c.code || "")}" inputmode="numeric"></label>
+        <label>Notes<input data-boite-notes="${c.id}" value="${esc(c.notes || "")}"></label>
+        <button class="del-btn" data-boite-del="${c.id}" style="height:38px">🗑️</button>
+      </div>
+    `).join("")}
+    <button class="nav-btn" id="sd-boite-add" data-dossier-id="${dossierId}" data-dossier-nom="${esc(dossierNom)}">➕ Ajouter une boîte à clés</button>
+    <div id="sd-boite-status" style="font-size:12px;margin-top:6px"></div>
+  `;
+}
+
+function attacherEditeurBoitesListeners(dOriginal, data) {
+  if (!document.getElementById("sd-boite-add")) return; // aucune section boîte à clés sur ce dossier
+  const statusEl = document.getElementById("sd-boite-status");
+
+  mountedContainer.querySelectorAll("[data-boite-nom]").forEach(sel => {
+    const autre = mountedContainer.querySelector(`[data-boite-nom-autre="${sel.dataset.boiteNom}"]`);
+    sel.addEventListener("change", () => { autre.style.display = sel.value === "__autre__" ? "block" : "none"; });
+  });
+
+  const valeurNom = (id) => {
+    const sel = mountedContainer.querySelector(`[data-boite-nom="${id}"]`);
+    const autre = mountedContainer.querySelector(`[data-boite-nom-autre="${id}"]`);
+    return sel.value === "__autre__" ? (autre.value || "").trim() : sel.value;
+  };
+
+  mountedContainer.querySelectorAll("[data-boite-del]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Supprimer cette boîte à clés ? L'historique de ses codes précédents est conservé.")) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Suppression…</span>`;
+    try {
+      await supprimerCodeMasterlock(btn.dataset.boiteDel, dOriginal.id);
+      boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
+      rafraichirSectionBoitesDansData(data, boitesEnEdition.liste);
+      renderEdit(dOriginal, data);
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
+
+  // Un changement de nom/code/notes s'enregistre au moment où l'on
+  // quitte le champ (évite un enregistrement à chaque frappe).
+  mountedContainer.querySelectorAll("[data-boite-code], [data-boite-notes], [data-boite-nom-autre]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      const id = inp.dataset.boiteCode || inp.dataset.boiteNotes || inp.dataset.boiteNomAutre;
+      const entryActuel = boitesEnEdition.liste.find(c => c.id === id);
+      if (!entryActuel) return;
+      const nom = valeurNom(id) || entryActuel.nom;
+      const code = mountedContainer.querySelector(`[data-boite-code="${id}"]`).value.trim();
+      const notes = mountedContainer.querySelector(`[data-boite-notes="${id}"]`).value.trim();
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      try {
+        await modifierCodeMasterlock(entryActuel, { nom, code, notes }, mountedUser);
+        boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
+        rafraichirSectionBoitesDansData(data, boitesEnEdition.liste);
+        statusEl.innerHTML = `<span style="color:var(--gold)">✓ Enregistré.</span>`;
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+      }
+    });
+  });
+  mountedContainer.querySelectorAll("[data-boite-nom]").forEach(sel => sel.addEventListener("change", async () => {
+    if (sel.value === "__autre__") return; // attend la saisie du texte libre avant d'enregistrer
+    const id = sel.dataset.boiteNom;
+    const entryActuel = boitesEnEdition.liste.find(c => c.id === id);
+    if (!entryActuel) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    try {
+      await modifierCodeMasterlock(entryActuel, { nom: sel.value }, mountedUser);
+      boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
+      rafraichirSectionBoitesDansData(data, boitesEnEdition.liste);
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ Enregistré.</span>`;
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  }));
+
+  document.getElementById("sd-boite-add").addEventListener("click", async () => {
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Ajout…</span>`;
+    try {
+      const entry = nouveauCodeMasterlock();
+      await creerCodeMasterlock(dOriginal.id, dOriginal.nom, entry, mountedUser);
+      boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
+      rafraichirSectionBoitesDansData(data, boitesEnEdition.liste);
+      renderEdit(dOriginal, data);
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
+}
+
 function renderEdit(dOriginal, workingCopy) {
   const data = workingCopy || JSON.parse(JSON.stringify(dOriginal));
   data.sections.forEach(s => { if (!s.photos) s.photos = []; });
+
+  // Charge une seule fois les boîtes à clés existantes de ce site (voir
+  // le cache module boitesEnEdition) — se re-render tout seul une fois
+  // reçues, comme pour tout chargement async dans ce module.
+  if (boitesEnEdition.dossierId !== dOriginal.id) {
+    boitesEnEdition = { dossierId: dOriginal.id, liste: null }; // null = en cours de chargement
+    listerCodesPourSite(dOriginal.id).then(liste => {
+      if (boitesEnEdition.dossierId === dOriginal.id) { boitesEnEdition.liste = liste; renderEdit(dOriginal, data); }
+    });
+  }
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -733,7 +880,9 @@ function renderEdit(dOriginal, workingCopy) {
       </div>
 
       <h3 style="margin:12px 0 0;font-size:14px;color:var(--gold)">Équipements & organes techniques</h3>
-      ${data.sections.map((s, i) => `
+      ${data.sections.map((s, i) => {
+        const estBoiteACles = /boîte|boite|clé|cle|masterlock/i.test(s.titre || "");
+        return `
         <div class="form-card">
           <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px">
             <div style="display:flex;flex-direction:column;gap:2px;padding-top:6px">
@@ -746,14 +895,16 @@ function renderEdit(dOriginal, workingCopy) {
             <input data-sec-titre="${i}" value="${esc(s.titre)}" style="flex:1;font-weight:700">
             <button class="del-btn" data-del-sec="${i}">🗑️</button>
           </div>
+          ${estBoiteACles ? renderEditeurBoites(dOriginal.id, dOriginal.nom) : `
           <div class="form-grid">
             <label>Emplacement<input data-sec-emplacement="${i}" value="${esc(s.emplacement || '')}" placeholder="ex. hall d'entrée, placard technique…"></label>
             <label>Procédure / consignes<input data-sec-procedure="${i}" value="${esc(s.procedure || '')}" placeholder="ex. clé de levage requise…"></label>
           </div>
+          `}
           <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photos & documents</label>
           ${photoGalleryHTML(s, i, true)}
         </div>
-      `).join("")}
+      `;}).join("")}
       <button class="nav-btn" id="sd-add-sec">➕ Ajouter un équipement</button>
 
       <button class="add-btn" id="sd-save-bottom">💾 Enregistrer</button>
@@ -792,6 +943,7 @@ function renderEdit(dOriginal, workingCopy) {
     if (i < data.sections.length - 1) { [data.sections[i + 1], data.sections[i]] = [data.sections[i], data.sections[i + 1]]; renderEdit(dOriginal, data); }
   }));
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
+  attacherEditeurBoitesListeners(dOriginal, data);
 
   mountedContainer.querySelectorAll("[data-open-photo-picker]").forEach(btn => {
     btn.addEventListener("click", async () => {
