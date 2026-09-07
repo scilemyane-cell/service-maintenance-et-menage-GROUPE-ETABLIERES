@@ -8,6 +8,7 @@ import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
 import { synchroniserEmplacementsCompteurs } from "./compteurs-data.js";
+import { watchCodesForSite } from "./masterlock-data.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
@@ -499,6 +500,12 @@ function renderView(d) {
         </div>
       </div>
 
+      <div class="form-card" id="sd-masterlock-card" style="display:none">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🔐 Codes Masterlock</h3>
+        <div id="sd-masterlock-list"></div>
+        <p class="hint" style="margin:8px 0 0">Géré depuis l'onglet "Codes Masterlock" — mis à jour ici automatiquement.</p>
+      </div>
+
       <h3 style="margin:12px 0 0;font-size:14px;color:var(--gold)">🔧 Équipements & organes techniques</h3>
       ${concernes.length === 0 ? `<p class="hint">Aucun équipement marqué "concerné" pour l'instant.</p>` :
         concernes.map((s) => {
@@ -639,6 +646,23 @@ function renderView(d) {
   });
   attachLightboxListeners(mountedContainer);
   resolveGalleryImages(mountedContainer);
+
+  // Codes Masterlock de ce site (gérés depuis l'onglet dédié) — affichage
+  // en lecture seule ici, en temps réel : dès qu'un code est modifié
+  // dans l'autre onglet, cette fiche se met à jour toute seule.
+  watchCodesForSite(d.id, (codes) => {
+    const card = document.getElementById("sd-masterlock-card");
+    const list = document.getElementById("sd-masterlock-list");
+    if (!card || !list || !document.contains(card)) return; // la fiche a peut-être été refermée entre-temps
+    if (codes.length === 0) { card.style.display = "none"; return; }
+    card.style.display = "block";
+    list.innerHTML = codes.map(c => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span>${esc(c.nom)}${c.notes ? ` <span style="color:var(--text-dim);font-size:12px">— ${esc(c.notes)}</span>` : ""}</span>
+        <span style="font-weight:800;font-size:16px;letter-spacing:2px;color:var(--gold)">${esc(c.code || "—")}</span>
+      </div>
+    `).join("");
+  });
 }
 
 // =================================================================

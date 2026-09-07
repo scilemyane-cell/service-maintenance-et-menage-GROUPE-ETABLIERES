@@ -217,5 +217,21 @@ service cloud.firestore {
       allow create: if isEditor() || (isSignedIn() && estHorodatageRecent(request.resource.data.createdAt));
       allow update, delete: if isSuperAdmin();
     }
+    // ---- Codes Masterlock (boites a cles) par site ----
+    // Lecture ouverte a tous les connectes (les equipes ont besoin de
+    // voir les codes pour utiliser les boites). Ecriture (creation,
+    // modification, suppression) reservee aux editeurs uniquement -
+    // donnee sensible, contrairement aux relevés de compteurs. Un
+    // changement de code, une fois trace dans l'historique, n'est jamais
+    // modifiable/supprimable (integrite).
+    match /masterlock-codes/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
+    match /masterlock-historique/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isEditor();
+      allow update, delete: if isSuperAdmin();
+    }
   }
 }

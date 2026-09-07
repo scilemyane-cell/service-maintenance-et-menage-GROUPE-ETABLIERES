@@ -22,6 +22,7 @@
   import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab } from "./js/planning.js";
   import { mountSitesDossiers } from "./js/site-dossier.js";
   import { mountCompteurs } from "./js/compteurs.js";
+  import { mountMasterlock } from "./js/masterlock.js";
   import { watchCompteursAlertCount } from "./js/compteurs-data.js";
   import { mountStockProduits } from "./js/stock.js";
   import { mountStockInventaire } from "./js/stock-inventaire.js";
@@ -125,6 +126,12 @@
         ],
       },
       {
+        id: "masterlock", label: "Codes Masterlock", icon: "🔐", desc: "Boîtes à clés par site, avec récap équipe",
+        subtabs: [
+          { id: "liste", label: "Sites", icon: "🏢", roles: [...GESTION,"technicien"], mount: mountMasterlock },
+        ],
+      },
+      {
         id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
         badgeAtelier: stockAlertCount.central > 0 ? stockAlertCount.central : null,
         badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
@@ -141,8 +148,8 @@
   }
 
   function allCategories(user) {
-    const [astreinte, administration, sites, compteurs, stock] = staticCategories();
-    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, stock];
+    const [astreinte, administration, sites, compteurs, masterlock, stock] = staticCategories();
+    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, stock];
   }
 
   watchAuth((user) => {
