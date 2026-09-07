@@ -18,7 +18,7 @@ import {
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
-  trouverSectionPourType,
+  trouverSectionPourType, consommationMensuelle, INDEX_ELEC_ENERGIE, INDEX_ELEC_PUISSANCE,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -405,7 +405,10 @@ function renderCompteurRow(c) {
 function formatEcarts(compteur, ecarts) {
   if (!ecarts) return `<span class="hint">—</span>`;
   if (compteur.type === "elec") {
-    return INDEX_ELEC.map(k => {
+    // Uniquement l'énergie (HPH/HCH/HPE/HCE) : la puissance maximale
+    // appelée (120/121/122/123) peut se réinitialiser périodiquement,
+    // une "consommation" n'a pas de sens pour ces index-là.
+    return INDEX_ELEC_ENERGIE.map(k => {
       const e = ecarts[k];
       if (e === null || e === undefined || isNaN(e)) return `${k}\u00A0?`;
       return `${k}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
@@ -453,23 +456,25 @@ function renderHistoriqueHTML(historique, compteur) {
 
 let graphiquesActifs = {}; // conserve les instances Chart.js pour les détruire avant d'en recréer une
 
+// Graphique en bâtons de la consommation mensuelle sur les 12 derniers
+// mois — plus parlant qu'une courbe brute des index pour repérer une
+// tendance ou un mois anormal. Pour l'électricité, uniquement les 4
+// index d'ÉNERGIE (HPH/HCH/HPE/HCE) : les 4 index de PUISSANCE MAXIMALE
+// (120/121/122/123) ne se soustraient pas d'un mois à l'autre de la même
+// façon (ce ne sont pas des compteurs cumulatifs de consommation), ils
+// restent visibles dans le tableau d'historique mais pas dans ce graphique.
 function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const canvas = holder.querySelector(`#cpt-hist-chart-${compteur.id}`);
   if (!canvas || !window.Chart || historique.length < 2) { if (canvas) canvas.style.display = "none"; return; }
 
-  // Chart.js veut les points du plus ancien au plus récent (l'historique
-  // Firestore est trié du plus récent au plus ancien).
-  const chrono = [...historique].reverse();
-  const labels = chrono.map(r => formatDate(r.createdAt));
-  const cles = clesIndex(compteur.type);
+  const clesConso = compteur.type === "elec" ? INDEX_ELEC_ENERGIE : ["valeur"];
   const couleurs = ["#D9B24C", "#3FB6AC", "#E5533D", "#8B7CF0"];
-  const datasets = cles.map((cle, i) => ({
-    label: cle === "valeur" ? (compteur.type === "eau" ? "Index (m³)" : "Index (m³)") : `${cle} (kWh)`,
-    data: chrono.map(r => { const v = parseFloat(r.valeurs?.[cle]); return isNaN(v) ? null : v; }),
-    borderColor: couleurs[i % couleurs.length],
+  const parCle = clesConso.map(cle => consommationMensuelle(historique, cle, 12));
+  const labels = parCle[0].map(m => m.label);
+  const datasets = clesConso.map((cle, i) => ({
+    label: cle === "valeur" ? (compteur.type === "eau" ? "Conso. mensuelle (m³)" : "Conso. mensuelle (m³)") : `${cle} (kWh)`,
+    data: parCle[i].map(m => m.valeur),
     backgroundColor: couleurs[i % couleurs.length],
-    tension: 0.2,
-    spanGaps: true,
   }));
 
   const idPrecedent = canvas.dataset.chartId;
@@ -477,14 +482,14 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const chartId = compteur.id + "-" + Date.now();
   canvas.dataset.chartId = chartId;
   graphiquesActifs[chartId] = new window.Chart(canvas.getContext("2d"), {
-    type: "line",
+    type: "bar",
     data: { labels, datasets },
     options: {
       responsive: true,
-      plugins: { legend: { display: cles.length > 1 }, title: { display: true, text: "Évolution de l'index dans le temps", color: "#111" } },
+      plugins: { legend: { display: clesConso.length > 1 }, title: { display: true, text: "Consommation par mois (12 derniers mois)", color: "#111" } },
       scales: {
         x: { ticks: { color: "#333" } },
-        y: { ticks: { color: "#333" }, beginAtZero: false },
+        y: { ticks: { color: "#333" }, beginAtZero: true },
       },
     },
   });
@@ -687,6 +692,10 @@ function labelPourCle(type, cle) {
   return `${cle} — ${INDEX_LABELS[cle]}`;
 }
 
+function uniteIndex(cle) {
+  return INDEX_ELEC_PUISSANCE.includes(cle) ? "kW" : "kWh";
+}
+
 function photosBlockHTML(prefix, compteur, photos) {
   return clesIndex(compteur.type).map(cle => {
     const photo = photos[cle];
@@ -828,7 +837,7 @@ function renderReleve() {
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
         <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
-          <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh">
+          <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="${uniteIndex(k)}">
         </label>
       `).join("")
     : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-r-valeur" value="${valeurs.valeur ?? ""}" placeholder="m³"></label>`;
@@ -934,7 +943,7 @@ function renderRapide() {
   const complet = photosCompletes(compteur, photos);
   const champs = compteur.type === "elec"
     ? INDEX_ELEC.map(k => `
-        <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh"></label>
+        <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="${uniteIndex(k)}"></label>
       `).join("")
     : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-rap-valeur" value="${valeurs.valeur ?? ""}" placeholder="m³"></label>`;
 

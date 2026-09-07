@@ -16,15 +16,27 @@ import {
 const COMPTEURS = "compteurs";
 const RELEVES = "compteurs-releves";
 
-export const INDEX_ELEC = ["HPH", "HCH", "HPE", "HCE"];
+// Index énergie (kWh), consommation par période tarifaire — Tarif Jaune/
+// Vert (bâtiments tertiaires).
+export const INDEX_ELEC_ENERGIE = ["HPH", "HCH", "HPE", "HCE"];
+// Index puissance maximale appelée cumulée (kW), codes OBIS 1.2.0 à
+// 1.2.3 — souvent affichés sans les points sur l'écran du compteur
+// ("120", "121", "122", "123"). Donnée différente de la consommation :
+// sert à vérifier si la puissance souscrite a été dépassée (pénalités
+// sur les contrats Tarif Jaune/Vert en cas de dépassement).
+export const INDEX_ELEC_PUISSANCE = ["120", "121", "122", "123"];
+export const INDEX_ELEC = [...INDEX_ELEC_ENERGIE, ...INDEX_ELEC_PUISSANCE];
 export const INDEX_LABELS = {
   HPH: "Heures Pleines Hiver", HCH: "Heures Creuses Hiver",
   HPE: "Heures Pleines Été", HCE: "Heures Creuses Été",
+  "120": "Puissance max. appelée (OBIS 1.2.0)", "121": "Puissance max. appelée (OBIS 1.2.1)",
+  "122": "Puissance max. appelée (OBIS 1.2.2)", "123": "Puissance max. appelée (OBIS 1.2.3)",
 };
 export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Clés d'index à relever (et donc à photographier) selon le type de
-// compteur — une seule pour eau/gaz, les 4 index tarifaires pour l'élec.
+// compteur — une seule pour eau/gaz, les 8 index (4 énergie + 4
+// puissance) pour l'élec.
 export function clesIndex(type) {
   return type === "elec" ? INDEX_ELEC : ["valeur"];
 }
@@ -224,7 +236,11 @@ export function calculerEcarts(valeursRecentes, valeursPrecedentes) {
 // (vide = rien d'anormal détecté).
 export function detecterAnomalies(compteur, nouvellesValeurs, historiqueRecent = []) {
   const messages = [];
-  const cles = clesIndex(compteur.type);
+  // Les index de puissance maximale appelée (120/121/122/123) peuvent se
+  // réinitialiser périodiquement selon le compteur (contrairement à
+  // l'énergie cumulée) — une baisse n'y est donc pas une anomalie, on ne
+  // les inclut pas dans cette vérification.
+  const cles = clesIndex(compteur.type).filter(c => !INDEX_ELEC_PUISSANCE.includes(c));
   const derniereValeur = compteur.dernierReleve?.valeurs;
 
   for (const cle of cles) {
@@ -275,4 +291,35 @@ export function watchCompteursAlertCount(callback) {
     });
     callback(n);
   }, (err) => { console.error("watchCompteursAlertCount:", err); callback(0); });
+}
+
+// Consommation par mois calendaire sur les N derniers mois (12 par
+// défaut), pour un index donné — utilisée pour le graphique en bâtons
+// (préféré à une courbe brute des index). Pour chaque mois, on prend la
+// dernière valeur connue avant la fin du mois moins la dernière valeur
+// connue avant son début ; un mois sans donnée suffisante renvoie null
+// plutôt que 0 (pour ne pas laisser croire à une consommation nulle).
+export function consommationMensuelle(releves, cle, nbMois = 12) {
+  const chrono = [...releves].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const valeurAvant = (ms) => {
+    let derniere = null;
+    for (const r of chrono) {
+      if ((r.createdAt || 0) >= ms) break;
+      const v = parseFloat(r.valeurs?.[cle]);
+      if (!isNaN(v)) derniere = v;
+    }
+    return derniere;
+  };
+
+  const maintenant = new Date();
+  const mois = [];
+  for (let i = nbMois - 1; i >= 0; i--) {
+    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1);
+    const fin = new Date(maintenant.getFullYear(), maintenant.getMonth() - i + 1, 1);
+    const avant = valeurAvant(debut.getTime());
+    const apres = valeurAvant(fin.getTime());
+    const conso = (avant !== null && apres !== null) ? Math.max(0, apres - avant) : null;
+    mois.push({ label: debut.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }), valeur: conso });
+  }
+  return mois;
 }

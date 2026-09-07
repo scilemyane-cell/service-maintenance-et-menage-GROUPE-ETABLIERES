@@ -17,6 +17,7 @@ import {
 import { esc } from "./astreinte-logic.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { INDEX_ELEC, INDEX_ELEC_ENERGIE, consommationMensuelle } from "./compteurs-data.js";
 
 const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 
@@ -255,7 +256,7 @@ async function extraireRelevesCompteurs() {
   snap.forEach(d => {
     const r = d.data();
     const valeurs = r.type === "elec"
-      ? ["HPH", "HCH", "HPE", "HCE"].map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
+      ? INDEX_ELEC.map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
       : `${r.valeurs?.valeur ?? "?"} m³`;
     lignes.push({
       Date: r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "",
@@ -282,7 +283,7 @@ async function extraireRelevesParSite() {
     const r = d.data();
     const nomSite = r.dossierNom || "Site inconnu";
     const valeurs = r.type === "elec"
-      ? ["HPH", "HCH", "HPE", "HCE"].map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
+      ? INDEX_ELEC.map(k => `${k}=${r.valeurs?.[k] ?? "?"}`).join(" / ")
       : `${r.valeurs?.valeur ?? "?"} m³`;
     if (!parSite.has(nomSite)) parSite.set(nomSite, []);
     parSite.get(nomSite).push({
@@ -322,16 +323,15 @@ function anneeScolaire(ms) {
 }
 
 const TYPE_LABEL_COMPTEUR = { eau: "Eau", gaz: "Gaz", elec: "Électricité" };
-const INDEX_ELEC_EXPORT = ["HPH", "HCH", "HPE", "HCE"];
 
-// PDF détaillé d'UN SEUL compteur : courbe d'évolution de l'index dans le
-// temps, puis l'historique complet des relevés découpé par année
-// scolaire (la plus récente en premier).
+// PDF détaillé d'UN SEUL compteur : graphique en bâtons de la
+// consommation mensuelle sur 12 mois, puis l'historique complet des
+// relevés découpé par année scolaire (la plus récente en premier).
 async function genererPdfCompteur(compteur, releves) {
   if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
-  const cles = compteur.type === "elec" ? INDEX_ELEC_EXPORT : ["valeur"];
+  const cles = compteur.type === "elec" ? INDEX_ELEC : ["valeur"];
+  const clesConso = compteur.type === "elec" ? INDEX_ELEC_ENERGIE : ["valeur"];
   const couleurs = ["#B08D46", "#3FB6AC", "#E5533D", "#8B7CF0"];
-  const chrono = [...releves].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
   const parAnnee = new Map();
   [...releves].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).forEach(r => {
@@ -351,7 +351,7 @@ async function genererPdfCompteur(compteur, releves) {
         <span style="font-size:11px;color:#666">Groupe Établières · Service Maintenance et Ménage</span>
       </div>
       <p style="font-size:11px;color:#666;margin:0 0 18px">${esc(TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type)}${compteur.emplacement ? " · " + esc(compteur.emplacement) : ""} · Généré le ${esc(new Date().toLocaleString("fr-FR"))}</p>
-      ${chrono.length >= 2 ? `<canvas id="cpt-export-chart" width="900" height="280" style="width:100%;max-width:900px;margin-bottom:20px"></canvas>` : ""}
+      ${releves.length >= 2 ? `<canvas id="cpt-export-chart" width="900" height="280" style="width:100%;max-width:900px;margin-bottom:20px"></canvas>` : ""}
       ${releves.length === 0 ? `<p style="font-size:13px;color:#666">Aucun relevé enregistré pour l'instant.</p>` : anneesTriees.map(annee => `
         <h3 style="font-size:14px;margin:18px 0 8px;border-bottom:2px solid #B08D46;padding-bottom:4px">Année scolaire ${esc(annee)}</h3>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);width:100%">
@@ -379,19 +379,22 @@ async function genererPdfCompteur(compteur, releves) {
   const cible = hidden.firstElementChild;
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
+  // Graphique en bâtons de la consommation mensuelle sur 12 mois — pas de
+  // notion de "consommation" pour les index de puissance maximale
+  // (120/121/122/123), exclus ici (clesConso).
   let chart = null;
-  if (chrono.length >= 2 && window.Chart) {
+  if (releves.length >= 2 && window.Chart) {
     const canvas = hidden.querySelector("#cpt-export-chart");
-    const datasets = cles.map((cle, i) => ({
-      label: cle === "valeur" ? "Index (m³)" : `${cle} (kWh)`,
-      data: chrono.map(r => { const v = parseFloat(r.valeurs?.[cle]); return isNaN(v) ? null : v; }),
-      borderColor: couleurs[i % couleurs.length], backgroundColor: couleurs[i % couleurs.length],
-      tension: 0.2, spanGaps: true,
+    const parCle = clesConso.map(cle => consommationMensuelle(releves, cle, 12));
+    const datasets = clesConso.map((cle, i) => ({
+      label: cle === "valeur" ? "Conso. mensuelle (m³)" : `${cle} (kWh)`,
+      data: parCle[i].map(m => m.valeur),
+      backgroundColor: couleurs[i % couleurs.length],
     }));
     chart = new window.Chart(canvas.getContext("2d"), {
-      type: "line",
-      data: { labels: chrono.map(r => r.createdAt ? new Date(r.createdAt).toLocaleDateString("fr-FR") : ""), datasets },
-      options: { responsive: false, animation: false, plugins: { legend: { display: cles.length > 1 }, title: { display: true, text: "Évolution de l'index" } } },
+      type: "bar",
+      data: { labels: parCle[0].map(m => m.label), datasets },
+      options: { responsive: false, animation: false, plugins: { legend: { display: clesConso.length > 1 }, title: { display: true, text: "Consommation par mois (12 derniers mois)" } }, scales: { y: { beginAtZero: true } } },
     });
     await new Promise(resolve => setTimeout(resolve, 200)); // laisse Chart.js finir de dessiner avant la capture
   }
