@@ -78,7 +78,7 @@ function renderListe() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Codes des boîtes à clés Masterlock par site. Ils apparaissent aussi, en lecture seule, sur la fiche du dossier de site correspondant.</p>
+      <p class="hint">Codes des boîtes à clés Masterlock par site. Chaque ajout/modification écrit directement le code dans la section "Lieux des boîtes à clés" de la fiche du dossier de site correspondant (champ Procédure).</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="nav-btn" id="mlk-choisir-site">➕ Ajouter un code sur un site</button>
         <button class="nav-btn" id="mlk-import" style="border-color:var(--gold);color:var(--gold)">📥 Importer les codes déjà présents dans les dossiers de site</button>
@@ -140,7 +140,7 @@ function renderListe() {
     const c = state.codes.find(x => x.id === btn.dataset.delCode);
     if (!c) return;
     if (!confirm(`Supprimer "${c.nom}" (${c.dossierNom}) ? L'historique des codes précédents est conservé.`)) return;
-    try { await supprimerCode(c.id); await load(); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    try { await supprimerCode(c.id, c.dossierId); await load(); } catch (e) { alert("Erreur : " + (e.message || e)); }
   }));
   mountedContainer.querySelectorAll("[data-toggle-hist]").forEach(btn => btn.addEventListener("click", async () => {
     const dossierId = btn.dataset.toggleHist;

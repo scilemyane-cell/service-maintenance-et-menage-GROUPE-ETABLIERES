@@ -15,9 +15,50 @@ import {
   doc, addDoc, updateDoc, getDocs, onSnapshot,
   collection, query, where,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
 
 const CODES = "masterlock-codes";
 const HISTORIQUE = "masterlock-historique";
+
+// Trouve, parmi les sections d'un dossier de site, celle correspondant
+// aux boîtes à clés ("Lieux des boîtes à clés" est une des 16 sections
+// standard présentes sur chaque dossier — voir SECTIONS_STANDARD).
+export function trouverSectionMasterlock(sections) {
+  const mots = ["boîte", "boite", "clé", "cle", "masterlock"];
+  return (sections || []).find(s => mots.some(m => (s.titre || "").toLowerCase().includes(m))) || null;
+}
+
+// Écrit RÉELLEMENT le(s) code(s) actuel(s) de ce site dans la fiche du
+// dossier (section "Lieux des boîtes à clés" — champ Procédure), au lieu
+// de se contenter d'un simple affichage à côté. Régénère l'intégralité
+// du texte à partir de TOUS les codes actifs du site (pas seulement
+// celui qui vient de changer), pour rester cohérent si un site a
+// plusieurs boîtes. Marque aussi la section comme "concernée". Échec
+// silencieux si le dossier n'a pas (ou plus) de section correspondante,
+// pour ne jamais faire échouer l'enregistrement du code lui-même.
+async function synchroniserVersDossier(dossierId) {
+  try {
+    const [dossier, codesActuels] = await Promise.all([
+      getDossierUnique(dossierId),
+      listerTousLesCodes(),
+    ]);
+    if (!dossier) return;
+    const sections = dossier.sections || [];
+    const section = trouverSectionMasterlock(sections);
+    if (!section) return;
+
+    const codesDuSite = codesActuels.filter(c => c.dossierId === dossierId);
+    section.concerne = true;
+    section.procedure = codesDuSite.length > 0
+      ? codesDuSite.map(c => `${c.nom} : CODE ${c.code}`).join("\n")
+      : "";
+
+    const { id, ...donnees } = dossier; // setDoc remplace tout le document : ne jamais réinjecter "id" dedans
+    await saveDossier(dossierId, { ...donnees, sections });
+  } catch (e) {
+    console.error("Synchronisation du code Masterlock vers le dossier de site échouée :", e);
+  }
+}
 
 export function nouveauCode() {
   return {
@@ -98,6 +139,7 @@ export async function creerCode(dossierId, dossierNom, entry, user) {
       modifieParNom: user?.nom || user?.email || "Inconnu", at: Date.now(),
     });
   }
+  await synchroniserVersDossier(dossierId);
   return ref.id;
 }
 
@@ -114,10 +156,12 @@ export async function modifierCode(entryActuel, patch, user) {
       modifieParNom: nomAffiche, at: Date.now(),
     });
   }
+  await synchroniserVersDossier(entryActuel.dossierId);
 }
 
-export async function supprimerCode(id) {
+export async function supprimerCode(id, dossierId) {
   await updateDoc(doc(db, CODES, id), { supprimeLe: Date.now() });
+  if (dossierId) await synchroniserVersDossier(dossierId);
 }
 
 export async function listerHistoriquePourSite(dossierId) {
