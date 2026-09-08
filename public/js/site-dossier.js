@@ -811,11 +811,16 @@ function renderEditeurBoites(dossierId, dossierNom) {
               <button data-boite-photo-del="${c.id}:${pi}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>
             </div>
           `).join("")}
-          <button class="nav-btn" data-boite-photo-add="${c.id}" style="padding:6px 10px;font-size:11px">📷 Ajouter une photo</button>
         </div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="nav-btn" data-boite-photo-add="${c.id}" data-mode="camera" style="padding:6px 10px;font-size:11px">📷 Prendre une photo</button>
+          <button class="nav-btn" data-boite-photo-add="${c.id}" data-mode="file" style="padding:6px 10px;font-size:11px">📎 Importer un fichier</button>
+        </div>
+        <div data-boite-upload-status="${c.id}" style="font-size:11px;margin-top:4px"></div>
       </div>
     `).join("")}
-    <input type="file" accept="image/*" capture="environment" id="sd-boite-photo-input" style="display:none">
+    <input type="file" accept="image/*" capture="environment" id="sd-boite-photo-input-camera" style="display:none">
+    <input type="file" id="sd-boite-photo-input-file" style="display:none">
     <button class="nav-btn" id="sd-boite-add" data-dossier-id="${dossierId}" data-dossier-nom="${esc(dossierNom)}">➕ Ajouter une boîte à clés</button>
     <div id="sd-boite-status" style="font-size:12px;margin-top:6px"></div>
   `;
@@ -850,41 +855,48 @@ function attacherEditeurBoitesListeners(dOriginal, data) {
   }));
 
   // Photo(s) par boîte — une galerie propre à chaque boîte, stockée sur
+  // Photo(s) par boîte — une galerie propre à chaque boîte, stockée sur
   // son enregistrement Masterlock (pas sur la section partagée du
   // dossier, qui ne pouvait avant afficher qu'une seule galerie commune
-  // à toutes les boîtes).
-  const photoInput = document.getElementById("sd-boite-photo-input");
+  // à toutes les boîtes). Mêmes deux options (caméra / fichier) que les
+  // autres galeries du dossier, pour rester cohérent visuellement.
+  const inputCamera = document.getElementById("sd-boite-photo-input-camera");
+  const inputFile = document.getElementById("sd-boite-photo-input-file");
   mountedContainer.querySelectorAll("[data-boite-photo-add]").forEach(btn => btn.addEventListener("click", async () => {
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
+    const id = btn.dataset.boitePhotoAdd;
+    const uploadStatusEl = mountedContainer.querySelector(`[data-boite-upload-status="${id}"]`);
+    const input = btn.dataset.mode === "file" ? inputFile : inputCamera;
+    uploadStatusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
     try {
       const token = await getAccessToken(); // en réaction directe au clic, sinon bloqué par le navigateur
-      statusEl.innerHTML = "";
-      photoInput.dataset.readyToken = token;
-      photoInput.dataset.boiteId = btn.dataset.boitePhotoAdd;
-      photoInput.click();
+      uploadStatusEl.innerHTML = "";
+      input.dataset.readyToken = token;
+      input.dataset.boiteId = id;
+      input.click();
     } catch (e) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+      uploadStatusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
     }
   }));
-  photoInput?.addEventListener("change", async (e) => {
+  [inputCamera, inputFile].forEach(input => input?.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const id = e.target.dataset.boiteId;
+    const uploadStatusEl = mountedContainer.querySelector(`[data-boite-upload-status="${id}"]`);
     const entryActuel = boitesEnEdition.liste.find(c => c.id === id);
     if (!entryActuel) return;
-    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
+    uploadStatusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
     try {
-      const { url, itemId, name } = await uploadToDrive(
+      const { url, itemId, isImage, name } = await uploadToDrive(
         file, e.target.dataset.readyToken, [dOriginal.nom, "Codes Masterlock", entryActuel.nom], undefined
       );
-      const photos = [...(entryActuel.photos || []), { url, itemId, name }];
+      const photos = [...(entryActuel.photos || []), { url, itemId, isImage, name }];
       await modifierCodeMasterlock(entryActuel, { photos }, mountedUser);
       boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
       renderEdit(dOriginal, data);
     } catch (err) {
-      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
+      uploadStatusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
     }
-  });
+  }));
   mountedContainer.querySelectorAll("[data-boite-photo-del]").forEach(btn => btn.addEventListener("click", async () => {
     const [id, indexStr] = btn.dataset.boitePhotoDel.split(":");
     const entryActuel = boitesEnEdition.liste.find(c => c.id === id);
