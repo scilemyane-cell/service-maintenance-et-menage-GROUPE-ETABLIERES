@@ -1058,18 +1058,16 @@ function renderEdit(dOriginal, workingCopy) {
             <input data-sec-titre="${i}" value="${esc(s.titre)}" style="flex:1;font-weight:700">
             <button class="del-btn" data-del-sec="${i}">🗑️</button>
           </div>
-          ${estBoiteACles ? renderEditeurBoites(dOriginal.id, dOriginal.nom) : `
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);margin-bottom:8px">
-            <input type="checkbox" data-sec-multilignes="${i}" ${s.multiLignes ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--gold)">
+            <input type="checkbox" data-sec-multilignes="${i}" ${estBoiteACles || s.multiLignes ? 'checked' : ''} ${estBoiteACles ? 'disabled title="Toujours activé pour une section boîte à clés"' : ''} style="width:16px;height:16px;accent-color:var(--gold)">
             Plusieurs éléments dans cette section (ex. plusieurs baies de brassage, plusieurs extincteurs…), chacun avec sa propre photo
           </label>
-          ${s.multiLignes ? renderLignesEditor(s, i) : `
+          ${estBoiteACles ? renderEditeurBoites(dOriginal.id, dOriginal.nom) : (s.multiLignes ? renderLignesEditor(s, i) : `
           <div class="form-grid">
             <label>Emplacement<input data-sec-emplacement="${i}" value="${esc(s.emplacement || '')}" placeholder="ex. hall d'entrée, placard technique…"></label>
             <label>Procédure / consignes<input data-sec-procedure="${i}" value="${esc(s.procedure || '')}" placeholder="ex. clé de levage requise…"></label>
           </div>
-          `}
-          `}
+          `)}
           ${!estBoiteACles && !s.multiLignes ? `
           <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photos & documents</label>
           ${photoGalleryHTML(s, i, true)}
