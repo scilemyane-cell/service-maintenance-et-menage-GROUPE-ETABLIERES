@@ -18,6 +18,7 @@ import { esc } from "./astreinte-logic.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { consommationMensuelle, clesIndex } from "./compteurs-data.js";
+import { listerTousLesCodes } from "./masterlock-data.js";
 
 const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 
@@ -475,6 +476,89 @@ async function exporterPdfParCompteur(token, dernieresEmpreintes) {
   }
 }
 
+// ---- Codes Masterlock (avec logo, meme style visuel que le recap
+// imprimable de l'onglet dedie) ----
+
+async function genererPdfMasterlock(codes) {
+  if (!window.html2pdf) throw new Error("Librairie PDF non chargée (vérifier app.html)");
+  const parSite = new Map();
+  codes.forEach(c => {
+    const nomSite = c.dossierNom || "Site inconnu";
+    if (!parSite.has(nomSite)) parSite.set(nomSite, []);
+    parSite.get(nomSite).push(c);
+  });
+  const sitesTries = [...parSite.keys()].sort((a, b) => a.localeCompare(b));
+
+  const carteCode = (c) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 10px;border:1px solid #e2ddd0;border-radius:6px;background:#FAF8F3;margin-bottom:4px">
+      <div style="min-width:0">
+        <p style="margin:0;font-weight:700;font-size:12px;color:#222">${esc(c.nom)}</p>
+        ${c.notes ? `<p style="margin:0;font-size:10px;color:#777">${esc(c.notes)}</p>` : ""}
+      </div>
+      <div style="flex:none;background:#B08D46;color:#fff;font-weight:800;font-size:16px;letter-spacing:2px;border-radius:5px;padding:3px 12px;white-space:nowrap">${esc(c.code || "—")}</div>
+    </div>
+  `;
+
+  const html = `
+    <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;width:100%">
+      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:14px 20px;display:flex;align-items:center;gap:14px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:40px;background:#fff;border-radius:6px;padding:4px">
+        <div>
+          <p style="margin:0;color:#D9B24C;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
+          <h1 style="margin:1px 0 0;color:#fff;font-size:17px">Codes Masterlock — Récapitulatif</h1>
+        </div>
+      </div>
+      <div style="padding:14px 20px">
+        <p style="margin:0 0 10px;font-size:10px;color:#a00;font-weight:700;background:#fdecea;border:1px solid #f5c6c1;border-radius:5px;padding:5px 10px;display:inline-block">Document sensible — usage interne uniquement. Généré le ${esc(new Date().toLocaleString("fr-FR"))}.</p>
+        ${sitesTries.length === 0 ? `<p style="font-size:13px;color:#666">Aucun code enregistré pour l'instant.</p>` : sitesTries.map(nomSite => `
+          <div style="border:1px solid #ddd;border-radius:8px;padding:8px 10px;margin-bottom:8px;break-inside:avoid">
+            <h4 style="margin:0 0 5px;font-size:12px;color:#111;border-bottom:1.5px solid #B08D46;padding-bottom:3px">${esc(nomSite)}</h4>
+            ${parSite.get(nomSite).map(carteCode).join("")}
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  const hidden = document.createElement("div");
+  hidden.style.cssText = "position:fixed;top:0;left:0;width:800px;opacity:0.01;pointer-events:none;z-index:-1;";
+  document.body.appendChild(hidden);
+  hidden.innerHTML = html;
+  const cible = hidden.firstElementChild;
+  try {
+    return await window.html2pdf()
+      .set({
+        margin: 10, filename: "Codes_masterlock.pdf",
+        image: { type: "jpeg", quality: 0.92 },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(cible)
+      .outputPdf("blob");
+  } finally {
+    hidden.remove();
+  }
+}
+
+async function exporterCodesMasterlock(token, dernieresEmpreintes) {
+  const codes = await listerTousLesCodes();
+  const blob = await genererPdfMasterlock(codes);
+  const nomFichier = "Codes_masterlock.pdf";
+  const dossierSegments = ["Codes Masterlock"];
+
+  const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
+  await uploadToDrive(fileActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+
+  const cleEmpreinte = "CodesMasterlock";
+  const emp = empreinte(codes.map(c => ({ nom: c.nom, code: c.code, notes: c.notes, site: c.dossierNom })));
+  if (dernieresEmpreintes[cleEmpreinte] !== emp) {
+    const nomArchive = `Codes_masterlock_${todayStr()}.pdf`;
+    const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
+    await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
+    dernieresEmpreintes[cleEmpreinte] = emp;
+  }
+}
+
 // ---- Orchestration ----
 
 const MODULES = [
@@ -506,6 +590,7 @@ export async function runDailyExportIfNeeded() {
     }
     await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
     await exporterPdfParCompteur(token, dernieresEmpreintes);
+    await exporterCodesMasterlock(token, dernieresEmpreintes);
 
     await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
   } catch (e) {
@@ -530,6 +615,8 @@ export async function exporterMaintenant(getTokenInteractif, onProgress) {
   await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
   onProgress?.("Relevés de compteurs (un PDF par compteur, avec courbe)");
   await exporterPdfParCompteur(token, dernieresEmpreintes);
+  onProgress?.("Codes Masterlock");
+  await exporterCodesMasterlock(token, dernieresEmpreintes);
   await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
 }
 

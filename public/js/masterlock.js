@@ -429,12 +429,12 @@ function exporterRecap(sites) {
   if (groupes.length === 0) { alert("Aucun code à exporter pour le moment."); return; }
 
   const carteCode = (c) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 14px;border:1px solid #e2ddd0;border-radius:8px;background:#FAF8F3;margin-bottom:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 10px;border:1px solid #e2ddd0;border-radius:6px;background:#FAF8F3;margin-bottom:4px">
       <div style="min-width:0">
-        <p style="margin:0;font-weight:700;font-size:13px;color:#222">${esc(c.nom)}</p>
-        ${c.notes ? `<p style="margin:2px 0 0;font-size:11px;color:#777">${esc(c.notes)}</p>` : ""}
+        <p style="margin:0;font-weight:700;font-size:12px;color:#222">${esc(c.nom)}</p>
+        ${c.notes ? `<p style="margin:0;font-size:10px;color:#777">${esc(c.notes)}</p>` : ""}
       </div>
-      <div style="flex:none;background:#B08D46;color:#fff;font-weight:800;font-size:20px;letter-spacing:3px;border-radius:6px;padding:6px 16px;white-space:nowrap">${esc(c.code || "—")}</div>
+      <div style="flex:none;background:#B08D46;color:#fff;font-weight:800;font-size:16px;letter-spacing:2px;border-radius:5px;padding:3px 12px;white-space:nowrap">${esc(c.code || "—")}</div>
     </div>
   `;
 
@@ -442,8 +442,8 @@ function exporterRecap(sites) {
     const codes = state.codes.filter(c => c.dossierId === site.id);
     if (codes.length === 0) return "";
     return `
-      <div style="border:1px solid #ddd;border-radius:10px;padding:14px 16px;margin-bottom:12px;break-inside:avoid;page-break-inside:avoid">
-        <h4 style="margin:0 0 8px;font-size:14px;color:#111;border-bottom:2px solid #B08D46;padding-bottom:6px">🔐 ${esc(site.nom)}</h4>
+      <div style="border:1px solid #ddd;border-radius:8px;padding:8px 10px;margin-bottom:8px;break-inside:avoid;page-break-inside:avoid">
+        <h4 style="margin:0 0 5px;font-size:12px;color:#111;border-bottom:1.5px solid #B08D46;padding-bottom:3px">🔐 ${esc(site.nom)}</h4>
         ${codes.map(carteCode).join("")}
       </div>
     `;
@@ -451,22 +451,24 @@ function exporterRecap(sites) {
 
   const html = `
     <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:0;color:#111;overflow:hidden">
-      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:24px 28px;display:flex;align-items:center;gap:18px">
-        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:56px;background:#fff;border-radius:8px;padding:6px">
+      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:14px 20px;display:flex;align-items:center;gap:14px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:40px;background:#fff;border-radius:6px;padding:4px">
         <div>
-          <p style="margin:0;color:#D9B24C;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
-          <h1 style="margin:2px 0 0;color:#fff;font-size:22px">🔐 Codes Masterlock — Récapitulatif</h1>
+          <p style="margin:0;color:#D9B24C;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
+          <h1 style="margin:1px 0 0;color:#fff;font-size:17px">🔐 Codes Masterlock — Récapitulatif</h1>
         </div>
       </div>
-      <div style="padding:20px 28px">
-        <p style="margin:0 0 18px;font-size:11px;color:#a00;font-weight:700;background:#fdecea;border:1px solid #f5c6c1;border-radius:6px;padding:8px 12px;display:inline-block">⚠️ Document sensible — usage interne uniquement. Exporté le ${formatDate(Date.now())}.</p>
-        ${groupes.map(g => `
-          <h2 style="margin:20px 0 10px;font-size:16px;color:#B08D46;border-bottom:1px solid #eee;padding-bottom:6px">${esc(g.assocLabel)}</h2>
-          ${g.groups.map(sub => `
-            ${sub.groupeLabel ? `<p style="margin:8px 0 8px;font-weight:700;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.5px">${esc(sub.groupeLabel)}</p>` : ""}
-            ${sub.sites.map(carteSite).join("")}
+      <div style="padding:12px 20px">
+        <p style="margin:0 0 10px;font-size:10px;color:#a00;font-weight:700;background:#fdecea;border:1px solid #f5c6c1;border-radius:5px;padding:5px 10px;display:inline-block">⚠️ Document sensible — usage interne uniquement. Exporté le ${formatDate(Date.now())}.</p>
+        <div style="columns:2;column-gap:16px">
+          ${groupes.map(g => `
+            <h2 style="margin:12px 0 6px;font-size:14px;color:#B08D46;border-bottom:1px solid #eee;padding-bottom:4px;break-after:avoid">${esc(g.assocLabel)}</h2>
+            ${g.groups.map(sub => `
+              ${sub.groupeLabel ? `<p style="margin:5px 0 5px;font-weight:700;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px">${esc(sub.groupeLabel)}</p>` : ""}
+              ${sub.sites.map(carteSite).join("")}
+            `).join("")}
           `).join("")}
-        `).join("")}
+        </div>
       </div>
     </div>
   `;
