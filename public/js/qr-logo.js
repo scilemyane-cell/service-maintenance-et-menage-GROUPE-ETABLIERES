@@ -19,11 +19,21 @@ function loadLogo() {
 
 // container : élément DOM vide dans lequel dessiner le QR (comme pour un
 // new QRCode(container, ...) classique). text : contenu encodé. size :
-// largeur/hauteur en pixels (carré).
-export async function renderQrWithLogo(container, text, size = 220) {
+// largeur/hauteur en pixels (carré). sansLogo : à activer pour les petits
+// formats (ex. étiquettes en grille) — en dessous d'une certaine taille,
+// le logo devient minuscule et flou, et mange une portion du QR déjà
+// dense (URL longue) qui devient alors difficile à scanner ; mieux vaut
+// un QR propre et net sans logo qu'un QR encombré et illisible.
+export async function renderQrWithLogo(container, text, size = 220, sansLogo = false) {
   container.innerHTML = "";
   if (!window.QRCode) { container.textContent = "Librairie QR non chargée."; return; }
-  new window.QRCode(container, { text, width: size, height: size, correctLevel: window.QRCode.CorrectLevel.H });
+  // Le niveau H (~30% de redondance) n'est nécessaire QUE pour tolérer le
+  // logo qui recouvre le centre — sans logo, un niveau M (~15%) suffit et
+  // réduit sensiblement la densité du QR pour la même donnée encodée (donc
+  // plus lisible, surtout à petite taille).
+  const correctLevel = sansLogo ? window.QRCode.CorrectLevel.M : window.QRCode.CorrectLevel.H;
+  new window.QRCode(container, { text, width: size, height: size, correctLevel });
+  if (sansLogo) return;
 
   try {
     const logo = await loadLogo();
