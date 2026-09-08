@@ -104,8 +104,7 @@ async function genererEtImprimer() {
 
   const estPetit = state.type === "produits" || state.type === "articlesSite";
   const colonnes = estPetit ? 3 : 2;
-  const taille = estPetit ? 150 : 190; // taille d'affichage/impression (physique, en px CSS)
-  const resolutionInterne = estPetit ? 320 : 420; // résolution réelle du QR dessiné, toujours plus fine que la taille affichée pour un rendu net à l'impression (l'agrandissement d'un QR trop petit à la source est ce qui le rendait flou/brouillé)
+  const taille = estPetit ? 150 : 190; // le rendu SVG est net à n'importe quelle taille, plus besoin de sur-dimensionner en interne avant de réduire
 
   const titreFeuille = { produits: "Étiquettes QR — Produits", sites: "Fiches QR — Dossiers de site", articlesSite: "Étiquettes QR — Stock déporté" }[state.type];
 
@@ -130,18 +129,10 @@ async function genererEtImprimer() {
   printRoot.innerHTML = html;
   document.body.appendChild(printRoot);
 
-  // Les QR se dessinent dans des <canvas> créés dynamiquement par
-  // qrcodejs — il faut attendre que chacun soit prêt avant d'imprimer,
-  // sinon certaines cases resteraient vides sur le papier. Rendu à
-  // resolutionInterne (plus fine que la taille affichée) puis mis à
-  // l'échelle en CSS pour un résultat net plutôt que pixelisé/brouillé.
-  // Le logo Établières reste présent partout, y compris les étiquettes.
-  await Promise.all(items.map(async (it, i) => {
-    const holder = document.getElementById(`qm-qr-${i}`);
-    await renderQrWithLogo(holder, payloadPour(it), resolutionInterne);
-    const canvas = holder.querySelector("canvas");
-    if (canvas) { canvas.style.width = "100%"; canvas.style.height = "100%"; }
-  }));
+  // Les QR se dessinent en SVG (vectoriel, net à n'importe quelle taille)
+  // — il faut attendre que chacun soit prêt avant d'imprimer, sinon
+  // certaines cases resteraient vides sur le papier.
+  await Promise.all(items.map((it, i) => renderQrWithLogo(document.getElementById(`qm-qr-${i}`), payloadPour(it), taille)));
 
   statusEl.innerHTML = "";
   window.print();

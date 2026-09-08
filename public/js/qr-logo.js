@@ -1,75 +1,51 @@
 // qr-logo.js
-// Génère un QR code avec le logo du Groupe Établières incrusté au centre
-// (sur un fond blanc arrondi, pour rester lisible), réutilisé par tous
-// les écrans qui génèrent un QR (stock, dossiers de site...). Le niveau
-// de correction d'erreur est réglé sur H (~30%) — c'est ce qui permet au
-// QR de rester scannable malgré la portion centrale recouverte par le
-// logo ; un niveau plus bas romprait la lecture.
+// Génère un QR code avec le logo du Groupe Établières incrusté au centre,
+// réutilisé par tous les écrans qui génèrent un QR (stock, dossiers de
+// site, compteurs, masterlock, impression en masse...).
+//
+// Rendu en SVG (librairie qr-code-styling) plutôt qu'en <canvas>
+// (qrcodejs, utilisé auparavant) : un SVG est vectoriel, donc net à
+// n'importe quelle taille d'affichage ou d'impression — fini l'effet
+// flou/pixelisé d'un raster dessiné petit puis agrandi. Le niveau de
+// correction d'erreur est réglé sur H (~30%) — c'est ce qui permet au QR
+// de rester scannable malgré la portion centrale recouverte par le logo ;
+// un niveau plus bas romprait la lecture. Sans logo (sansLogo=true), un
+// niveau M (~15%) suffit et réduit la densité du QR pour la même donnée.
 
-let cachedLogo = null;
-function loadLogo() {
-  if (cachedLogo) return Promise.resolve(cachedLogo);
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => { cachedLogo = img; resolve(img); };
-    img.onerror = reject;
-    img.src = "img/logo-etablieres.png";
-  });
-}
-
-// container : élément DOM vide dans lequel dessiner le QR (comme pour un
-// new QRCode(container, ...) classique). text : contenu encodé. size :
-// largeur/hauteur en pixels (carré). sansLogo : à activer pour les petits
-// formats (ex. étiquettes en grille) — en dessous d'une certaine taille,
-// le logo devient minuscule et flou, et mange une portion du QR déjà
-// dense (URL longue) qui devient alors difficile à scanner ; mieux vaut
-// un QR propre et net sans logo qu'un QR encombré et illisible.
+// container : élément DOM vide dans lequel dessiner le QR. text : contenu
+// encodé. size : largeur/hauteur en pixels (carré). sansLogo : pour un
+// QR sans logo incrusté (voir plus haut).
 export async function renderQrWithLogo(container, text, size = 220, sansLogo = false) {
   container.innerHTML = "";
-  if (!window.QRCode) { container.textContent = "Librairie QR non chargée."; return; }
-  // Le niveau H (~30% de redondance) n'est nécessaire QUE pour tolérer le
-  // logo qui recouvre le centre — sans logo, un niveau M (~15%) suffit et
-  // réduit sensiblement la densité du QR pour la même donnée encodée (donc
-  // plus lisible, surtout à petite taille).
-  const correctLevel = sansLogo ? window.QRCode.CorrectLevel.M : window.QRCode.CorrectLevel.H;
-  new window.QRCode(container, { text, width: size, height: size, correctLevel });
-  if (sansLogo) return;
+  if (!window.QRCodeStyling) { container.textContent = "Librairie QR non chargée."; return; }
 
-  try {
-    const logo = await loadLogo();
-    const canvas = container.querySelector("canvas");
-    // Repli silencieux : anciens navigateurs sans support canvas (qrcodejs
-    // rend alors en <table>) — le QR reste valide, simplement sans logo.
-    if (!canvas || !container.isConnected) return;
-    const ctx = canvas.getContext("2d");
-
-    // Le logo Établières est rectangulaire (large), pas carré : on le
-    // fait tenir dans une boîte carrée en conservant ses proportions
-    // (comme un "object-fit: contain") au lieu de l'étirer en carré, ce
-    // qui le déformait auparavant.
-    const boxSize = size * 0.26;
-    const ratio = logo.naturalWidth && logo.naturalHeight ? logo.naturalWidth / logo.naturalHeight : 1;
-    let logoW = boxSize, logoH = boxSize;
-    if (ratio > 1) logoH = boxSize / ratio; else logoW = boxSize * ratio;
-    const x = (size - logoW) / 2;
-    const y = (size - logoH) / 2;
-    const pad = size * 0.03;
-    const bx = (size - boxSize) / 2 - pad, by = (size - boxSize) / 2 - pad, bw = boxSize + pad * 2, bh = boxSize + pad * 2, r = 8;
-
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.moveTo(bx + r, by);
-    ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
-    ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
-    ctx.arcTo(bx, by + bh, bx, by, r);
-    ctx.arcTo(bx, by, bx + bw, by, r);
-    ctx.closePath();
-    ctx.fill();
-    ctx.drawImage(logo, x, y, logoW, logoH);
-  } catch (e) {
-    // Logo indisponible (hors-ligne, etc.) : le QR généré juste avant
-    // reste parfaitement valide et scannable, simplement sans logo.
+  const options = {
+    width: size, height: size, type: "svg", data: text, margin: 0,
+    qrOptions: { errorCorrectionLevel: sansLogo ? "M" : "H" },
+    dotsOptions: { color: "#000000", type: "square" },
+    backgroundOptions: { color: "#ffffff" },
+  };
+  if (!sansLogo) {
+    // Le logo Établières est rectangulaire (large), pas carré :
+    // imageSize s'applique proportionnellement, sans le déformer.
+    options.image = "img/logo-etablieres.png";
+    options.imageOptions = { crossOrigin: "anonymous", margin: Math.round(size * 0.02), imageSize: 0.24, hideBackgroundDots: true };
   }
+
+  const qr = new window.QRCodeStyling(options);
+  try {
+    // getRawData() attend la génération complète (y compris le
+    // chargement du logo) avant de résoudre — on l'appelle d'abord pour
+    // être sûr que append() affiche directement le rendu final, jamais
+    // une version intermédiaire sans logo.
+    await qr.getRawData("svg");
+  } catch (e) {
+    // Logo indisponible (hors-ligne, etc.) : on affiche quand même le QR
+    // déjà généré juste après, qui reste parfaitement valide et
+    // scannable, simplement sans logo.
+  }
+  if (!container.isConnected) return; // l'écran a peut-être changé entre-temps
+  qr.append(container);
 }
 
 // Imprime UNIQUEMENT la carte QR passée en paramètre (élément portant la
@@ -81,9 +57,9 @@ export async function renderQrWithLogo(container, text, size = 220, sansLogo = f
 // la carte dans un conteneur dédié ajouté directement à <body>, et on
 // masque le reste de l'application via #app pendant l'impression — une
 // seule page, propre, quelle que soit la taille de l'écran d'origine.
-// Le contenu du <canvas> du QR (dessiné en JS, jamais présent dans le
-// HTML) est converti en image avant le clonage, sinon il apparaîtrait
-// vide sur la copie.
+// Le QR étant un <svg> (contrairement à l'ancien <canvas>), il se clone
+// tel quel sans perdre son contenu — plus besoin de le convertir en image
+// avant le clonage.
 export function printQrCard(card) {
   if (!card) { window.print(); return; }
 
@@ -99,24 +75,19 @@ export function printQrCard(card) {
   clone.style.display = "block";
   clone.querySelectorAll("button").forEach(b => b.remove()); // inutile sur le papier
 
+  // Repli de sécurité pour un éventuel ancien rendu resté en <canvas>
+  // (ne devrait plus se produire avec le moteur SVG actuel).
   const sourceCanvas = card.querySelector("canvas");
   const cloneCanvas = clone.querySelector("canvas");
   if (sourceCanvas && cloneCanvas) {
     const img = document.createElement("img");
     img.src = sourceCanvas.toDataURL("image/png");
-    img.width = sourceCanvas.width;
-    img.height = sourceCanvas.height;
     img.style.width = sourceCanvas.width + "px";
     img.style.height = sourceCanvas.height + "px";
     img.style.display = "block";
     img.style.margin = "0 auto";
     cloneCanvas.replaceWith(img);
   }
-  // Le fallback interne de qrcodejs (une <img> cachée en display:none,
-  // utilisée pour la sauvegarde d'image sur d'anciens navigateurs) ne
-  // doit jamais apparaître à l'impression — retiré explicitement plutôt
-  // que de compter sur son display:none d'origine.
-  clone.querySelectorAll("img[alt='Scan me!']").forEach(el => el.remove());
 
   const printRoot = document.createElement("div");
   printRoot.id = "qr-print-root";
