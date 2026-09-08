@@ -1,5 +1,5 @@
 // compteurs.js
-// Nouvel onglet indépendant "🎛️ Relevé compteur" : relevés eau/gaz/
+// Nouvel onglet indépendant "🚰 Relevé compteur" : relevés eau/gaz/
 // électricité par site, avec photo obligatoire à chaque relevé et QR
 // code par compteur (ouvre directement le formulaire de relevé depuis
 // l'appareil photo du téléphone, hors appli). Historique complet
@@ -286,7 +286,7 @@ function renderListe() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Relevés eau, gaz, électricité par site, avec photo obligatoire à chaque relevé — activable depuis la fiche d'un dossier de site ("🎛️ Ce site a des compteurs à relever").</p>
+      <p class="hint">Relevés eau, gaz, électricité par site, avec photo obligatoire à chaque relevé — activable depuis la fiche d'un dossier de site ("🚰 Ce site a des compteurs à relever").</p>
       ${pendingCount > 0 ? `
         <div class="stat-chip" style="width:fit-content;border-color:var(--gold);color:var(--gold)">
           📡 ${pendingCount} relevé(s) enregistré(s) sur cet appareil, en attente d'envoi (pas de réseau au moment de la saisie) — envoi automatique dès le retour de connexion.
