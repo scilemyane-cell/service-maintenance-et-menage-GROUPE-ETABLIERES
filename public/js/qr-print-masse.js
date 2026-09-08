@@ -103,8 +103,8 @@ async function genererEtImprimer() {
   statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération de ${items.length} QR code(s)…</span>`;
 
   const estPetit = state.type === "produits" || state.type === "articlesSite";
-  const colonnes = estPetit ? 4 : 2;
-  const taille = estPetit ? 110 : 190; // taille d'affichage/impression (physique, en px CSS)
+  const colonnes = estPetit ? 3 : 2;
+  const taille = estPetit ? 150 : 190; // taille d'affichage/impression (physique, en px CSS)
   const resolutionInterne = estPetit ? 320 : 420; // résolution réelle du QR dessiné, toujours plus fine que la taille affichée pour un rendu net à l'impression (l'agrandissement d'un QR trop petit à la source est ce qui le rendait flou/brouillé)
 
   const titreFeuille = { produits: "Étiquettes QR — Produits", sites: "Fiches QR — Dossiers de site", articlesSite: "Étiquettes QR — Stock déporté" }[state.type];
@@ -133,14 +133,12 @@ async function genererEtImprimer() {
   // Les QR se dessinent dans des <canvas> créés dynamiquement par
   // qrcodejs — il faut attendre que chacun soit prêt avant d'imprimer,
   // sinon certaines cases resteraient vides sur le papier. Rendu à
-  // resolutionInterne (plus fin que la taille affichée) puis mis à
+  // resolutionInterne (plus fine que la taille affichée) puis mis à
   // l'échelle en CSS pour un résultat net plutôt que pixelisé/brouillé.
-  // Pas de logo sur les petites étiquettes : à cette taille il devient
-  // minuscule et flou, et mange une portion d'un QR déjà dense (URL
-  // longue) — mieux vaut un QR propre sans logo qu'illisible avec.
+  // Le logo Établières reste présent partout, y compris les étiquettes.
   await Promise.all(items.map(async (it, i) => {
     const holder = document.getElementById(`qm-qr-${i}`);
-    await renderQrWithLogo(holder, payloadPour(it), resolutionInterne, estPetit);
+    await renderQrWithLogo(holder, payloadPour(it), resolutionInterne);
     const canvas = holder.querySelector("canvas");
     if (canvas) { canvas.style.width = "100%"; canvas.style.height = "100%"; }
   }));
