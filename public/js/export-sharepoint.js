@@ -476,6 +476,19 @@ async function exporterPdfParCompteur(token, dernieresEmpreintes) {
   }
 }
 
+// Attend que toutes les images d'un conteneur aient fini de charger (ou
+// aient échoué) avant de continuer — html2canvas peut sinon capturer la
+// page avant qu'une image (ex. le logo) ait eu le temps de s'afficher,
+// laissant un espace vide dans le PDF généré.
+function attendreImages(container) {
+  const imgs = [...container.querySelectorAll("img")];
+  return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+    img.addEventListener("load", resolve, { once: true });
+    img.addEventListener("error", resolve, { once: true }); // on continue quand même plutôt que de bloquer indéfiniment
+    setTimeout(resolve, 3000); // filet de sécurité
+  })));
+}
+
 // ---- Codes Masterlock (avec logo, meme style visuel que le recap
 // imprimable de l'onglet dedie) ----
 
@@ -525,6 +538,7 @@ async function genererPdfMasterlock(codes) {
   document.body.appendChild(hidden);
   hidden.innerHTML = html;
   const cible = hidden.firstElementChild;
+  await attendreImages(cible); // sinon html2canvas peut capturer avant la fin du chargement du logo
   try {
     return await window.html2pdf()
       .set({
