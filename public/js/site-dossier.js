@@ -207,6 +207,63 @@ function photoGalleryHTML(section, sectionIndex, editable) {
   `;
 }
 
+// Galerie photo d'UNE LIGNE au sein d'une section "à plusieurs éléments"
+// (voir renderLignesEditor) — même mécanisme que photoGalleryHTML pour
+// une section entière, mais adressé par une clé composée "si_li" (index
+// de section, index de ligne) au lieu d'un simple index de section.
+function ligneGalleryHTML(ligne, si, li) {
+  const photos = ligne.photos || [];
+  const key = `${si}_${li}`;
+  return `
+    <div class="sd-gallery" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+      ${photos.map((p, pi) => `
+        <div style="position:relative">
+          ${p.isImage !== false
+            ? (p.itemId
+                ? `<img data-resolve-img="${esc(p.itemId)}" data-lightbox-photo="${esc(p.itemId)}" alt="${esc(p.name || 'Photo')}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--panel-alt)" onerror="this.style.opacity=0.3">`
+                : `<img src="${esc(p.url)}" data-lightbox-static="${esc(p.url)}" alt="${esc(p.name || 'Photo')}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border)" onerror="this.style.opacity=0.3">`)
+            : `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="width:64px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);text-decoration:none;color:var(--text);font-size:18px;padding:4px;text-align:center">
+                📄<span style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${esc(p.name || 'Document')}</span>
+              </a>`}
+          <button data-del-photo="${key}-${pi}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>
+        </div>
+      `).join("")}
+    </div>
+    <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+      <button type="button" class="nav-btn" data-open-photo-picker="${key}" data-mode="camera" style="font-size:11px">📷 Photo</button>
+      <button type="button" class="nav-btn" data-open-photo-picker="${key}" data-mode="file" style="font-size:11px">📎 Fichier</button>
+      <input type="file" accept="image/*" capture="environment" data-hidden-file-input="${key}" data-mode="camera" style="display:none">
+      <input type="file" data-hidden-file-input="${key}" data-mode="file" style="display:none">
+    </div>
+    <div data-upload-status="${key}" style="font-size:11px;margin-top:4px"></div>
+  `;
+}
+
+// Éditeur générique "plusieurs lignes" pour une section — chaque ligne a
+// un nom libre, un emplacement/valeur, des notes, et sa propre galerie
+// photo. Contrairement aux boîtes à clés (qui ont leur propre collection
+// Firestore dédiée avec historique), ces lignes sont de simples données
+// libres stockées directement dans la section du dossier, enregistrées
+// avec le reste du formulaire au clic sur "Enregistrer".
+function renderLignesEditor(section, si) {
+  const lignes = section.lignes || [];
+  return `
+    ${lignes.length === 0 ? `<p class="hint" style="margin:0 0 8px">Aucune ligne pour l'instant.</p>` : lignes.map((ligne, li) => `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div class="form-grid" style="align-items:end">
+          <label>Nom<input data-ligne-titre="${si}_${li}" value="${esc(ligne.titre || '')}" placeholder="ex. Baie de brassage RDC"></label>
+          <label>Emplacement / valeur<input data-ligne-valeur="${si}_${li}" value="${esc(ligne.valeur || '')}" placeholder="ex. local informatique"></label>
+          <label>Notes<input data-ligne-notes="${si}_${li}" value="${esc(ligne.notes || '')}"></label>
+          <button class="del-btn" data-del-ligne="${si}_${li}" style="height:38px">🗑️</button>
+        </div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin:8px 0 0">Photo(s) de cette ligne</label>
+        ${ligneGalleryHTML(ligne, si, li)}
+      </div>
+    `).join("")}
+    <button type="button" class="nav-btn" data-add-ligne="${si}">➕ Ajouter une ligne</button>
+  `;
+}
+
 function lightboxHTML() {
   if (!ui.lightbox) return "";
   return `
@@ -288,14 +345,28 @@ export function printFicheHtml(d) {
         ${concernes.map(s => `
           <div style="margin-bottom:14px;page-break-inside:avoid">
             <p style="font-size:12px;font-weight:700;margin:0 0 3px">${esc(s.titre)}</p>
-            ${s.emplacement ? `<p style="font-size:11px;margin:0 0 2px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
-            ${s.procedure ? `<p style="font-size:11px;margin:0 0 4px;color:#555"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
-            ${(s.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${s.photos.map(p => p.isImage !== false
-              ? (p.itemId
-                  ? `<img data-resolve-img="${esc(p.itemId)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`
-                  : `<img src="${esc(p.url)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`)
-              : `<span style="display:inline-block;padding:6px 10px;border:1px solid #999;border-radius:4px;font-size:10px">📄 ${esc(p.name || 'Document')}</span>`
-            ).join("")}</div>` : ""}
+            ${s.multiLignes ? (s.lignes || []).map((ligne, li) => `
+              <div style="margin:4px 0 8px;padding-left:8px;border-left:2px solid #ccc">
+                <p style="font-size:11px;font-weight:700;margin:0 0 2px">${esc(ligne.titre || `Ligne ${li + 1}`)}</p>
+                ${ligne.valeur ? `<p style="font-size:11px;margin:0 0 2px"><b>Emplacement :</b> ${esc(ligne.valeur)}</p>` : ""}
+                ${ligne.notes ? `<p style="font-size:11px;margin:0 0 4px;color:#555">${esc(ligne.notes)}</p>` : ""}
+                ${(ligne.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${ligne.photos.map(p => p.isImage !== false
+                  ? (p.itemId
+                      ? `<img data-resolve-img="${esc(p.itemId)}" alt="${esc(p.name || '')}" style="width:90px;height:90px;object-fit:cover;border:1px solid #999;border-radius:4px">`
+                      : `<img src="${esc(p.url)}" alt="${esc(p.name || '')}" style="width:90px;height:90px;object-fit:cover;border:1px solid #999;border-radius:4px">`)
+                  : `<span style="display:inline-block;padding:6px 10px;border:1px solid #999;border-radius:4px;font-size:10px">📄 ${esc(p.name || 'Document')}</span>`
+                ).join("")}</div>` : ""}
+              </div>
+            `).join("") : `
+              ${s.emplacement ? `<p style="font-size:11px;margin:0 0 2px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
+              ${s.procedure ? `<p style="font-size:11px;margin:0 0 4px;color:#555"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
+              ${(s.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${s.photos.map(p => p.isImage !== false
+                ? (p.itemId
+                    ? `<img data-resolve-img="${esc(p.itemId)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`
+                    : `<img src="${esc(p.url)}" alt="${esc(p.name || '')}" style="width:110px;height:110px;object-fit:cover;border:1px solid #999;border-radius:4px">`)
+                : `<span style="display:inline-block;padding:6px 10px;border:1px solid #999;border-radius:4px;font-size:10px">📄 ${esc(p.name || 'Document')}</span>`
+              ).join("")}</div>` : ""}
+            `}
           </div>
         `).join("")}
         <p style="font-size:10px;color:#666;margin-top:16px">Ce document doit rester consultable librement par tout intervenant extérieur, technicien de maintenance, prestataire ou service de secours dès son arrivée sur site.</p>
@@ -521,9 +592,20 @@ function renderView(d) {
           return `
           <div class="form-card">
             <h4 style="margin:0 0 6px;font-size:14px">${esc(s.titre)}</h4>
-            ${s.emplacement ? `<p style="font-size:13px;margin:0 0 4px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
-            ${s.procedure ? `<p style="font-size:13px;margin:0 0 4px;color:var(--text-dim)"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
-            ${photoGalleryHTML(s, si, false)}
+            ${s.multiLignes ? `
+              ${(s.lignes || []).map((ligne, li) => `
+                <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px;first-child:border:none">
+                  <p style="font-size:13px;margin:0 0 2px;font-weight:700">${esc(ligne.titre || `Ligne ${li + 1}`)}</p>
+                  ${ligne.valeur ? `<p style="font-size:13px;margin:0 0 2px"><b>Emplacement :</b> ${esc(ligne.valeur)}</p>` : ""}
+                  ${ligne.notes ? `<p style="font-size:13px;margin:0 0 4px;color:var(--text-dim)">${esc(ligne.notes)}</p>` : ""}
+                  ${photoGalleryHTML(ligne, `${si}_${li}`, false)}
+                </div>
+              `).join("") || `<p class="hint">Aucune ligne renseignée.</p>`}
+            ` : `
+              ${s.emplacement ? `<p style="font-size:13px;margin:0 0 4px"><b>Emplacement :</b> ${esc(s.emplacement)}</p>` : ""}
+              ${s.procedure ? `<p style="font-size:13px;margin:0 0 4px;color:var(--text-dim)"><b>Procédure :</b> ${esc(s.procedure)}</p>` : ""}
+              ${photoGalleryHTML(s, si, false)}
+            `}
           </div>`;
         }).join("")}
 
@@ -872,7 +954,11 @@ function attacherEditeurBoitesListeners(dOriginal, data) {
 
 function renderEdit(dOriginal, workingCopy) {
   const data = workingCopy || JSON.parse(JSON.stringify(dOriginal));
-  data.sections.forEach(s => { if (!s.photos) s.photos = []; });
+  data.sections.forEach(s => {
+    if (!s.photos) s.photos = [];
+    if (s.multiLignes && !s.lignes) s.lignes = [];
+    (s.lignes || []).forEach(l => { if (!l.photos) l.photos = []; });
+  });
 
   // Charge une seule fois les boîtes à clés existantes de ce site (voir
   // le cache module boitesEnEdition) — se re-render tout seul une fois
@@ -961,13 +1047,21 @@ function renderEdit(dOriginal, workingCopy) {
             <button class="del-btn" data-del-sec="${i}">🗑️</button>
           </div>
           ${estBoiteACles ? renderEditeurBoites(dOriginal.id, dOriginal.nom) : `
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);margin-bottom:8px">
+            <input type="checkbox" data-sec-multilignes="${i}" ${s.multiLignes ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--gold)">
+            Plusieurs éléments dans cette section (ex. plusieurs baies de brassage, plusieurs extincteurs…), chacun avec sa propre photo
+          </label>
+          ${s.multiLignes ? renderLignesEditor(s, i) : `
           <div class="form-grid">
             <label>Emplacement<input data-sec-emplacement="${i}" value="${esc(s.emplacement || '')}" placeholder="ex. hall d'entrée, placard technique…"></label>
             <label>Procédure / consignes<input data-sec-procedure="${i}" value="${esc(s.procedure || '')}" placeholder="ex. clé de levage requise…"></label>
           </div>
           `}
+          `}
+          ${!estBoiteACles && !s.multiLignes ? `
           <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photos & documents</label>
           ${photoGalleryHTML(s, i, true)}
+          ` : ""}
         </div>
       `;}).join("")}
       <button class="nav-btn" id="sd-add-sec">➕ Ajouter un équipement</button>
@@ -998,6 +1092,36 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-sec-concerne]").forEach(cb => cb.addEventListener("change", () => { data.sections[cb.dataset.secConcerne].concerne = cb.checked; }));
   mountedContainer.querySelectorAll("[data-sec-emplacement]").forEach(inp => inp.addEventListener("input", () => { data.sections[inp.dataset.secEmplacement].emplacement = inp.value; }));
   mountedContainer.querySelectorAll("[data-sec-procedure]").forEach(inp => inp.addEventListener("input", () => { data.sections[inp.dataset.secProcedure].procedure = inp.value; }));
+  mountedContainer.querySelectorAll("[data-sec-multilignes]").forEach(cb => cb.addEventListener("change", () => {
+    const s = data.sections[cb.dataset.secMultilignes];
+    s.multiLignes = cb.checked;
+    if (s.multiLignes && !s.lignes) s.lignes = [];
+    renderEdit(dOriginal, data);
+  }));
+  mountedContainer.querySelectorAll("[data-ligne-titre]").forEach(inp => inp.addEventListener("input", () => {
+    const [si, li] = inp.dataset.ligneTitre.split("_").map(Number);
+    data.sections[si].lignes[li].titre = inp.value;
+  }));
+  mountedContainer.querySelectorAll("[data-ligne-valeur]").forEach(inp => inp.addEventListener("input", () => {
+    const [si, li] = inp.dataset.ligneValeur.split("_").map(Number);
+    data.sections[si].lignes[li].valeur = inp.value;
+  }));
+  mountedContainer.querySelectorAll("[data-ligne-notes]").forEach(inp => inp.addEventListener("input", () => {
+    const [si, li] = inp.dataset.ligneNotes.split("_").map(Number);
+    data.sections[si].lignes[li].notes = inp.value;
+  }));
+  mountedContainer.querySelectorAll("[data-add-ligne]").forEach(btn => btn.addEventListener("click", () => {
+    const si = parseInt(btn.dataset.addLigne, 10);
+    if (!data.sections[si].lignes) data.sections[si].lignes = [];
+    data.sections[si].lignes.push({ titre: "", valeur: "", notes: "", photos: [] });
+    renderEdit(dOriginal, data);
+  }));
+  mountedContainer.querySelectorAll("[data-del-ligne]").forEach(btn => btn.addEventListener("click", () => {
+    const [si, li] = btn.dataset.delLigne.split("_").map(Number);
+    if (!confirm("Supprimer cette ligne (et ses photos, dont les fichiers déjà envoyés sur SharePoint ne seront pas retirés automatiquement) ?")) return;
+    data.sections[si].lignes.splice(li, 1);
+    renderEdit(dOriginal, data);
+  }));
   mountedContainer.querySelectorAll("[data-del-sec]").forEach(btn => btn.addEventListener("click", () => { data.sections.splice(parseInt(btn.dataset.delSec, 10), 1); renderEdit(dOriginal, data); }));
   mountedContainer.querySelectorAll("[data-move-up]").forEach(btn => btn.addEventListener("click", () => {
     const i = parseInt(btn.dataset.moveUp, 10);
@@ -1010,12 +1134,25 @@ function renderEdit(dOriginal, workingCopy) {
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
   attacherEditeurBoitesListeners(dOriginal, data);
 
+  // Résout la "cible" d'une clé de galerie photo — soit une section
+  // entière (clé "si"), soit une ligne précise au sein d'une section à
+  // plusieurs éléments (clé "si_li", voir renderLignesEditor).
+  function resolverCiblePhoto(key) {
+    const [siStr, liStr] = key.split("_");
+    const si = parseInt(siStr, 10);
+    const section = data.sections[si];
+    if (liStr === undefined) return { cible: section, dossierSegments: [data.nom, section.titre] };
+    const li = parseInt(liStr, 10);
+    const ligne = section.lignes[li];
+    return { cible: ligne, dossierSegments: [data.nom, section.titre, ligne.titre || `Ligne ${li + 1}`] };
+  }
+
   mountedContainer.querySelectorAll("[data-open-photo-picker]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const si = parseInt(btn.dataset.openPhotoPicker, 10);
+      const key = btn.dataset.openPhotoPicker;
       const mode = btn.dataset.mode;
-      const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
-      const fileInput = mountedContainer.querySelector(`[data-hidden-file-input="${si}"][data-mode="${mode}"]`);
+      const statusEl = mountedContainer.querySelector(`[data-upload-status="${key}"]`);
+      const fileInput = mountedContainer.querySelector(`[data-hidden-file-input="${key}"][data-mode="${mode}"]`);
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion à Microsoft…</span>`;
       try {
         // La connexion Google DOIT être demandée en tout premier, en
@@ -1034,14 +1171,14 @@ function renderEdit(dOriginal, workingCopy) {
     input.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const si = parseInt(input.dataset.hiddenFileInput, 10);
-      const statusEl = mountedContainer.querySelector(`[data-upload-status="${si}"]`);
+      const key = input.dataset.hiddenFileInput;
+      const statusEl = mountedContainer.querySelector(`[data-upload-status="${key}"]`);
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
       try {
-        const { url, itemId, isImage, name } = await uploadToDrive(
-          file, input.dataset.readyToken, [data.nom, data.sections[si].titre]
-        );
-        data.sections[si].photos.push({ url, itemId, isImage, name });
+        const { cible, dossierSegments } = resolverCiblePhoto(key);
+        const { url, itemId, isImage, name } = await uploadToDrive(file, input.dataset.readyToken, dossierSegments);
+        if (!cible.photos) cible.photos = [];
+        cible.photos.push({ url, itemId, isImage, name });
         renderEdit(dOriginal, data);
       } catch (err) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
@@ -1050,8 +1187,12 @@ function renderEdit(dOriginal, workingCopy) {
   });
   mountedContainer.querySelectorAll("[data-del-photo]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const [si, pi] = btn.dataset.delPhoto.split("-").map(Number);
-      const photo = data.sections[si].photos[pi];
+      const raw = btn.dataset.delPhoto;
+      const lastDash = raw.lastIndexOf("-");
+      const key = raw.slice(0, lastDash);
+      const pi = parseInt(raw.slice(lastDash + 1), 10);
+      const { cible } = resolverCiblePhoto(key);
+      const photo = cible.photos[pi];
       if (!confirm(`Supprimer définitivement "${photo.name || 'ce fichier'}" ?`)) return;
       btn.disabled = true;
       if (photo.itemId) {
@@ -1063,7 +1204,7 @@ function renderEdit(dOriginal, workingCopy) {
           return;
         }
       }
-      data.sections[si].photos.splice(pi, 1);
+      cible.photos.splice(pi, 1);
       renderEdit(dOriginal, data);
     });
   });
