@@ -233,5 +233,15 @@ service cloud.firestore {
       allow create: if isEditor();
       allow update, delete: if isSuperAdmin();
     }
+    // ---- Previsionnel travaux/investissement (budget, conseil d'administration) ----
+    // Lecture ouverte a tous les connectes ; creation ouverte a tous
+    // (un technicien peut signaler un besoin repere sur le terrain) ;
+    // modification/suppression reservees aux editeurs (Frederic et son
+    // niveau de supervision gerent le budget final).
+    match /previsionnel-travaux/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isEditor();
+    }
   }
 }

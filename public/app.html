@@ -45,6 +45,7 @@
   import { runDailyExportIfNeeded } from "./js/export-sharepoint.js";
   import { mountExportSharepointAdmin } from "./js/export-sharepoint-admin.js";
   import { mountQrMasse } from "./js/qr-print-masse.js";
+  import { mountPrevisionnel } from "./js/previsionnel.js";
   import { mountCorbeille } from "./js/corbeille.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
@@ -135,6 +136,12 @@
         ],
       },
       {
+        id: "previsionnel", label: "Prévisionnel Travaux", icon: "📋", desc: "Budget travaux/investissement, pour le conseil d'administration",
+        subtabs: [
+          { id: "liste", label: "Besoins", icon: "📋", roles: [...GESTION,"technicien"], mount: mountPrevisionnel },
+        ],
+      },
+      {
         id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
         badgeAtelier: stockAlertCount.central > 0 ? stockAlertCount.central : null,
         badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
@@ -151,8 +158,8 @@
   }
 
   function allCategories(user) {
-    const [astreinte, administration, sites, compteurs, masterlock, stock] = staticCategories();
-    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, stock];
+    const [astreinte, administration, sites, compteurs, masterlock, previsionnel, stock] = staticCategories();
+    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, stock];
   }
 
   watchAuth((user) => {
