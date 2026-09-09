@@ -554,19 +554,23 @@ function renderDocPreview() {
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Intervenant</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Site</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Type</th>
-          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Description</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Arrivée</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Retour</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Compte-rendu</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Nuit</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Prime dim.</th>
         </tr></thead>
         <tbody>
-          ${filtered.length === 0 ? `<tr><td colspan="8" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
+          ${filtered.length === 0 ? `<tr><td colspan="10" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
             filtered.map(i => `
               <tr>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${new Date(i.date).toLocaleDateString("fr-FR")}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.technicien)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.site)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.type)}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${esc(i.heureDebut || "—")}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${esc(i.heureFin || "—")}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.description)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heures}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heuresNuit > 0 ? i.heuresNuit.toFixed(2) + "h" : ""}</td>
@@ -575,7 +579,7 @@ function renderDocPreview() {
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
-            <td colspan="5" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
+            <td colspan="7" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${total.toFixed(2)} h</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${totalNuit.toFixed(2)} h</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${totalPrimes > 0 ? totalPrimes + "€" : "0€"}</td>
