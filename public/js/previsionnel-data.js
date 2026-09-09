@@ -45,7 +45,7 @@ export function nouvelleLigne() {
 // année civile, "2025-2026" pour une année scolaire (1er septembre au
 // 31 août).
 export function formatAnneeVisee(ligne) {
-  if (ligne.typeAnnee === "scolaire") return `${ligne.anneeVisee}-${ligne.anneeVisee + 1}`;
+  if (ligne.typeAnnee === "scolaire") return `${ligne.anneeVisee}/${ligne.anneeVisee + 1}`;
   return String(ligne.anneeVisee);
 }
 
