@@ -30,6 +30,7 @@ export function activerGlisserDeposer(container, selector, onReorder) {
 
     handle.addEventListener("pointerdown", (e) => {
       e.preventDefault();
+      delete item.dataset.dragMoved;
       const estLigneTableau = item.tagName === "TR";
       const rect = item.getBoundingClientRect();
       const startX = e.clientX, startY = e.clientY;
@@ -74,6 +75,7 @@ export function activerGlisserDeposer(container, selector, onReorder) {
       document.body.style.userSelect = "none";
 
       const onMove = (ev) => {
+        item.dataset.dragMoved = "1";
         ghostWrapper.style.top = (rect.top + (ev.clientY - startY)) + "px";
         ghostWrapper.style.left = (rect.left + (ev.clientX - startX)) + "px";
         for (const el of items()) {
@@ -94,6 +96,10 @@ export function activerGlisserDeposer(container, selector, onReorder) {
         item.style.display = ""; item.style.opacity = "";
         ghostWrapper.remove();
         document.body.style.userSelect = "";
+        // Laisse le temps à un éventuel écouteur "click" du contenu de la
+        // ligne (ex. bouton "ouvrir") de vérifier ce marqueur pour ignorer
+        // le clic qui suit un vrai glissement, avant de le retirer.
+        if (item.dataset.dragMoved) setTimeout(() => { delete item.dataset.dragMoved; }, 300);
         onReorder(items().map(el => parseInt(el.dataset.dragIndex, 10)));
       };
       document.addEventListener("pointermove", onMove);

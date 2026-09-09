@@ -79,6 +79,14 @@ export function nouveauDossier(sectionsOrder) {
   };
 }
 
+// Enregistre un nouvel ordre d'affichage (glisser-déposer) pour une liste
+// de dossiers de site d'un coup — même principe que definirOrdreProduits
+// (stock-data.js). L'ordre ne compte qu'au sein d'un même sous-groupe
+// (association/groupe), affiché comme une liste indépendante à l'écran.
+export async function definirOrdreDossiers(paires) {
+  await Promise.all(paires.map(({ id, ordre }) => updateDoc(doc(db, "sites-dossiers", id), { ordre })));
+}
+
 export async function createDossier(data) {
   const ref = await addDoc(collection(db, "sites-dossiers"), data);
   return ref.id;

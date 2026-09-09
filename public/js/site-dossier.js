@@ -1,7 +1,7 @@
 import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
-  watchSectionsOrder, saveSectionsOrder,
+  watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
@@ -41,6 +41,18 @@ export function mountSitesDossiers(container, user) {
   unsubs.push(watchSectionsOrder((s) => { state.sectionsOrder = s; render(); }));
 }
 
+// Trie une liste de dossiers selon l'ordre manuel défini par glisser-
+// déposer (voir definirOrdreDossiers) — les dossiers sans ordre défini
+// (jamais réordonnés) restent groupés à la fin, triés alphabétiquement.
+function triParOrdre(liste) {
+  return [...liste].sort((a, b) => {
+    if (a.ordre != null && b.ordre != null) return a.ordre - b.ordre;
+    if (a.ordre != null) return -1;
+    if (b.ordre != null) return 1;
+    return (a.nom || "").localeCompare(b.nom || "");
+  });
+}
+
 function groupedDossiers() {
   const result = [];
   const usedIds = new Set();
@@ -49,13 +61,13 @@ function groupedDossiers() {
     if (dossiersForAssoc.length === 0) return;
     const groupeNames = [...new Set(dossiersForAssoc.map(d => d.groupe).filter(Boolean))];
     const groups = [];
-    const sansGroupe = dossiersForAssoc.filter(d => !d.groupe);
+    const sansGroupe = triParOrdre(dossiersForAssoc.filter(d => !d.groupe));
     if (sansGroupe.length) groups.push({ groupeLabel: null, dossiers: sansGroupe });
-    groupeNames.forEach(g => groups.push({ groupeLabel: g, dossiers: dossiersForAssoc.filter(d => d.groupe === g) }));
+    groupeNames.forEach(g => groups.push({ groupeLabel: g, dossiers: triParOrdre(dossiersForAssoc.filter(d => d.groupe === g)) }));
     result.push({ assocLabel: assoc.nom, groups });
     dossiersForAssoc.forEach(d => usedIds.add(d.id));
   });
-  const orphans = state.dossiers.filter(d => !usedIds.has(d.id));
+  const orphans = triParOrdre(state.dossiers.filter(d => !usedIds.has(d.id)));
   if (orphans.length) result.push({ assocLabel: "Sans association", groups: [{ groupeLabel: null, dossiers: orphans }] });
   return result;
 }
@@ -75,7 +87,7 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Dossier technique et sécurité de chaque résidence — organes de coupure, accès clés, contacts d'urgence, photos. Structure uniforme reprise de la fiche index papier.</p>
+      <p class="hint">Dossier technique et sécurité de chaque résidence — organes de coupure, accès clés, contacts d'urgence, photos. Structure uniforme reprise de la fiche index papier. Maintiens l'icône ☰ appuyée sur une carte puis fais glisser pour réordonner les sites (au sein d'une même catégorie).</p>
       ${isEditorUser(mountedUser) ? `
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="add-btn" id="sd-new" style="width:fit-content">➕ Créer un nouveau dossier</button>
@@ -88,15 +100,18 @@ function render() {
             ${g.groups.map(sub => `
               ${sub.groupeLabel ? `<div style="font-size:12px;color:var(--text-dim);margin:6px 0 6px 4px">${esc(sub.groupeLabel)}</div>` : ""}
               <div class="bubble-grid" style="margin-bottom:8px">
-                ${sub.dossiers.map(d => {
+                ${sub.dossiers.map((d, i) => {
                   const nbFichiers = (d.sections || []).reduce((s, sec) => s + (sec.photos?.length || 0), 0);
                   const icone = g.assocLabel === "École" ? "🏫" : (sub.groupeLabel || "").toLowerCase().includes("residence") ? "🏢" : (sub.groupeLabel || "").toLowerCase() === "mna" ? "🏠" : "🏢";
                   return `
-                  <button class="bubble-card" data-open="${d.id}">
-                    <span class="bubble-icon">${icone}</span>
-                    <span class="bubble-label">${esc(d.nom)}</span>
-                    <span class="bubble-desc">${esc(d.adresse || "Adresse non renseignée")}${nbFichiers ? ` · 📎 ${nbFichiers}` : ""}</span>
-                  </button>`;
+                  <div style="position:relative" data-drag-index="${i}">
+                    <button class="bubble-card" data-open="${d.id}">
+                      <span class="bubble-icon">${icone}</span>
+                      <span class="bubble-label">${esc(d.nom)}</span>
+                      <span class="bubble-desc">${esc(d.adresse || "Adresse non renseignée")}${nbFichiers ? ` · 📎 ${nbFichiers}` : ""}</span>
+                    </button>
+                    ${isEditorUser(mountedUser) ? `<span data-drag-handle title="Glisser pour réordonner" style="position:absolute;top:8px;left:8px;font-size:14px;color:var(--text-dim);cursor:grab;background:var(--panel);border-radius:6px;padding:3px 6px;opacity:.75">☰</span>` : ""}
+                  </div>`;
                 }).join("")}
               </div>
             `).join("")}
@@ -113,8 +128,28 @@ function render() {
   document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (btn.closest("[data-drag-index]")?.dataset.dragMoved) return; // clic déclenché juste après un glissement de réorganisation, à ignorer
       ui.openId = btn.dataset.open; ui.mode = "view"; render();
       window.scrollTo(0, 0); // remonte en haut de la fiche, quelle que soit la position de défilement dans la liste (utile pour un dossier tout en bas)
+    });
+  });
+
+  // Réorganisation manuelle des sites par glisser-déposer, au sein d'un
+  // même sous-groupe (association/groupe) — ne redessine pas l'écran
+  // ensuite (la position visuelle est déjà correcte grâce au glissement
+  // lui-même), seule la sauvegarde se fait en tâche de fond.
+  const sousGroupesAPlat = groups.flatMap(g => g.groups);
+  mountedContainer.querySelectorAll(".bubble-grid").forEach((grid, idx) => {
+    const sub = sousGroupesAPlat[idx];
+    if (!sub) return;
+    activerGlisserDeposer(grid, "[data-drag-index]", async (nouvelOrdre) => {
+      const dossiersReordonnes = nouvelOrdre.map(ancienIndex => sub.dossiers[ancienIndex]);
+      dossiersReordonnes.forEach((d, i) => { d.ordre = i; });
+      try {
+        await definirOrdreDossiers(dossiersReordonnes.map((d, i) => ({ id: d.id, ordre: i })));
+      } catch (e) {
+        console.error("Échec de l'enregistrement du nouvel ordre des sites :", e);
+      }
     });
   });
 }
