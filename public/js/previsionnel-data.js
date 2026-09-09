@@ -23,13 +23,30 @@ export const CATEGORIES_TRAVAUX = [
 export const PRIORITES = { urgent: "🔴 Urgent", a_prevoir: "🟡 À prévoir", si_budget: "🟢 Si budget disponible" };
 export const STATUTS = { propose: "Proposé", valide: "✅ Validé", refuse: "❌ Refusé", reporte: "⏳ Reporté" };
 
+// Une fois VALIDÉ par le CA, une demande suit un avancement jusqu'à sa
+// réalisation — permet à Frédéric de suivre où en est chaque travaux
+// voté, pas seulement s'il a été accepté ou non.
+export const AVANCEMENTS = {
+  a_planifier: "À planifier", devis_demande: "Devis demandé",
+  travaux_prevus: "Travaux prévus", travaux_en_cours: "Travaux en cours", termine: "✅ Terminé",
+};
+
 export function nouvelleLigne() {
   return {
     titre: "", categorie: "", description: "",
-    montantEstime: 0, anneeVisee: new Date().getFullYear() + 1,
+    montantEstime: 0, anneeVisee: new Date().getFullYear() + 1, typeAnnee: "civile", // "civile" | "scolaire"
     priorite: "a_prevoir", motif: "", photos: [],
     statut: "propose", dateStatut: null, statutParNom: "",
+    avancement: null, dateAvancement: null, avancementParNom: "",
   };
+}
+
+// Libellé d'affichage de l'année visée, selon son type — "2026" pour une
+// année civile, "2025-2026" pour une année scolaire (1er septembre au
+// 31 août).
+export function formatAnneeVisee(ligne) {
+  if (ligne.typeAnnee === "scolaire") return `${ligne.anneeVisee}-${ligne.anneeVisee + 1}`;
+  return String(ligne.anneeVisee);
 }
 
 // Flux temps réel de toutes les lignes — filtrage (année, site,
@@ -59,6 +76,14 @@ export async function modifierLigne(id, patch) {
 export async function changerStatut(id, statut, user) {
   await updateDoc(doc(db, COLLECTION, id), {
     statut, dateStatut: Date.now(), statutParNom: user?.nom || user?.email || "Inconnu",
+  });
+}
+
+// Changement d'avancement (uniquement pertinent une fois validé) — tracé
+// de la même façon.
+export async function changerAvancement(id, avancement, user) {
+  await updateDoc(doc(db, COLLECTION, id), {
+    avancement, dateAvancement: Date.now(), avancementParNom: user?.nom || user?.email || "Inconnu",
   });
 }
 

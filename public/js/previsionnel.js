@@ -6,8 +6,8 @@
 
 import { esc } from "./astreinte-logic.js";
 import {
-  watchLignes, creerLigne, modifierLigne, changerStatut, supprimerLigne,
-  nouvelleLigne, CATEGORIES_TRAVAUX, PRIORITES, STATUTS, anneesDisponibles,
+  watchLignes, creerLigne, modifierLigne, changerStatut, changerAvancement, supprimerLigne,
+  nouvelleLigne, CATEGORIES_TRAVAUX, PRIORITES, STATUTS, AVANCEMENTS, anneesDisponibles, formatAnneeVisee,
 } from "./previsionnel-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAssociations } from "./associations-data.js";
@@ -16,14 +16,14 @@ import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOS
 let mountedContainer = null;
 let mountedUser = null;
 let state = { lignes: [], sites: [], associations: [] };
-let ui = { filtreAnnee: "toutes", filtreSite: "toutes", filtrePriorite: "toutes", filtreStatut: "actives", addingOpen: false, editingId: null, form: null };
+let ui = { filtreAnnee: "toutes", filtreSite: "toutes", filtrePriorite: "toutes", filtreStatut: "actives", addingOpen: false, editingId: null, form: null, vueEnsemble: false };
 let unsubs = [];
 
 export async function mountPrevisionnel(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { lignes: [], sites: [], associations: [] };
-  ui = { filtreAnnee: "toutes", filtreSite: "toutes", filtrePriorite: "toutes", filtreStatut: "actives", addingOpen: false, editingId: null, form: null };
+  ui = { filtreAnnee: "toutes", filtreSite: "toutes", filtrePriorite: "toutes", filtreStatut: "actives", addingOpen: false, editingId: null, form: null, vueEnsemble: false };
   unsubs.forEach(u => u());
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs = [
@@ -42,6 +42,7 @@ function formatDate(ms) {
 }
 function labelPriorite(p) { return PRIORITES[p] || p; }
 function labelStatut(s) { return STATUTS[s] || s; }
+function labelAvancement(a) { return AVANCEMENTS[a] || "Non renseigné"; }
 
 function lignesFiltrees() {
   return state.lignes.filter(l => {
@@ -56,17 +57,24 @@ function lignesFiltrees() {
 
 function render() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
+  if (ui.vueEnsemble) return renderVueEnsemble();
+  renderListe();
+}
+
+function renderListe() {
   const lignes = lignesFiltrees();
   const total = lignes.reduce((s, l) => s + (l.montantEstime || 0), 0);
   const annees = anneesDisponibles(state.lignes);
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Prévisionnel travaux/investissement, saisi au fil de l'eau plutôt que reconstitué au moment du budget. Un montant total se calcule automatiquement selon les filtres choisis, et un export prêt pour le conseil d'administration est disponible en bas de page.</p>
+      <p class="hint">Prévisionnel travaux/investissement, saisi au fil de l'eau plutôt que reconstitué au moment du budget. Un montant total se calcule automatiquement selon les filtres choisis, et les exports ci-dessous suivent aussi ces mêmes filtres.</p>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="add-btn" id="pv-add">➕ Ajouter un besoin de travaux</button>
-        <button class="nav-btn" id="pv-export">🖨️ Exporter pour le conseil d'administration</button>
+        <button class="nav-btn" id="pv-export">🖨️ Exporter en PDF pour le CA</button>
+        <button class="nav-btn" id="pv-export-excel">📊 Exporter en Excel (filtré)</button>
+        <button class="nav-btn" id="pv-vue-ensemble" style="border-color:var(--teal);color:var(--teal)">📈 Vue d'ensemble (suivi des travaux validés)</button>
       </div>
 
       <div class="filters-row" style="flex-wrap:wrap;gap:8px">
@@ -98,10 +106,11 @@ function render() {
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
             <div style="min-width:0">
               <p style="margin:0;font-weight:700">${esc(l.titre || l.categorie)} <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(l.dossierNom || "Site non renseigné")}</span></p>
-              <p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">${esc(l.categorie)} · ${l.anneeVisee} · ${labelPriorite(l.priorite)}</p>
+              <p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">${esc(l.categorie)} · ${formatAnneeVisee(l)}${l.typeAnnee === "scolaire" ? " (année scolaire)" : ""} · ${labelPriorite(l.priorite)}</p>
               ${l.description ? `<p style="margin:4px 0 0;font-size:13px">${esc(l.description)}</p>` : ""}
               ${l.motif ? `<p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)"><b>Motif :</b> ${esc(l.motif)}</p>` : ""}
               <p style="margin:4px 0 0;font-size:12px">Statut : <b>${labelStatut(l.statut)}</b>${l.dateStatut ? ` le ${formatDate(l.dateStatut)}${l.statutParNom ? " par " + esc(l.statutParNom) : ""}` : ""}</p>
+              ${l.statut === "valide" ? `<p style="margin:2px 0 0;font-size:12px">Avancement : <b>${labelAvancement(l.avancement)}</b></p>` : ""}
             </div>
             <div style="text-align:right;flex:none">
               <p style="margin:0;font-size:20px;font-weight:800;color:var(--gold)">${formatMontant(l.montantEstime)}</p>
@@ -118,7 +127,17 @@ function render() {
               <button class="nav-btn" data-statut="${l.id}:refuse" style="border-color:var(--red);color:var(--red);font-size:12px">❌ Marquer Refusé</button>
               <button class="nav-btn" data-statut="${l.id}:reporte" style="font-size:12px">⏳ Reporter</button>
             </div>
-          ` : l.statut !== "propose" ? `<button class="nav-btn" data-statut="${l.id}:propose" style="margin-top:8px;font-size:11px">↩️ Remettre en Proposé</button>` : ""}
+          ` : l.statut === "valide" ? `
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+              <label style="font-size:12px">Avancement
+                <select data-avancement="${l.id}">
+                  <option value="">— Non renseigné —</option>
+                  ${Object.entries(AVANCEMENTS).map(([k, v]) => `<option value="${k}" ${l.avancement === k ? "selected" : ""}>${v}</option>`).join("")}
+                </select>
+              </label>
+              <button class="nav-btn" data-statut="${l.id}:propose" style="font-size:11px">↩️ Remettre en Proposé</button>
+            </div>
+          ` : `<button class="nav-btn" data-statut="${l.id}:propose" style="margin-top:8px;font-size:11px">↩️ Remettre en Proposé</button>`}
           ${ui.editingId === l.id ? renderForm(l) : ""}
         </div>
       `).join("")}
@@ -127,11 +146,16 @@ function render() {
 
   document.getElementById("pv-add").addEventListener("click", () => { ui.addingOpen = !ui.addingOpen; ui.editingId = null; render(); });
   document.getElementById("pv-export").addEventListener("click", () => exporterPourCA(lignes));
+  document.getElementById("pv-export-excel").addEventListener("click", () => exporterExcel(lignes));
+  document.getElementById("pv-vue-ensemble").addEventListener("click", () => { ui.vueEnsemble = true; render(); });
   document.getElementById("pv-f-annee").addEventListener("change", (e) => { ui.filtreAnnee = e.target.value; render(); });
   document.getElementById("pv-f-site").addEventListener("change", (e) => { ui.filtreSite = e.target.value; render(); });
   document.getElementById("pv-f-priorite").addEventListener("change", (e) => { ui.filtrePriorite = e.target.value; render(); });
   document.getElementById("pv-f-statut").addEventListener("change", (e) => { ui.filtreStatut = e.target.value; render(); });
 
+  mountedContainer.querySelectorAll("[data-avancement]").forEach(sel => sel.addEventListener("change", async (e) => {
+    try { await changerAvancement(sel.dataset.avancement, e.target.value || null, mountedUser); } catch (err) { alert("Erreur : " + (err.message || err)); }
+  }));
   mountedContainer.querySelectorAll("[data-edit-pv]").forEach(btn => btn.addEventListener("click", () => {
     ui.editingId = ui.editingId === btn.dataset.editPv ? null : btn.dataset.editPv;
     ui.addingOpen = false;
@@ -173,7 +197,13 @@ function renderForm(ligneExistante) {
         </label>
         <label>Titre court<input id="${prefix}-titre" value="${esc(l.titre || "")}" placeholder="ex. Réfection toiture bâtiment A"></label>
         <label>Montant estimé (€)<input id="${prefix}-montant" type="number" min="0" step="100" value="${l.montantEstime || 0}"></label>
-        <label>Année visée<input id="${prefix}-annee" type="number" min="2020" max="2100" value="${l.anneeVisee}"></label>
+        <label>Type d'année
+          <select id="${prefix}-typeannee">
+            <option value="civile" ${l.typeAnnee !== "scolaire" ? "selected" : ""}>Année civile</option>
+            <option value="scolaire" ${l.typeAnnee === "scolaire" ? "selected" : ""}>Année scolaire</option>
+          </select>
+        </label>
+        <label>Année visée (début si scolaire)<input id="${prefix}-annee" type="number" min="2020" max="2100" value="${l.anneeVisee}"></label>
         <label>Priorité
           <select id="${prefix}-priorite">
             ${Object.entries(PRIORITES).map(([k, v]) => `<option value="${k}" ${l.priorite === k ? "selected" : ""}>${v}</option>`).join("")}
@@ -274,6 +304,7 @@ function attacherFormulaireListeners() {
         titre: document.getElementById(`${prefix}-titre`).value.trim(),
         montantEstime: parseFloat(document.getElementById(`${prefix}-montant`).value) || 0,
         anneeVisee: parseInt(document.getElementById(`${prefix}-annee`).value, 10) || new Date().getFullYear() + 1,
+        typeAnnee: document.getElementById(`${prefix}-typeannee`).value,
         priorite: document.getElementById(`${prefix}-priorite`).value,
         description: document.getElementById(`${prefix}-description`).value.trim(),
         motif: document.getElementById(`${prefix}-motif`).value.trim(),
@@ -314,7 +345,7 @@ function exporterPourCA(lignes) {
     <tr>
       <td style="border:1px solid #ccc;padding:4px 6px;font-size:11px">${esc(l.categorie)}</td>
       <td style="border:1px solid #ccc;padding:4px 6px;font-size:11px">${esc(l.titre || l.description || "")}</td>
-      <td style="border:1px solid #ccc;padding:4px 6px;font-size:11px;text-align:center">${l.anneeVisee}</td>
+      <td style="border:1px solid #ccc;padding:4px 6px;font-size:11px;text-align:center">${formatAnneeVisee(l)}</td>
       <td style="border:1px solid #ccc;padding:4px 6px;font-size:11px">${labelPriorite(l.priorite)}</td>
       <td style="border:1px solid #ccc;padding:4px 6px;font-size:11px;text-align:right;font-weight:700">${formatMontant(l.montantEstime)}</td>
     </tr>
@@ -355,4 +386,71 @@ function exporterPourCA(lignes) {
   document.body.appendChild(printRoot);
   window.print();
   setTimeout(() => printRoot.remove(), 1000);
+}
+
+// Export Excel — reflète exactement les mêmes lignes que la liste
+// actuellement affichée (filtres année/site/priorité/statut appliqués),
+// pour un tableau modifiable/triable plutôt qu'un PDF figé.
+function exporterExcel(lignes) {
+  if (!window.XLSX) { alert("Librairie Excel non chargée — vérifie ta connexion et recharge la page."); return; }
+  if (lignes.length === 0) { alert("Aucune ligne à exporter pour ces filtres."); return; }
+  const donnees = lignes.map(l => ({
+    "Site": l.dossierNom || "", "Catégorie": l.categorie || "", "Titre": l.titre || "",
+    "Description": l.description || "", "Motif": l.motif || "",
+    "Année visée": formatAnneeVisee(l), "Type d'année": l.typeAnnee === "scolaire" ? "Scolaire" : "Civile",
+    "Priorité": labelPriorite(l.priorite), "Montant estimé (€)": l.montantEstime || 0,
+    "Statut": labelStatut(l.statut), "Avancement": l.statut === "valide" ? labelAvancement(l.avancement) : "",
+    "Créé par": l.createdByNom || "", "Créé le": formatDate(l.createdAt),
+  }));
+  const feuille = window.XLSX.utils.json_to_sheet(donnees);
+  feuille["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 24 }, { wch: 30 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 12 }];
+  const classeur = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(classeur, feuille, "Prévisionnel travaux");
+  window.XLSX.writeFile(classeur, `Previsionnel_travaux_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// Vue d'ensemble : uniquement les demandes déjà VALIDÉES par le CA,
+// regroupées par étape d'avancement — pour suivre où en est chaque
+// travaux voté, du "à planifier" jusqu'au "terminé".
+function renderVueEnsemble() {
+  const validees = state.lignes.filter(l => l.statut === "valide");
+  const etapes = ["", ...Object.keys(AVANCEMENTS)];
+  const total = validees.reduce((s, l) => s + (l.montantEstime || 0), 0);
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="pv-retour-liste">← Retour à la liste</button>
+      <p class="hint">Suivi des travaux déjà validés par le conseil d'administration, du plus en amont (à planifier) au plus avancé (terminé).</p>
+      <div class="stat-chip" style="width:fit-content;font-weight:700">💰 Total des travaux validés : ${formatMontant(total)} — ${validees.length} demande(s)</div>
+      ${validees.length === 0 ? `<p class="hint">Aucune demande validée pour l'instant.</p>` : etapes.map(etape => {
+        const lignesEtape = validees.filter(l => (l.avancement || "") === etape);
+        if (lignesEtape.length === 0) return "";
+        return `
+          <h3 style="margin:16px 0 6px;font-size:14px;color:var(--gold)">${etape === "" ? "Non renseigné" : labelAvancement(etape)} (${lignesEtape.length})</h3>
+          ${lignesEtape.map(l => `
+            <div class="form-card" style="margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+                <div>
+                  <p style="margin:0;font-weight:700">${esc(l.titre || l.categorie)} <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(l.dossierNom || "Site non renseigné")}</span></p>
+                  <p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">${esc(l.categorie)} · ${formatAnneeVisee(l)} · Validé le ${formatDate(l.dateStatut)}</p>
+                </div>
+                <p style="margin:0;font-size:16px;font-weight:800;color:var(--gold)">${formatMontant(l.montantEstime)}</p>
+              </div>
+              <label style="display:block;margin-top:8px;font-size:12px">Avancement
+                <select data-avancement-ve="${l.id}">
+                  <option value="">— Non renseigné —</option>
+                  ${Object.entries(AVANCEMENTS).map(([k, v]) => `<option value="${k}" ${l.avancement === k ? "selected" : ""}>${v}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+          `).join("")}
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  document.getElementById("pv-retour-liste").addEventListener("click", () => { ui.vueEnsemble = false; render(); });
+  mountedContainer.querySelectorAll("[data-avancement-ve]").forEach(sel => sel.addEventListener("change", async (e) => {
+    try { await changerAvancement(sel.dataset.avancementVe, e.target.value || null, mountedUser); } catch (err) { alert("Erreur : " + (err.message || err)); }
+  }));
 }
