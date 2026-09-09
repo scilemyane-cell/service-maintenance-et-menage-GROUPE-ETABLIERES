@@ -13,6 +13,7 @@ import {
   modifierCode as modifierCodeMasterlock, supprimerCode as supprimerCodeMasterlock,
   nouveauCode as nouveauCodeMasterlock, CATEGORIES_BOITE,
 } from "./masterlock-data.js";
+import { activerGlisserDeposer } from "./drag-reorder.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
 let ui = { openId: null, mode: "view", lightbox: null };
@@ -1044,15 +1045,13 @@ function renderEdit(dOriginal, workingCopy) {
       </div>
 
       <h3 style="margin:12px 0 0;font-size:14px;color:var(--gold)">Équipements & organes techniques</h3>
+      <p class="hint" style="margin:0">Maintiens l'icône ☰ appuyée puis fais glisser pour réordonner.</p>
       ${data.sections.map((s, i) => {
         const estBoiteACles = /boîte|boite|clé|cle|masterlock/i.test(s.titre || "");
         return `
-        <div class="form-card">
+        <div class="form-card" data-drag-index="${i}">
           <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px">
-            <div style="display:flex;flex-direction:column;gap:2px;padding-top:6px">
-              <button class="nav-btn" data-move-up="${i}" ${i === 0 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px" title="Monter">▲</button>
-              <button class="nav-btn" data-move-down="${i}" ${i === data.sections.length - 1 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px" title="Descendre">▼</button>
-            </div>
+            <span data-drag-handle style="font-size:18px;color:var(--text-dim);padding:6px 4px;user-select:none">☰</span>
             <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;padding-top:8px">
               <input type="checkbox" data-sec-concerne="${i}" ${s.concerne ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)"> Concerné
             </label>
@@ -1134,14 +1133,10 @@ function renderEdit(dOriginal, workingCopy) {
     renderEdit(dOriginal, data);
   }));
   mountedContainer.querySelectorAll("[data-del-sec]").forEach(btn => btn.addEventListener("click", () => { data.sections.splice(parseInt(btn.dataset.delSec, 10), 1); renderEdit(dOriginal, data); }));
-  mountedContainer.querySelectorAll("[data-move-up]").forEach(btn => btn.addEventListener("click", () => {
-    const i = parseInt(btn.dataset.moveUp, 10);
-    if (i > 0) { [data.sections[i - 1], data.sections[i]] = [data.sections[i], data.sections[i - 1]]; renderEdit(dOriginal, data); }
-  }));
-  mountedContainer.querySelectorAll("[data-move-down]").forEach(btn => btn.addEventListener("click", () => {
-    const i = parseInt(btn.dataset.moveDown, 10);
-    if (i < data.sections.length - 1) { [data.sections[i + 1], data.sections[i]] = [data.sections[i], data.sections[i + 1]]; renderEdit(dOriginal, data); }
-  }));
+  activerGlisserDeposer(mountedContainer, ".form-card[data-drag-index]", (nouvelOrdre) => {
+    data.sections = nouvelOrdre.map(ancienIndex => data.sections[ancienIndex]);
+    renderEdit(dOriginal, data);
+  });
   document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
   attacherEditeurBoitesListeners(dOriginal, data);
 
