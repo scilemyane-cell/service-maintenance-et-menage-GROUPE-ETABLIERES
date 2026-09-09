@@ -133,8 +133,14 @@ function renderEditForm(p, workingCopy) {
   // "" = aucun ; "__autre__" = saisie libre (fournisseur ponctuel non listé) ; sinon id d'un fournisseur de la liste
   const selectionFournisseur = data.fournisseurId || (data.fournisseurNom ? "__autre__" : "");
   const catsExistantes = categories();
-  // "__nouvelle__" si la catégorie du produit n'existe pas encore dans la liste (nouveau produit, ou catégorie tapée manuellement avant cette mise à jour)
-  const selectionCategorie = data.categorie && catsExistantes.includes(data.categorie) ? data.categorie : (data.categorie ? "__nouvelle__" : "");
+  // "__nouvelle__" si l'utilisateur a explicitement choisi de créer une
+  // nouvelle catégorie (mémorisé via data.categorieModeNouvelle, car au
+  // moment du choix data.categorie est encore vide — sans ce marqueur
+  // séparé, le formulaire "oubliait" ce choix et revenait aussitôt à
+  // "— Choisir —" sans jamais laisser taper le nom de la catégorie).
+  const selectionCategorie = data.categorieModeNouvelle
+    ? "__nouvelle__"
+    : (data.categorie && catsExistantes.includes(data.categorie) ? data.categorie : "");
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -150,7 +156,7 @@ function renderEditForm(p, workingCopy) {
               <option value="__nouvelle__" ${selectionCategorie === "__nouvelle__" ? "selected" : ""}>✏️ Nouvelle catégorie…</option>
             </select>
           </label>
-          ${selectionCategorie === "__nouvelle__" ? `<label>Nom de la nouvelle catégorie<input id="sk-categorie-nouvelle" value="${esc(catsExistantes.includes(data.categorie) ? '' : data.categorie)}" placeholder="ex. Robinetterie"></label>` : ""}
+          ${selectionCategorie === "__nouvelle__" ? `<label>Nom de la nouvelle catégorie<input id="sk-categorie-nouvelle" value="${esc(data.categorie || '')}" placeholder="ex. Robinetterie"></label>` : ""}
           <label>Unité<input id="sk-unite" value="${esc(data.unite)}" placeholder="pièce, lot, boîte…"></label>
           <label>Stock actuel<input id="sk-actuel" type="number" min="0" value="${data.stockActuel ?? 0}"></label>
           <label>Stock cible (niveau normal)<input id="sk-cible" type="number" min="0" value="${data.stockCible ?? 0}"></label>
@@ -200,7 +206,13 @@ function renderEditForm(p, workingCopy) {
     data.nom = document.getElementById("sk-nom").value;
     const catSelect = document.getElementById("sk-categorie-select");
     const catNouvelle = document.getElementById("sk-categorie-nouvelle");
-    data.categorie = catSelect.value === "__nouvelle__" ? (catNouvelle?.value || "") : catSelect.value;
+    if (catSelect.value === "__nouvelle__") {
+      data.categorieModeNouvelle = true;
+      data.categorie = catNouvelle?.value || "";
+    } else {
+      data.categorieModeNouvelle = false;
+      data.categorie = catSelect.value;
+    }
     data.unite = document.getElementById("sk-unite").value;
     data.stockActuel = document.getElementById("sk-actuel").value;
     data.stockCible = document.getElementById("sk-cible").value;
