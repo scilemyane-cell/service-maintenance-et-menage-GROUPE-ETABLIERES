@@ -135,14 +135,11 @@ function renderParams() {
         <button class="add-btn" id="sp-save">💾 Enregistrer</button>
         <span id="sp-status" style="font-size:12px;align-self:center"></span>
       </div>
-      <p class="hint">Cet ordre s'applique aux nouveaux dossiers créés à partir de maintenant. Pour réordonner un dossier déjà existant, ouvre-le, passe en mode Modifier, et utilise les flèches ▲▼ sur chaque équipement.</p>
+      <p class="hint">Cet ordre s'applique aux nouveaux dossiers créés à partir de maintenant. Pour réordonner un dossier déjà existant, ouvre-le, passe en mode Modifier, et fais glisser via la poignée ☰ sur chaque équipement. Maintiens la poignée ☰ appuyée puis fais glisser pour réordonner ci-dessous.</p>
       <div class="form-card">
         ${list.map((titre, i) => `
-          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
-            <div style="display:flex;flex-direction:column;gap:2px">
-              <button class="nav-btn" data-sp-up="${i}" ${i === 0 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px">▲</button>
-              <button class="nav-btn" data-sp-down="${i}" ${i === list.length - 1 ? 'disabled style="opacity:0.3"' : ''} style="padding:2px 8px;font-size:11px">▼</button>
-            </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;${i > 0 ? 'border-top:1px solid var(--border)' : ''}" data-drag-index="${i}">
+            <span data-drag-handle style="font-size:18px;color:var(--text-dim);padding:6px 4px;user-select:none">☰</span>
             <input data-sp-titre="${i}" value="${esc(titre)}" style="flex:1">
             <button class="del-btn" data-sp-del="${i}">🗑️</button>
           </div>
@@ -160,14 +157,10 @@ function renderParams() {
   mountedContainer.querySelectorAll("[data-sp-del]").forEach(btn => {
     btn.addEventListener("click", () => { list.splice(parseInt(btn.dataset.spDel, 10), 1); render(); });
   });
-  mountedContainer.querySelectorAll("[data-sp-up]").forEach(btn => btn.addEventListener("click", () => {
-    const i = parseInt(btn.dataset.spUp, 10);
-    if (i > 0) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; render(); }
-  }));
-  mountedContainer.querySelectorAll("[data-sp-down]").forEach(btn => btn.addEventListener("click", () => {
-    const i = parseInt(btn.dataset.spDown, 10);
-    if (i < list.length - 1) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; render(); }
-  }));
+  activerGlisserDeposer(mountedContainer, "[data-drag-index]", (nouvelOrdre) => {
+    paramsWorking = nouvelOrdre.map(ancienIndex => list[ancienIndex]);
+    render();
+  });
   document.getElementById("sp-save").addEventListener("click", async () => {
     const statusEl = document.getElementById("sp-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
