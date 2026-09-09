@@ -12,6 +12,7 @@ import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 
@@ -62,7 +63,7 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "" },
+  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [] },
   editingId: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
@@ -591,6 +592,83 @@ function renderDocPreview() {
   `;
 }
 
+// Galerie photo du formulaire d'intervention — même mécanisme que les
+// autres galeries de l'appli (caméra + fichier), utile pour garder une
+// preuve visuelle d'un dépannage (avant/après, pièce changée...).
+function interventionPhotosHTML() {
+  const photos = ui.form.photos || [];
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      ${photos.map((p, pi) => `
+        <div style="position:relative">
+          ${p.itemId
+            ? `<img data-resolve-img-interv="${esc(p.itemId)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt)" onerror="this.style.opacity=0.3">`
+            : `<img src="${esc(p.url)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" onerror="this.style.opacity=0.3">`}
+          <button data-del-interv-photo="${pi}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>
+        </div>
+      `).join("")}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="nav-btn" id="interv-photo-camera" style="font-size:12px">📷 Prendre une photo</button>
+      <button type="button" class="nav-btn" id="interv-photo-file" style="font-size:12px">📎 Importer un fichier</button>
+      <input type="file" accept="image/*" capture="environment" id="interv-photo-input-camera" style="display:none">
+      <input type="file" id="interv-photo-input-file" style="display:none">
+    </div>
+    <div id="interv-photo-status" style="font-size:11px;margin-top:4px"></div>
+  `;
+}
+
+function attacherPhotosInterventionListeners() {
+  const inputCamera = document.getElementById("interv-photo-input-camera");
+  const inputFile = document.getElementById("interv-photo-input-file");
+  const statusEl = document.getElementById("interv-photo-status");
+  if (!inputCamera) return;
+
+  const declencherSelecteur = async (input) => {
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Connexion…</span>`;
+    try {
+      const token = await getAccessToken(); // en réaction directe au clic, sinon bloqué par le navigateur
+      statusEl.innerHTML = "";
+      input.dataset.readyToken = token;
+      input.click();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  };
+  document.getElementById("interv-photo-camera").addEventListener("click", () => declencherSelecteur(inputCamera));
+  document.getElementById("interv-photo-file").addEventListener("click", () => declencherSelecteur(inputFile));
+
+  [inputCamera, inputFile].forEach(input => input.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Envoi de la photo…</span>`;
+    try {
+      const dossierSegments = [ui.form.site || "Site non renseigné", "Interventions", `${ui.form.date || "date"} - ${ui.form.type || "Intervention"}`];
+      const { url, itemId, isImage, name } = await uploadToDrive(file, e.target.dataset.readyToken, dossierSegments, DOSSIERS_ROOT_FOLDER);
+      ui.form.photos = [...(ui.form.photos || []), { url, itemId, isImage, name }];
+      renderAll();
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(err.message || String(err))}</span>`;
+    }
+  }));
+
+  document.querySelectorAll("[data-del-interv-photo]").forEach(btn => btn.addEventListener("click", async () => {
+    const pi = parseInt(btn.dataset.delIntervPhoto, 10);
+    const photo = (ui.form.photos || [])[pi];
+    if (!photo) return;
+    if (!confirm(`Supprimer définitivement "${photo.name || 'cette photo'}" ?`)) return;
+    if (photo.itemId) {
+      try { await deleteDriveItem(photo.itemId); } catch (e) { alert("Échec de la suppression sur SharePoint : " + (e.message || e)); return; }
+    }
+    ui.form.photos = (ui.form.photos || []).filter((_, i) => i !== pi);
+    renderAll();
+  }));
+
+  document.querySelectorAll("[data-resolve-img-interv]").forEach(async (img) => {
+    try { img.src = await getImageDisplayUrl(img.dataset.resolveImgInterv); } catch (e) { img.style.opacity = "0.3"; }
+  });
+}
+
 function renderInterventions(container, perms) {
   const intervenants = [...state.people.n1, ...state.people.n2];
   if (!ui.form.technicien && intervenants.length > 0) ui.form.technicien = intervenants[0];
@@ -641,6 +719,8 @@ function renderInterventions(container, perms) {
           <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photo(s) du dépannage (optionnel)</label>
+        <div id="interv-photo-zone">${interventionPhotosHTML()}</div>
         <div id="interv-nuit-indicator">${nuitIndicatorHTML()}</div>
         <button class="add-btn" id="add-interv">${ui.editingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'intervention"}</button>
         ${ui.editingId ? `<button class="nav-btn" id="cancel-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
@@ -676,7 +756,7 @@ function renderInterventions(container, perms) {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
                 return `<tr>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
-                  <td>${i.heures} h</td><td>${esc(i.description)}</td>
+                  <td>${i.heures} h</td><td>${esc(i.description)}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}</td>
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
@@ -694,6 +774,7 @@ function renderInterventions(container, perms) {
   `;
 
   if (perms.canLogIntervention) {
+    attacherPhotosInterventionListeners();
     ["type", "heures", "desc"].forEach(field => {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
@@ -752,6 +833,7 @@ function renderInterventions(container, perms) {
         type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
         heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin,
         heuresNuit: nuit, primeDimanche: dimanche ? PRIME_DIMANCHE : 0,
+        photos: ui.form.photos || [],
       };
       try {
         if (ui.editingId) {
@@ -760,7 +842,7 @@ function renderInterventions(container, perms) {
         } else {
           await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
         }
-        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = "";
+        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = [];
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
@@ -768,9 +850,26 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("cancel-edit")?.addEventListener("click", () => {
       ui.editingId = null;
-      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = "";
+      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = [];
       renderAll();
     });
+    container.querySelectorAll("[data-voir-photos-interv]").forEach(btn => btn.addEventListener("click", async () => {
+      const i = state.interventions.find(x => x.id === btn.dataset.voirPhotosInterv);
+      if (!i || !(i.photos || []).length) return;
+      btn.disabled = true; const original = btn.textContent; btn.textContent = "⏳";
+      try {
+        const urls = await Promise.all(i.photos.map(p => p.itemId ? getImageDisplayUrl(p.itemId) : Promise.resolve(p.url)));
+        const overlay = document.createElement("div");
+        overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;padding:20px;overflow:auto;cursor:pointer";
+        overlay.innerHTML = urls.map(u => `<img src="${esc(u)}" style="max-width:90vw;max-height:80vh;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.5)">`).join("");
+        overlay.addEventListener("click", () => overlay.remove());
+        document.body.appendChild(overlay);
+      } catch (e) {
+        alert("Impossible d'ouvrir les photos : " + (e.message || e));
+      } finally {
+        btn.disabled = false; btn.textContent = original;
+      }
+    }));
     container.querySelectorAll("[data-edit]").forEach(btn => {
       btn.addEventListener("click", () => {
         const i = state.interventions.find(x => x.id === btn.dataset.edit);
@@ -779,6 +878,7 @@ function renderInterventions(container, perms) {
         ui.form = {
           date: i.date, technicien: i.technicien, association: i.association || "", groupe: i.groupe || "",
           site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
+          photos: i.photos || [],
         };
         renderAll();
         mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
