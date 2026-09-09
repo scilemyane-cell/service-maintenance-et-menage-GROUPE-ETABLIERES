@@ -48,6 +48,32 @@ export async function saveSectionsOrder(titres) {
   await setDoc(SETTINGS_DOC, { titres });
 }
 
+// Réordonne les sections déjà présentes sur les dossiers de site
+// EXISTANTS pour qu'elles suivent ce nouvel ordre (par défaut, l'ordre
+// des Paramètres ne s'applique qu'aux dossiers créés APRÈS coup). Fait
+// correspondre les sections par titre exact ; celles présentes sur un
+// dossier mais absentes de la nouvelle liste (équipement propre à ce
+// site, ajouté à la main) sont conservées à la fin, dans leur ordre
+// d'origine — jamais perdues. Renvoie le nombre de dossiers modifiés.
+export async function appliquerOrdreAuxDossiersExistants(titres) {
+  const snap = await getDocs(collection(db, "sites-dossiers"));
+  let n = 0;
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data();
+    if (data.supprimeLe) continue;
+    const sections = data.sections || [];
+    const restantes = new Map(sections.map(s => [s.titre, s]));
+    const nouvelOrdre = [];
+    titres.forEach(t => {
+      if (restantes.has(t)) { nouvelOrdre.push(restantes.get(t)); restantes.delete(t); }
+    });
+    sections.forEach(s => { if (restantes.has(s.titre)) nouvelOrdre.push(s); }); // équipements propres à ce site, gardés à la fin
+    await updateDoc(doc(db, "sites-dossiers", docSnap.id), { sections: nouvelOrdre });
+    n++;
+  }
+  return n;
+}
+
 export function watchSitesDossiers(callback) {
   return onSnapshot(collection(db, "sites-dossiers"), (snap) => {
     const list = [];

@@ -1,7 +1,7 @@
 import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
-  watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers,
+  watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
@@ -170,7 +170,7 @@ function renderParams() {
         <button class="add-btn" id="sp-save">💾 Enregistrer</button>
         <span id="sp-status" style="font-size:12px;align-self:center"></span>
       </div>
-      <p class="hint">Cet ordre s'applique aux nouveaux dossiers créés à partir de maintenant. Pour réordonner un dossier déjà existant, ouvre-le, passe en mode Modifier, et fais glisser via la poignée ☰ sur chaque équipement. Maintiens la poignée ☰ appuyée puis fais glisser pour réordonner ci-dessous.</p>
+      <p class="hint">Cet ordre s'applique aux nouveaux dossiers créés à partir de maintenant. Pour l'appliquer aussi aux dossiers déjà créés, utilise le bouton "🔁 Appliquer cet ordre aux dossiers déjà créés" ci-dessous — ou réordonne un dossier individuellement en l'ouvrant, en passant en mode Modifier, puis en glissant via la poignée ☰ sur chaque équipement. Maintiens la poignée ☰ appuyée puis fais glisser pour réordonner ci-dessous.</p>
       <div class="form-card">
         ${list.map((titre, i) => `
           <div style="display:flex;align-items:center;gap:8px;padding:6px 0;${i > 0 ? 'border-top:1px solid var(--border)' : ''}" data-drag-index="${i}">
@@ -181,6 +181,8 @@ function renderParams() {
         `).join("")}
       </div>
       <button class="nav-btn" id="sp-add">➕ Ajouter une ligne standard</button>
+      <button class="nav-btn" id="sp-appliquer-existants" style="border-color:var(--gold);color:var(--gold)">🔁 Appliquer cet ordre aux dossiers déjà créés</button>
+      <div id="sp-appliquer-status" style="font-size:12px"></div>
     </div>
   `;
 
@@ -203,6 +205,20 @@ function renderParams() {
       await saveSectionsOrder(list.filter(t => t.trim() !== ""));
       paramsWorking = null;
       statusEl.innerHTML = `<span style="color:var(--gold)">✓ Enregistré</span>`;
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+    }
+  });
+  document.getElementById("sp-appliquer-existants").addEventListener("click", async () => {
+    const statusEl = document.getElementById("sp-appliquer-status");
+    const titres = list.filter(t => t.trim() !== "");
+    if (!confirm(`Réordonner les équipements de TOUS les dossiers de site déjà créés selon cet ordre ? Les équipements propres à un site (ajoutés à la main, absents de cette liste) sont conservés à la fin, jamais perdus.`)) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement de l'ordre puis application aux dossiers existants…</span>`;
+    try {
+      await saveSectionsOrder(titres); // enregistre aussi l'ordre par défaut pour les futurs dossiers, au passage
+      const n = await appliquerOrdreAuxDossiersExistants(titres);
+      paramsWorking = null;
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ ${n} dossier(s) réordonné(s).</span>`;
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
     }
