@@ -1118,7 +1118,7 @@ function renderEdit(dOriginal, workingCopy) {
           ` : ""}
         </div>
       `;}).join("")}
-      <button class="nav-btn" id="sd-add-sec">➕ Ajouter un équipement</button>
+      <p class="hint" style="margin-top:8px">Pour ajouter une nouvelle catégorie d'équipement, passe par <b>Paramètres (ordre des équipements)</b> depuis l'écran précédent — elle sera alors proposée sur tous les dossiers, plutôt que d'en créer une différente sur chacun.</p>
 
       <button class="add-btn" id="sd-save-bottom">💾 Enregistrer</button>
     </div>
@@ -1181,7 +1181,6 @@ function renderEdit(dOriginal, workingCopy) {
     data.sections = nouvelOrdre.map(ancienIndex => data.sections[ancienIndex]);
     renderEdit(dOriginal, data);
   });
-  document.getElementById("sd-add-sec").addEventListener("click", () => { data.sections.push({ titre: "Nouvel équipement", concerne: false, emplacement: "", procedure: "", photos: [] }); renderEdit(dOriginal, data); });
   attacherEditeurBoitesListeners(dOriginal, data);
 
   // Résout la "cible" d'une clé de galerie photo — soit une section
