@@ -89,9 +89,10 @@ function render() {
               <div class="bubble-grid" style="margin-bottom:8px">
                 ${sub.dossiers.map(d => {
                   const nbFichiers = (d.sections || []).reduce((s, sec) => s + (sec.photos?.length || 0), 0);
+                  const icone = g.assocLabel === "École" ? "🏫" : (sub.groupeLabel || "").toLowerCase().includes("residence") ? "🏠" : "🏢";
                   return `
                   <button class="bubble-card" data-open="${d.id}">
-                    <span class="bubble-icon">🏢</span>
+                    <span class="bubble-icon">${icone}</span>
                     <span class="bubble-label">${esc(d.nom)}</span>
                     <span class="bubble-desc">${esc(d.adresse || "Adresse non renseignée")}${nbFichiers ? ` · 📎 ${nbFichiers}` : ""}</span>
                   </button>`;
