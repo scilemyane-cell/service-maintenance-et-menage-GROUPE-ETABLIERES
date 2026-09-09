@@ -66,6 +66,7 @@ export async function appliquerOrdreAuxDossiersExistants(titres) {
     const nouvelOrdre = [];
     titres.forEach(t => {
       if (restantes.has(t)) { nouvelOrdre.push(restantes.get(t)); restantes.delete(t); }
+      else nouvelOrdre.push({ titre: t, concerne: false, emplacement: "", procedure: "", photos: [] }); // section standard récente, absente de ce dossier créé avant son ajout — créée vide, à compléter si besoin
     });
     sections.forEach(s => { if (restantes.has(s.titre)) nouvelOrdre.push(s); }); // équipements propres à ce site, gardés à la fin
     await updateDoc(doc(db, "sites-dossiers", docSnap.id), { sections: nouvelOrdre });
