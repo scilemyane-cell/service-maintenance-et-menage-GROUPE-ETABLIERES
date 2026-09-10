@@ -65,6 +65,8 @@ let ui = {
   filterTech: "Tous", filterSite: "Tous",
   form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [] },
   editingId: null,
+  ficheOuverte: null, // nom de la personne dont la fiche technicien est dépliée
+  noteFraisMois: new Date().toISOString().slice(0, 7),
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
@@ -209,8 +211,23 @@ function renderArchiveReleves(container, user) {
 }
 
 // =================================================================
-// Coordonnées (téléphone / email) des cadres et techniciens
+// Coordonnées (téléphone / email) des cadres et techniciens, fiche
+// technicien détaillée (adresse, kilomètres par site) et génération de
+// la note de frais de déplacements officielle (reproduit le formulaire
+// papier CG01 du groupe Établières).
 // =================================================================
+const STATUTS_NOTE_FRAIS = {
+  salarie_prive: "Salarié droit privé", salarie_public: "Salarié droit public",
+  intervenant: "Intervenant (facturation)", etudiant: "Étudiants",
+};
+const TARIF_KM = 0.32;
+
+function sitesConnus() {
+  const noms = new Set();
+  state.associations.forEach(a => (a.sites || []).forEach(s => noms.add(s.nom)));
+  return [...noms].sort((a, b) => a.localeCompare(b));
+}
+
 function renderCoordonnees(container, perms) {
   const all = [
     ...state.people.n1.map(nom => ({ nom, role: "Cadre astreinte" })),
@@ -219,12 +236,12 @@ function renderCoordonnees(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Coordonnées des cadres d'astreinte et techniciens. ${perms.isEditor ? "Clique sur un champ pour le modifier." : ""}</p>
+      <p class="hint">Coordonnées des cadres d'astreinte et techniciens. ${perms.isEditor ? "Clique sur un champ pour le modifier. Déplie la fiche d'un technicien pour renseigner son adresse et ses kilomètres par site, puis générer sa note de frais de déplacements." : ""}</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Nom</th><th>Rôle</th><th>Téléphone</th><th>Email</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Rôle</th><th>Téléphone</th><th>Email</th><th></th></tr></thead>
           <tbody>
-            ${all.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucune personne configurée.</td></tr>` :
+            ${all.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucune personne configurée.</td></tr>` :
               all.map(p => {
                 const c = state.coordonnees[p.nom] || {};
                 return `<tr>
@@ -236,7 +253,9 @@ function renderCoordonnees(container, perms) {
                   <td>${perms.isEditor
                     ? `<input type="email" data-coord-email="${esc(p.nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr" style="min-width:200px">`
                     : (c.email ? esc(c.email) : `<span class="hint">—</span>`)}</td>
-                </tr>`;
+                  <td>${perms.isEditor ? `<button class="nav-btn" data-toggle-fiche="${esc(p.nom)}" style="padding:5px 9px;font-size:11px">${ui.ficheOuverte === p.nom ? "▲ Fermer" : "📋 Fiche technicien"}</button>` : ""}</td>
+                </tr>
+                ${perms.isEditor && ui.ficheOuverte === p.nom ? `<tr><td colspan="5" style="padding:0;border:none">${renderFicheTechnicien(p.nom, c)}</td></tr>` : ""}`;
               }).join("")}
           </tbody>
         </table>
@@ -260,6 +279,220 @@ function renderCoordonnees(container, perms) {
       await saveCoordonnee(nom, { ...existing, email: inp.value.trim() });
     });
   });
+  container.querySelectorAll("[data-toggle-fiche]").forEach(btn => btn.addEventListener("click", () => {
+    ui.ficheOuverte = ui.ficheOuverte === btn.dataset.toggleFiche ? null : btn.dataset.toggleFiche;
+    renderAll();
+  }));
+  attacherFicheTechnicienListeners();
+}
+
+// Fiche détaillée d'un technicien : adresse, association, statut, site
+// principal, table des kilomètres aller-retour par site (alimentée au
+// fur et à mesure, complétée automatiquement à la génération de la note
+// de frais si un site manque), puis le générateur de note de frais.
+function renderFicheTechnicien(nom, c) {
+  const kmParSite = c.kmParSite || {};
+  const sites = sitesConnus();
+  return `
+    <div class="form-card" style="margin:8px 0;background:var(--panel-alt)">
+      <h4 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📋 Fiche technicien — ${esc(nom)}</h4>
+      <div class="form-grid">
+        <label>Adresse du domicile (lieu de départ)<input data-fiche-adresse="${esc(nom)}" value="${esc(c.adresseDomicile || '')}" placeholder="ex. 12 rue des Lilas, 85000 La Roche-sur-Yon"></label>
+        <label>Association
+          <select data-fiche-association="${esc(nom)}">
+            <option value="ECOLE" ${(c.association || "ECOLE") === "ECOLE" ? "selected" : ""}>ECOLE</option>
+            <option value="ARMONIA" ${c.association === "ARMONIA" ? "selected" : ""}>ARMONIA</option>
+          </select>
+        </label>
+        <label>Statut
+          <select data-fiche-statut="${esc(nom)}">
+            ${Object.entries(STATUTS_NOTE_FRAIS).map(([k, v]) => `<option value="${k}" ${(c.statut || "salarie_prive") === k ? "selected" : ""}>${v}</option>`).join("")}
+          </select>
+        </label>
+        <label>Site principal
+          <select data-fiche-siteprincipal="${esc(nom)}">
+            <option value="">— Non renseigné —</option>
+            ${sites.map(s => `<option value="${esc(s)}" ${c.sitePrincipal === s ? "selected" : ""}>${esc(s)}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+
+      <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🚗 Kilomètres aller-retour par site (depuis le domicile)</p>
+      <div id="fiche-km-liste-${esc(nom)}">
+        ${Object.keys(kmParSite).length === 0 ? `<p class="hint" style="margin:0 0 6px">Aucun site renseigné pour l'instant — complété automatiquement si besoin lors de la génération d'une note de frais.</p>` :
+          Object.entries(kmParSite).sort((a, b) => a[0].localeCompare(b[0])).map(([site, km]) => `
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+              <span style="flex:1;font-size:13px">${esc(site)}</span>
+              <input type="number" min="0" step="0.1" data-fiche-km="${esc(nom)}|${esc(site)}" value="${km}" style="width:90px" placeholder="km A/R">
+              <button class="del-btn" data-fiche-km-del="${esc(nom)}|${esc(site)}" style="padding:4px 8px;font-size:11px">🗑️</button>
+            </div>
+          `).join("")}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+        <select id="fiche-nouveau-site-${esc(nom)}" style="flex:1">
+          <option value="">— Ajouter un site —</option>
+          ${sites.filter(s => !(s in kmParSite)).map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("")}
+        </select>
+        <input type="number" min="0" step="0.1" id="fiche-nouveau-km-${esc(nom)}" placeholder="km A/R" style="width:90px">
+        <button class="nav-btn" data-fiche-km-add="${esc(nom)}" style="font-size:12px">➕</button>
+      </div>
+
+      <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:16px 0 6px">🖨️ Note de frais de déplacements</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="month" id="fiche-mois-${esc(nom)}" value="${ui.noteFraisMois}">
+        <button class="add-btn" data-generer-note="${esc(nom)}" style="font-size:12px">🖨️ Générer la note de frais</button>
+      </div>
+      <div id="fiche-note-status-${esc(nom)}" style="font-size:12px;margin-top:6px"></div>
+    </div>
+  `;
+}
+
+function attacherFicheTechnicienListeners() {
+  mountedContainer.querySelectorAll("[data-fiche-adresse]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.ficheAdresse;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), adresseDomicile: inp.value.trim() });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-association]").forEach(sel => sel.addEventListener("change", async () => {
+    const nom = sel.dataset.ficheAssociation;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), association: sel.value });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-statut]").forEach(sel => sel.addEventListener("change", async () => {
+    const nom = sel.dataset.ficheStatut;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), statut: sel.value });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-siteprincipal]").forEach(sel => sel.addEventListener("change", async () => {
+    const nom = sel.dataset.ficheSiteprincipal;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), sitePrincipal: sel.value });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-km]").forEach(inp => inp.addEventListener("change", async () => {
+    const [nom, site] = inp.dataset.ficheKm.split("|");
+    const existing = state.coordonnees[nom] || {};
+    const kmParSite = { ...(existing.kmParSite || {}), [site]: parseFloat(inp.value) || 0 };
+    await saveCoordonnee(nom, { ...existing, kmParSite });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-km-del]").forEach(btn => btn.addEventListener("click", async () => {
+    const [nom, site] = btn.dataset.ficheKmDel.split("|");
+    const existing = state.coordonnees[nom] || {};
+    const kmParSite = { ...(existing.kmParSite || {}) };
+    delete kmParSite[site];
+    await saveCoordonnee(nom, { ...existing, kmParSite });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-km-add]").forEach(btn => btn.addEventListener("click", async () => {
+    const nom = btn.dataset.ficheKmAdd;
+    const siteSel = document.getElementById(`fiche-nouveau-site-${nom}`);
+    const kmInp = document.getElementById(`fiche-nouveau-km-${nom}`);
+    if (!siteSel.value) return;
+    const existing = state.coordonnees[nom] || {};
+    const kmParSite = { ...(existing.kmParSite || {}), [siteSel.value]: parseFloat(kmInp.value) || 0 };
+    await saveCoordonnee(nom, { ...existing, kmParSite });
+  }));
+  mountedContainer.querySelectorAll("[data-generer-note]").forEach(btn => btn.addEventListener("click", async () => {
+    const nom = btn.dataset.genererNote;
+    const mois = document.getElementById(`fiche-mois-${nom}`).value;
+    ui.noteFraisMois = mois;
+    await genererNoteDeFrais(nom, mois);
+  }));
+}
+
+// Génère la note de frais de déplacements du mois pour un technicien,
+// en reproduisant le formulaire officiel papier (CG01) du groupe
+// Établières — imprimable/enregistrable en PDF via la boîte de dialogue
+// d'impression du navigateur.
+async function genererNoteDeFrais(nom, mois) {
+  const statusEl = document.getElementById(`fiche-note-status-${nom}`);
+  const c = state.coordonnees[nom] || {};
+  const kmParSite = c.kmParSite || {};
+  const [annee, moisNum] = mois.split("-").map(Number);
+  const lignes = state.interventions
+    .filter(i => i.technicien === nom && i.date && i.date.startsWith(mois))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (lignes.length === 0) { statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; return; }
+  const sitesManquants = [...new Set(lignes.map(l => l.site))].filter(s => s && !(s in kmParSite));
+  if (sitesManquants.length > 0) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠️ Kilomètres non renseignés pour : ${sitesManquants.map(esc).join(", ")}. Ajoute-les dans la fiche ci-dessus avant de générer.</span>`;
+    return;
+  }
+  statusEl.innerHTML = "";
+
+  const totalKm = lignes.reduce((s, l) => s + (kmParSite[l.site] || 0), 0);
+  const nomMois = new Date(annee, moisNum - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const coche = (condition) => condition ? "☒" : "☐";
+
+  const html = `
+    <div class="print-fiche" style="background:#fff;color:#111;padding:20px;font-family:Calibri,Arial,sans-serif;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #333;padding-bottom:8px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:38px">
+          <div style="font-size:11px;line-height:1.3">Association ECOLE<br>Association ARMONIA</div>
+        </div>
+        <div style="font-size:10px;text-align:right;line-height:1.4">
+          <b>Codification : CG 01</b><br>Rattachement : CG - Compta/Gestion
+        </div>
+      </div>
+      <h2 style="text-align:center;margin:0 0 14px;font-size:16px;background:#eee;padding:6px">NOTE DE FRAIS DE DEPLACEMENTS – ECOLE &amp; ARMONIA</h2>
+      <p style="margin:0 0 4px"><b>NOM Prénom :</b> ${esc(nom)} &nbsp;&nbsp;&nbsp;&nbsp; <b>Mois :</b> ${esc(nomMois)}</p>
+      <p style="margin:0 0 4px"><b>Association :</b> ${coche(c.association !== "ARMONIA")} ECOLE &nbsp; ${coche(c.association === "ARMONIA")} ARMONIA</p>
+      <p style="margin:0 0 4px"><b>Statut :</b>
+        ${coche((c.statut || "salarie_prive") === "salarie_prive")} Salarié droit privé &nbsp;
+        ${coche(c.statut === "salarie_public")} Salarié droit public &nbsp;
+        ${coche(c.statut === "intervenant")} Intervenant (facturation) &nbsp;
+        ${coche(c.statut === "etudiant")} Étudiants
+      </p>
+      <p style="margin:0 0 4px"><b>Site principal :</b> ${esc(c.sitePrincipal || "—")}</p>
+      <p style="margin:0 0 10px"><b>Adresse complète :</b> ${esc(c.adresseDomicile || "—")}</p>
+
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr>
+          <th style="border:1px solid #999;padding:5px;background:#eee">DATE</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Lieu départ</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Ville de destination</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Nature de la mission</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Nbr Km A/R</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Frais annexes *</th>
+        </tr></thead>
+        <tbody>
+          ${lignes.map(l => `
+            <tr>
+              <td style="border:1px solid #999;padding:5px">${new Date(l.date).toLocaleDateString("fr-FR")}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(c.adresseDomicile || "—")}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(l.site)}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(l.type || "")}${l.description ? " — " + esc(l.description) : ""}</td>
+              <td style="border:1px solid #999;padding:5px;text-align:center">${kmParSite[l.site] || 0}</td>
+              <td style="border:1px solid #999;padding:5px"></td>
+            </tr>
+          `).join("")}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700">
+            <td colspan="4" style="border:1px solid #999;padding:5px;text-align:right">TOTAUX</td>
+            <td style="border:1px solid #999;padding:5px;text-align:center">${totalKm.toFixed(1)} km</td>
+            <td style="border:1px solid #999;padding:5px"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <p style="font-size:10px;margin:6px 0 0">*Frais annexes : joindre les justificatifs. En cas de repas, indiquer nom et nombre de personnes.</p>
+
+      <div style="display:flex;justify-content:space-between;margin-top:24px">
+        <div style="width:45%;border:1px solid #999;padding:8px;font-size:11px">
+          <b>RESERVE ADMINISTRATION</b><br>Tarif de remboursement du km : ${TARIF_KM.toFixed(2).replace(".", ",")} €<br><br><br>
+          <i>Cachet « comptabilité » à remplir et valider par le Directeur Délégué</i>
+        </div>
+        <div style="width:45%;border:1px solid #999;padding:8px;font-size:11px;text-align:center">
+          <b>SIGNATURE DU DEMANDEUR</b>
+        </div>
+      </div>
+      <p style="font-size:9px;color:#666;margin-top:12px">Le nombre de kms déclarés doit s'appuyer sur le trajet le plus court proposé par MAPPY entre la résidence administrative du salarié (lieu de travail habituel) et la ville de déplacement. C'est sur cette base que se fera le remboursement.</p>
+    </div>
+  `;
+
+  const printRoot = document.createElement("div");
+  printRoot.id = "note-frais-print-root";
+  printRoot.className = "print-only";
+  printRoot.innerHTML = html;
+  document.body.appendChild(printRoot);
+  window.print();
+  setTimeout(() => printRoot.remove(), 1000);
 }
 
 // =================================================================
