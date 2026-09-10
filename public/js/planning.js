@@ -221,12 +221,12 @@ const STATUTS_NOTE_FRAIS = {
   intervenant: "Intervenant (facturation)", etudiant: "Étudiants",
 };
 const TARIF_KM = 0.32;
-
-function sitesConnus() {
-  const noms = new Set();
-  state.associations.forEach(a => (a.sites || []).forEach(s => noms.add(s.nom)));
-  return [...noms].sort((a, b) => a.localeCompare(b));
-}
+// Le technicien est remboursé pour le trajet domicile ↔ service
+// technique (puis prend un véhicule de service pour se rendre sur le
+// site d'intervention lui-même — ce dernier trajet n'est pas à ses
+// frais). Une seule adresse de destination, fixe, pour tout le monde.
+const SERVICE_TECHNIQUE_NOM = "Service technique";
+const SERVICE_TECHNIQUE_ADRESSE = "Route de Nantes, 85000 La Roche-sur-Yon";
 
 function renderCoordonnees(container, perms) {
   const all = [
@@ -291,13 +291,13 @@ function renderCoordonnees(container, perms) {
 // fur et à mesure, complétée automatiquement à la génération de la note
 // de frais si un site manque), puis le générateur de note de frais.
 function renderFicheTechnicien(nom, c) {
-  const kmParSite = c.kmParSite || {};
-  const sites = sitesConnus();
   return `
     <div class="form-card" style="margin:8px 0;background:var(--panel-alt)">
       <h4 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📋 Fiche technicien — ${esc(nom)}</h4>
+      <p class="hint" style="margin:0 0 10px">Le trajet remboursé est domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} (${esc(SERVICE_TECHNIQUE_ADRESSE)}) — le technicien prend ensuite un véhicule de service pour se rendre sur le site d'intervention, non remboursé séparément.</p>
       <div class="form-grid">
         <label>Adresse du domicile (lieu de départ)<input data-fiche-adresse="${esc(nom)}" value="${esc(c.adresseDomicile || '')}" placeholder="ex. 12 rue des Lilas, 85000 La Roche-sur-Yon"></label>
+        <label>Km aller-retour domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)}<input type="number" min="0" step="0.1" data-fiche-km-service="${esc(nom)}" value="${c.kmDomicileService || ''}" placeholder="ex. 24"></label>
         <label>Association
           <select data-fiche-association="${esc(nom)}">
             <option value="ECOLE" ${(c.association || "ECOLE") === "ECOLE" ? "selected" : ""}>ECOLE</option>
@@ -309,32 +309,7 @@ function renderFicheTechnicien(nom, c) {
             ${Object.entries(STATUTS_NOTE_FRAIS).map(([k, v]) => `<option value="${k}" ${(c.statut || "salarie_prive") === k ? "selected" : ""}>${v}</option>`).join("")}
           </select>
         </label>
-        <label>Site principal
-          <select data-fiche-siteprincipal="${esc(nom)}">
-            <option value="">— Non renseigné —</option>
-            ${sites.map(s => `<option value="${esc(s)}" ${c.sitePrincipal === s ? "selected" : ""}>${esc(s)}</option>`).join("")}
-          </select>
-        </label>
-      </div>
-
-      <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🚗 Kilomètres aller-retour par site (depuis le domicile)</p>
-      <div id="fiche-km-liste-${esc(nom)}">
-        ${Object.keys(kmParSite).length === 0 ? `<p class="hint" style="margin:0 0 6px">Aucun site renseigné pour l'instant — complété automatiquement si besoin lors de la génération d'une note de frais.</p>` :
-          Object.entries(kmParSite).sort((a, b) => a[0].localeCompare(b[0])).map(([site, km]) => `
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
-              <span style="flex:1;font-size:13px">${esc(site)}</span>
-              <input type="number" min="0" step="0.1" data-fiche-km="${esc(nom)}|${esc(site)}" value="${km}" style="width:90px" placeholder="km A/R">
-              <button class="del-btn" data-fiche-km-del="${esc(nom)}|${esc(site)}" style="padding:4px 8px;font-size:11px">🗑️</button>
-            </div>
-          `).join("")}
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-        <select id="fiche-nouveau-site-${esc(nom)}" style="flex:1">
-          <option value="">— Ajouter un site —</option>
-          ${sites.filter(s => !(s in kmParSite)).map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("")}
-        </select>
-        <input type="number" min="0" step="0.1" id="fiche-nouveau-km-${esc(nom)}" placeholder="km A/R" style="width:90px">
-        <button class="nav-btn" data-fiche-km-add="${esc(nom)}" style="font-size:12px">➕</button>
+        <label>Site principal (informatif)<input data-fiche-siteprincipal="${esc(nom)}" value="${esc(c.sitePrincipal || '')}" placeholder="ex. Service technique"></label>
       </div>
 
       <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:16px 0 6px">🖨️ Note de frais de déplacements</p>
@@ -360,31 +335,13 @@ function attacherFicheTechnicienListeners() {
     const nom = sel.dataset.ficheStatut;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), statut: sel.value });
   }));
-  mountedContainer.querySelectorAll("[data-fiche-siteprincipal]").forEach(sel => sel.addEventListener("change", async () => {
-    const nom = sel.dataset.ficheSiteprincipal;
-    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), sitePrincipal: sel.value });
+  mountedContainer.querySelectorAll("[data-fiche-siteprincipal]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.ficheSiteprincipal;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), sitePrincipal: inp.value.trim() });
   }));
-  mountedContainer.querySelectorAll("[data-fiche-km]").forEach(inp => inp.addEventListener("change", async () => {
-    const [nom, site] = inp.dataset.ficheKm.split("|");
-    const existing = state.coordonnees[nom] || {};
-    const kmParSite = { ...(existing.kmParSite || {}), [site]: parseFloat(inp.value) || 0 };
-    await saveCoordonnee(nom, { ...existing, kmParSite });
-  }));
-  mountedContainer.querySelectorAll("[data-fiche-km-del]").forEach(btn => btn.addEventListener("click", async () => {
-    const [nom, site] = btn.dataset.ficheKmDel.split("|");
-    const existing = state.coordonnees[nom] || {};
-    const kmParSite = { ...(existing.kmParSite || {}) };
-    delete kmParSite[site];
-    await saveCoordonnee(nom, { ...existing, kmParSite });
-  }));
-  mountedContainer.querySelectorAll("[data-fiche-km-add]").forEach(btn => btn.addEventListener("click", async () => {
-    const nom = btn.dataset.ficheKmAdd;
-    const siteSel = document.getElementById(`fiche-nouveau-site-${nom}`);
-    const kmInp = document.getElementById(`fiche-nouveau-km-${nom}`);
-    if (!siteSel.value) return;
-    const existing = state.coordonnees[nom] || {};
-    const kmParSite = { ...(existing.kmParSite || {}), [siteSel.value]: parseFloat(kmInp.value) || 0 };
-    await saveCoordonnee(nom, { ...existing, kmParSite });
+  mountedContainer.querySelectorAll("[data-fiche-km-service]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.ficheKmService;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), kmDomicileService: parseFloat(inp.value) || 0 });
   }));
   mountedContainer.querySelectorAll("[data-generer-note]").forEach(btn => btn.addEventListener("click", async () => {
     const nom = btn.dataset.genererNote;
@@ -401,21 +358,30 @@ function attacherFicheTechnicienListeners() {
 async function genererNoteDeFrais(nom, mois) {
   const statusEl = document.getElementById(`fiche-note-status-${nom}`);
   const c = state.coordonnees[nom] || {};
-  const kmParSite = c.kmParSite || {};
+  const kmAllerRetour = c.kmDomicileService || 0;
   const [annee, moisNum] = mois.split("-").map(Number);
-  const lignes = state.interventions
+  const interventionsMois = state.interventions
     .filter(i => i.technicien === nom && i.date && i.date.startsWith(mois))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  if (lignes.length === 0) { statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; return; }
-  const sitesManquants = [...new Set(lignes.map(l => l.site))].filter(s => s && !(s in kmParSite));
-  if (sitesManquants.length > 0) {
-    statusEl.innerHTML = `<span style="color:var(--red)">⚠️ Kilomètres non renseignés pour : ${sitesManquants.map(esc).join(", ")}. Ajoute-les dans la fiche ci-dessus avant de générer.</span>`;
+  if (interventionsMois.length === 0) { statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; return; }
+  if (!kmAllerRetour) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠️ Kilomètres domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} non renseignés. Complète-les dans la fiche ci-dessus avant de générer.</span>`;
     return;
   }
   statusEl.innerHTML = "";
 
-  const totalKm = lignes.reduce((s, l) => s + (kmParSite[l.site] || 0), 0);
+  // Un seul trajet domicile ↔ service technique par JOUR travaillé, même
+  // si plusieurs interventions (sur des sites différents) ont eu lieu ce
+  // jour-là — le technicien ne fait cet aller-retour qu'une fois avant de
+  // prendre le véhicule de service pour la suite.
+  const parJour = new Map();
+  interventionsMois.forEach(i => {
+    if (!parJour.has(i.date)) parJour.set(i.date, []);
+    parJour.get(i.date).push(i);
+  });
+  const jours = [...parJour.keys()].sort();
+  const totalKm = kmAllerRetour * jours.length;
   const nomMois = new Date(annee, moisNum - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const coche = (condition) => condition ? "☒" : "☐";
 
@@ -452,16 +418,19 @@ async function genererNoteDeFrais(nom, mois) {
           <th style="border:1px solid #999;padding:5px;background:#eee">Frais annexes *</th>
         </tr></thead>
         <tbody>
-          ${lignes.map(l => `
+          ${jours.map(jour => {
+            const interventionsJour = parJour.get(jour);
+            const nature = interventionsJour.map(i => `${i.site}${i.type ? " (" + i.type + ")" : ""}`).join(" ; ");
+            return `
             <tr>
-              <td style="border:1px solid #999;padding:5px">${new Date(l.date).toLocaleDateString("fr-FR")}</td>
+              <td style="border:1px solid #999;padding:5px">${new Date(jour).toLocaleDateString("fr-FR")}</td>
               <td style="border:1px solid #999;padding:5px">${esc(c.adresseDomicile || "—")}</td>
-              <td style="border:1px solid #999;padding:5px">${esc(l.site)}</td>
-              <td style="border:1px solid #999;padding:5px">${esc(l.type || "")}${l.description ? " — " + esc(l.description) : ""}</td>
-              <td style="border:1px solid #999;padding:5px;text-align:center">${kmParSite[l.site] || 0}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(SERVICE_TECHNIQUE_NOM)} — ${esc(SERVICE_TECHNIQUE_ADRESSE)}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(nature)}</td>
+              <td style="border:1px solid #999;padding:5px;text-align:center">${kmAllerRetour}</td>
               <td style="border:1px solid #999;padding:5px"></td>
             </tr>
-          `).join("")}
+          `;}).join("")}
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
