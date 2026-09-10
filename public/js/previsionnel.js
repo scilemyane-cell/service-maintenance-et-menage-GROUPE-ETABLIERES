@@ -46,7 +46,7 @@ function labelAvancement(a) { return AVANCEMENTS[a] || "Non renseigné"; }
 
 function lignesFiltrees() {
   return state.lignes.filter(l => {
-    if (ui.filtreAnnee !== "toutes" && String(l.anneeVisee) !== String(ui.filtreAnnee)) return false;
+    if (ui.filtreAnnee !== "toutes" && `${l.typeAnnee || "civile"}-${l.anneeVisee}` !== String(ui.filtreAnnee)) return false;
     if (ui.filtreSite !== "toutes" && l.dossierId !== ui.filtreSite) return false;
     if (ui.filtrePriorite !== "toutes" && l.priorite !== ui.filtrePriorite) return false;
     if (ui.filtreStatut === "actives" && (l.statut === "refuse" || l.statut === "reporte")) return false;
@@ -80,7 +80,7 @@ function renderListe() {
       <div class="filters-row" style="flex-wrap:wrap;gap:8px">
         <select id="pv-f-annee">
           <option value="toutes">Toutes années</option>
-          ${annees.map(a => `<option value="${a}" ${String(ui.filtreAnnee) === String(a) ? "selected" : ""}>${a}</option>`).join("")}
+          ${annees.map(a => `<option value="${a.valeur}" ${String(ui.filtreAnnee) === String(a.valeur) ? "selected" : ""}>${a.libelle}</option>`).join("")}
         </select>
         <select id="pv-f-site">
           <option value="toutes">Tous les sites</option>

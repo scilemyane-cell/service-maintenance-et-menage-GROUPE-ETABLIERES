@@ -96,7 +96,14 @@ export async function supprimerLigne(id) {
 // pour préparer le budget de l'année prochaine facilement).
 export function anneesDisponibles(lignes) {
   const maintenant = new Date().getFullYear();
-  const annees = new Set([maintenant, maintenant + 1]);
-  lignes.forEach(l => { if (l.anneeVisee) annees.add(l.anneeVisee); });
-  return [...annees].sort((a, b) => b - a);
+  const map = new Map(); // clé "type-annee" -> libellé affiché
+  [maintenant, maintenant + 1].forEach(a => map.set(`civile-${a}`, String(a))); // toujours proposées par défaut, même sans ligne
+  lignes.forEach(l => {
+    if (!l.anneeVisee) return;
+    const cle = `${l.typeAnnee || "civile"}-${l.anneeVisee}`;
+    if (!map.has(cle)) map.set(cle, formatAnneeVisee(l));
+  });
+  return [...map.entries()]
+    .map(([valeur, libelle]) => ({ valeur, libelle }))
+    .sort((a, b) => b.libelle.localeCompare(a.libelle));
 }
