@@ -589,7 +589,7 @@ function renderDocPreview() {
       <p style="font-size:10px;color:#666;margin-bottom:12px">Heures de nuit calculées sur la plage 21h-6h (indicatif — à valider avec la convention collective). Prime dimanche : ${PRIME_DIMANCHE}€ par jour d'intervention un dimanche.</p>
 
       <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
-        <span>Signature intervenant</span>
+        <span>Signature salarié</span>
         <span>Signature manager (validation pour paiement)</span>
       </div>
     </div>
