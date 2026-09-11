@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock — Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  // stock-site-guest.html
+  // Accès direct (par QR, sans compte ni code) à la mise à jour rapide du
+  // stock déporté d'UN site précis — pensé pour le personnel du site qui
+  // n'a pas de compte dans l'appli. Une connexion Firebase "anonyme" se
+  // fait automatiquement en coulisses (nécessaire pour satisfaire les
+  // règles Firestore existantes, qui exigent juste "être connecté", pas
+  // un compte nommé) — la personne ne voit jamais d'écran de connexion.
+  //
+  // Nécessite que la méthode de connexion "Anonyme" soit activée dans
+  // Firebase Console > Authentication > Sign-in method (à faire une
+  // seule fois si ce n'est pas déjà le cas).
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { firebaseConfig } from "./js/firebase-config.js";
+
+  const app = document.getElementById("app");
+  const params = new URLSearchParams(location.search);
+  const siteId = params.get("site");
+
+  function showError(msg) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Accès invalide</div>
+          <h1>Impossible d'accéder</h1>
+          <p class="hint">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  if (!siteId) {
+    showError("Ce lien ne contient pas de site valide. Scanne le QR code affiché sur le site.");
+  } else {
+    const fbApp = initializeApp(firebaseConfig);
+    const auth = getAuth(fbApp);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) { demarrer(); return; }
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        showError(`Connexion impossible : ${e.message || e}. Vérifie ta connexion internet, ou contacte ton responsable si le problème persiste (la connexion "anonyme" doit être activée côté Firebase).`);
+      }
+    });
+
+    async function demarrer() {
+      const { getDossierUnique } = await import("./js/site-dossier-data.js");
+      const { watchStockSite, actualiserStockSite } = await import("./js/stock-site-data.js");
+
+      let site;
+      try {
+        site = await getDossierUnique(siteId);
+      } catch (e) {
+        showError(`Erreur lors du chargement du site : ${e.message || e}`);
+        return;
+      }
+      if (!site) { showError("Site introuvable ou supprimé."); return; }
+
+      let liste = [];
+      let index = 0;
+
+      watchStockSite(siteId, (items) => {
+        liste = [...items].sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+        render();
+      });
+
+      function esc(s) {
+        return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function render() {
+        if (liste.length === 0) {
+          app.innerHTML = `<div class="stack" style="padding:16px"><p class="hint">Aucun article pour l'instant sur ${esc(site.nom)}.</p></div>`;
+          return;
+        }
+        if (index >= liste.length) {
+          app.innerHTML = `
+            <div class="stack" style="padding:16px">
+              <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+                <p style="font-size:36px;margin:0 0 8px">✅</p>
+                <h3 style="margin:0 0 6px">Stock de ${esc(site.nom)} mis à jour</h3>
+                <p class="hint" style="margin:0 0 16px">${liste.length} article(s) passé(s) en revue.</p>
+                <button class="add-btn" id="g-recommencer" style="width:100%">↻ Recommencer</button>
+              </div>
+            </div>`;
+          document.getElementById("g-recommencer").addEventListener("click", () => { index = 0; render(); });
+          return;
+        }
+
+        const it = liste[index];
+        app.innerHTML = `
+          <div class="stack" style="padding:16px">
+            <p class="hint" style="text-align:center">${index + 1} / ${liste.length} · ${esc(site.nom)}</p>
+            <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+              <h3 style="margin:0 0 2px;font-size:17px">${esc(it.nom)}</h3>
+              <p class="hint" style="margin:0 0 16px">Cible permanente : ${it.quantiteCible ?? 0} ${esc(it.unite || "")} · Dernier stock : ${it.quantite ?? 0} ${esc(it.unite || "")}</p>
+
+              <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Quantité comptée</p>
+              <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
+                <button id="g-moins" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">−</button>
+                <input id="g-qte" type="number" min="0" value="${it.quantite ?? 0}" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
+                <button id="g-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
+              </div>
+
+              <button class="add-btn" id="g-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider et suivant →</button>
+              <button class="nav-btn" id="g-passer" style="width:100%;margin-top:8px">Passer sans modifier</button>
+              <div id="g-status" style="font-size:12px;margin-top:10px"></div>
+            </div>
+          </div>`;
+
+        const qteInput = document.getElementById("g-qte");
+        document.getElementById("g-moins").addEventListener("click", () => { qteInput.value = Math.max(0, (parseInt(qteInput.value, 10) || 0) - 1); });
+        document.getElementById("g-plus").addEventListener("click", () => { qteInput.value = (parseInt(qteInput.value, 10) || 0) + 1; });
+        document.getElementById("g-passer").addEventListener("click", () => { index++; render(); });
+        document.getElementById("g-valider").addEventListener("click", async () => {
+          const statusEl = document.getElementById("g-status");
+          const nouvelle = parseInt(qteInput.value, 10);
+          if (isNaN(nouvelle) || nouvelle < 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
+          try {
+            await actualiserStockSite(it.id, nouvelle, auth.currentUser?.uid || null);
+            it.quantite = nouvelle;
+            index++;
+            render();
+          } catch (e) {
+            statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+          }
+        });
+      }
+    }
+  }
+</script>
+</body>
+</html>

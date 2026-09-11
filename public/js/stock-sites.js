@@ -122,7 +122,7 @@ function renderListe() {
             </div>
             <div id="ssx-qr-rapide-holder-${site.id}" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
               <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
-              <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois sur ce site — scanné avec l'appareil photo du téléphone, ouvre directement le mode rapide de <b>${esc(site.nom)}</b> uniquement.</p>
+              <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois sur ce site — scanné avec l'appareil photo du téléphone, ouvre directement la mise à jour du stock de <b>${esc(site.nom)}</b>, sans compte ni code à saisir.</p>
               <button class="nav-btn" data-qr-rapide-print="${site.id}" style="margin-top:10px">🖨️ Imprimer</button>
             </div>
             ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
@@ -179,7 +179,7 @@ function renderListe() {
     const canvas = document.getElementById(`ssx-qr-rapide-canvas-${id}`);
     if (holder.style.display === "none") {
       holder.style.display = "block";
-      renderQrWithLogo(canvas, `https://service-maintenance-et-menage.web.app/app.html?stocksiterapide=${id}`, 200);
+      renderQrWithLogo(canvas, `https://service-maintenance-et-menage.web.app/stock-site-guest.html?site=${id}`, 200);
     } else {
       holder.style.display = "none";
     }
