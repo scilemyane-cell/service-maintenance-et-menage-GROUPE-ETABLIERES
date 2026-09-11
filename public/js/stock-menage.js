@@ -9,53 +9,75 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchProduits, creerProduit, modifierProduit, supprimerProduit,
   enregistrerSortie, enregistrerEntree, watchSorties,
-  nouveauProduit, CATEGORIES_MENAGE, MNA_ID, MNA_LABEL,
+  nouveauProduit, CATEGORIES_MENAGE, MNA_ID, MNA_LABEL, ZONES,
+  watchZonesSites, definirZoneSite,
 } from "./stock-menage-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
-let state = { produits: [], sorties: [], sites: [] };
+let state = { produits: [], sorties: [], sites: [], zonesSites: {} };
 let unsubs = [];
-let ui = { onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes" };
+let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes" };
 
 export async function mountStockMenage(container, user) {
   mountedContainer = container;
   mountedUser = user;
-  state = { produits: [], sorties: [], sites: [] };
-  ui = { onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes" };
+  state = { produits: [], sorties: [], sites: [], zonesSites: {} };
+  ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes" };
   unsubs.forEach(u => u());
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs = [
     watchProduits((list) => { state.produits = list; render(); }),
     watchSorties((list) => { state.sorties = list; render(); }),
     watchSitesDossiers((list) => { state.sites = list; render(); }),
+    watchZonesSites((z) => { state.zonesSites = z; render(); }),
   ];
   render();
+}
+
+// Sites configurés (via Paramètres) comme concernés par une zone donnée.
+function sitesDeLaZone(zone) {
+  return state.sites.filter(s => state.zonesSites[s.id] === zone);
 }
 
 function render() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Produits de ménage (papier toilette, savon, produits d'entretien…), distincts du stock de pièces techniques. Chaque sortie est attribuée à un centre ou au dispositif MNA, pour suivre la consommation.</p>
+      <p class="hint">Produits de ménage (papier toilette, savon, produits d'entretien…), distincts du stock de pièces techniques — deux stocks séparés, École et Agropolis. Chaque sortie est attribuée à un centre concerné ou au dispositif MNA.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="nav-btn" id="sm-onglet-produits" style="${ui.onglet === 'produits' ? 'border-color:var(--gold);color:var(--gold)' : ''}">📦 Produits & stock</button>
-        <button class="nav-btn" id="sm-onglet-historique" style="${ui.onglet === 'historique' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🗂️ Historique des sorties</button>
+        <button class="nav-btn" id="sm-zone-ecole" style="${ui.zone === 'ecole' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🏫 École</button>
+        <button class="nav-btn" id="sm-zone-agropolis" style="${ui.zone === 'agropolis' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🌾 Agropolis</button>
+        <button class="nav-btn" id="sm-zone-parametres" style="${ui.zone === 'parametres' ? 'border-color:var(--gold);color:var(--gold)' : ''}">⚙️ Paramètres (sites concernés)</button>
       </div>
       <div id="sm-corps"></div>
     </div>
   `;
+  document.getElementById("sm-zone-ecole").addEventListener("click", () => { ui.zone = "ecole"; ui.onglet = "produits"; render(); });
+  document.getElementById("sm-zone-agropolis").addEventListener("click", () => { ui.zone = "agropolis"; ui.onglet = "produits"; render(); });
+  document.getElementById("sm-zone-parametres").addEventListener("click", () => { ui.zone = "parametres"; render(); });
+
+  const corps = document.getElementById("sm-corps");
+  if (ui.zone === "parametres") { renderParametresZones(corps); return; }
+
+  corps.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+      <button class="nav-btn" id="sm-onglet-produits" style="${ui.onglet === 'produits' ? 'border-color:var(--gold);color:var(--gold)' : ''}">📦 Produits & stock</button>
+      <button class="nav-btn" id="sm-onglet-historique" style="${ui.onglet === 'historique' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🗂️ Historique des sorties</button>
+    </div>
+    <div id="sm-sous-corps"></div>
+  `;
   document.getElementById("sm-onglet-produits").addEventListener("click", () => { ui.onglet = "produits"; render(); });
   document.getElementById("sm-onglet-historique").addEventListener("click", () => { ui.onglet = "historique"; render(); });
 
-  const corps = document.getElementById("sm-corps");
-  if (ui.onglet === "produits") renderProduits(corps); else renderHistorique(corps);
+  const sousCorps = document.getElementById("sm-sous-corps");
+  if (ui.onglet === "produits") renderProduits(sousCorps); else renderHistorique(sousCorps);
 }
 
 function attributionOptions(selectionnee) {
   const options = [`<option value="">— Choisir —</option>`, `<option value="${MNA_ID}" ${selectionnee === MNA_ID ? "selected" : ""}>👥 ${MNA_LABEL}</option>`];
-  state.sites.forEach(s => options.push(`<option value="${s.id}" ${selectionnee === s.id ? "selected" : ""}>🏢 ${esc(s.nom)}</option>`));
+  sitesDeLaZone(ui.zone).forEach(s => options.push(`<option value="${s.id}" ${selectionnee === s.id ? "selected" : ""}>🏢 ${esc(s.nom)}</option>`));
   return options.join("");
 }
 
@@ -65,16 +87,48 @@ function nomAttribution(id) {
 }
 
 // =================================================================
+// Paramètres : quels sites sont concernés par chaque zone
+// =================================================================
+function renderParametresZones(container) {
+  const sitesTries = [...state.sites].sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+  container.innerHTML = `
+    <p class="hint" style="margin:10px 0">Indique, pour chaque site, s'il est concerné par le stock École, le stock Agropolis, ou aucun des deux (n'apparaîtra alors dans aucune liste d'attribution de sortie).</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Site</th><th>Zone</th></tr></thead>
+        <tbody>
+          ${sitesTries.length === 0 ? `<tr><td colspan="2" class="empty-row">Aucun site pour l'instant.</td></tr>` :
+            sitesTries.map(s => `
+              <tr>
+                <td>${esc(s.nom)}</td>
+                <td>
+                  <select data-zone-site="${s.id}">
+                    <option value="" ${!state.zonesSites[s.id] ? "selected" : ""}>— Aucune —</option>
+                    ${Object.entries(ZONES).map(([k, v]) => `<option value="${k}" ${state.zonesSites[s.id] === k ? "selected" : ""}>${v}</option>`).join("")}
+                  </select>
+                </td>
+              </tr>
+            `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+  container.querySelectorAll("[data-zone-site]").forEach(sel => sel.addEventListener("change", async (e) => {
+    try { await definirZoneSite(sel.dataset.zoneSite, e.target.value || null); } catch (err) { alert("Erreur : " + (err.message || err)); }
+  }));
+}
+
+// =================================================================
 // Onglet Produits & stock
 // =================================================================
 function renderProduits(container) {
-  const produits = state.produits;
+  const produits = state.produits.filter(p => p.zone === ui.zone);
   container.innerHTML = `
     <div style="display:flex;gap:8px;margin:10px 0">
       <button class="add-btn" id="sm-add">➕ Ajouter un produit</button>
     </div>
     ${ui.addingOpen ? renderFormProduit(null) : ""}
-    ${produits.length === 0 ? `<p class="hint">Aucun produit pour l'instant.</p>` : CATEGORIES_MENAGE.map(cat => {
+    ${produits.length === 0 ? `<p class="hint">Aucun produit pour l'instant dans le stock ${ZONES[ui.zone]}.</p>` : CATEGORIES_MENAGE.map(cat => {
       const liste = produits.filter(p => p.categorie === cat);
       if (liste.length === 0) return "";
       return `
@@ -113,11 +167,11 @@ function renderCarteProduit(p) {
 }
 
 function renderFormProduit(p) {
-  const data = p || nouveauProduit();
+  const data = p || nouveauProduit(ui.zone);
   const prefix = p ? `sm-edit-${p.id}` : "sm-new";
   return `
     <div class="form-card" style="margin-top:8px;background:var(--panel-alt)">
-      <h4 style="margin:0 0 10px;font-size:14px">${p ? "Modifier — " + esc(p.nom) : "Nouveau produit"}</h4>
+      <h4 style="margin:0 0 10px;font-size:14px">${p ? "Modifier — " + esc(p.nom) : `Nouveau produit — stock ${ZONES[ui.zone]}`}</h4>
       <div class="form-grid">
         <label>Nom<input id="${prefix}-nom" value="${esc(data.nom || '')}" placeholder="ex. Papier toilette"></label>
         <label>Catégorie
@@ -166,6 +220,7 @@ function attacherEcouteursProduits() {
       stockActuel: parseInt(document.getElementById(`${prefix}-stock`).value, 10) || 0,
       seuilMin: parseInt(document.getElementById(`${prefix}-seuil`).value, 10) || 0,
     };
+    if (id === "new") payload.zone = ui.zone; // la zone d'un produit existant ne change jamais après coup depuis ce formulaire
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
       if (id === "new") { await creerProduit(payload); ui.addingOpen = false; }
@@ -257,6 +312,7 @@ function attacherEcouteurEntree(produitId) {
 // =================================================================
 function renderHistorique(container) {
   const sorties = state.sorties.filter(s => {
+    if (s.zone !== ui.zone) return false;
     if (ui.filtreAttribution !== "toutes" && s.attributionId !== ui.filtreAttribution) return false;
     if (ui.filtreCategorie !== "toutes" && s.categorie !== ui.filtreCategorie) return false;
     return true;
