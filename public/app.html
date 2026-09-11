@@ -47,6 +47,7 @@
   import { mountExportSharepointAdmin } from "./js/export-sharepoint-admin.js";
   import { mountQrMasse } from "./js/qr-print-masse.js";
   import { mountPrevisionnel } from "./js/previsionnel.js";
+  import { mountStockMenage } from "./js/stock-menage.js";
   import { mountCorbeille } from "./js/corbeille.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
@@ -143,6 +144,12 @@
         ],
       },
       {
+        id: "stock-menage", label: "Stock Ménage", icon: "🧻", desc: "PQ, savon, entretien — sorties attribuées à un centre ou au dispositif MNA",
+        subtabs: [
+          { id: "liste", label: "Stock", icon: "🧻", roles: [...GESTION,"menage","technicien"], mount: mountStockMenage },
+        ],
+      },
+      {
         id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
         badgeAtelier: stockAlertCount.central > 0 ? stockAlertCount.central : null,
         badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
@@ -159,8 +166,8 @@
   }
 
   function allCategories(user) {
-    const [astreinte, administration, sites, compteurs, masterlock, previsionnel, stock] = staticCategories();
-    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, stock];
+    const [astreinte, administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock] = staticCategories();
+    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock];
   }
 
   watchAuth((user) => {

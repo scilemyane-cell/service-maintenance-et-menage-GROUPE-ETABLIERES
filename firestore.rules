@@ -243,5 +243,22 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if isEditor();
     }
+    // ---- Stock Menage (papier toilette, savon, produits d'entretien) ----
+    // Lecture ouverte a tous les connectes (techniciens/agents d'entretien
+    // ont besoin de voir le stock et faire des sorties). Creation d'un
+    // produit/modification/suppression reservees aux editeurs ; la mise a
+    // jour du champ stockActuel (sortie/entree) ouverte a tout utilisateur
+    // connecte, comme pour le stock deporte par site.
+    match /stock-menage-produits/{docId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isEditor();
+      allow update: if isEditor()
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockActuel']));
+    }
+    match /stock-menage-sorties/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isEditor();
+    }
   }
 }
