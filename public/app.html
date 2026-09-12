@@ -182,6 +182,14 @@
       window.stockDeepLinkProduitId = stockParam;
       history.replaceState(null, "", window.location.pathname);
     }
+    // Idem pour un produit du Stock Ménage : .../app.html?stockmenage=ID_PRODUIT
+    const stockMenageParam = new URLSearchParams(window.location.search).get("stockmenage");
+    if (stockMenageParam && currentCategory === null) {
+      currentCategory = "stock-menage";
+      currentSubtab = "liste";
+      window.stockMenageDeepLinkProduitId = stockMenageParam;
+      history.replaceState(null, "", window.location.pathname);
+    }
     // Idem pour un article de stock déporté par site : .../app.html?stocksite=ID
     const stockSiteParam = new URLSearchParams(window.location.search).get("stocksite");
     if (stockSiteParam && currentCategory === null) {

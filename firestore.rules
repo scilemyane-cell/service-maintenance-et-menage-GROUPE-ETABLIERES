@@ -11,6 +11,13 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    // Zones Stock Menage assignees a l'utilisateur (ex. ["ecole"],
+    // ["agropolis"], ou les deux) - le personnel n'est pas le meme d'une
+    // association a l'autre, donc distinct des roles habituels.
+    function mesZonesMenage() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.stockMenageZones;
+    }
+
     function isSuperAdmin() {
       return isSignedIn() && myRole() == 'super_admin';
     }
@@ -250,14 +257,13 @@ service cloud.firestore {
     // jour du champ stockActuel (sortie/entree) ouverte a tout utilisateur
     // connecte, comme pour le stock deporte par site.
     match /stock-menage-produits/{docId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isEditor();
-      allow update: if isEditor()
-        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockActuel']));
+      allow read: if isEditor() || (isSignedIn() && resource.data.zone in mesZonesMenage());
+      allow create: if isEditor() || (isSignedIn() && request.resource.data.zone in mesZonesMenage());
+      allow update, delete: if isEditor() || (isSignedIn() && resource.data.zone in mesZonesMenage());
     }
     match /stock-menage-sorties/{docId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      allow read: if isEditor() || (isSignedIn() && resource.data.zone in mesZonesMenage());
+      allow create: if isEditor() || (isSignedIn() && request.resource.data.zone in mesZonesMenage());
       allow update, delete: if isEditor();
     }
   }

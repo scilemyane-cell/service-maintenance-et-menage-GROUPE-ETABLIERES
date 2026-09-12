@@ -88,9 +88,9 @@ function renderUtilisateurs(container) {
       <p class="hint">Modifie le nom affiché, l'email ou le rôle de chaque compte existant. Si l'email est vide ci-dessous (comptes créés avant cette mise à jour), renseigne-le manuellement — nécessaire pour "Réinitialiser". "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Mot de passe</th></tr></thead>
+          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Zones Stock Ménage</th><th>Mot de passe</th></tr></thead>
           <tbody>
-            ${usersState.users.length === 0 ? `<tr><td colspan="4" class="empty-row">Aucun utilisateur.</td></tr>` :
+            ${usersState.users.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucun utilisateur.</td></tr>` :
               usersState.users.map(u => `
                 <tr>
                   <td><input data-user-email="${u.uid}" value="${esc(u.email || '')}" placeholder="email manquant — à renseigner" style="min-width:200px${!u.email ? ';border-color:var(--red)' : ''}"></td>
@@ -98,6 +98,10 @@ function renderUtilisateurs(container) {
                   <td>${peutModifierRoleDe(currentUser, u.role)
                     ? `<select data-user-role="${u.uid}">${rolesAssignablesPar(currentUser).map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select>`
                     : `<span title="Seul un Super Admin peut modifier ce rôle">🔒 ${esc(roleLabel(u.role))}</span>`}</td>
+                  <td style="white-space:nowrap;font-size:12px">
+                    <label style="margin-right:8px"><input type="checkbox" data-user-zone="${u.uid}:ecole" ${(u.stockMenageZones || []).includes("ecole") ? "checked" : ""}> École</label>
+                    <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
+                  </td>
                   <td>
                     <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
                     <div data-reset-status="${u.uid}" style="font-size:11px;margin-top:4px"></div>
@@ -150,6 +154,15 @@ function renderUtilisateurs(container) {
   });
   container.querySelectorAll("[data-user-role]").forEach(sel => {
     sel.addEventListener("change", async () => { await updateUser(sel.dataset.userRole, { role: sel.value }); });
+  });
+  container.querySelectorAll("[data-user-zone]").forEach(cb => {
+    cb.addEventListener("change", async () => {
+      const [uid, zone] = cb.dataset.userZone.split(":");
+      const u = usersState.users.find(x => x.uid === uid);
+      const zones = new Set(u?.stockMenageZones || []);
+      if (cb.checked) zones.add(zone); else zones.delete(zone);
+      await updateUser(uid, { stockMenageZones: [...zones] });
+    });
   });
   container.querySelectorAll("[data-reset-pwd]").forEach(btn => {
     btn.addEventListener("click", async () => {

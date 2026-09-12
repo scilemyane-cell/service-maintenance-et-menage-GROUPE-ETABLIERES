@@ -13,22 +13,50 @@ import {
   watchZonesSites, definirZoneSite,
 } from "./stock-menage-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
+import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 let mountedContainer = null;
 let mountedUser = null;
 let state = { produits: [], sorties: [], sites: [], zonesSites: {} };
 let unsubs = [];
-let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes" };
+let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null };
+
+const ROLES_GESTION = ["super_admin", "admin", "n1"];
+
+// Les gestionnaires voient toujours les deux zones ; les autres rôles
+// (techniciens, agents de ménage) sont restreints aux zones qui leur ont
+// été explicitement assignées (Administration > Comptes), puisque le
+// personnel n'est pas le même d'une association à l'autre.
+function zonesAccessibles(user) {
+  if (ROLES_GESTION.includes(user?.role)) return ["ecole", "agropolis"];
+  return user?.stockMenageZones || [];
+}
 
 export async function mountStockMenage(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { produits: [], sorties: [], sites: [], zonesSites: {} };
-  ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes" };
+  const accessibles = zonesAccessibles(user);
+  ui = { zone: accessibles[0] || null, onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null };
   unsubs.forEach(u => u());
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs = [
-    watchProduits((list) => { state.produits = list; render(); }),
+    watchProduits((list) => {
+      state.produits = list;
+      // Lien direct depuis un QR produit (scanné hors appli) :
+      // .../app.html?stockmenage=ID_PRODUIT — ouvre directement sa fiche
+      // avec la sortie prête à valider, sur la bonne zone.
+      if (window.stockMenageDeepLinkProduitId) {
+        const cible = list.find(p => p.id === window.stockMenageDeepLinkProduitId);
+        window.stockMenageDeepLinkProduitId = null;
+        if (cible && zonesAccessibles(mountedUser).includes(cible.zone)) {
+          ui.zone = cible.zone;
+          ui.onglet = "produits";
+          ui.deepLinkSortieId = cible.id;
+        }
+      }
+      render();
+    }),
     watchSorties((list) => { state.sorties = list; render(); }),
     watchSitesDossiers((list) => { state.sites = list; render(); }),
     watchZonesSites((z) => { state.zonesSites = z; render(); }),
@@ -43,23 +71,33 @@ function sitesDeLaZone(zone) {
 
 function render() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
+  if (ui.qrId) { renderQr(state.produits.find(p => p.id === ui.qrId)); return; }
+  const accessibles = zonesAccessibles(mountedUser);
+  const estGestion = ROLES_GESTION.includes(mountedUser?.role);
+
+  if (accessibles.length === 0) {
+    mountedContainer.innerHTML = `<div class="stack"><p class="hint">Aucune zone de stock ménage ne t'a été attribuée pour l'instant — contacte un administrateur.</p></div>`;
+    return;
+  }
+  if (!ui.zone || (ui.zone !== "parametres" && !accessibles.includes(ui.zone))) ui.zone = accessibles[0];
+
   mountedContainer.innerHTML = `
     <div class="stack">
       <p class="hint">Produits de ménage (papier toilette, savon, produits d'entretien…), distincts du stock de pièces techniques — deux stocks séparés, École et Agropolis. Chaque sortie est attribuée à un centre concerné ou au dispositif MNA.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="nav-btn" id="sm-zone-ecole" style="${ui.zone === 'ecole' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🏫 École</button>
-        <button class="nav-btn" id="sm-zone-agropolis" style="${ui.zone === 'agropolis' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🌾 Agropolis</button>
-        <button class="nav-btn" id="sm-zone-parametres" style="${ui.zone === 'parametres' ? 'border-color:var(--gold);color:var(--gold)' : ''}">⚙️ Paramètres (sites concernés)</button>
+        ${accessibles.includes("ecole") ? `<button class="nav-btn" id="sm-zone-ecole" style="${ui.zone === 'ecole' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🏫 École</button>` : ""}
+        ${accessibles.includes("agropolis") ? `<button class="nav-btn" id="sm-zone-agropolis" style="${ui.zone === 'agropolis' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🌾 Agropolis</button>` : ""}
+        ${estGestion ? `<button class="nav-btn" id="sm-zone-parametres" style="${ui.zone === 'parametres' ? 'border-color:var(--gold);color:var(--gold)' : ''}">⚙️ Paramètres (sites concernés)</button>` : ""}
       </div>
       <div id="sm-corps"></div>
     </div>
   `;
-  document.getElementById("sm-zone-ecole").addEventListener("click", () => { ui.zone = "ecole"; ui.onglet = "produits"; render(); });
-  document.getElementById("sm-zone-agropolis").addEventListener("click", () => { ui.zone = "agropolis"; ui.onglet = "produits"; render(); });
-  document.getElementById("sm-zone-parametres").addEventListener("click", () => { ui.zone = "parametres"; render(); });
+  document.getElementById("sm-zone-ecole")?.addEventListener("click", () => { ui.zone = "ecole"; ui.onglet = "produits"; render(); });
+  document.getElementById("sm-zone-agropolis")?.addEventListener("click", () => { ui.zone = "agropolis"; ui.onglet = "produits"; render(); });
+  document.getElementById("sm-zone-parametres")?.addEventListener("click", () => { ui.zone = "parametres"; render(); });
 
   const corps = document.getElementById("sm-corps");
-  if (ui.zone === "parametres") { renderParametresZones(corps); return; }
+  if (ui.zone === "parametres" && estGestion) { renderParametresZones(corps); return; }
 
   corps.innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
@@ -141,6 +179,45 @@ function renderProduits(container) {
 
   document.getElementById("sm-add").addEventListener("click", () => { ui.addingOpen = !ui.addingOpen; ui.editingId = null; render(); });
   attacherEcouteursProduits();
+
+  // Ouvre automatiquement la sortie du produit visé par un QR scanné,
+  // une seule fois (voir mountStockMenage).
+  if (ui.deepLinkSortieId) {
+    const id = ui.deepLinkSortieId;
+    ui.deepLinkSortieId = null;
+    const holder = document.getElementById(`sm-sortie-form-${id}`);
+    if (holder) {
+      holder.innerHTML = renderFormSortie(id);
+      attacherEcouteurSortie(id);
+      holder.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+}
+
+// Encodage du QR : un vrai lien vers l'appli avec l'id du produit en
+// paramètre — scanné avec l'appareil photo normal du téléphone, ouvre
+// directement la fiche du bon produit, sortie prête à valider. Même
+// principe que le Stock maintenance.
+export function qrPayloadFor(produitId) {
+  return `https://service-maintenance-et-menage.web.app/app.html?stockmenage=${produitId}`;
+}
+
+function renderQr(p) {
+  if (!p) { ui.qrId = null; render(); return; }
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="sm-qr-back">← Retour</button>
+      <div class="form-card qr-print-card" style="text-align:center;max-width:320px" id="sm-qr-print">
+        <p style="font-weight:700;margin:0 0 4px">${esc(p.nom)}</p>
+        <p class="hint" style="margin:0 0 12px">${esc(p.categorie || "")} · ${ZONES[p.zone] || ""}</p>
+        <div id="sm-qr-canvas" style="width:220px;height:220px;margin:0 auto"></div>
+      </div>
+      <button class="add-btn" id="sm-qr-print-btn" style="width:fit-content">🖨️ Imprimer l'étiquette</button>
+    </div>
+  `;
+  document.getElementById("sm-qr-back").addEventListener("click", () => { ui.qrId = null; render(); });
+  document.getElementById("sm-qr-print-btn").addEventListener("click", () => printQrCard(document.getElementById("sm-qr-print")));
+  renderQrWithLogo(document.getElementById("sm-qr-canvas"), qrPayloadFor(p.id), 220);
 }
 
 function renderCarteProduit(p) {
@@ -157,6 +234,7 @@ function renderCarteProduit(p) {
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="nav-btn" data-sortie="${p.id}" style="padding:6px 10px;font-size:12px">📤 Sortie</button>
           <button class="nav-btn" data-entree="${p.id}" style="padding:6px 10px;font-size:12px">📥 Entrée</button>
+          <button class="nav-btn" data-qr-sm="${p.id}" style="padding:6px 10px;font-size:12px">🔲 QR</button>
           <button class="nav-btn" data-edit-sm="${p.id}" style="padding:6px 10px;font-size:12px">✏️</button>
           <button class="del-btn" data-del-sm="${p.id}" style="padding:6px 10px;font-size:12px">🗑️</button>
         </div>
@@ -239,6 +317,7 @@ function attacherEcouteursProduits() {
     }
   }));
 
+  mountedContainer.querySelectorAll("[data-qr-sm]").forEach(btn => btn.addEventListener("click", () => { ui.qrId = btn.dataset.qrSm; render(); }));
   mountedContainer.querySelectorAll("[data-sortie]").forEach(btn => btn.addEventListener("click", () => {
     const holder = document.getElementById(`sm-sortie-form-${btn.dataset.sortie}`);
     holder.innerHTML = holder.innerHTML ? "" : renderFormSortie(btn.dataset.sortie);
