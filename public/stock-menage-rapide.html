@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Ménage — Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  // stock-menage-rapide.html
+  // Page épurée, sans le reste de l'appli autour (mêmes principe et
+  // interface que stock-site-guest.html pour le stock déporté) —
+  // MAIS contrairement à cette dernière, PAS de connexion anonyme :
+  // le stock ménage est cloisonné par zone (École/Agropolis, pas les
+  // mêmes personnes des deux côtés), donc une vraie session utilisateur
+  // déjà connectée dans l'appli est nécessaire pour vérifier ses droits.
+  // Si la personne n'est pas déjà connectée, on l'invite à se connecter
+  // depuis l'appli plutôt que de contourner le contrôle d'accès.
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { firebaseConfig } from "./js/firebase-config.js";
+
+  const app = document.getElementById("app");
+  const params = new URLSearchParams(location.search);
+  const zoneParam = params.get("zone");
+  const produitParam = params.get("produit");
+  const ZONES = { ecole: "École", agropolis: "Agropolis" };
+  const ROLES_GESTION = ["super_admin", "admin", "n1"];
+
+  function showMessage(titre, msg, avecConnexion) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Stock Ménage</div>
+          <h1>${titre}</h1>
+          <p class="hint">${msg}</p>
+          ${avecConnexion ? `<a class="add-btn" href="index.html" style="display:inline-block;text-decoration:none;margin-top:12px">Se connecter</a>` : ""}
+        </div>
+      </div>`;
+  }
+
+  if (!zoneParam && !produitParam) {
+    showMessage("Accès invalide", "Ce lien ne contient ni zone ni produit valide. Scanne le QR imprimé depuis l'appli.", false);
+  } else {
+    const fbApp = initializeApp(firebaseConfig);
+    const auth = getAuth(fbApp);
+    const db = getFirestore(fbApp);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { showMessage("Connexion requise", "Le stock ménage est réservé aux comptes autorisés — connecte-toi d'abord dans l'appli, puis rescanne ce QR.", true); return; }
+      let profil;
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        profil = snap.exists() ? snap.data() : {};
+      } catch (e) {
+        showMessage("Erreur", `Impossible de vérifier tes accès : ${e.message || e}`, false);
+        return;
+      }
+      const zonesAutorisees = ROLES_GESTION.includes(profil.role) ? ["ecole", "agropolis"] : (profil.stockMenageZones || []);
+
+      // Cas d'un QR produit unique : on doit d'abord charger ce produit
+      // pour connaître sa zone, avant de vérifier l'accès.
+      if (produitParam) {
+        const { doc: docRef, getDoc: getDocFn } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
+        let produit;
+        try {
+          const snapP = await getDocFn(docRef(db, "stock-menage-produits", produitParam));
+          produit = snapP.exists() ? { id: snapP.id, ...snapP.data() } : null;
+        } catch (e) {
+          showMessage("Erreur", `Impossible de charger ce produit : ${e.message || e}`, false);
+          return;
+        }
+        if (!produit) { showMessage("Produit introuvable", "Ce produit a peut-être été supprimé.", false); return; }
+        if (!zonesAutorisees.includes(produit.zone)) {
+          showMessage("Accès refusé", `Tu n'as pas accès au stock ${ZONES[produit.zone] || produit.zone}. Contacte un administrateur si tu penses que c'est une erreur.`, false);
+          return;
+        }
+        demarrer(db, produit.zone, produit.id);
+        return;
+      }
+
+      if (!ZONES[zoneParam]) { showMessage("Accès invalide", "Zone inconnue.", false); return; }
+      if (!zonesAutorisees.includes(zoneParam)) {
+        showMessage("Accès refusé", `Tu n'as pas accès au stock ${ZONES[zoneParam]}. Contacte un administrateur si tu penses que c'est une erreur.`, false);
+        return;
+      }
+      demarrer(db, zoneParam, null);
+    });
+
+    async function demarrer(db, zone, seulProduitId) {
+      const { collection, onSnapshot, updateDoc } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
+
+      let liste = [];
+      let index = 0;
+
+      onSnapshot(collection(db, "stock-menage-produits"), (snap) => {
+        const tous = [];
+        snap.forEach((d) => { if (!d.data().supprimeLe) tous.push({ id: d.id, ...d.data() }); });
+        liste = tous
+          .filter(p => p.zone === zone && (!seulProduitId || p.id === seulProduitId))
+          .sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || ""));
+        render();
+      });
+
+      function esc(s) {
+        return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function render() {
+        if (liste.length === 0) {
+          app.innerHTML = `<div class="stack" style="padding:16px"><p class="hint">Aucun produit pour l'instant dans le stock ${ZONES[zone]}.</p></div>`;
+          return;
+        }
+        if (index >= liste.length) {
+          app.innerHTML = `
+            <div class="stack" style="padding:16px">
+              <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+                <p style="font-size:36px;margin:0 0 8px">✅</p>
+                <h3 style="margin:0 0 6px">Stock ${ZONES[zone]} actualisé</h3>
+                <p class="hint" style="margin:0 0 16px">${liste.length} produit(s) passé(s) en revue.</p>
+                <button class="add-btn" id="g-recommencer" style="width:100%">↻ Recommencer</button>
+              </div>
+            </div>`;
+          document.getElementById("g-recommencer").addEventListener("click", () => { index = 0; render(); });
+          return;
+        }
+
+        const p = liste[index];
+        app.innerHTML = `
+          <div class="stack" style="padding:16px">
+            <p class="hint" style="text-align:center">${index + 1} / ${liste.length} · ${ZONES[zone]}</p>
+            <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+              <h3 style="margin:0 0 2px;font-size:17px">${esc(p.nom)}</h3>
+              <p class="hint" style="margin:0 0 16px">${esc(p.categorie || "")} · Dernier stock : ${p.stockActuel || 0} ${esc(p.unite || "")}</p>
+
+              <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Quantité comptée</p>
+              <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
+                <button id="g-moins" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">−</button>
+                <input id="g-qte" type="number" min="0" value="${p.stockActuel || 0}" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
+                <button id="g-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
+              </div>
+
+              <button class="add-btn" id="g-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider et suivant →</button>
+              <button class="nav-btn" id="g-passer" style="width:100%;margin-top:8px">Passer sans modifier</button>
+              <div id="g-status" style="font-size:12px;margin-top:10px"></div>
+            </div>
+          </div>`;
+
+        const qteInput = document.getElementById("g-qte");
+        document.getElementById("g-moins").addEventListener("click", () => { qteInput.value = Math.max(0, (parseInt(qteInput.value, 10) || 0) - 1); });
+        document.getElementById("g-plus").addEventListener("click", () => { qteInput.value = (parseInt(qteInput.value, 10) || 0) + 1; });
+        document.getElementById("g-passer").addEventListener("click", () => { index++; render(); });
+        document.getElementById("g-valider").addEventListener("click", async () => {
+          const statusEl = document.getElementById("g-status");
+          const nouvelle = parseInt(qteInput.value, 10);
+          if (isNaN(nouvelle) || nouvelle < 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
+          try {
+            await updateDoc(doc(db, "stock-menage-produits", p.id), { stockActuel: nouvelle });
+            p.stockActuel = nouvelle;
+            index++;
+            render();
+          } catch (e) {
+            statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+          }
+        });
+      }
+    }
+  }
+</script>
+</body>
+</html>

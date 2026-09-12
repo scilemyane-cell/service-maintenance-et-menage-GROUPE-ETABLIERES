@@ -213,15 +213,24 @@ function renderProduits(container) {
 // paramètre — scanné avec l'appareil photo normal du téléphone, ouvre
 // directement la fiche du bon produit, sortie prête à valider. Même
 // principe que le Stock maintenance.
+// Encodage du QR : mène à la même page épurée que le QR général (voir
+// qrPayloadGeneral), mais limitée à ce seul produit, prêt à actualiser
+// directement — même interface que le stock déporté par site, sans le
+// reste de l'appli autour, tout en gardant la vérification d'accès par
+// zone (session connectée requise, pas de contournement anonyme).
 export function qrPayloadFor(produitId) {
-  return `https://service-maintenance-et-menage.web.app/app.html?stockmenage=${produitId}`;
+  return `https://service-maintenance-et-menage.web.app/stock-menage-rapide.html?produit=${produitId}`;
 }
 
 // Encodage du QR général d'une zone — un seul QR, imprimé une fois,
-// menant directement au mode rapide d'actualisation de tous les
-// produits de cette zone (comme le QR général du Stock maintenance).
+// menant à une page épurée (sans le reste de l'appli autour, même
+// principe que le stock déporté par site) pour actualiser rapidement
+// tous les produits de cette zone. Nécessite une vraie session
+// connectée avec l'accès à cette zone (pas de contournement anonyme
+// ici, contrairement au stock déporté — le personnel diffère d'une
+// association à l'autre).
 export function qrPayloadGeneral(zone) {
-  return `https://service-maintenance-et-menage.web.app/app.html?stockmenagerapide=${zone}`;
+  return `https://service-maintenance-et-menage.web.app/stock-menage-rapide.html?zone=${zone}`;
 }
 
 function renderQrGeneral(zone) {
