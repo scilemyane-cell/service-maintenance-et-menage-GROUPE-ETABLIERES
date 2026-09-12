@@ -190,6 +190,15 @@
       window.stockMenageDeepLinkProduitId = stockMenageParam;
       history.replaceState(null, "", window.location.pathname);
     }
+    // QR général par zone menant directement au mode rapide d'actualisation
+    // de tous les produits de cette zone : .../app.html?stockmenagerapide=ecole (ou agropolis)
+    const stockMenageRapideParam = new URLSearchParams(window.location.search).get("stockmenagerapide");
+    if (stockMenageRapideParam && currentCategory === null) {
+      currentCategory = "stock-menage";
+      currentSubtab = "liste";
+      window.stockMenageRapideDeepLinkZone = stockMenageRapideParam;
+      history.replaceState(null, "", window.location.pathname);
+    }
     // Idem pour un article de stock déporté par site : .../app.html?stocksite=ID
     const stockSiteParam = new URLSearchParams(window.location.search).get("stocksite");
     if (stockSiteParam && currentCategory === null) {

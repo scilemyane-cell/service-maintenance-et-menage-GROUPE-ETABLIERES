@@ -19,7 +19,7 @@ let mountedContainer = null;
 let mountedUser = null;
 let state = { produits: [], sorties: [], sites: [], zonesSites: {} };
 let unsubs = [];
-let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null };
+let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null, qrGeneralZone: null, rapide: false, rapideIndex: 0 };
 
 const ROLES_GESTION = ["super_admin", "admin", "n1"];
 
@@ -37,11 +37,12 @@ export async function mountStockMenage(container, user) {
   mountedUser = user;
   state = { produits: [], sorties: [], sites: [], zonesSites: {} };
   const accessibles = zonesAccessibles(user);
-  ui = { zone: accessibles[0] || null, onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null };
+  ui = { zone: accessibles[0] || null, onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null, qrGeneralZone: null, rapide: false, rapideIndex: 0 };
   unsubs.forEach(u => u());
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs = [
     watchProduits((list) => {
+      const dejaEnRapide = ui.rapide;
       state.produits = list;
       // Lien direct depuis un QR produit (scanné hors appli) :
       // .../app.html?stockmenage=ID_PRODUIT — ouvre directement sa fiche
@@ -55,7 +56,17 @@ export async function mountStockMenage(container, user) {
           ui.deepLinkSortieId = cible.id;
         }
       }
-      render();
+      // QR général par zone (mode rapide) : .../app.html?stockmenagerapide=ecole
+      if (window.stockMenageRapideDeepLinkZone) {
+        const zoneCible = window.stockMenageRapideDeepLinkZone;
+        window.stockMenageRapideDeepLinkZone = null;
+        if (zonesAccessibles(mountedUser).includes(zoneCible)) {
+          ui.zone = zoneCible;
+          ui.rapide = true;
+          ui.rapideIndex = 0;
+        }
+      }
+      if (!dejaEnRapide) render();
     }),
     watchSorties((list) => { state.sorties = list; render(); }),
     watchSitesDossiers((list) => { state.sites = list; render(); }),
@@ -72,6 +83,8 @@ function sitesDeLaZone(zone) {
 function render() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
   if (ui.qrId) { renderQr(state.produits.find(p => p.id === ui.qrId)); return; }
+  if (ui.qrGeneralZone) { renderQrGeneral(ui.qrGeneralZone); return; }
+  if (ui.rapide) { renderModeRapide(); return; }
   const accessibles = zonesAccessibles(mountedUser);
   const estGestion = ROLES_GESTION.includes(mountedUser?.role);
 
@@ -162,8 +175,9 @@ function renderParametresZones(container) {
 function renderProduits(container) {
   const produits = state.produits.filter(p => p.zone === ui.zone);
   container.innerHTML = `
-    <div style="display:flex;gap:8px;margin:10px 0">
+    <div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap">
       <button class="add-btn" id="sm-add">➕ Ajouter un produit</button>
+      <button class="nav-btn" id="sm-qr-general">🔲 QR général (actualisation rapide)</button>
     </div>
     ${ui.addingOpen ? renderFormProduit(null) : ""}
     ${produits.length === 0 ? `<p class="hint">Aucun produit pour l'instant dans le stock ${ZONES[ui.zone]}.</p>` : CATEGORIES_MENAGE.map(cat => {
@@ -178,6 +192,7 @@ function renderProduits(container) {
   `;
 
   document.getElementById("sm-add").addEventListener("click", () => { ui.addingOpen = !ui.addingOpen; ui.editingId = null; render(); });
+  document.getElementById("sm-qr-general").addEventListener("click", () => { ui.qrGeneralZone = ui.zone; render(); });
   attacherEcouteursProduits();
 
   // Ouvre automatiquement la sortie du produit visé par un QR scanné,
@@ -200,6 +215,97 @@ function renderProduits(container) {
 // principe que le Stock maintenance.
 export function qrPayloadFor(produitId) {
   return `https://service-maintenance-et-menage.web.app/app.html?stockmenage=${produitId}`;
+}
+
+// Encodage du QR général d'une zone — un seul QR, imprimé une fois,
+// menant directement au mode rapide d'actualisation de tous les
+// produits de cette zone (comme le QR général du Stock maintenance).
+export function qrPayloadGeneral(zone) {
+  return `https://service-maintenance-et-menage.web.app/app.html?stockmenagerapide=${zone}`;
+}
+
+function renderQrGeneral(zone) {
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="sm-qrg-back">← Retour</button>
+      <div class="form-card qr-print-card" style="text-align:center;max-width:320px" id="sm-qrg-print">
+        <p style="font-weight:700;margin:0 0 4px">Stock Ménage — ${ZONES[zone]}</p>
+        <p class="hint" style="margin:0 0 12px">Ouvre l'actualisation rapide de tous les produits</p>
+        <div id="sm-qrg-canvas" style="width:220px;height:220px;margin:0 auto"></div>
+      </div>
+      <button class="add-btn" id="sm-qrg-print-btn" style="width:fit-content">🖨️ Imprimer l'affiche</button>
+    </div>
+  `;
+  document.getElementById("sm-qrg-back").addEventListener("click", () => { ui.qrGeneralZone = null; render(); });
+  document.getElementById("sm-qrg-print-btn").addEventListener("click", () => printQrCard(document.getElementById("sm-qrg-print")));
+  renderQrWithLogo(document.getElementById("sm-qrg-canvas"), qrPayloadGeneral(zone), 220);
+}
+
+// Mode rapide : passe en revue, un par un, tous les produits de la zone
+// actuelle pour actualiser directement leur stock — même principe que
+// le mode rapide du Stock maintenance.
+function renderModeRapide() {
+  const produits = state.produits.filter(p => p.zone === ui.zone);
+  if (produits.length === 0) {
+    mountedContainer.innerHTML = `<div class="stack" style="padding:16px"><p class="hint">Aucun produit pour l'instant dans le stock ${ZONES[ui.zone]}.</p><button class="nav-btn" id="sm-rapide-quitter">← Retour</button></div>`;
+    document.getElementById("sm-rapide-quitter").addEventListener("click", () => { ui.rapide = false; render(); });
+    return;
+  }
+  if (ui.rapideIndex >= produits.length) {
+    mountedContainer.innerHTML = `
+      <div class="stack" style="padding:16px">
+        <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+          <p style="font-size:36px;margin:0 0 8px">✅</p>
+          <h3 style="margin:0 0 6px">Stock ${ZONES[ui.zone]} actualisé</h3>
+          <p class="hint" style="margin:0 0 16px">${produits.length} produit(s) passé(s) en revue.</p>
+          <button class="add-btn" id="sm-rapide-recommencer" style="width:100%">↻ Recommencer</button>
+          <button class="nav-btn" id="sm-rapide-quitter" style="width:100%;margin-top:8px">Terminer</button>
+        </div>
+      </div>`;
+    document.getElementById("sm-rapide-recommencer").addEventListener("click", () => { ui.rapideIndex = 0; render(); });
+    document.getElementById("sm-rapide-quitter").addEventListener("click", () => { ui.rapide = false; render(); });
+    return;
+  }
+
+  const p = produits[ui.rapideIndex];
+  mountedContainer.innerHTML = `
+    <div class="stack" style="padding:16px">
+      <p class="hint" style="text-align:center">${ui.rapideIndex + 1} / ${produits.length} · ${ZONES[ui.zone]}</p>
+      <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
+        <h3 style="margin:0 0 2px;font-size:17px">${esc(p.nom)}</h3>
+        <p class="hint" style="margin:0 0 16px">${esc(p.categorie || "")} · Dernier stock : ${p.stockActuel || 0} ${esc(p.unite || "")}</p>
+
+        <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Quantité comptée</p>
+        <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
+          <button id="sm-rapide-moins" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">−</button>
+          <input id="sm-rapide-qte" type="number" min="0" value="${p.stockActuel || 0}" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
+          <button id="sm-rapide-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
+        </div>
+
+        <button class="add-btn" id="sm-rapide-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider et suivant →</button>
+        <button class="nav-btn" id="sm-rapide-passer" style="width:100%;margin-top:8px">Passer sans modifier</button>
+        <button class="nav-btn" id="sm-rapide-quitter-inline" style="width:100%;margin-top:8px;border:none">← Quitter le mode rapide</button>
+        <div id="sm-rapide-status" style="font-size:12px;margin-top:10px"></div>
+      </div>
+    </div>`;
+
+  const qteInput = document.getElementById("sm-rapide-qte");
+  document.getElementById("sm-rapide-moins").addEventListener("click", () => { qteInput.value = Math.max(0, (parseInt(qteInput.value, 10) || 0) - 1); });
+  document.getElementById("sm-rapide-plus").addEventListener("click", () => { qteInput.value = (parseInt(qteInput.value, 10) || 0) + 1; });
+  document.getElementById("sm-rapide-passer").addEventListener("click", () => { ui.rapideIndex++; render(); });
+  document.getElementById("sm-rapide-quitter-inline").addEventListener("click", () => { ui.rapide = false; render(); });
+  document.getElementById("sm-rapide-valider").addEventListener("click", async () => {
+    const statusEl = document.getElementById("sm-rapide-status");
+    const nouvelle = parseInt(qteInput.value, 10);
+    if (isNaN(nouvelle) || nouvelle < 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
+    try {
+      await modifierProduit(p.id, { stockActuel: nouvelle });
+      ui.rapideIndex++;
+      render();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
 }
 
 function renderQr(p) {
