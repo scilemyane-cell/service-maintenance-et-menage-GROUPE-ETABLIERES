@@ -96,7 +96,28 @@
     });
 
     async function demarrer(db, zone, seulProduitId) {
-      const { collection, onSnapshot, updateDoc } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
+      const { collection, onSnapshot, addDoc, updateDoc, getDocs } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
+
+      const MNA_ID = "__dispositif_mna__";
+      const MNA_LABEL = "Dispositif MNA";
+
+      // Sites configurés (Paramètres > sites concernés) comme relevant de
+      // cette zone, pour proposer le bon menu déroulant d'attribution —
+      // c'est tout l'objet de cette page : pouvoir attribuer directement
+      // la sortie au bon site (ex. Sub-Social), pas juste compter le stock.
+      let attributions = [{ id: MNA_ID, nom: MNA_LABEL }];
+      try {
+        const [zonesSnapDoc, sitesSnap] = await Promise.all([
+          getDoc(doc(db, "config", "stock-menage-zones")),
+          getDocs(collection(db, "sites-dossiers")),
+        ]);
+        const zonesSites = zonesSnapDoc.exists() ? zonesSnapDoc.data() : {};
+        sitesSnap.forEach((d) => {
+          if (!d.data().supprimeLe && zonesSites[d.id] === zone) attributions.push({ id: d.id, nom: d.data().nom });
+        });
+      } catch (e) {
+        console.error("Chargement des sites concernés :", e);
+      }
 
       let liste = [];
       let index = 0;
@@ -124,7 +145,7 @@
             <div class="stack" style="padding:16px">
               <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
                 <p style="font-size:36px;margin:0 0 8px">✅</p>
-                <h3 style="margin:0 0 6px">Stock ${ZONES[zone]} actualisé</h3>
+                <h3 style="margin:0 0 6px">Terminé</h3>
                 <p class="hint" style="margin:0 0 16px">${liste.length} produit(s) passé(s) en revue.</p>
                 <button class="add-btn" id="g-recommencer" style="width:100%">↻ Recommencer</button>
               </div>
@@ -136,35 +157,55 @@
         const p = liste[index];
         app.innerHTML = `
           <div class="stack" style="padding:16px">
-            <p class="hint" style="text-align:center">${index + 1} / ${liste.length} · ${ZONES[zone]}</p>
+            <p class="hint" style="text-align:center">${liste.length > 1 ? `${index + 1} / ${liste.length} · ` : ""}${ZONES[zone]}</p>
             <div class="form-card" style="text-align:center;max-width:360px;margin:0 auto">
               <h3 style="margin:0 0 2px;font-size:17px">${esc(p.nom)}</h3>
-              <p class="hint" style="margin:0 0 16px">${esc(p.categorie || "")} · Dernier stock : ${p.stockActuel || 0} ${esc(p.unite || "")}</p>
+              <p class="hint" style="margin:0 0 16px">${esc(p.categorie || "")} · Stock actuel : ${p.stockActuel || 0} ${esc(p.unite || "")}</p>
 
-              <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px">Quantité comptée</p>
-              <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
+              <label style="display:block;font-size:12px;color:var(--text-dim);text-align:left;margin-bottom:4px">Quantité sortie</label>
+              <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px">
                 <button id="g-moins" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">−</button>
-                <input id="g-qte" type="number" min="0" value="${p.stockActuel || 0}" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
+                <input id="g-qte" type="number" min="1" value="1" style="font-size:32px;font-weight:700;width:110px;text-align:center;background:transparent;border:none;border-bottom:2px solid var(--border);padding:4px">
                 <button id="g-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
               </div>
 
-              <button class="add-btn" id="g-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider et suivant →</button>
-              <button class="nav-btn" id="g-passer" style="width:100%;margin-top:8px">Passer sans modifier</button>
+              <label style="display:block;font-size:12px;color:var(--text-dim);text-align:left;margin-bottom:4px">Attribution (site concerné ou MNA)</label>
+              <select id="g-attrib" style="width:100%;margin-bottom:10px">
+                <option value="">— Choisir —</option>
+                ${attributions.map(a => `<option value="${a.id}">${a.id === MNA_ID ? "👥 " : "🏢 "}${esc(a.nom)}</option>`).join("")}
+              </select>
+
+              <button class="add-btn" id="g-valider" style="width:100%;font-size:15px;padding:14px">✓ Valider la sortie</button>
+              ${liste.length > 1 ? `<button class="nav-btn" id="g-passer" style="width:100%;margin-top:8px">Passer ce produit</button>` : ""}
               <div id="g-status" style="font-size:12px;margin-top:10px"></div>
             </div>
           </div>`;
 
         const qteInput = document.getElementById("g-qte");
-        document.getElementById("g-moins").addEventListener("click", () => { qteInput.value = Math.max(0, (parseInt(qteInput.value, 10) || 0) - 1); });
-        document.getElementById("g-plus").addEventListener("click", () => { qteInput.value = (parseInt(qteInput.value, 10) || 0) + 1; });
-        document.getElementById("g-passer").addEventListener("click", () => { index++; render(); });
+        document.getElementById("g-moins").addEventListener("click", () => { qteInput.value = Math.max(1, (parseInt(qteInput.value, 10) || 1) - 1); });
+        document.getElementById("g-plus").addEventListener("click", () => { qteInput.value = (parseInt(qteInput.value, 10) || 1) + 1; });
+        document.getElementById("g-passer")?.addEventListener("click", () => { index++; render(); });
         document.getElementById("g-valider").addEventListener("click", async () => {
           const statusEl = document.getElementById("g-status");
-          const nouvelle = parseInt(qteInput.value, 10);
-          if (isNaN(nouvelle) || nouvelle < 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
+          const qte = parseInt(qteInput.value, 10);
+          const attribSelect = document.getElementById("g-attrib");
+          const attribId = attribSelect.value;
+          if (!qte || qte <= 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
+          if (!attribId) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une attribution.</span>`; return; }
+          const attribNom = attributions.find(a => a.id === attribId)?.nom || "Inconnu";
+          statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
           try {
-            await updateDoc(doc(db, "stock-menage-produits", p.id), { stockActuel: nouvelle });
-            p.stockActuel = nouvelle;
+            const nouveauStock = Math.max(0, (p.stockActuel || 0) - qte);
+            await updateDoc(doc(db, "stock-menage-produits", p.id), { stockActuel: nouveauStock });
+            await addDoc(collection(db, "stock-menage-sorties"), {
+              produitId: p.id, produitNom: p.nom, categorie: p.categorie || "", zone: p.zone || "",
+              quantite: qte, unite: p.unite || "",
+              attributionId: attribId, attributionNom: attribNom,
+              commentaire: "",
+              date: Date.now(),
+              creePar: auth.currentUser?.email || "Inconnu",
+            });
+            p.stockActuel = nouveauStock;
             index++;
             render();
           } catch (e) {
