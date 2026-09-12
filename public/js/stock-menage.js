@@ -144,13 +144,15 @@ function renderProduits(container) {
 }
 
 function renderCarteProduit(p) {
-  const enAlerte = (p.stockActuel || 0) <= (p.seuilMin || 0);
+  const enAlerte = (p.stockActuel || 0) <= (p.stockMin || 0);
+  const enSurstock = p.stockMax > 0 && (p.stockActuel || 0) > p.stockMax;
   return `
     <div class="form-card" style="margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div>
           <p style="margin:0;font-weight:700">${esc(p.nom)}</p>
-          <p style="margin:2px 0 0;font-size:12px;${enAlerte ? "color:var(--red);font-weight:700" : "color:var(--text-dim)"}">${enAlerte ? "⚠️ " : ""}Stock : ${p.stockActuel || 0} ${esc(p.unite || "")} ${enAlerte ? "(sous le seuil)" : ""} · Seuil : ${p.seuilMin || 0}</p>
+          <p style="margin:2px 0 0;font-size:12px;${enAlerte ? "color:var(--red);font-weight:700" : enSurstock ? "color:var(--gold);font-weight:700" : "color:var(--text-dim)"}">${enAlerte ? "⚠️ " : enSurstock ? "📦 " : ""}Stock : ${p.stockActuel || 0} ${esc(p.unite || "")} ${enAlerte ? "(sous le stock minimum)" : enSurstock ? "(au-dessus du stock maximum)" : ""}</p>
+          <p style="margin:2px 0 0;font-size:11px;color:var(--text-dim)">Min : ${p.stockMin || 0} · Max : ${p.stockMax || "—"}${(p.uniteParEmballage || p.uniteParPalette) ? ` · Conditionnement : ${p.uniteParEmballage ? p.uniteParEmballage + " " + esc(p.unite || "") + "/emballage" : ""}${p.uniteParEmballage && p.uniteParPalette ? " · " : ""}${p.uniteParPalette ? p.uniteParPalette + " emballages/palette" : ""}` : ""}</p>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="nav-btn" data-sortie="${p.id}" style="padding:6px 10px;font-size:12px">📤 Sortie</button>
@@ -182,7 +184,10 @@ function renderFormProduit(p) {
         </label>
         <label>Unité<input id="${prefix}-unite" value="${esc(data.unite || 'pièce')}" placeholder="ex. rouleau, litre, pièce"></label>
         <label>Stock actuel<input type="number" min="0" id="${prefix}-stock" value="${data.stockActuel || 0}"></label>
-        <label>Seuil minimum (alerte)<input type="number" min="0" id="${prefix}-seuil" value="${data.seuilMin || 0}"></label>
+        <label>Stock minimum (alerte)<input type="number" min="0" id="${prefix}-stockmin" value="${data.stockMin || 0}"></label>
+        <label>Stock maximum<input type="number" min="0" id="${prefix}-stockmax" value="${data.stockMax || 0}"></label>
+        <label>Conditionnement — unités par emballage<input type="number" min="0" id="${prefix}-condemballage" value="${data.uniteParEmballage || 0}" placeholder="ex. 6 rouleaux/paquet"></label>
+        <label>Conditionnement — emballages par palette<input type="number" min="0" id="${prefix}-condpalette" value="${data.uniteParPalette || 0}" placeholder="ex. 60 paquets/palette"></label>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="add-btn" data-save-sm="${p ? p.id : 'new'}">💾 Enregistrer</button>
@@ -218,7 +223,10 @@ function attacherEcouteursProduits() {
       nom, categorie: document.getElementById(`${prefix}-categorie`).value,
       unite: document.getElementById(`${prefix}-unite`).value.trim() || "pièce",
       stockActuel: parseInt(document.getElementById(`${prefix}-stock`).value, 10) || 0,
-      seuilMin: parseInt(document.getElementById(`${prefix}-seuil`).value, 10) || 0,
+      stockMin: parseInt(document.getElementById(`${prefix}-stockmin`).value, 10) || 0,
+      stockMax: parseInt(document.getElementById(`${prefix}-stockmax`).value, 10) || 0,
+      uniteParEmballage: parseInt(document.getElementById(`${prefix}-condemballage`).value, 10) || 0,
+      uniteParPalette: parseInt(document.getElementById(`${prefix}-condpalette`).value, 10) || 0,
     };
     if (id === "new") payload.zone = ui.zone; // la zone d'un produit existant ne change jamais après coup depuis ce formulaire
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;

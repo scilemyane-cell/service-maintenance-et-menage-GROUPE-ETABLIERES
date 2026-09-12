@@ -29,8 +29,10 @@ export const CATEGORIES_MENAGE = [
 
 export function nouveauProduit(zone) {
   return {
-    nom: "", categorie: "", unite: "pièce", stockActuel: 0, seuilMin: 0, zone,
-    supprimeLe: null,
+    nom: "", categorie: "", unite: "pièce", stockActuel: 0,
+    stockMin: 0, stockMax: 0,
+    uniteParEmballage: 0, uniteParPalette: 0,
+    zone, supprimeLe: null,
   };
 }
 
