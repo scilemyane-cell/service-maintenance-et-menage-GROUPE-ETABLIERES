@@ -1063,16 +1063,24 @@ function renderInterventions(container, perms) {
     document.getElementById("add-interv").addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
       if (!ui.form.technicien) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un intervenant.</span>`; return; }
-      if (!ui.form.association) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association.</span>`; return; }
-      if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un site.</span>`; return; }
-      if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
-      if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
+      if (ui.form.appelN1) {
+        // Un appel au N1 peut se suffire à lui-même (ex. alerte à distance,
+        // sans déplacement sur site) — pas besoin d'association/site/type/
+        // heures dans ce cas, contrairement à une intervention classique.
+        if (!ui.form.n1Contacte) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis le N1 contacté.</span>`; return; }
+        if (!ui.form.motifAppelN1) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le motif de l'appel.</span>`; return; }
+      } else {
+        if (!ui.form.association) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association.</span>`; return; }
+        if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un site.</span>`; return; }
+        if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
+        if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
+      }
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
       const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
       const dimanche = estDimanche(ui.form.date);
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
-        type: ui.form.type, heures: parseFloat(ui.form.heures), description: ui.form.description,
+        type: ui.form.type, heures: parseFloat(ui.form.heures) || 0, description: ui.form.description,
         heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin,
         heuresNuit: nuit, primeDimanche: dimanche ? PRIME_DIMANCHE : 0,
         photos: ui.form.photos || [],
