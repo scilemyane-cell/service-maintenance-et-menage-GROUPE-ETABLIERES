@@ -902,7 +902,7 @@ function attacherPhotosInterventionListeners() {
 
 function renderInterventions(container, perms) {
   const intervenants = [...state.people.n1, ...state.people.n2];
-  if (!ui.form.technicien && intervenants.length > 0) ui.form.technicien = intervenants[0];
+  if (!ui.form.technicien && intervenants.length > 0 && !ui.form.appelN1) ui.form.technicien = intervenants[0];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   const isLockedTech = perms.isTech && !perms.isEditor;
 
@@ -923,7 +923,7 @@ function renderInterventions(container, perms) {
           <label>Intervenant
             ${isLockedTech
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
-              : `<select id="f-tech">${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
+              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.appelN1 ? "— Aucun (appel N1 seul) —" : "— Choisir —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
           <label>Association
             <select id="f-association">
@@ -1062,14 +1062,15 @@ function renderInterventions(container, perms) {
     }
     document.getElementById("add-interv").addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
-      if (!ui.form.technicien) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un intervenant.</span>`; return; }
       if (ui.form.appelN1) {
         // Un appel au N1 peut se suffire à lui-même (ex. alerte à distance,
-        // sans déplacement sur site) — pas besoin d'association/site/type/
-        // heures dans ce cas, contrairement à une intervention classique.
+        // sans déplacement sur site) — pas besoin d'intervenant N2,
+        // association/site/type/heures dans ce cas, contrairement à une
+        // intervention classique.
         if (!ui.form.n1Contacte) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis le N1 contacté.</span>`; return; }
         if (!ui.form.motifAppelN1) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le motif de l'appel.</span>`; return; }
       } else {
+        if (!ui.form.technicien) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un intervenant.</span>`; return; }
         if (!ui.form.association) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association.</span>`; return; }
         if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un site.</span>`; return; }
         if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
