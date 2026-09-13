@@ -453,7 +453,7 @@ function renderFormSortie(produitId) {
       <h4 style="margin:0 0 10px;font-size:13px">📤 Enregistrer une sortie</h4>
       <div class="form-grid">
         <label>Quantité<input type="number" min="1" id="sm-sortie-qte-${produitId}" value="1"></label>
-        <label>Attribution (centre ou MNA)
+        <label>Attribution (${ui.zone === "agropolis" ? "centre ou MNA" : "centre concerné"})
           <select id="sm-sortie-attrib-${produitId}">${attributionOptions("")}</select>
         </label>
         <label>Commentaire (optionnel)<input id="sm-sortie-comment-${produitId}" placeholder="ex. réassort mensuel"></label>

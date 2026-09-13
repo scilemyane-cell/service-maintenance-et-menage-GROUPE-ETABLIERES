@@ -170,7 +170,7 @@
                 <button id="g-plus" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:26px;cursor:pointer">+</button>
               </div>
 
-              <label style="display:block;font-size:12px;color:var(--text-dim);text-align:left;margin-bottom:4px">Attribution (site concerné ou MNA)</label>
+              <label style="display:block;font-size:12px;color:var(--text-dim);text-align:left;margin-bottom:4px">Attribution (${zone === "agropolis" ? "centre ou MNA" : "centre concerné"})</label>
               <select id="g-attrib" style="width:100%;margin-bottom:10px">
                 <option value="">— Choisir —</option>
                 ${attributions.map(a => `<option value="${a.id}">${a.id === MNA_ID ? "👥 " : "🏢 "}${esc(a.nom)}</option>`).join("")}
