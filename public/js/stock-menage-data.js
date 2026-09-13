@@ -136,3 +136,32 @@ export async function definirZoneSite(siteId, zone) {
     await setDoc(PARAMETRES_DOC(), { [siteId]: zone }, { merge: true });
   }
 }
+
+// ---- Sites personnalisés, propres au Stock Ménage ----
+// Certaines attributions n'existent pas comme "Dossier de site" à part
+// entière (ex. les internats Bâtiment A / B, qui sont des sous-parties
+// d'un site plutôt que des sites autonomes) — plutôt que de polluer les
+// vrais Dossiers de site avec des entrées qui ne concernent QUE la
+// répartition du stock ménage, on les ajoute ici, propres à cet onglet.
+// Stockés dans le même document, sous la clé réservée "_personnalises"
+// (jamais utilisée comme identifiant de site réel).
+const CLE_PERSONNALISES = "_personnalises";
+
+export function sitesPersonnalisesDe(zonesSites) {
+  return zonesSites[CLE_PERSONNALISES] || [];
+}
+
+export async function ajouterSitePersonnalise(nom, zone) {
+  const ref = PARAMETRES_DOC();
+  const snap = await getDoc(ref);
+  const actuels = snap.exists() ? (snap.data()[CLE_PERSONNALISES] || []) : [];
+  const nouveau = { id: `perso-${Date.now()}`, nom, zone };
+  await setDoc(ref, { [CLE_PERSONNALISES]: [...actuels, nouveau] }, { merge: true });
+}
+
+export async function supprimerSitePersonnalise(id) {
+  const ref = PARAMETRES_DOC();
+  const snap = await getDoc(ref);
+  const actuels = snap.exists() ? (snap.data()[CLE_PERSONNALISES] || []) : [];
+  await setDoc(ref, { [CLE_PERSONNALISES]: actuels.filter(s => s.id !== id) }, { merge: true });
+}

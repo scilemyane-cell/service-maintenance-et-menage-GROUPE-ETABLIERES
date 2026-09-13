@@ -10,7 +10,7 @@ import {
   watchProduits, creerProduit, modifierProduit, supprimerProduit,
   enregistrerSortie, enregistrerEntree, watchSorties, supprimerSortie,
   nouveauProduit, CATEGORIES_MENAGE, MNA_ID, MNA_LABEL, ZONES,
-  watchZonesSites, definirZoneSite,
+  watchZonesSites, definirZoneSite, sitesPersonnalisesDe, ajouterSitePersonnalise, supprimerSitePersonnalise,
 } from "./stock-menage-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
@@ -77,7 +77,9 @@ export async function mountStockMenage(container, user) {
 
 // Sites configurés (via Paramètres) comme concernés par une zone donnée.
 function sitesDeLaZone(zone) {
-  return state.sites.filter(s => state.zonesSites[s.id] === zone);
+  const reels = state.sites.filter(s => state.zonesSites[s.id] === zone);
+  const perso = sitesPersonnalisesDe(state.zonesSites).filter(s => s.zone === zone);
+  return [...reels, ...perso];
 }
 
 function render() {
@@ -140,7 +142,9 @@ function attributionOptions(selectionnee) {
 
 function nomAttribution(id) {
   if (id === MNA_ID) return MNA_LABEL;
-  return state.sites.find(s => s.id === id)?.nom || "Inconnu";
+  const reel = state.sites.find(s => s.id === id);
+  if (reel) return reel.nom;
+  return sitesPersonnalisesDe(state.zonesSites).find(s => s.id === id)?.nom || "Inconnu";
 }
 
 // =================================================================
@@ -148,6 +152,7 @@ function nomAttribution(id) {
 // =================================================================
 function renderParametresZones(container) {
   const sitesTries = [...state.sites].sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+  const perso = sitesPersonnalisesDe(state.zonesSites);
   container.innerHTML = `
     <p class="hint" style="margin:10px 0">Indique, pour chaque site, s'il est concerné par le stock École, le stock Agropolis, ou aucun des deux (n'apparaîtra alors dans aucune liste d'attribution de sortie).</p>
     <div class="table-wrap">
@@ -169,10 +174,54 @@ function renderParametresZones(container) {
         </tbody>
       </table>
     </div>
+
+    <h4 style="margin:20px 0 6px;font-size:13px;color:var(--gold)">➕ Sites personnalisés (propres au Stock Ménage)</h4>
+    <p class="hint" style="margin:0 0 10px">Pour une attribution qui n'existe pas comme dossier de site à part entière — ex. les internats. N'apparaît que dans les listes de sortie de cet onglet, sans créer de vrai dossier de site.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nom</th><th>Zone</th><th></th></tr></thead>
+        <tbody>
+          ${perso.length === 0 ? `<tr><td colspan="3" class="empty-row">Aucun site personnalisé pour l'instant.</td></tr>` :
+            perso.map(s => `
+              <tr>
+                <td>${esc(s.nom)}</td>
+                <td>${ZONES[s.zone] || s.zone}</td>
+                <td><button class="del-btn" data-del-perso="${s.id}" style="padding:3px 8px;font-size:11px">🗑️</button></td>
+              </tr>
+            `).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+      <input id="sm-perso-nom" placeholder="ex. Internat Bâtiment A" style="flex:1;min-width:180px">
+      <select id="sm-perso-zone">
+        ${Object.entries(ZONES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
+      </select>
+      <button class="nav-btn" id="sm-perso-add">➕ Ajouter</button>
+    </div>
+    <div id="sm-perso-status" style="font-size:12px;margin-top:6px"></div>
   `;
   container.querySelectorAll("[data-zone-site]").forEach(sel => sel.addEventListener("change", async (e) => {
     try { await definirZoneSite(sel.dataset.zoneSite, e.target.value || null); } catch (err) { alert("Erreur : " + (err.message || err)); }
   }));
+  container.querySelectorAll("[data-del-perso]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Supprimer ce site personnalisé ? Les sorties déjà enregistrées avec cette attribution restent inchangées dans l'historique.")) return;
+    try { await supprimerSitePersonnalise(btn.dataset.delPerso); } catch (e) { alert("Erreur : " + (e.message || e)); }
+  }));
+  document.getElementById("sm-perso-add").addEventListener("click", async () => {
+    const statusEl = document.getElementById("sm-perso-status");
+    const nom = document.getElementById("sm-perso-nom").value.trim();
+    const zone = document.getElementById("sm-perso-zone").value;
+    if (!nom) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un nom.</span>`; return; }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Ajout…</span>`;
+    try {
+      await ajouterSitePersonnalise(nom, zone);
+      document.getElementById("sm-perso-nom").value = "";
+      statusEl.innerHTML = "";
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
 }
 
 // =================================================================
