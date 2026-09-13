@@ -7,7 +7,8 @@ import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFo
 import { watchAssociations, saveAssociations } from "./associations-data.js";
 import { roleLabel } from "./auth.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { auth } from "./firebase-init.js";
+import { auth, db } from "./firebase-init.js";
+import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
@@ -199,7 +200,9 @@ export function mountAssociationsSites(container) {
 function renderAssociations(container) {
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Ces associations et leurs sites alimentent le menu déroulant "Site" dans l'onglet Interventions.</p>
+      <p class="hint">Ces associations et leurs sites alimentent le menu déroulant "Site" dans l'onglet Interventions. Cette liste est saisie ici manuellement, indépendamment des "Dossiers de site" — utilise le bouton ci-dessous si les deux ont divergé.</p>
+      <button class="nav-btn" id="assoc-sync" style="border-color:var(--teal);color:var(--teal)">🔄 Synchroniser les sites depuis les Dossiers de site</button>
+      <div id="assoc-sync-status" style="font-size:12px"></div>
       ${assocState.associations.map((assoc, ai) => `
         <div class="form-card">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
@@ -265,6 +268,30 @@ function renderAssociations(container) {
   });
   document.getElementById("assoc-save").addEventListener("click", async () => {
     await saveAssociations(assocState.associations);
+  });
+  document.getElementById("assoc-sync").addEventListener("click", async () => {
+    const statusEl = document.getElementById("assoc-sync-status");
+    if (!confirm("Reconstruire la liste des associations/sites à partir des Dossiers de site actuels ? Ça remplacera les noms saisis manuellement ici par les vrais noms des dossiers.")) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Synchronisation…</span>`;
+    try {
+      const snap = await getDocs(collection(db, "sites-dossiers"));
+      const parAssoc = new Map();
+      snap.forEach(d => {
+        const data = d.data();
+        if (data.supprimeLe || !data.association) return;
+        if (!parAssoc.has(data.association)) parAssoc.set(data.association, []);
+        parAssoc.get(data.association).push({ nom: data.nom, groupe: data.groupe || "" });
+      });
+      const nouvellesAssociations = [...parAssoc.entries()].map(([nom, sites]) => ({
+        nom, sites: sites.sort((a, b) => (a.nom || "").localeCompare(b.nom || "")),
+      }));
+      await saveAssociations(nouvellesAssociations);
+      assocState.associations = JSON.parse(JSON.stringify(nouvellesAssociations));
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ Synchronisé (${nouvellesAssociations.reduce((s, a) => s + a.sites.length, 0)} sites).</span>`;
+      renderAssociations(container);
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
   });
 }
 
