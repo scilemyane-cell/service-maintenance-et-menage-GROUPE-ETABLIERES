@@ -63,7 +63,7 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [] },
+  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "" },
   editingId: null,
   ficheOuverte: null, // nom de la personne dont la fiche technicien est dépliée
   noteFraisMois: new Date().toISOString().slice(0, 7),
@@ -801,6 +801,31 @@ function renderDocPreview() {
 // Galerie photo du formulaire d'intervention — même mécanisme que les
 // autres galeries de l'appli (caméra + fichier), utile pour garder une
 // preuve visuelle d'un dépannage (avant/après, pièce changée...).
+// Bloc "Appel au N1" — apparaît quand la case est cochée, pour tracer
+// les escalades du technicien vers le cadre d'astreinte (qui, pourquoi,
+// quelle décision/consigne a été donnée).
+function appelN1HTML() {
+  if (!ui.form.appelN1) return "";
+  return `
+    <div class="form-grid" style="margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--panel-alt)">
+      <label>N1 contacté
+        <select id="f-n1-contacte">
+          <option value="">— Choisir —</option>
+          ${state.people.n1.map(nom => `<option value="${esc(nom)}" ${ui.form.n1Contacte === nom ? "selected" : ""}>${esc(nom)}</option>`).join("")}
+        </select>
+      </label>
+      <label>Motif de l'appel<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. besoin d'un accord pour commander une pièce"></label>
+      <label class="desc-field">Décision / consigne donnée<input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"></label>
+    </div>
+  `;
+}
+
+function attacherEcouteursAppelN1() {
+  document.getElementById("f-n1-contacte")?.addEventListener("change", (e) => { ui.form.n1Contacte = e.target.value; });
+  document.getElementById("f-motif-n1")?.addEventListener("input", (e) => { ui.form.motifAppelN1 = e.target.value; });
+  document.getElementById("f-decision-n1")?.addEventListener("input", (e) => { ui.form.decisionN1 = e.target.value; });
+}
+
 function interventionPhotosHTML() {
   const photos = ui.form.photos || [];
   return `
@@ -925,6 +950,11 @@ function renderInterventions(container, perms) {
           <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:10px">
+          <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--gold)">
+          📞 Appel passé au N1 pendant cette intervention (escalade, décision, consigne)
+        </label>
+        <div id="interv-n1-zone">${appelN1HTML()}</div>
         <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photo(s) du dépannage (optionnel)</label>
         <div id="interv-photo-zone">${interventionPhotosHTML()}</div>
         <div id="interv-nuit-indicator">${nuitIndicatorHTML()}</div>
@@ -962,7 +992,7 @@ function renderInterventions(container, perms) {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
                 return `<tr>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
-                  <td>${i.heures} h</td><td>${esc(i.description)}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}</td>
+                  <td>${i.heures} h</td><td>${esc(i.description)}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${i.appelN1 ? ` <span title="Appel au N1 (${esc(i.n1Contacte || '')}) : ${esc(i.motifAppelN1 || '')}" style="font-size:11px;cursor:help">📞</span>` : ""}</td>
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
@@ -981,6 +1011,12 @@ function renderInterventions(container, perms) {
 
   if (perms.canLogIntervention) {
     attacherPhotosInterventionListeners();
+    attacherEcouteursAppelN1();
+    document.getElementById("f-appel-n1")?.addEventListener("change", (e) => {
+      ui.form.appelN1 = e.target.checked;
+      document.getElementById("interv-n1-zone").innerHTML = appelN1HTML();
+      attacherEcouteursAppelN1();
+    });
     ["type", "heures", "desc"].forEach(field => {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
@@ -1040,6 +1076,8 @@ function renderInterventions(container, perms) {
         heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin,
         heuresNuit: nuit, primeDimanche: dimanche ? PRIME_DIMANCHE : 0,
         photos: ui.form.photos || [],
+        appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
+        motifAppelN1: ui.form.appelN1 ? ui.form.motifAppelN1 : "", decisionN1: ui.form.appelN1 ? ui.form.decisionN1 : "",
       };
       try {
         if (ui.editingId) {
@@ -1048,7 +1086,7 @@ function renderInterventions(container, perms) {
         } else {
           await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
         }
-        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = [];
+        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = []; ui.form.appelN1 = false; ui.form.n1Contacte = ""; ui.form.motifAppelN1 = ""; ui.form.decisionN1 = "";
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
@@ -1056,7 +1094,7 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("cancel-edit")?.addEventListener("click", () => {
       ui.editingId = null;
-      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = [];
+      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = []; ui.form.appelN1 = false; ui.form.n1Contacte = ""; ui.form.motifAppelN1 = ""; ui.form.decisionN1 = "";
       renderAll();
     });
     container.querySelectorAll("[data-voir-photos-interv]").forEach(btn => btn.addEventListener("click", async () => {
@@ -1085,6 +1123,7 @@ function renderInterventions(container, perms) {
           date: i.date, technicien: i.technicien, association: i.association || "", groupe: i.groupe || "",
           site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
           photos: i.photos || [],
+          appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
         };
         renderAll();
         mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
