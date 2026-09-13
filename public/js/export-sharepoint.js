@@ -194,6 +194,23 @@ async function extraireHistoriqueInventaires() {
   return lignes;
 }
 
+async function extraireSortiesStockMenage() {
+  const snap = await getDocs(collection(db, "stock-menage-sorties"));
+  const brutes = [];
+  snap.forEach(d => brutes.push(d.data()));
+  return brutes
+    .sort((a, b) => (b.date || 0) - (a.date || 0))
+    .map(s => ({
+      Date: s.date ? new Date(s.date).toLocaleDateString("fr-FR") : "",
+      Zone: s.zone === "agropolis" ? "Agropolis" : s.zone === "ecole" ? "École" : s.zone || "",
+      Produit: s.produitNom || "", Catégorie: s.categorie || "",
+      Quantité: `${s.quantite ?? ""} ${s.unite || ""}`.trim(),
+      Attribution: s.attributionNom || "",
+      Commentaire: s.commentaire || "",
+      "Créé par": s.creePar || "",
+    }));
+}
+
 async function extraireSortiesStockSites() {
   const [mouvSnap, itemsSnap, sitesSnap, usersSnap] = await Promise.all([
     getDocs(collection(db, "stock-site-mouvements")),
@@ -580,6 +597,7 @@ const MODULES = [
   { dossier: ["Stock"], fichier: "Stock_par_site.pdf", titre: "Stock par site", extraire: extraireStockSites },
   { dossier: ["Stock"], fichier: "Historique_inventaires.pdf", titre: "Historique des inventaires", extraire: extraireHistoriqueInventaires },
   { dossier: ["Stock"], fichier: "Historique_sorties_sites.pdf", titre: "Sorties de stock par site", extraire: extraireSortiesStockSites },
+  { dossier: ["Stock Ménage"], fichier: "Sorties_stock_menage.pdf", titre: "Sorties de stock ménage (École/Agropolis, par site)", extraire: extraireSortiesStockMenage },
   { dossier: ["Interventions"], fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
   { dossier: ["Menage"], fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
   { dossier: ["Relevé de compteur"], fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs (tous sites)", extraire: extraireRelevesCompteurs },
