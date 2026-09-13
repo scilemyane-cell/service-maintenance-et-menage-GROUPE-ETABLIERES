@@ -234,6 +234,7 @@ function renderProduits(container) {
       <button class="add-btn" id="sm-add">➕ Ajouter un produit</button>
       <button class="nav-btn" id="sm-qr-general">🔲 QR général (actualisation rapide)</button>
     </div>
+    ${produits.length > 0 ? jaugesHTML(produits) : ""}
     ${ui.addingOpen ? renderFormProduit(null) : ""}
     ${produits.length === 0 ? `<p class="hint">Aucun produit pour l'instant dans le stock ${ZONES[ui.zone]}.</p>` : CATEGORIES_MENAGE.map(cat => {
       const liste = produits.filter(p => p.categorie === cat);
@@ -388,6 +389,45 @@ function renderQr(p) {
   document.getElementById("sm-qr-back").addEventListener("click", () => { ui.qrId = null; render(); });
   document.getElementById("sm-qr-print-btn").addEventListener("click", () => printQrCard(document.getElementById("sm-qr-print")));
   renderQrWithLogo(document.getElementById("sm-qr-canvas"), qrPayloadFor(p.id), 220);
+}
+
+// Jauges circulaires façon tableau de bord — un coup d'œil immédiat sur
+// le niveau de chaque produit, sans avoir à lire des nombres. Rouge sous
+// le seuil minimum, or en zone intermédiaire, sarcelle en zone confortable.
+function jaugesHTML(produits) {
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:14px 0 18px">
+      ${produits.map(p => uneJaugeHTML(p)).join("")}
+    </div>
+  `;
+}
+
+function uneJaugeHTML(p) {
+  const min = p.stockMin || 0;
+  const actuel = p.stockActuel || 0;
+  const max = p.stockMax > 0 ? p.stockMax : Math.max(min * 2, actuel, 10);
+  const f = Math.max(0, Math.min(1, max > 0 ? actuel / max : 0));
+
+  const cx = 60, cy = 62, r = 46;
+  const angle = 180 - f * 180;
+  const rad = (angle * Math.PI) / 180;
+  const endX = cx + r * Math.cos(rad);
+  const endY = cy - r * Math.sin(rad);
+
+  const seuilInter = min + (max - min) * 0.4;
+  const couleur = actuel <= min ? "#C24444" : actuel <= seuilInter ? "#C29A3F" : "#3FB6AC";
+
+  return `
+    <div style="text-align:center">
+      <svg viewBox="0 0 120 78" style="width:100%">
+        <path d="M ${cx - r},${cy} A ${r},${r} 0 0 1 ${cx + r},${cy}" fill="none" stroke="var(--border, #444)" stroke-width="10" stroke-linecap="round"/>
+        <path d="M ${cx - r},${cy} A ${r},${r} 0 0 1 ${endX},${endY}" fill="none" stroke="${couleur}" stroke-width="10" stroke-linecap="round"/>
+        <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="20" font-weight="800" fill="var(--text, #eee)">${actuel}</text>
+        <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="9" fill="var(--text-dim, #999)">/ ${max} ${esc(p.unite || "")}</text>
+      </svg>
+      <p style="margin:2px 0 0;font-size:11px;font-weight:700;line-height:1.2" title="${esc(p.nom)}">${esc(p.nom.length > 16 ? p.nom.slice(0, 15) + "…" : p.nom)}</p>
+    </div>
+  `;
 }
 
 function renderCarteProduit(p) {
