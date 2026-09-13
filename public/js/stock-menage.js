@@ -618,6 +618,7 @@ function renderFlux(container) {
   sorties.forEach(s => parAttrib.set(s.attributionNom, (parAttrib.get(s.attributionNom) || 0) + (s.quantite || 0)));
   const entries = [...parAttrib.entries()].sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, q]) => s + q, 0);
+  const stockActuelTotal = state.produits.filter(p => p.zone === ui.zone).reduce((s, p) => s + (p.stockActuel || 0), 0);
 
   container.innerHTML = `
     <div class="form-card">
@@ -627,10 +628,10 @@ function renderFlux(container) {
     </div>
   `;
   if (entries.length === 0) return;
-  dessinerFlux(document.getElementById("sm-flux-svg"), entries, total);
+  dessinerFlux(document.getElementById("sm-flux-svg"), entries, total, stockActuelTotal);
 }
 
-function dessinerFlux(holder, entries, total) {
+function dessinerFlux(holder, entries, total, stockActuelTotal) {
   const largeur = 720, hauteur = Math.max(280, entries.length * 62);
   const gapRatio = entries.length > 1 ? 0.2 : 0;
   const hauteurUtile = hauteur * (1 - gapRatio);
@@ -694,10 +695,12 @@ function dessinerFlux(holder, entries, total) {
   `).join("");
 
   holder.innerHTML = `
-    <svg viewBox="0 0 ${largeur} ${hauteur}" xmlns:xlink="http://www.w3.org/1999/xlink" style="width:100%;min-width:520px;height:${hauteur}px">
+    <svg viewBox="0 -28 ${largeur} ${hauteur + 28}" xmlns:xlink="http://www.w3.org/1999/xlink" style="width:100%;min-width:520px;height:${hauteur + 28}px">
       ${svgDefs}
       <rect x="${leftX}" y="0" width="${leftW}" height="${hauteurUtile}" rx="${leftW / 2}" fill="var(--gold, #B08D46)" filter="url(#sm-shadow)"/>
       <text x="${leftX + leftW / 2}" y="${hauteurUtile / 2}" fill="#fff" font-size="12" font-weight="800" text-anchor="middle" letter-spacing="1" transform="rotate(-90 ${leftX + leftW / 2} ${hauteurUtile / 2})">📦 STOCK</text>
+      <text x="${leftX + leftW / 2}" y="-10" text-anchor="middle" font-size="13" font-weight="800" fill="var(--gold, #B08D46)">${stockActuelTotal}</text>
+      <text x="${leftX + leftW / 2}" y="6" text-anchor="middle" font-size="9" fill="var(--text-dim, #999)">en réserve</text>
       ${svgRubans}
       ${svgNoeudsDroite}
     </svg>
