@@ -8,7 +8,7 @@
 import { esc } from "./astreinte-logic.js";
 import {
   watchProduits, creerProduit, modifierProduit, supprimerProduit,
-  enregistrerSortie, enregistrerEntree, watchSorties,
+  enregistrerSortie, enregistrerEntree, watchSorties, supprimerSortie,
   nouveauProduit, CATEGORIES_MENAGE, MNA_ID, MNA_LABEL, ZONES,
   watchZonesSites, definirZoneSite,
 } from "./stock-menage-data.js";
@@ -522,6 +522,7 @@ function renderHistorique(container) {
     return true;
   });
 
+  const estSuperAdmin = mountedUser?.role === "super_admin";
   container.innerHTML = `
     <div class="filters-row" style="flex-wrap:wrap;gap:8px;margin:10px 0">
       <select id="sm-hist-attrib">
@@ -535,9 +536,9 @@ function renderHistorique(container) {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Date</th><th>Produit</th><th>Quantité</th><th>Attribution</th><th>Commentaire</th><th>Par</th></tr></thead>
+        <thead><tr><th>Date</th><th>Produit</th><th>Quantité</th><th>Attribution</th><th>Commentaire</th><th>Par</th>${estSuperAdmin ? "<th></th>" : ""}</tr></thead>
         <tbody>
-          ${sorties.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucune sortie pour ces filtres.</td></tr>` :
+          ${sorties.length === 0 ? `<tr><td colspan="${estSuperAdmin ? 7 : 6}" class="empty-row">Aucune sortie pour ces filtres.</td></tr>` :
             sorties.map(s => `
               <tr>
                 <td>${new Date(s.date).toLocaleDateString("fr-FR")}</td>
@@ -546,6 +547,7 @@ function renderHistorique(container) {
                 <td>${s.attributionId === MNA_ID ? "👥 " : "🏢 "}${esc(s.attributionNom)}</td>
                 <td>${esc(s.commentaire || "")}</td>
                 <td>${esc(s.creePar || "")}</td>
+                ${estSuperAdmin ? `<td><button class="del-btn" data-del-sortie-sm="${s.id}" style="padding:3px 8px;font-size:11px" title="Annuler cette sortie (ex. test) et recréditer le stock">🗑️</button></td>` : ""}
               </tr>
             `).join("")}
         </tbody>
@@ -555,4 +557,10 @@ function renderHistorique(container) {
 
   document.getElementById("sm-hist-attrib").addEventListener("change", (e) => { ui.filtreAttribution = e.target.value || "toutes"; render(); });
   document.getElementById("sm-hist-cat").addEventListener("change", (e) => { ui.filtreCategorie = e.target.value; render(); });
+  container.querySelectorAll("[data-del-sortie-sm]").forEach(btn => btn.addEventListener("click", async () => {
+    const s = state.sorties.find(x => x.id === btn.dataset.delSortieSm);
+    if (!s) return;
+    if (!confirm(`Annuler cette sortie de "${s.produitNom}" (${s.quantite} ${s.unite || ""}) ? Le stock sera recrédité de cette quantité.`)) return;
+    try { await supprimerSortie(s); } catch (e) { alert("Erreur : " + (e.message || e)); }
+  }));
 }

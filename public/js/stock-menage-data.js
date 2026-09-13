@@ -87,6 +87,19 @@ export function watchSorties(callback) {
   }, (err) => { console.error("watchSorties (stock menage):", err); callback([]); });
 }
 
+// Annule une sortie (ex. sortie de test lors d'une démonstration) :
+// supprime définitivement la ligne d'historique ET recrédite le stock
+// du produit de la quantité correspondante, pour ne pas fausser le
+// niveau de stock après coup.
+export async function supprimerSortie(sortie) {
+  const refProduit = doc(db, PRODUITS, sortie.produitId);
+  const snapProduit = await getDoc(refProduit);
+  if (snapProduit.exists()) {
+    await updateDoc(refProduit, { stockActuel: (snapProduit.data().stockActuel || 0) + (sortie.quantite || 0) });
+  }
+  await deleteDoc(doc(db, SORTIES, sortie.id));
+}
+
 // ---- Paramètres : quels sites sont concernés par chaque zone ----
 // Un même document config/stock-menage-zones : { [siteId]: "ecole" | "agropolis" }
 // Un site non listé n'est concerné par aucune des deux zones (n'apparaît
