@@ -63,6 +63,7 @@ export async function enregistrerSortie(produit, quantite, attributionId, attrib
   const nouveauStock = Math.max(0, (produit.stockActuel || 0) - quantite);
   await updateDoc(doc(db, PRODUITS, produit.id), { stockActuel: nouveauStock });
   await addDoc(collection(db, SORTIES), {
+    type: "sortie",
     produitId: produit.id, produitNom: produit.nom, categorie: produit.categorie || "", zone: produit.zone || "",
     quantite, unite: produit.unite || "",
     attributionId, attributionNom,
@@ -72,11 +73,22 @@ export async function enregistrerSortie(produit, quantite, attributionId, attrib
   });
 }
 
-// Réapprovisionnement (entrée de stock) — plus simple qu'une sortie, pas
-// d'attribution puisque ça alimente le stock commun.
-export async function enregistrerEntree(produit, quantite) {
+// Réapprovisionnement (entrée de stock) — pas d'attribution puisque ça
+// alimente le stock commun, mais journalisé dans la même collection
+// (type: "entree") pour permettre un vrai suivi entrées/sorties dans
+// les statistiques.
+export async function enregistrerEntree(produit, quantite, user) {
   const nouveauStock = (produit.stockActuel || 0) + quantite;
   await updateDoc(doc(db, PRODUITS, produit.id), { stockActuel: nouveauStock });
+  await addDoc(collection(db, SORTIES), {
+    type: "entree",
+    produitId: produit.id, produitNom: produit.nom, categorie: produit.categorie || "", zone: produit.zone || "",
+    quantite, unite: produit.unite || "",
+    attributionId: null, attributionNom: null,
+    commentaire: "",
+    date: Date.now(),
+    creePar: user?.nom || user?.email || "Inconnu",
+  });
 }
 
 export function watchSorties(callback) {
@@ -87,15 +99,18 @@ export function watchSorties(callback) {
   }, (err) => { console.error("watchSorties (stock menage):", err); callback([]); });
 }
 
-// Annule une sortie (ex. sortie de test lors d'une démonstration) :
-// supprime définitivement la ligne d'historique ET recrédite le stock
-// du produit de la quantité correspondante, pour ne pas fausser le
-// niveau de stock après coup.
+// Annule un mouvement (sortie ou entrée — ex. saisie de test lors
+// d'une démonstration) : supprime définitivement la ligne d'historique
+// ET rétablit le stock du produit en sens inverse (une sortie annulée
+// recrédite le stock, une entrée annulée le débite), pour ne pas
+// fausser le niveau de stock après coup.
 export async function supprimerSortie(sortie) {
   const refProduit = doc(db, PRODUITS, sortie.produitId);
   const snapProduit = await getDoc(refProduit);
   if (snapProduit.exists()) {
-    await updateDoc(refProduit, { stockActuel: (snapProduit.data().stockActuel || 0) + (sortie.quantite || 0) });
+    const signe = sortie.type === "entree" ? -1 : 1;
+    const nouveauStock = Math.max(0, (snapProduit.data().stockActuel || 0) + signe * (sortie.quantite || 0));
+    await updateDoc(refProduit, { stockActuel: nouveauStock });
   }
   await deleteDoc(doc(db, SORTIES, sortie.id));
 }

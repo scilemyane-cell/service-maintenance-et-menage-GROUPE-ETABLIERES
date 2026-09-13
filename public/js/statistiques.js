@@ -83,11 +83,15 @@ function render(data) {
   const parStatut = { propose: 0, valide: 0, refuse: 0, reporte: 0 };
   previsionnelAnnee.forEach(l => { parStatut[l.statut] = (parStatut[l.statut] || 0) + (l.montantEstime || 0); });
 
-  // ---- Consommation stock ménage par zone (30 derniers jours) ----
-  const il30j = Date.now() - 30 * 24 * 3600 * 1000;
-  const sortiesRecentes = data.stockMenageSorties.filter(s => (s.date || 0) >= il30j);
-  const consoParZone = { ecole: 0, agropolis: 0 };
-  sortiesRecentes.forEach(s => { if (consoParZone[s.zone] !== undefined) consoParZone[s.zone] += (s.quantite || 0); });
+  // ---- Stock Ménage : entrées/sorties de l'année + quote-part par attribution ----
+  const mouvementsAnnee = data.stockMenageSorties.filter(s => new Date(s.date || 0).getFullYear() === anneeCourante);
+  const totalEntrees = mouvementsAnnee.filter(s => s.type === "entree").reduce((s, m) => s + (m.quantite || 0), 0);
+  const totalSorties = mouvementsAnnee.filter(s => s.type !== "entree").reduce((s, m) => s + (m.quantite || 0), 0);
+  const quotePart = {};
+  mouvementsAnnee.filter(s => s.type !== "entree" && s.attributionNom).forEach(s => {
+    quotePart[s.attributionNom] = (quotePart[s.attributionNom] || 0) + (s.quantite || 0);
+  });
+  const quotePartTriee = Object.entries(quotePart).sort((a, b) => b[1] - a[1]);
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -121,22 +125,35 @@ function render(data) {
       </div>
 
       <div class="form-card">
-        <h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">Consommation Stock Ménage — 30 derniers jours</h3>
-        <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">Stock Ménage ${anneeCourante} — entrées / sorties</h3>
+        <p class="hint" style="margin:0 0 12px">École + Agropolis confondus</p>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
           <div style="text-align:center">
-            <p style="margin:0;font-size:32px;font-weight:800;color:var(--gold)">${consoParZone.ecole}</p>
-            <p class="hint" style="margin:0">unités sorties — École</p>
+            <p style="margin:0;font-size:32px;font-weight:800;color:var(--teal, #3FB6AC)">${totalEntrees}</p>
+            <p class="hint" style="margin:0">📥 unités entrées (réappro)</p>
           </div>
           <div style="text-align:center">
-            <p style="margin:0;font-size:32px;font-weight:800;color:var(--gold)">${consoParZone.agropolis}</p>
-            <p class="hint" style="margin:0">unités sorties — Agropolis</p>
+            <p style="margin:0;font-size:32px;font-weight:800;color:var(--gold)">${totalSorties}</p>
+            <p class="hint" style="margin:0">📤 unités sorties (consommées)</p>
           </div>
         </div>
+        <h4 style="margin:0 0 10px;font-size:13px;color:var(--text-dim)">Quote-part des sorties par site / MNA</h4>
+        ${quotePartTriee.length === 0 ? `<p class="hint">Aucune sortie enregistrée pour ${anneeCourante}.</p>` : `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center" class="stats-2col">
+            <div style="position:relative;height:220px"><canvas id="stat-chart-quotepart"></canvas></div>
+            <div>
+              ${quotePartTriee.map(([nom, qte]) => {
+                const pct = totalSorties > 0 ? Math.round((qte / totalSorties) * 100) : 0;
+                return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)"><span>${esc(nom)}</span><b>${qte} (${pct}%)</b></div>`;
+              }).join("")}
+            </div>
+          </div>
+        `}
       </div>
     </div>
   `;
 
-  dessinerGraphiques(mois12, interventionsParMois, typesTries, statutsLabels, parStatut);
+  dessinerGraphiques(mois12, interventionsParMois, typesTries, statutsLabels, parStatut, quotePartTriee);
 }
 
 function carteKpi(icone, valeur, label, couleur) {
@@ -149,7 +166,7 @@ function carteKpi(icone, valeur, label, couleur) {
   `;
 }
 
-function dessinerGraphiques(mois12, interventionsParMois, typesTries, statutsLabels, parStatut) {
+function dessinerGraphiques(mois12, interventionsParMois, typesTries, statutsLabels, parStatut, quotePartTriee) {
   Object.values(graphiquesActifs).forEach(c => c.destroy());
   graphiquesActifs = {};
   if (!window.Chart) return;
@@ -201,6 +218,19 @@ function dessinerGraphiques(mois12, interventionsParMois, typesTries, statutsLab
         }],
       },
       options: { ...styleCommun, plugins: { legend: { display: false } }, indexAxis: "y", maintainAspectRatio: false },
+    });
+  }
+
+  const ctxQuotePart = document.getElementById("stat-chart-quotepart");
+  if (ctxQuotePart && quotePartTriee && quotePartTriee.length > 0) {
+    const palette = ["#B08D46", "#3FB6AC", "#C24444", "#6B5CA5", "#4C8CC2", "#C29A3F", "#5FA85A", "#A15C9E"];
+    graphiquesActifs.quotepart = new window.Chart(ctxQuotePart, {
+      type: "pie",
+      data: {
+        labels: quotePartTriee.map(([nom]) => nom),
+        datasets: [{ data: quotePartTriee.map(([, qte]) => qte), backgroundColor: palette }],
+      },
+      options: { plugins: { legend: { display: false } }, maintainAspectRatio: false },
     });
   }
 }

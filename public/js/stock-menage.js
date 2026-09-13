@@ -503,7 +503,7 @@ function attacherEcouteurEntree(produitId) {
     if (!qte || qte <= 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      await enregistrerEntree(p, qte);
+      await enregistrerEntree(p, qte, mountedUser);
       document.getElementById(`sm-entree-form-${produitId}`).innerHTML = "";
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
@@ -515,7 +515,7 @@ function attacherEcouteurEntree(produitId) {
 // Onglet Historique des sorties
 // =================================================================
 function renderHistorique(container) {
-  const sorties = state.sorties.filter(s => {
+  const mouvements = state.sorties.filter(s => {
     if (s.zone !== ui.zone) return false;
     if (ui.filtreAttribution !== "toutes" && s.attributionId !== ui.filtreAttribution) return false;
     if (ui.filtreCategorie !== "toutes" && s.categorie !== ui.filtreCategorie) return false;
@@ -536,18 +536,19 @@ function renderHistorique(container) {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Date</th><th>Produit</th><th>Quantité</th><th>Attribution</th><th>Commentaire</th><th>Par</th>${estSuperAdmin ? "<th></th>" : ""}</tr></thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Produit</th><th>Quantité</th><th>Attribution</th><th>Commentaire</th><th>Par</th>${estSuperAdmin ? "<th></th>" : ""}</tr></thead>
         <tbody>
-          ${sorties.length === 0 ? `<tr><td colspan="${estSuperAdmin ? 7 : 6}" class="empty-row">Aucune sortie pour ces filtres.</td></tr>` :
-            sorties.map(s => `
+          ${mouvements.length === 0 ? `<tr><td colspan="${estSuperAdmin ? 8 : 7}" class="empty-row">Aucun mouvement pour ces filtres.</td></tr>` :
+            mouvements.map(s => `
               <tr>
                 <td>${new Date(s.date).toLocaleDateString("fr-FR")}</td>
+                <td>${s.type === "entree" ? "📥 Entrée" : "📤 Sortie"}</td>
                 <td>${esc(s.produitNom)}</td>
                 <td>${s.quantite} ${esc(s.unite || "")}</td>
-                <td>${s.attributionId === MNA_ID ? "👥 " : "🏢 "}${esc(s.attributionNom)}</td>
+                <td>${s.attributionId ? (s.attributionId === MNA_ID ? "👥 " : "🏢 ") + esc(s.attributionNom) : "—"}</td>
                 <td>${esc(s.commentaire || "")}</td>
                 <td>${esc(s.creePar || "")}</td>
-                ${estSuperAdmin ? `<td><button class="del-btn" data-del-sortie-sm="${s.id}" style="padding:3px 8px;font-size:11px" title="Annuler cette sortie (ex. test) et recréditer le stock">🗑️</button></td>` : ""}
+                ${estSuperAdmin ? `<td><button class="del-btn" data-del-sortie-sm="${s.id}" style="padding:3px 8px;font-size:11px" title="Annuler ce mouvement (ex. test) et rétablir le stock">🗑️</button></td>` : ""}
               </tr>
             `).join("")}
         </tbody>

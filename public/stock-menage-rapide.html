@@ -199,6 +199,7 @@
             const nouveauStock = Math.max(0, (p.stockActuel || 0) - qte);
             await updateDoc(doc(db, "stock-menage-produits", p.id), { stockActuel: nouveauStock });
             await addDoc(collection(db, "stock-menage-sorties"), {
+              type: "sortie",
               produitId: p.id, produitNom: p.nom, categorie: p.categorie || "", zone: p.zone || "",
               quantite: qte, unite: p.unite || "",
               attributionId: attribId, attributionNom: attribNom,
