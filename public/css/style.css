@@ -116,6 +116,7 @@ body{
   .bubble-icon{ width:48px; height:48px; font-size:22px; }
   .bubble-label{ font-size:13px; }
   .bubble-desc{ font-size:10px; }
+  .stats-2col{ grid-template-columns:1fr !important; }
 }
 
 .back-btn{ background:none; border:none; color:var(--gold); font-size:12px; font-weight:700; cursor:pointer; padding:0 0 4px 0; display:block; }

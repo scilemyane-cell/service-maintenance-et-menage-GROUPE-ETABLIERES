@@ -48,6 +48,7 @@
   import { mountQrMasse } from "./js/qr-print-masse.js";
   import { mountPrevisionnel } from "./js/previsionnel.js";
   import { mountStockMenage } from "./js/stock-menage.js";
+  import { mountStatistiques } from "./js/statistiques.js";
   import { mountCorbeille } from "./js/corbeille.js";
   import { watchSites } from "./js/sites-data.js";
   import { watchAccess, hasAccess } from "./js/access-data.js";
@@ -94,6 +95,12 @@
 
   function staticCategories() {
     return [
+      {
+        id: "statistiques", label: "Statistiques", icon: "📊", desc: "Tableau de bord — vue d'ensemble de l'activité",
+        subtabs: [
+          { id: "vue", label: "Vue d'ensemble", icon: "📊", roles: [...GESTION,"direction"], mount: mountStatistiques },
+        ],
+      },
       {
         id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning, absences, interventions",
         subtabs: [
@@ -166,8 +173,8 @@
   }
 
   function allCategories(user) {
-    const [astreinte, administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock] = staticCategories();
-    return [astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock];
   }
 
   watchAuth((user) => {
