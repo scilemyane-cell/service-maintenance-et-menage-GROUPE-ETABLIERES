@@ -116,14 +116,18 @@ function render() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
       <button class="nav-btn" id="sm-onglet-produits" style="${ui.onglet === 'produits' ? 'border-color:var(--gold);color:var(--gold)' : ''}">📦 Produits & stock</button>
       <button class="nav-btn" id="sm-onglet-historique" style="${ui.onglet === 'historique' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🗂️ Historique des sorties</button>
+      <button class="nav-btn" id="sm-onglet-flux" style="${ui.onglet === 'flux' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🌊 Flux de stock</button>
     </div>
     <div id="sm-sous-corps"></div>
   `;
   document.getElementById("sm-onglet-produits").addEventListener("click", () => { ui.onglet = "produits"; render(); });
   document.getElementById("sm-onglet-historique").addEventListener("click", () => { ui.onglet = "historique"; render(); });
+  document.getElementById("sm-onglet-flux").addEventListener("click", () => { ui.onglet = "flux"; render(); });
 
   const sousCorps = document.getElementById("sm-sous-corps");
-  if (ui.onglet === "produits") renderProduits(sousCorps); else renderHistorique(sousCorps);
+  if (ui.onglet === "produits") renderProduits(sousCorps);
+  else if (ui.onglet === "historique") renderHistorique(sousCorps);
+  else renderFlux(sousCorps);
 }
 
 function attributionOptions(selectionnee) {
@@ -514,6 +518,77 @@ function attacherEcouteurEntree(produitId) {
 // =================================================================
 // Onglet Historique des sorties
 // =================================================================
+// =================================================================
+// Onglet Flux de stock — diagramme façon "Sankey" fait maison (SVG),
+// montrant en un coup d'œil comment le stock se répartit entre les
+// sites/MNA, avec un effet de flux animé.
+// =================================================================
+function renderFlux(container) {
+  const sorties = state.sorties.filter(s => s.zone === ui.zone && s.type !== "entree" && s.attributionNom);
+  const parAttrib = new Map();
+  sorties.forEach(s => parAttrib.set(s.attributionNom, (parAttrib.get(s.attributionNom) || 0) + (s.quantite || 0)));
+  const entries = [...parAttrib.entries()].sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, q]) => s + q, 0);
+
+  container.innerHTML = `
+    <div class="form-card">
+      <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">🌊 Flux du stock ${ZONES[ui.zone]}</h3>
+      <p class="hint" style="margin:0 0 14px">Répartition de toutes les sorties enregistrées vers chaque site ou le dispositif MNA.</p>
+      ${entries.length === 0 ? `<p class="hint">Aucune sortie enregistrée pour l'instant sur cette zone.</p>` : `<div id="sm-flux-svg" style="width:100%;overflow-x:auto"></div>`}
+    </div>
+  `;
+  if (entries.length === 0) return;
+  dessinerFlux(document.getElementById("sm-flux-svg"), entries, total);
+}
+
+function dessinerFlux(holder, entries, total) {
+  const largeur = 640, hauteur = Math.max(260, entries.length * 56);
+  const gapRatio = entries.length > 1 ? 0.18 : 0;
+  const hauteurUtile = hauteur * (1 - gapRatio);
+  const gap = entries.length > 1 ? (hauteur * gapRatio) / (entries.length - 1) : 0;
+  const leftX = 30, leftW = 22, rightX = largeur - 190, rightW = 22;
+  const midX = (leftX + leftW + rightX) / 2;
+  const palette = ["#B08D46", "#3FB6AC", "#C24444", "#6B5CA5", "#4C8CC2", "#C29A3F", "#5FA85A", "#A15C9E", "#D98A47", "#5C9EAD"];
+
+  let cumulLeft = 0, cumulRight = 0;
+  const rubans = entries.map(([nom, qte], i) => {
+    const h = total > 0 ? (qte / total) * hauteurUtile : 0;
+    const r = { nom, qte, h, y0Left: cumulLeft, y1Left: cumulLeft + h, y0Right: cumulRight, y1Right: cumulRight + h, color: palette[i % palette.length] };
+    cumulLeft += h;
+    cumulRight += h + gap;
+    return r;
+  });
+
+  const svgRubans = rubans.map((r, i) => `
+    <path d="M ${leftX + leftW},${r.y0Left}
+             C ${midX},${r.y0Left} ${midX},${r.y0Right} ${rightX},${r.y0Right}
+             L ${rightX},${r.y1Right}
+             C ${midX},${r.y1Right} ${midX},${r.y1Left} ${leftX + leftW},${r.y1Left} Z"
+          fill="${r.color}" fill-opacity="0.32" stroke="none"/>
+    <path id="sm-flux-ligne-${i}" d="M ${leftX + leftW},${(r.y0Left + r.y1Left) / 2}
+             C ${midX},${(r.y0Left + r.y1Left) / 2} ${midX},${(r.y0Right + r.y1Right) / 2} ${rightX},${(r.y0Right + r.y1Right) / 2}"
+          fill="none" stroke="${r.color}" stroke-width="${Math.max(2, r.h * 0.5)}" stroke-linecap="round"
+          stroke-dasharray="10 8">
+      <animate attributeName="stroke-dashoffset" from="36" to="0" dur="1.1s" repeatCount="indefinite"/>
+    </path>
+  `).join("");
+
+  const svgNoeudsDroite = rubans.map(r => `
+    <rect x="${rightX}" y="${r.y0Right}" width="${rightW}" height="${Math.max(2, r.h)}" rx="4" fill="${r.color}"/>
+    <text x="${rightX + rightW + 10}" y="${(r.y0Right + r.y1Right) / 2 - 4}" fill="var(--text, #eee)" font-size="12" font-weight="700">${esc(r.nom)}</text>
+    <text x="${rightX + rightW + 10}" y="${(r.y0Right + r.y1Right) / 2 + 12}" fill="var(--text-dim, #999)" font-size="11">${r.qte} unités · ${total > 0 ? Math.round((r.qte / total) * 100) : 0}%</text>
+  `).join("");
+
+  holder.innerHTML = `
+    <svg viewBox="0 0 ${largeur} ${hauteur}" style="width:100%;min-width:480px;height:${hauteur}px">
+      <rect x="${leftX}" y="0" width="${leftW}" height="${hauteurUtile}" rx="4" fill="var(--gold, #B08D46)"/>
+      <text x="${leftX + leftW / 2}" y="${hauteurUtile / 2}" fill="#fff" font-size="11" font-weight="700" text-anchor="middle" transform="rotate(-90 ${leftX + leftW / 2} ${hauteurUtile / 2})">STOCK</text>
+      ${svgRubans}
+      ${svgNoeudsDroite}
+    </svg>
+  `;
+}
+
 function renderHistorique(container) {
   const mouvements = state.sorties.filter(s => {
     if (s.zone !== ui.zone) return false;
