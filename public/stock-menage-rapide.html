@@ -105,7 +105,8 @@
       // cette zone, pour proposer le bon menu déroulant d'attribution —
       // c'est tout l'objet de cette page : pouvoir attribuer directement
       // la sortie au bon site (ex. Sub-Social), pas juste compter le stock.
-      let attributions = [{ id: MNA_ID, nom: MNA_LABEL }];
+      // Le dispositif MNA est propre à Agropolis — jamais proposé côté École.
+      let attributions = zone === "agropolis" ? [{ id: MNA_ID, nom: MNA_LABEL }] : [];
       try {
         const [zonesSnapDoc, sitesSnap] = await Promise.all([
           getDoc(doc(db, "config", "stock-menage-zones")),

@@ -127,7 +127,9 @@ function render() {
 }
 
 function attributionOptions(selectionnee) {
-  const options = [`<option value="">— Choisir —</option>`, `<option value="${MNA_ID}" ${selectionnee === MNA_ID ? "selected" : ""}>👥 ${MNA_LABEL}</option>`];
+  // Le dispositif MNA est propre à Agropolis — jamais proposé côté École.
+  const options = [`<option value="">— Choisir —</option>`];
+  if (ui.zone === "agropolis") options.push(`<option value="${MNA_ID}" ${selectionnee === MNA_ID ? "selected" : ""}>👥 ${MNA_LABEL}</option>`);
   sitesDeLaZone(ui.zone).forEach(s => options.push(`<option value="${s.id}" ${selectionnee === s.id ? "selected" : ""}>🏢 ${esc(s.nom)}</option>`));
   return options.join("");
 }
