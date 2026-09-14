@@ -19,13 +19,13 @@ import {
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -66,6 +66,7 @@ function render() {
   if (ui.screen === "ajuste") return renderAjuste();
   if (ui.screen === "scan") return renderScan();
   if (ui.screen === "flux") return renderFlux();
+  if (ui.screen === "jauges") return renderJauges();
   if (ui.rapideSiteId) return renderRapide();
   renderListe();
 }
@@ -123,6 +124,7 @@ function renderListe() {
               <button class="nav-btn" data-rapide-site="${site.id}">🚀 Mode rapide</button>
               <button class="nav-btn" data-qr-rapide-site="${site.id}">🔳 QR inventaire rapide</button>
               <button class="nav-btn" data-flux-site="${site.id}" style="border-color:var(--teal);color:var(--teal)">🌊 Flux des sorties</button>
+              <button class="nav-btn" data-jauges-site="${site.id}" style="border-color:var(--gold);color:var(--gold)">📊 Jauges des sorties</button>
             </div>
             <div id="ssx-qr-rapide-holder-${site.id}" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
               <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
@@ -179,6 +181,9 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-flux-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.screen = "flux"; ui.fluxSiteId = btn.dataset.fluxSite; render();
+  }));
+  mountedContainer.querySelectorAll("[data-jauges-site]").forEach(btn => btn.addEventListener("click", () => {
+    ui.screen = "jauges"; ui.jaugesSiteId = btn.dataset.jaugesSite; render();
   }));
   mountedContainer.querySelectorAll("[data-qr-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.qrRapideSite;
@@ -504,6 +509,67 @@ async function renderFlux() {
   `;
   document.getElementById("ssx-flux-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
   if (entries.length > 0) dessinerFluxSVG(document.getElementById("ssx-flux-svg"), entries, total, { labelCentre: "STOCK", reserveTotal: stockActuelTotal });
+}
+
+// =================================================================
+// Jauges des sorties — tableau de bord : un coup d'œil sur ce qui part
+// le plus vite sur ce site, article par article (quantité totale sortie
+// depuis le début du suivi, tous logements confondus).
+// =================================================================
+async function renderJauges() {
+  const site = state.sites.find(s => s.id === ui.jaugesSiteId);
+  const itemsDuSite = state.items.filter(it => it.dossierId === ui.jaugesSiteId);
+  mountedContainer.innerHTML = `<div class="stack"><button class="nav-btn" id="ssx-jauges-retour">← Retour</button><p class="hint">⏳ Calcul des sorties…</p></div>`;
+  document.getElementById("ssx-jauges-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+
+  const tousMouvements = await Promise.all(itemsDuSite.map(it => listerMouvementsSite(it.id)));
+  const parItem = itemsDuSite.map((it, i) => {
+    const sorties = tousMouvements[i].filter(m => m.type === "sortie");
+    const total = sorties.reduce((s, m) => s + (m.quantiteSortie || 0), 0);
+    return { nom: it.nom, unite: it.unite || "", total, nombre: sorties.length };
+  }).filter(it => it.total > 0).sort((a, b) => b.total - a.total);
+
+  if (ui.screen !== "jauges" || ui.jaugesSiteId !== site?.id) return; // écran changé pendant le calcul
+
+  const maxTotal = parItem.reduce((m, it) => Math.max(m, it.total), 0) || 1;
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="ssx-jauges-retour">← Retour</button>
+      <div class="form-card">
+        <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">📊 Jauges des sorties — ${esc(site?.nom || "")}</h3>
+        <p class="hint" style="margin:0 0 14px">Quantité totale sortie par article depuis le début du suivi, tous logements confondus. Rouge = article qui part le plus vite, sarcelle = consommation faible.</p>
+        ${parItem.length === 0 ? `<p class="hint">Aucune sortie enregistrée pour l'instant sur ce site.</p>` : `
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+            ${parItem.map(it => uneJaugeSortieHTML(it, maxTotal)).join("")}
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+  document.getElementById("ssx-jauges-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+}
+
+function uneJaugeSortieHTML(it, maxTotal) {
+  const f = Math.max(0, Math.min(1, it.total / maxTotal));
+  const cx = 60, cy = 62, r = 46;
+  const angle = 180 - f * 180;
+  const rad = (angle * Math.PI) / 180;
+  const endX = cx + r * Math.cos(rad);
+  const endY = cy - r * Math.sin(rad);
+  const couleur = f > 0.66 ? "#C24444" : f > 0.33 ? "#C29A3F" : "#3FB6AC";
+
+  return `
+    <div style="text-align:center">
+      <svg viewBox="0 0 120 78" style="width:100%">
+        <path d="M ${cx - r},${cy} A ${r},${r} 0 0 1 ${cx + r},${cy}" fill="none" stroke="var(--border, #444)" stroke-width="10" stroke-linecap="round"/>
+        <path d="M ${cx - r},${cy} A ${r},${r} 0 0 1 ${endX},${endY}" fill="none" stroke="${couleur}" stroke-width="10" stroke-linecap="round"/>
+        <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="20" font-weight="800" fill="var(--text, #eee)">${it.total}</text>
+        <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="9" fill="var(--text-dim, #999)">${esc(it.unite)} · ${it.nombre} sortie(s)</text>
+      </svg>
+      <p style="margin:2px 0 0;font-size:11px;font-weight:700;line-height:1.2" title="${esc(it.nom)}">${esc(it.nom.length > 16 ? it.nom.slice(0, 15) + "…" : it.nom)}</p>
+    </div>
+  `;
 }
 
 function renderQr() {
