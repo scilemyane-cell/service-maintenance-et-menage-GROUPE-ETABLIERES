@@ -13,19 +13,19 @@ import {
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
   configurerArticlesSiteDepuisCatalogue, listerCatalogueSite, listerCatalogueCentral,
   qrPayloadForSite, getArticleSiteAvecResidence, actualiserStockSite, enregistrerSortieSite,
-  listerMouvementsSite,
+  listerMouvementsSite, supprimerMouvementSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -67,6 +67,7 @@ function render() {
   if (ui.screen === "scan") return renderScan();
   if (ui.screen === "flux") return renderFlux();
   if (ui.screen === "jauges") return renderJauges();
+  if (ui.screen === "historique") return renderHistorique();
   if (ui.rapideSiteId) return renderRapide();
   renderListe();
 }
@@ -125,6 +126,7 @@ function renderListe() {
               <button class="nav-btn" data-qr-rapide-site="${site.id}">🔳 QR inventaire rapide</button>
               <button class="nav-btn" data-flux-site="${site.id}" style="border-color:var(--teal);color:var(--teal)">🌊 Flux des sorties</button>
               <button class="nav-btn" data-jauges-site="${site.id}" style="border-color:var(--gold);color:var(--gold)">📊 Jauges des sorties</button>
+              <button class="nav-btn" data-historique-site="${site.id}">🗂️ Historique des sorties</button>
             </div>
             <div id="ssx-qr-rapide-holder-${site.id}" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
               <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
@@ -184,6 +186,9 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-jauges-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.screen = "jauges"; ui.jaugesSiteId = btn.dataset.jaugesSite; render();
+  }));
+  mountedContainer.querySelectorAll("[data-historique-site]").forEach(btn => btn.addEventListener("click", () => {
+    ui.screen = "historique"; ui.historiqueSiteId = btn.dataset.historiqueSite; render();
   }));
   mountedContainer.querySelectorAll("[data-qr-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.qrRapideSite;
@@ -570,6 +575,66 @@ function uneJaugeSortieHTML(it, maxTotal) {
       <p style="margin:2px 0 0;font-size:11px;font-weight:700;line-height:1.2" title="${esc(it.nom)}">${esc(it.nom.length > 16 ? it.nom.slice(0, 15) + "…" : it.nom)}</p>
     </div>
   `;
+}
+
+// =================================================================
+// Historique des sorties — liste détaillée, avec suppression réservée
+// au Super Admin (recrédite automatiquement le stock de l'article).
+// =================================================================
+async function renderHistorique() {
+  const site = state.sites.find(s => s.id === ui.historiqueSiteId);
+  const itemsDuSite = state.items.filter(it => it.dossierId === ui.historiqueSiteId);
+  const itemsParId = new Map(itemsDuSite.map(it => [it.id, it]));
+  mountedContainer.innerHTML = `<div class="stack"><button class="nav-btn" id="ssx-hist-retour">← Retour</button><p class="hint">⏳ Chargement de l'historique…</p></div>`;
+  document.getElementById("ssx-hist-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+
+  const tousMouvements = (await Promise.all(itemsDuSite.map(it => listerMouvementsSite(it.id)))).flat();
+  const sorties = tousMouvements.filter(m => m.type === "sortie").sort((a, b) => (b.date?.toMillis?.() || 0) - (a.date?.toMillis?.() || 0));
+
+  if (ui.screen !== "historique" || ui.historiqueSiteId !== site?.id) return; // écran changé pendant le chargement
+
+  const estSuperAdmin = mountedUser?.role === "super_admin";
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="ssx-hist-retour">← Retour</button>
+      <div class="form-card">
+        <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">🗂️ Historique des sorties — ${esc(site?.nom || "")}</h3>
+        <p class="hint" style="margin:0 0 14px">${estSuperAdmin ? "Supprimer une sortie recrédite automatiquement le stock de l'article." : "Seul un Super Admin peut supprimer une sortie."}</p>
+        ${sorties.length === 0 ? `<p class="hint">Aucune sortie enregistrée pour l'instant sur ce site.</p>` : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Article</th><th>Quantité</th><th>Logement</th>${estSuperAdmin ? "<th></th>" : ""}</tr></thead>
+              <tbody>
+                ${sorties.map(m => {
+                  const it = itemsParId.get(m.itemId);
+                  const dateStr = m.date?.toDate ? m.date.toDate().toLocaleDateString("fr-FR") : "—";
+                  return `
+                    <tr>
+                      <td>${dateStr}</td>
+                      <td>${esc(it?.nom || "Article supprimé")}</td>
+                      <td>${m.quantiteSortie ?? 0} ${esc(it?.unite || "")}</td>
+                      <td>${esc(m.logement || "—")}</td>
+                      ${estSuperAdmin ? `<td><button class="del-btn" data-del-mouvement="${m.id}" style="padding:3px 8px;font-size:11px" title="Supprimer cette sortie (ex. erreur de saisie) et recréditer le stock">🗑️</button></td>` : ""}
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+  document.getElementById("ssx-hist-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+  mountedContainer.querySelectorAll("[data-del-mouvement]").forEach(btn => btn.addEventListener("click", async () => {
+    const m = sorties.find(x => x.id === btn.dataset.delMouvement);
+    if (!m) return;
+    const it = itemsParId.get(m.itemId);
+    if (!confirm(`Supprimer cette sortie de "${it?.nom || "cet article"}" (${m.quantiteSortie ?? 0} ${it?.unite || ""}) ? Le stock sera recrédité de cette quantité.`)) return;
+    try { await supprimerMouvementSite(m); await load(); await renderHistorique(); }
+    catch (e) { alert("Échec : " + (e.message || e)); }
+  }));
 }
 
 function renderQr() {

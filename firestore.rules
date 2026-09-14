@@ -178,7 +178,7 @@ service cloud.firestore {
     match /stock-site-mouvements/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isEditor();
+      allow update, delete: if isSuperAdmin();
     }
     match /stock-site-catalogue/{docId} {
       allow read: if isSignedIn();

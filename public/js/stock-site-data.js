@@ -95,6 +95,23 @@ export async function listerMouvementsSite(itemId) {
   return list.sort((a, b) => (b.date?.toMillis?.() || 0) - (a.date?.toMillis?.() || 0));
 }
 
+// Supprime UN mouvement de sortie individuel (ex. erreur de saisie, test)
+// et recrédite le stock de l'article de la quantité correspondante — même
+// logique que la suppression d'un relevé de compteur ou d'une sortie de
+// Stock Ménage. Réservé au Super Admin côté UI ; à restreindre aussi dans
+// les règles Firestore si ce n'est pas déjà le cas pour cette collection.
+export async function supprimerMouvementSite(mouvement) {
+  await deleteDoc(doc(db, MOUVEMENTS, mouvement.id));
+  if (mouvement.type === "sortie" && mouvement.itemId) {
+    const itemRef = doc(db, COLLECTION, mouvement.itemId);
+    const itemSnap = await getDoc(itemRef);
+    if (itemSnap.exists()) {
+      const actuel = itemSnap.data().quantite ?? 0;
+      await updateDoc(itemRef, { quantite: actuel + (mouvement.quantiteSortie || 0) });
+    }
+  }
+}
+
 // Liste ponctuelle des dossiers de site ayant le stock déporté activé —
 // utilisée par la vue centralisée du module Stock maintenance.
 export async function listerSitesAvecStockDeporte() {
