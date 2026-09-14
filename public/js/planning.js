@@ -56,6 +56,7 @@ function dureeHeures(depart, retour) {
   return Math.round(((end - start) / 60) * 100) / 100;
 }
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
+let graphiquesSynthese = {}; // instances Chart.js actives — détruites avant chaque nouveau rendu
 
 let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [], releves: [] };
 let ui = {
@@ -1237,28 +1238,24 @@ function renderInterventions(container, perms) {
 // =================================================================
 // Synthèse
 // =================================================================
-function barList(data, total) {
-  return data.map((d, i) => {
-    const pct = total > 0 ? Math.round((d.value / total) * 100) : 0;
-    return `<div class="bar-row" style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px">
-      <span style="width:130px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
-      <span style="flex:1;background:var(--panel-alt);border-radius:5px;height:14px;overflow:hidden"><span style="display:block;height:100%;border-radius:5px;width:${pct}%;background:${PIE_COLORS[i % PIE_COLORS.length]}"></span></span>
-      <span style="width:75px;text-align:right;color:var(--text-dim);font-family:ui-monospace,monospace">${d.value} · ${pct}%</span>
-    </div>`;
-  }).join("");
+function evolutionMensuelle(interventions, moisCount = 12) {
+  const maintenant = new Date();
+  const mois = [];
+  for (let i = moisCount - 1; i >= 0; i--) {
+    const d = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1);
+    mois.push({ cle: d.toISOString().slice(0, 7), label: d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }) });
+  }
+  const parCle = {}; interventions.forEach(iv => { if (iv.date) { const cle = iv.date.slice(0, 7); parCle[cle] = (parCle[cle] || 0) + 1; } });
+  return { labels: mois.map(m => m.label), valeurs: mois.map(m => parCle[m.cle] || 0) };
 }
-function barListHeures(data, maxVal) {
-  return data.map(d => {
-    const pct = maxVal > 0 ? Math.round((d.heures / maxVal) * 100) : 0;
-    return `<div class="bar-row" style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px">
-      <span style="width:130px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
-      <span style="flex:1;background:var(--panel-alt);border-radius:5px;height:14px;overflow:hidden"><span style="display:block;height:100%;border-radius:5px;width:${pct}%;background:var(--teal)"></span></span>
-      <span style="width:75px;text-align:right;color:var(--text-dim);font-family:ui-monospace,monospace">${d.heures.toFixed(2)} h</span>
-    </div>`;
-  }).join("");
+
+function detruireGraphiquesSynthese() {
+  Object.values(graphiquesSynthese).forEach(c => c.destroy());
+  graphiquesSynthese = {};
 }
 
 function renderSynthese(container) {
+  detruireGraphiquesSynthese();
   if (state.interventions.length === 0) {
     container.innerHTML = `<div class="stack"><p class="hint">Aucune donnée pour l'instant.</p></div>`;
     return;
@@ -1270,12 +1267,12 @@ function renderSynthese(container) {
   const totalHeures = filtered.reduce((s, i) => s + (i.heures || 0), 0);
 
   const byType = {}; filtered.forEach(i => { byType[i.type] = (byType[i.type] || 0) + 1; });
-  const byTypeArr = Object.entries(byType).map(([name, value]) => ({ name, value }));
+  const byTypeArr = Object.entries(byType).sort((a, b) => b[1] - a[1]);
   const bySite = {}; filtered.forEach(i => { bySite[i.site] = (bySite[i.site] || 0) + 1; });
-  const bySiteArr = Object.entries(bySite).map(([name, value]) => ({ name, value }));
+  const bySiteArr = Object.entries(bySite).sort((a, b) => b[1] - a[1]);
   const heuresParTech = {}; filtered.forEach(i => { heuresParTech[i.technicien] = (heuresParTech[i.technicien] || 0) + (i.heures || 0); });
-  const heuresArr = Object.entries(heuresParTech).map(([name, heures]) => ({ name, heures })).sort((a, b) => b.heures - a.heures);
-  const maxHeures = Math.max(...heuresArr.map(h => h.heures), 1);
+  const heuresArr = Object.entries(heuresParTech).sort((a, b) => b[1] - a[1]);
+  const evolution = evolutionMensuelle(filtered);
 
   container.innerHTML = `
     <div class="stack">
@@ -1284,13 +1281,40 @@ function renderSynthese(container) {
         <label style="font-size:11px;color:var(--text-dim)">Site<br><select id="filter-site">${sites.map(s => `<option value="${esc(s)}" ${ui.filterSite === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}</select></label>
         <div class="stat-chip" style="border-color:var(--teal);color:var(--teal)">${filtered.length} intervention${filtered.length > 1 ? "s" : ""} · ${totalHeures.toFixed(2)} h</div>
       </div>
+      <div class="form-card">
+        <h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Évolution mensuelle — 12 derniers mois</h3>
+        <div style="position:relative;height:220px"><canvas id="synth-evolution"></canvas></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par type d'intervention</h3>${barList(byTypeArr, filtered.length)}</div>
-        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par site</h3>${barList(bySiteArr, filtered.length)}</div>
-        <div class="form-card" style="grid-column:1/-1"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Heures cumulées par technicien</h3>${barListHeures(heuresArr, maxHeures)}</div>
+        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par type d'intervention</h3><div style="position:relative;height:220px"><canvas id="synth-types"></canvas></div></div>
+        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par site</h3><div style="position:relative;height:220px"><canvas id="synth-sites"></canvas></div></div>
+        <div class="form-card" style="grid-column:1/-1"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Heures cumulées par technicien</h3><div style="position:relative;height:${Math.max(160, heuresArr.length * 34)}px"><canvas id="synth-heures"></canvas></div></div>
       </div>
     </div>
   `;
   document.getElementById("filter-tech").addEventListener("change", (e) => { ui.filterTech = e.target.value; renderAll(); });
   document.getElementById("filter-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; renderAll(); });
+
+  if (!window.Chart) return; // librairie pas encore chargée (connexion lente) — les filtres/chiffres restent utilisables
+
+  graphiquesSynthese.evolution = new window.Chart(document.getElementById("synth-evolution").getContext("2d"), {
+    type: "bar",
+    data: { labels: evolution.labels, datasets: [{ label: "Interventions", data: evolution.valeurs, backgroundColor: "rgba(217,178,76,.75)", borderColor: "#D9B24C", borderWidth: 1.5, borderRadius: 5, maxBarThickness: 28 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0, color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, x: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
+  });
+  graphiquesSynthese.types = new window.Chart(document.getElementById("synth-types").getContext("2d"), {
+    type: "doughnut",
+    data: { labels: byTypeArr.map(([n]) => n), datasets: [{ data: byTypeArr.map(([, v]) => v), backgroundColor: byTypeArr.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
+  });
+  graphiquesSynthese.sites = new window.Chart(document.getElementById("synth-sites").getContext("2d"), {
+    type: "bar",
+    data: { labels: bySiteArr.map(([n]) => n), datasets: [{ data: bySiteArr.map(([, v]) => v), backgroundColor: bySiteArr.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) }] },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0, color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, y: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
+  });
+  graphiquesSynthese.heures = new window.Chart(document.getElementById("synth-heures").getContext("2d"), {
+    type: "bar",
+    data: { labels: heuresArr.map(([n]) => n), datasets: [{ label: "Heures", data: heuresArr.map(([, v]) => Math.round(v * 100) / 100), backgroundColor: "rgba(63,182,172,.75)", borderColor: "#3FB6AC", borderWidth: 1.5, borderRadius: 5, maxBarThickness: 26 }] },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, y: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
+  });
 }
