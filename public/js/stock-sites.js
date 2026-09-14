@@ -7,23 +7,25 @@
 
 import { esc } from "./astreinte-logic.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
+import { dessinerFluxSVG } from "./flux-svg.js";
 import {
   listerSitesAvecStockDeporte, listerTousLesArticlesSite,
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
   configurerArticlesSiteDepuisCatalogue, listerCatalogueSite, listerCatalogueCentral,
   qrPayloadForSite, getArticleSiteAvecResidence, actualiserStockSite, enregistrerSortieSite,
+  listerMouvementsSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -63,6 +65,7 @@ function render() {
   if (ui.screen === "qr") return renderQr();
   if (ui.screen === "ajuste") return renderAjuste();
   if (ui.screen === "scan") return renderScan();
+  if (ui.screen === "flux") return renderFlux();
   if (ui.rapideSiteId) return renderRapide();
   renderListe();
 }
@@ -119,6 +122,7 @@ function renderListe() {
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
               <button class="nav-btn" data-rapide-site="${site.id}">🚀 Mode rapide</button>
               <button class="nav-btn" data-qr-rapide-site="${site.id}">🔳 QR inventaire rapide</button>
+              <button class="nav-btn" data-flux-site="${site.id}" style="border-color:var(--teal);color:var(--teal)">🌊 Flux des sorties</button>
             </div>
             <div id="ssx-qr-rapide-holder-${site.id}" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
               <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
@@ -172,6 +176,9 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.rapideSiteId = btn.dataset.rapideSite; ui.rapideIndex = 0; render();
+  }));
+  mountedContainer.querySelectorAll("[data-flux-site]").forEach(btn => btn.addEventListener("click", () => {
+    ui.screen = "flux"; ui.fluxSiteId = btn.dataset.fluxSite; render();
   }));
   mountedContainer.querySelectorAll("[data-qr-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.qrRapideSite;
@@ -466,6 +473,39 @@ function attachAddFormListeners() {
 // =================================================================
 // QR code
 // =================================================================
+// =================================================================
+// Flux des sorties par logement, pour un site (résidence) donné
+// =================================================================
+async function renderFlux() {
+  const site = state.sites.find(s => s.id === ui.fluxSiteId);
+  const itemsDuSite = state.items.filter(it => it.dossierId === ui.fluxSiteId);
+  mountedContainer.innerHTML = `<div class="stack"><button class="nav-btn" id="ssx-flux-retour">← Retour</button><p class="hint">⏳ Calcul du flux…</p></div>`;
+  document.getElementById("ssx-flux-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+
+  const tousMouvements = (await Promise.all(itemsDuSite.map(it => listerMouvementsSite(it.id)))).flat();
+  const sorties = tousMouvements.filter(m => m.type === "sortie" && m.logement);
+  const parLogement = new Map();
+  sorties.forEach(m => parLogement.set(m.logement, (parLogement.get(m.logement) || 0) + (m.quantiteSortie || 0)));
+  const entries = [...parLogement.entries()].sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, q]) => s + q, 0);
+  const stockActuelTotal = itemsDuSite.reduce((s, it) => s + (it.quantite || 0), 0);
+
+  if (ui.screen !== "flux" || ui.fluxSiteId !== site?.id) return; // l'utilisateur a changé d'écran pendant le calcul
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="ssx-flux-retour">← Retour</button>
+      <div class="form-card">
+        <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">🌊 Flux des sorties — ${esc(site?.nom || "")}</h3>
+        <p class="hint" style="margin:0 0 14px">Répartition de toutes les sorties enregistrées vers chaque logement.</p>
+        ${entries.length === 0 ? `<p class="hint">Aucune sortie avec logement renseigné pour l'instant sur ce site.</p>` : `<div id="ssx-flux-svg" style="width:100%;overflow-x:auto"></div>`}
+      </div>
+    </div>
+  `;
+  document.getElementById("ssx-flux-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+  if (entries.length > 0) dessinerFluxSVG(document.getElementById("ssx-flux-svg"), entries, total, { labelCentre: "STOCK", reserveTotal: stockActuelTotal });
+}
+
 function renderQr() {
   const item = state.items.find(it => it.id === ui.qrId);
   if (!item) { ui.screen = "liste"; render(); return; }

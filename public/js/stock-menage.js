@@ -14,6 +14,7 @@ import {
 } from "./stock-menage-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
+import { dessinerFluxSVG } from "./flux-svg.js";
 
 let mountedContainer = null;
 let mountedUser = null;
@@ -605,9 +606,6 @@ function attacherEcouteurEntree(produitId) {
 }
 
 // =================================================================
-// Onglet Historique des sorties
-// =================================================================
-// =================================================================
 // Onglet Flux de stock — diagramme façon "Sankey" fait maison (SVG),
 // montrant en un coup d'œil comment le stock se répartit entre les
 // sites/MNA, avec un effet de flux animé.
@@ -628,85 +626,12 @@ function renderFlux(container) {
     </div>
   `;
   if (entries.length === 0) return;
-  dessinerFlux(document.getElementById("sm-flux-svg"), entries, total, stockActuelTotal);
+  dessinerFluxSVG(document.getElementById("sm-flux-svg"), entries, total, { reserveTotal: stockActuelTotal });
 }
 
-function dessinerFlux(holder, entries, total, stockActuelTotal) {
-  const largeur = 720, hauteur = Math.max(280, entries.length * 62);
-  const gapRatio = entries.length > 1 ? 0.2 : 0;
-  const hauteurUtile = hauteur * (1 - gapRatio);
-  const gap = entries.length > 1 ? (hauteur * gapRatio) / (entries.length - 1) : 0;
-  const leftX = 36, leftW = 34, rightX = largeur - 210, rightW = 16;
-  const midX = (leftX + leftW + rightX) / 2;
-  const palette = ["#B08D46", "#3FB6AC", "#C24444", "#6B5CA5", "#4C8CC2", "#C29A3F", "#5FA85A", "#A15C9E", "#D98A47", "#5C9EAD"];
-  const tronquer = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
-
-  let cumulLeft = 0, cumulRight = 0;
-  const rubans = entries.map(([nom, qte], i) => {
-    const h = total > 0 ? (qte / total) * hauteurUtile : 0;
-    const r = { nom, qte, h, y0Left: cumulLeft, y1Left: cumulLeft + h, y0Right: cumulRight, y1Right: cumulRight + h, color: palette[i % palette.length] };
-    cumulLeft += h;
-    cumulRight += h + gap;
-    return r;
-  });
-
-  const svgDefs = `
-    <defs>
-      <filter id="sm-glow" x="-60%" y="-60%" width="220%" height="220%">
-        <feGaussianBlur stdDeviation="3.2" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <filter id="sm-shadow" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.35"/>
-      </filter>
-      ${rubans.map((r, i) => `
-        <linearGradient id="sm-grad-${i}" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="var(--gold, #B08D46)"/>
-          <stop offset="100%" stop-color="${r.color}"/>
-        </linearGradient>
-      `).join("")}
-    </defs>
-  `;
-
-  const svgRubans = rubans.map((r, i) => {
-    const centerY0 = (r.y0Left + r.y1Left) / 2, centerY1 = (r.y0Right + r.y1Right) / 2;
-    const pathBord = `M ${leftX + leftW},${r.y0Left} C ${midX},${r.y0Left} ${midX},${r.y0Right} ${rightX},${r.y0Right} L ${rightX},${r.y1Right} C ${midX},${r.y1Right} ${midX},${r.y1Left} ${leftX + leftW},${r.y1Left} Z`;
-    const pathCentre = `M ${leftX + leftW},${centerY0} C ${midX},${centerY0} ${midX},${centerY1} ${rightX},${centerY1}`;
-    return `
-      <path d="${pathBord}" fill="url(#sm-grad-${i})" fill-opacity="0.4" stroke="none"/>
-      <path id="sm-flux-centre-${i}" d="${pathCentre}" fill="none" stroke="none"/>
-      <circle r="4.5" fill="${r.color}" filter="url(#sm-glow)">
-        <animateMotion dur="${(2.6 - Math.min(1.4, r.h / hauteurUtile * 2)).toFixed(2)}s" repeatCount="indefinite" rotate="auto">
-          <mpath href="#sm-flux-centre-${i}" xlink:href="#sm-flux-centre-${i}"/>
-        </animateMotion>
-      </circle>
-      <circle r="3" fill="#fff" opacity="0.9">
-        <animateMotion dur="${(2.6 - Math.min(1.4, r.h / hauteurUtile * 2)).toFixed(2)}s" begin="-0.5s" repeatCount="indefinite" rotate="auto">
-          <mpath href="#sm-flux-centre-${i}" xlink:href="#sm-flux-centre-${i}"/>
-        </animateMotion>
-      </circle>
-    `;
-  }).join("");
-
-  const svgNoeudsDroite = rubans.map(r => `
-    <rect x="${rightX}" y="${r.y0Right}" width="${rightW}" height="${Math.max(3, r.h)}" rx="5" fill="${r.color}" filter="url(#sm-shadow)"/>
-    <text x="${rightX + rightW + 12}" y="${(r.y0Right + r.y1Right) / 2 - 5}" fill="var(--text, #eee)" font-size="13" font-weight="700"><title>${esc(r.nom)}</title>${esc(tronquer(r.nom, 22))}</text>
-    <text x="${rightX + rightW + 12}" y="${(r.y0Right + r.y1Right) / 2 + 13}" fill="var(--text-dim, #999)" font-size="11">${r.qte} unités · ${total > 0 ? Math.round((r.qte / total) * 100) : 0}%</text>
-  `).join("");
-
-  holder.innerHTML = `
-    <svg viewBox="0 -28 ${largeur} ${hauteur + 28}" xmlns:xlink="http://www.w3.org/1999/xlink" style="width:100%;min-width:520px;height:${hauteur + 28}px">
-      ${svgDefs}
-      <rect x="${leftX}" y="0" width="${leftW}" height="${hauteurUtile}" rx="${leftW / 2}" fill="var(--gold, #B08D46)" filter="url(#sm-shadow)"/>
-      <text x="${leftX + leftW / 2}" y="${hauteurUtile / 2}" fill="#fff" font-size="12" font-weight="800" text-anchor="middle" letter-spacing="1" transform="rotate(-90 ${leftX + leftW / 2} ${hauteurUtile / 2})">📦 STOCK</text>
-      <text x="${leftX + leftW / 2}" y="-10" text-anchor="middle" font-size="13" font-weight="800" fill="var(--gold, #B08D46)">${stockActuelTotal}</text>
-      <text x="${leftX + leftW / 2}" y="6" text-anchor="middle" font-size="9" fill="var(--text-dim, #999)">en réserve</text>
-      ${svgRubans}
-      ${svgNoeudsDroite}
-    </svg>
-  `;
-}
-
+// =================================================================
+// Onglet Historique des sorties
+// =================================================================
 function renderHistorique(container) {
   const mouvements = state.sorties.filter(s => {
     if (s.zone !== ui.zone) return false;
