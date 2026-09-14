@@ -6,7 +6,6 @@
 <title>Établières</title>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
 <link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.46.0/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.9.2/lib/qr-code-styling.js"></script>
@@ -94,16 +93,16 @@
     return dispositifsList
       .filter(d => hasAccess(accessMap, d, user))
       .map(d => ({
-        id: "disp-" + d, label: d, icon: '<i class="ti ti-spray"></i>', desc: "Fiches, traçabilité",
+        id: "disp-" + d, label: d, icon: "🧽", desc: "Fiches, traçabilité",
         subtabs: [
-          { id: "fiches",      label: "Fiches",      icon: '<i class="ti ti-clipboard-list"></i>', roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
+          { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
           ...(heuresEnabled(dispositifSettings, d) ? [
-            { id: "heures", label: "Heures", icon: '<i class="ti ti-clock"></i>', roles: MENAGE_ROLES, mount: mountHeures },
-            { id: "repartition", label: "Répartition", icon: '<i class="ti ti-chart-bar"></i>', roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
-            { id: "archive", label: "Archive", icon: '<i class="ti ti-archive"></i>', roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
+            { id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
+            { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
+            { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
           ] : []),
-          { id: "tracabilite", label: "Traçabilité", icon: '<i class="ti ti-receipt"></i>', roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
-          { id: "parametres",  label: "Paramètres",  icon: '<i class="ti ti-settings"></i>', roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
+          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
+          { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],
       }));
   }
@@ -111,77 +110,77 @@
   function staticCategories() {
     return [
       {
-        id: "statistiques", label: "Statistiques", icon: '<i class="ti ti-chart-bar"></i>', desc: "Tableau de bord — vue d'ensemble de l'activité",
+        id: "statistiques", label: "Statistiques", icon: "📊", desc: "Tableau de bord — vue d'ensemble de l'activité",
         subtabs: [
-          { id: "vue", label: "Vue d'ensemble", icon: '<i class="ti ti-chart-bar"></i>', roles: [...GESTION,"direction"], mount: mountStatistiques },
+          { id: "vue", label: "Vue d'ensemble", icon: "📊", roles: [...GESTION,"direction"], mount: mountStatistiques },
         ],
       },
       {
-        id: "astreinte", label: "Astreinte", icon: '<i class="ti ti-calendar"></i>', desc: "Planning, absences, interventions",
+        id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning, absences, interventions",
         subtabs: [
-          { id: "calendrier",     label: "Calendrier",     icon: '<i class="ti ti-calendar"></i>', roles: ALL,                         mount: mountCalendrier },
-          { id: "absences",       label: "Absences",       icon: '<i class="ti ti-users"></i>', roles: GESTION,              mount: mountAbsencesTab },
-          { id: "interventions",  label: "Interventions",  icon: '<i class="ti ti-tool"></i>', roles: [...GESTION,"technicien"], mount: mountInterventionsTab },
-          { id: "synthese",       label: "Synthèse",       icon: '<i class="ti ti-chart-bar"></i>', roles: [...GESTION,"direction"],  mount: mountSyntheseTab },
-          { id: "transferts",     label: "Historique transferts", icon: '<i class="ti ti-refresh"></i>', roles: [...GESTION,"direction"], mount: mountTransfertsTab },
-          { id: "coordonnees",    label: "Coordonnées",    icon: '<i class="ti ti-phone"></i>', roles: ALL, mount: mountCoordonneesTab },
-          { id: "archive-releves", label: "Archive relevés", icon: '<i class="ti ti-archive"></i>', roles: [...GESTION,"direction"], mount: mountArchiveRelevesTab },
+          { id: "calendrier",     label: "Calendrier",     icon: "📅", roles: ALL,                         mount: mountCalendrier },
+          { id: "absences",       label: "Absences",       icon: "👥", roles: GESTION,              mount: mountAbsencesTab },
+          { id: "interventions",  label: "Interventions",  icon: "🔧", roles: [...GESTION,"technicien"], mount: mountInterventionsTab },
+          { id: "synthese",       label: "Synthèse",       icon: "📊", roles: [...GESTION,"direction"],  mount: mountSyntheseTab },
+          { id: "transferts",     label: "Historique transferts", icon: "🔄", roles: [...GESTION,"direction"], mount: mountTransfertsTab },
+          { id: "coordonnees",    label: "Coordonnées",    icon: "📞", roles: ALL, mount: mountCoordonneesTab },
+          { id: "archive-releves", label: "Archive relevés", icon: "🗄️", roles: [...GESTION,"direction"], mount: mountArchiveRelevesTab },
         ],
       },
       {
-        id: "administration", label: "Administration", icon: '<i class="ti ti-tools"></i>', desc: "Comptes, accès remplaçants",
+        id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès remplaçants",
         subtabs: [
-          { id: "utilisateurs", label: "Utilisateurs",       icon: '<i class="ti ti-user"></i>', roles: ADMIN_ONLY, mount: mountUtilisateurs },
-          { id: "remplacants",  label: "Accès remplaçants",  icon: '<i class="ti ti-link"></i>', roles: ADMIN_ONLY, mount: mountAccesRemplacants },
-          { id: "associations", label: "Associations & Sites", icon: '<i class="ti ti-school"></i>', roles: ADMIN_ONLY, mount: mountAssociationsSites },
-          { id: "corbeille", label: "Corbeille", icon: '<i class="ti ti-trash"></i>', roles: ADMIN_ONLY, mount: mountCorbeille },
-          { id: "migration", label: "Migration photos", icon: '<i class="ti ti-refresh"></i>', roles: ADMIN_ONLY, mount: mountMigrationTool },
-          { id: "export-sharepoint", label: "Export SharePoint", icon: '<i class="ti ti-upload"></i>', roles: ADMIN_ONLY, mount: mountExportSharepointAdmin },
-          { id: "qr-masse", label: "Impression QR en masse", icon: '<i class="ti ti-printer"></i>', roles: ADMIN_ONLY, mount: mountQrMasse },
+          { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ADMIN_ONLY, mount: mountUtilisateurs },
+          { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ADMIN_ONLY, mount: mountAccesRemplacants },
+          { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ADMIN_ONLY, mount: mountAssociationsSites },
+          { id: "corbeille", label: "Corbeille", icon: "🗑️", roles: ADMIN_ONLY, mount: mountCorbeille },
+          { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },
+          { id: "export-sharepoint", label: "Export SharePoint", icon: "📤", roles: ADMIN_ONLY, mount: mountExportSharepointAdmin },
+          { id: "qr-masse", label: "Impression QR en masse", icon: "🖨️", roles: ADMIN_ONLY, mount: mountQrMasse },
         ],
       },
       {
-        id: "sites", label: "Dossiers de site", icon: '<i class="ti ti-building-estate"></i>', desc: "Sécurité, contacts, organes techniques",
+        id: "sites", label: "Dossiers de site", icon: "🏠", desc: "Sécurité, contacts, organes techniques",
         subtabs: [
-          { id: "liste", label: "Dossiers", icon: '<i class="ti ti-building"></i>', roles: ALL, mount: mountSitesDossiers },
+          { id: "liste", label: "Dossiers", icon: "🏢", roles: ALL, mount: mountSitesDossiers },
         ],
       },
       {
-        id: "compteurs", label: "Relevé compteur", icon: '<i class="ti ti-gauge"></i>', desc: "Eau, gaz, électricité — avec photo et QR",
+        id: "compteurs", label: "Relevé compteur", icon: "🎛️", desc: "Eau, gaz, électricité — avec photo et QR",
         badge: compteursAlertCount > 0 ? compteursAlertCount : null,
         subtabs: [
-          { id: "liste", label: "Sites", icon: '<i class="ti ti-building"></i>', roles: [...GESTION,"technicien"], mount: mountCompteurs },
+          { id: "liste", label: "Sites", icon: "🏢", roles: [...GESTION,"technicien"], mount: mountCompteurs },
         ],
       },
       {
-        id: "masterlock", label: "Codes Masterlock", icon: '<i class="ti ti-lock"></i>', desc: "Boîtes à clés par site, avec récap équipe",
+        id: "masterlock", label: "Codes Masterlock", icon: "🔐", desc: "Boîtes à clés par site, avec récap équipe",
         subtabs: [
-          { id: "liste", label: "Sites", icon: '<i class="ti ti-building"></i>', roles: [...GESTION,"technicien"], mount: mountMasterlock },
+          { id: "liste", label: "Sites", icon: "🏢", roles: [...GESTION,"technicien"], mount: mountMasterlock },
         ],
       },
       {
-        id: "previsionnel", label: "Prévisionnel Travaux", icon: '<i class="ti ti-clipboard-list"></i>', desc: "Budget travaux/investissement, pour le conseil d'administration",
+        id: "previsionnel", label: "Prévisionnel Travaux", icon: "📋", desc: "Budget travaux/investissement, pour le conseil d'administration",
         subtabs: [
-          { id: "liste", label: "Besoins", icon: '<i class="ti ti-clipboard-list"></i>', roles: [...GESTION,"technicien"], mount: mountPrevisionnel },
+          { id: "liste", label: "Besoins", icon: "📋", roles: [...GESTION,"technicien"], mount: mountPrevisionnel },
         ],
       },
       {
-        id: "stock-menage", label: "Stock Ménage", icon: '<i class="ti ti-bath"></i>', desc: "PQ, savon, entretien — sorties attribuées à un centre ou au dispositif MNA",
+        id: "stock-menage", label: "Stock Ménage", icon: "🧻", desc: "PQ, savon, entretien — sorties attribuées à un centre ou au dispositif MNA",
         subtabs: [
-          { id: "liste", label: "Stock", icon: '<i class="ti ti-bath"></i>', roles: [...GESTION,"menage","technicien"], mount: mountStockMenage },
+          { id: "liste", label: "Stock", icon: "🧻", roles: [...GESTION,"menage","technicien"], mount: mountStockMenage },
         ],
       },
       {
-        id: "stock", label: "Stock maintenance", icon: '<i class="ti ti-package"></i>', desc: "Produits, inventaire QR, commandes",
+        id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
         badgeAtelier: stockAlertCount.central > 0 ? stockAlertCount.central : null,
         badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
         subtabs: [
-          { id: "produits",   label: "Produits",   icon: '<i class="ti ti-package"></i>', roles: GESTION,              mount: mountStockProduits },
-          { id: "inventaire", label: "Inventaire", icon: '<i class="ti ti-camera"></i>', roles: [...GESTION,"technicien"], mount: mountStockInventaire },
-          { id: "commandes",  label: "Commandes",  icon: '<i class="ti ti-mail"></i>', roles: [...GESTION,"direction"],  mount: mountStockCommandes },
-          { id: "sites",      label: "Sites",       icon: '<i class="ti ti-building"></i>', roles: [...GESTION,"technicien"], mount: mountStockSites },
-          { id: "catalogue-sites", label: "Catalogue sites", icon: '<i class="ti ti-folder"></i>', roles: GESTION, mount: mountStockCatalogueSite },
-          { id: "fournisseurs", label: "Fournisseurs", icon: '<i class="ti ti-building-factory"></i>', roles: GESTION, mount: mountFournisseurs },
+          { id: "produits",   label: "Produits",   icon: "📦", roles: GESTION,              mount: mountStockProduits },
+          { id: "inventaire", label: "Inventaire", icon: "📷", roles: [...GESTION,"technicien"], mount: mountStockInventaire },
+          { id: "commandes",  label: "Commandes",  icon: "📧", roles: [...GESTION,"direction"],  mount: mountStockCommandes },
+          { id: "sites",      label: "Sites",       icon: "🏢", roles: [...GESTION,"technicien"], mount: mountStockSites },
+          { id: "catalogue-sites", label: "Catalogue sites", icon: "🗂️", roles: GESTION, mount: mountStockCatalogueSite },
+          { id: "fournisseurs", label: "Fournisseurs", icon: "🏭", roles: GESTION, mount: mountFournisseurs },
         ],
       },
     ];
