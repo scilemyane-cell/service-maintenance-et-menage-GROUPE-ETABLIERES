@@ -11,7 +11,7 @@
 
 export const UNITES_STOCK = [
   "pièce", "lot", "boîte", "sachet", "paquet", "carton", "palette",
-  "rouleau", "bidon", "litre", "mL", "kg", "g", "mètre",
+  "rouleau", "bidon", "bouteille 1L", "litre", "mL", "kg", "g", "mètre",
 ];
 
 export function renderUniteField(id, valeurActuelle, esc) {
