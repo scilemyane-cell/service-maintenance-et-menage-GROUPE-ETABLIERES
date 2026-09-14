@@ -15,12 +15,12 @@ import { watchProduits as watchProduitsMenage, ZONES as ZONES_MENAGE } from "./s
 import { qrPayloadFor as qrPayloadForMenage } from "./stock-menage.js";
 
 let mountedContainer = null;
-let state = { type: "produits", produits: [], sites: [], articlesSite: [], produitsMenage: [], selection: new Set() };
+let state = { type: "produits", produits: [], sites: [], articlesSite: [], produitsMenage: [], selection: new Set(), siteFiltre: "toutes" };
 let unsubs = [];
 
 export async function mountQrMasse(container) {
   mountedContainer = container;
-  state = { type: "produits", produits: [], sites: [], articlesSite: [], produitsMenage: [], selection: new Set() };
+  state = { type: "produits", produits: [], sites: [], articlesSite: [], produitsMenage: [], selection: new Set(), siteFiltre: "toutes" };
   unsubs.forEach(u => u());
   unsubs = [
     watchStockProduits((list) => { state.produits = list; if (state.type === "produits") render(); }),
@@ -42,6 +42,25 @@ function itemsActuels() {
   return state.articlesSite;
 }
 
+// Sites distincts présents dans le stock déporté — pour peupler le filtre.
+function sitesDisponibles() {
+  const parId = new Map();
+  state.articlesSite.forEach(a => { if (a.dossierId && !parId.has(a.dossierId)) parId.set(a.dossierId, a.nomSite || "Site inconnu"); });
+  return [...parId.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+}
+
+// Éléments réellement affichés/sélectionnables à l'écran — c'est-à-dire
+// itemsActuels() après application du filtre par site (uniquement
+// pertinent pour le stock déporté, où le même produit existe sur
+// plusieurs sites).
+function itemsAffiches() {
+  const items = itemsActuels();
+  if (state.type === "articlesSite" && state.siteFiltre !== "toutes") {
+    return items.filter(it => it.dossierId === state.siteFiltre);
+  }
+  return items;
+}
+
 function payloadPour(item) {
   if (state.type === "produits") return qrPayloadFor(item.id);
   if (state.type === "sites") return `https://service-maintenance-et-menage.web.app/dossier-pdf-guest.html?dossier=${item.id}`;
@@ -61,7 +80,7 @@ function libellePour(item) {
 
 function render() {
   if (!mountedContainer || !document.contains(mountedContainer)) return;
-  const items = itemsActuels();
+  const items = itemsAffiches();
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -72,10 +91,20 @@ function render() {
         <button class="nav-btn" id="qm-type-articlesSite" style="${state.type === 'articlesSite' ? 'border-color:var(--gold);color:var(--gold)' : ''}">📤 Stock déporté (petites étiquettes)</button>
         <button class="nav-btn" id="qm-type-menage" style="${state.type === 'menage' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🧻 Stock Ménage (petites étiquettes)</button>
       </div>
+      ${state.type === "articlesSite" ? `
+        <div>
+          <label style="font-size:12px;color:var(--text-dim)">Filtrer par site
+            <select id="qm-site-filtre" style="display:block;margin-top:4px;max-width:280px">
+              <option value="toutes" ${state.siteFiltre === "toutes" ? "selected" : ""}>Tous les sites (${state.articlesSite.length})</option>
+              ${sitesDisponibles().map(([id, nom]) => `<option value="${esc(id)}" ${state.siteFiltre === id ? "selected" : ""}>${esc(nom)} (${state.articlesSite.filter(a => a.dossierId === id).length})</option>`).join("")}
+            </select>
+          </label>
+        </div>
+      ` : ""}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="nav-btn" id="qm-tout">Tout sélectionner</button>
         <button class="nav-btn" id="qm-aucun">Tout désélectionner</button>
-        <span class="hint">${state.selection.size} sur ${items.length} sélectionné(s)</span>
+        <span class="hint">${items.filter(it => state.selection.has(it.id)).length} sur ${items.length} sélectionné(s)</span>
       </div>
       <div style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:10px">
         ${items.length === 0 ? `<p class="hint">Aucun élément pour l'instant.</p>` : items.map(it => `
@@ -90,12 +119,13 @@ function render() {
     </div>
   `;
 
-  document.getElementById("qm-type-produits").addEventListener("click", () => { state.type = "produits"; state.selection = new Set(); render(); });
-  document.getElementById("qm-type-sites").addEventListener("click", () => { state.type = "sites"; state.selection = new Set(); render(); });
-  document.getElementById("qm-type-articlesSite").addEventListener("click", () => { state.type = "articlesSite"; state.selection = new Set(); render(); });
-  document.getElementById("qm-type-menage").addEventListener("click", () => { state.type = "menage"; state.selection = new Set(); render(); });
-  document.getElementById("qm-tout").addEventListener("click", () => { itemsActuels().forEach(it => state.selection.add(it.id)); render(); });
-  document.getElementById("qm-aucun").addEventListener("click", () => { state.selection.clear(); render(); });
+  document.getElementById("qm-type-produits").addEventListener("click", () => { state.type = "produits"; state.selection = new Set(); state.siteFiltre = "toutes"; render(); });
+  document.getElementById("qm-type-sites").addEventListener("click", () => { state.type = "sites"; state.selection = new Set(); state.siteFiltre = "toutes"; render(); });
+  document.getElementById("qm-type-articlesSite").addEventListener("click", () => { state.type = "articlesSite"; state.selection = new Set(); state.siteFiltre = "toutes"; render(); });
+  document.getElementById("qm-type-menage").addEventListener("click", () => { state.type = "menage"; state.selection = new Set(); state.siteFiltre = "toutes"; render(); });
+  document.getElementById("qm-site-filtre")?.addEventListener("change", (e) => { state.siteFiltre = e.target.value; render(); });
+  document.getElementById("qm-tout").addEventListener("click", () => { items.forEach(it => state.selection.add(it.id)); render(); });
+  document.getElementById("qm-aucun").addEventListener("click", () => { items.forEach(it => state.selection.delete(it.id)); render(); });
   mountedContainer.querySelectorAll("[data-qm-item]").forEach(cb => cb.addEventListener("change", () => {
     if (cb.checked) state.selection.add(cb.dataset.qmItem); else state.selection.delete(cb.dataset.qmItem);
     render();
