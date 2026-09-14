@@ -69,6 +69,19 @@
   let stockAlertSubscribed = false;
   let compteursAlertCount = 0;
   let compteursAlertSubscribed = false;
+  let backButtonGuardSetup = false;
+
+  // Bouton "retour" du navigateur (ou geste retour mobile) : par défaut
+  // il quitte carrément l'appli puisque celle-ci ne pousse jamais
+  // d'entrée dans l'historique. On piège ce retour pour qu'il ramène
+  // toujours à l'écran d'accueil de l'appli, jamais en dehors.
+  function armerRetourNavigateur() {
+    history.pushState({ appGuard: true }, "", window.location.href);
+  }
+  window.addEventListener("popstate", () => {
+    if (currentCategory !== null) { currentCategory = null; currentSubtab = null; render(); }
+    armerRetourNavigateur(); // ré-arme immédiatement pour le prochain retour
+  });
 
   const ALL = ["super_admin","admin","n1","technicien","menage","mi_temps","direction"];
   const MENAGE_ROLES = ["super_admin","admin","n1","direction","menage","mi_temps"];
@@ -243,6 +256,7 @@
     }
     if (!sitesSubscribed) {
       sitesSubscribed = true;
+      armerRetourNavigateur();
       watchSites((sitesList) => {
         dispositifsList = [...new Set(sitesList.map(s => s.dispositif || "Dispositif MNA"))];
         render();
