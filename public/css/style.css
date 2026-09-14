@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@500&display=swap');
 :root{
   --bg:#0B111C; --bg-grad:#0E1626; --panel:#131C2B; --panel-alt:#1A2537; --border:#243247;
   --text:#EAEFF7; --text-dim:#7C8BA3; --gold:#D9B24C; --teal:#3FB6AC;
@@ -15,6 +16,28 @@ html[data-theme="clair"]{
   --text:#1B2330; --text-dim:#525B6B; --gold:#A87A12; --teal:#128077;
   --red:#C23B27; --violet:#6656C9; --alert-text:#9A2A18;
 }
+/* ---- Thème "Atelier" : direction "carnet de bord technique" — fond
+   encre, laiton, registre à filets fins plutôt que cartes arrondies.
+   Optionnel, activable/désactivable par chaque utilisateur comme les
+   3 autres thèmes (aucun impact sur ceux qui restent sur Sombre/Gris/
+   Clair). ---- */
+html[data-theme="atelier"]{
+  --bg:#0E1520; --bg-grad:#111A26; --panel:#161F2C; --panel-alt:#1B2634; --border:#2A3A4C;
+  --text:#EDEFF3; --text-dim:#8B96A6; --gold:#C8A45C; --teal:#4FA89A;
+  --red:#C9604C; --violet:#8B7CF0; --alert-text:#F2D2C6;
+}
+html[data-theme="atelier"] body{ background-image:none; }
+html[data-theme="atelier"] h1,
+html[data-theme="atelier"] .login-card h1,
+html[data-theme="atelier"] .topbar-title h1{ font-family:"Fraunces", serif; font-weight:500; }
+html[data-theme="atelier"] .bubble-card{
+  border-radius:2px; background:var(--panel);
+  border-top:2px solid var(--gold); text-align:left; align-items:flex-start;
+}
+html[data-theme="atelier"] .bubble-card:hover{ transform:none; background:var(--panel-alt); }
+html[data-theme="atelier"] .stat-chip,
+html[data-theme="atelier"] .tile-card{ border-radius:2px; }
+html[data-theme="atelier"] .login-btn{ background:var(--gold); border-radius:2px; }
 /* Sur fond clair, une simple bordure claire ne suffit pas à distinguer
    les cartes du fond (contrairement aux thèmes sombres, où panel/bg sont
    naturellement plus contrastés) — on ajoute une ombre portée nette

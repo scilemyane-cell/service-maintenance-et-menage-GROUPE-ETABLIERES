@@ -6,8 +6,8 @@
 // autres comptes.
 
 const STORAGE_KEY = "etablieres-theme";
-export const THEMES = ["sombre", "gris", "clair"];
-export const THEME_LABELS = { sombre: "🌙 Sombre", gris: "⬛ Gris", clair: "☀️ Clair" };
+export const THEMES = ["sombre", "gris", "clair", "atelier"];
+export const THEME_LABELS = { sombre: "🌙 Sombre", gris: "⬛ Gris", clair: "☀️ Clair", atelier: "🖋️ Atelier" };
 
 export function getStoredTheme() {
   try {
