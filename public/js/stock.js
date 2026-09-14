@@ -55,6 +55,7 @@ function render() {
       <p class="hint">Produits de maintenance en stock — définis un stock cible et un seuil minimum par produit ; l'onglet "Commandes" liste automatiquement ce qui repasse sous le seuil.${sansFiltre ? " Utilise les flèches pour ranger la liste dans le même ordre que les étagères — utile pour l'inventaire rapide." : ""}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="sk-new">➕ Ajouter un produit</button>
+        <button class="nav-btn" id="sk-export">📊 Exporter en Excel (appel d'offre)</button>
         ${state.produits.length === 0 ? `<button class="nav-btn" id="sk-seed">📦 Charger la liste type (50 produits)</button>` : ""}
       </div>
       <div class="filters-row">
@@ -92,6 +93,7 @@ function render() {
   `;
 
   document.getElementById("sk-new").addEventListener("click", () => { ui.editId = "new"; render(); });
+  document.getElementById("sk-export").addEventListener("click", () => exporterProduitsExcel(state.produits));
   document.getElementById("sk-seed")?.addEventListener("click", async () => {
     if (!confirm("Charger les 50 produits type ? Tu pourras les modifier/supprimer ensuite.")) return;
     document.getElementById("sk-seed").textContent = "⏳ Chargement…";
@@ -324,6 +326,27 @@ function renderEditForm(p, workingCopy) {
     }
   });
   resolvePhotos(mountedContainer);
+}
+
+// Export Excel — tous les produits du stock central, triés par catégorie
+// puis par nom, avec les colonnes utiles pour un appel d'offre fournisseur
+// (quantité cible = quantité à demander en proposition, référence et
+// fournisseur actuel donnés à titre indicatif pour comparaison).
+function exporterProduitsExcel(produits) {
+  if (!window.XLSX) { alert("Librairie Excel non chargée — vérifie ta connexion et recharge la page."); return; }
+  if (produits.length === 0) { alert("Aucun produit à exporter."); return; }
+  const tries = [...produits].sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || ""));
+  const donnees = tries.map(p => ({
+    "Catégorie": p.categorie || "", "Produit": p.nom || "", "Unité": p.unite || "",
+    "Quantité cible": p.stockCible ?? 0, "Stock actuel": p.stockActuel ?? 0, "Seuil minimum": p.stockMin ?? 0,
+    "Fournisseur actuel": p.fournisseurNom || "", "Référence fournisseur": p.refFournisseur || "",
+    "Email fournisseur": p.fournisseurEmail || "",
+  }));
+  const feuille = window.XLSX.utils.json_to_sheet(donnees);
+  feuille["!cols"] = [{ wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 26 }];
+  const classeur = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(classeur, feuille, "Produits stock maintenance");
+  window.XLSX.writeFile(classeur, `Stock_maintenance_produits_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 // Encodage du QR : un vrai lien vers l'appli avec l'id du produit en
