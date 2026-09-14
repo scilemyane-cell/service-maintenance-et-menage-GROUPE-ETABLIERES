@@ -364,8 +364,8 @@ function renderInvites(container, user) {
   document.getElementById("pi-nb").addEventListener("input", (e) => { invForm.nbWeeks = parseInt(e.target.value, 10) || 1; });
 
   document.getElementById("pi-generate").addEventListener("click", async () => {
-    if (!invForm.label.trim()) { alert("Indique un nom ou une société pour ce remplaçant."); return; }
-    if (!isPlausibleDate(invForm.weekStart)) { alert("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
+    if (!invForm.label.trim()) { window.toast("Indique un nom ou une société pour ce remplaçant."); return; }
+    if (!isPlausibleDate(invForm.weekStart)) { window.toast("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
     const site = invState.sites.find(s => s.id === invForm.siteId);
     const weeks = [];
     let cur = new Date(invForm.weekStart);

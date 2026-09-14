@@ -204,7 +204,7 @@ function renderArchiveReleves(container, user) {
       try {
         await deleteReleve(r.id, r.interventionIds);
       } catch (e) {
-        alert("Échec : " + (e.message || e));
+        window.toast("Échec : " + (e.message || e));
         btn.disabled = false;
       }
     });
@@ -513,7 +513,7 @@ function renderTransferts(container, user) {
       try {
         await annulerTransfert(btn.dataset.annuler);
       } catch (e) {
-        alert("Échec de l'annulation : " + (e.message || e));
+        window.toast("Échec de l'annulation : " + (e.message || e));
         btn.disabled = false;
       }
     });
@@ -709,10 +709,10 @@ function renderAbsences(container, perms) {
     document.getElementById("add-abs").addEventListener("click", async () => {
       if (!ui.absForm.start || !ui.absForm.end) return;
       if (!isPlausibleDate(ui.absForm.start) || !isPlausibleDate(ui.absForm.end)) {
-        alert("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
+        window.toast("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
         return;
       }
-      if (ui.absForm.end < ui.absForm.start) { alert("La date de fin doit être après la date de début."); return; }
+      if (ui.absForm.end < ui.absForm.start) { window.toast("La date de fin doit être après la date de début."); return; }
       await addAbsence({ person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, createdBy: mountedUser.uid });
       ui.absForm.note = "";
       renderAll();
@@ -890,7 +890,7 @@ function attacherPhotosInterventionListeners() {
     if (!photo) return;
     if (!confirm(`Supprimer définitivement "${photo.name || 'cette photo'}" ?`)) return;
     if (photo.itemId) {
-      try { await deleteDriveItem(photo.itemId); } catch (e) { alert("Échec de la suppression sur SharePoint : " + (e.message || e)); return; }
+      try { await deleteDriveItem(photo.itemId); } catch (e) { window.toast("Échec de la suppression sur SharePoint : " + (e.message || e)); return; }
     }
     ui.form.photos = (ui.form.photos || []).filter((_, i) => i !== pi);
     renderAll();
@@ -1119,7 +1119,7 @@ function renderInterventions(container, perms) {
         overlay.addEventListener("click", () => overlay.remove());
         document.body.appendChild(overlay);
       } catch (e) {
-        alert("Impossible d'ouvrir les photos : " + (e.message || e));
+        window.toast("Impossible d'ouvrir les photos : " + (e.message || e));
       } finally {
         btn.disabled = false; btn.textContent = original;
       }
@@ -1154,7 +1154,7 @@ function renderInterventions(container, perms) {
         try {
           await updateIntervention(btn.dataset.remettreAttente, { transmis: false });
         } catch (e) {
-          alert("Échec : " + (e.message || e));
+          window.toast("Échec : " + (e.message || e));
           btn.disabled = false;
         }
       });
@@ -1173,7 +1173,7 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("doc-generate").addEventListener("click", () => {
       if (!isPlausibleDate(ui.docForm.start) || !isPlausibleDate(ui.docForm.end)) {
-        alert("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
+        window.toast("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
         return;
       }
       ui.docForm.generated = true; renderAll();

@@ -105,7 +105,7 @@ function render() {
   document.getElementById("sk-export").addEventListener("click", () => exporterProduitsExcel(state.produits));
   if (ui.analyseOuverte) dessinerAnalyseStock();
   document.getElementById("sk-seed")?.addEventListener("click", async () => {
-    if (!confirm("Charger les 50 produits type ? Tu pourras les modifier/supprimer ensuite.")) return;
+    if (!(await window.confirmDialog("Charger les 50 produits type ? Tu pourras les modifier/supprimer ensuite."))) return;
     document.getElementById("sk-seed").textContent = "⏳ Chargement…";
     await seedProduitsType();
   });
@@ -121,7 +121,7 @@ function render() {
   }
   mountedContainer.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", async () => {
     const p = state.produits.find(x => x.id === btn.dataset.del);
-    if (confirm(`Mettre "${p.nom}" à la corbeille ? Récupérable 60 jours (Administration > Corbeille).`)) await envoyerProduitCorbeille(p.id);
+    if (await window.confirmDialog(`Mettre "${p.nom}" à la corbeille ? Récupérable 60 jours (Administration > Corbeille).`, { danger: true, texteValider: "Mettre à la corbeille" })) await envoyerProduitCorbeille(p.id);
   }));
   resolvePhotos(mountedContainer);
 }
@@ -264,7 +264,7 @@ function renderEditForm(p, workingCopy) {
   document.getElementById("sk-del-photo")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sk-photo-status");
     if (data.photo?.itemId) {
-      if (!confirm("Supprimer définitivement cette photo ?")) return;
+      if (!(await window.confirmDialog("Supprimer définitivement cette photo ?", { danger: true, texteValider: "Supprimer" }))) return;
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Suppression…</span>`;
       try {
         await deleteDriveItem(data.photo.itemId);
@@ -373,8 +373,8 @@ function dessinerAnalyseStock() {
 // (quantité cible = quantité à demander en proposition, référence et
 // fournisseur actuel donnés à titre indicatif pour comparaison).
 function exporterProduitsExcel(produits) {
-  if (!window.XLSX) { alert("Librairie Excel non chargée — vérifie ta connexion et recharge la page."); return; }
-  if (produits.length === 0) { alert("Aucun produit à exporter."); return; }
+  if (!window.XLSX) { window.toast("Librairie Excel non chargée — vérifie ta connexion et recharge la page."); return; }
+  if (produits.length === 0) { window.toast("Aucun produit à exporter."); return; }
   const tries = [...produits].sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || ""));
   const donnees = tries.map(p => ({
     "Catégorie": p.categorie || "", "Produit": p.nom || "", "Unité": p.unite || "",

@@ -348,7 +348,7 @@ function renderListe() {
       if (win) win.location.href = url; else window.open(url, "_blank");
     } catch (e) {
       win?.close();
-      alert("Impossible d'ouvrir SharePoint : " + (e.message || e));
+      window.toast("Impossible d'ouvrir SharePoint : " + (e.message || e));
     } finally {
       btn.textContent = original; btn.disabled = false;
     }
@@ -399,7 +399,7 @@ function renderListe() {
     const c = state.compteurs.find(x => x.id === btn.dataset.delCompteur);
     if (!c) return;
     if (!confirm(`Mettre "${c.nom}" à la corbeille ? L'historique des relevés est conservé.`)) return;
-    envoyerCompteurCorbeille(c.id).then(load).catch(e => alert("Erreur : " + (e.message || e)));
+    envoyerCompteurCorbeille(c.id).then(load).catch(e => window.toast("Erreur : " + (e.message || e)));
   }));
 
   attachAddFormListeners();
@@ -514,7 +514,7 @@ async function chargerEtAfficherHistorique(compteurId) {
       await load(); // recharge la liste (rafraîchit aussi le "dernier relevé" affiché sur la ligne du compteur) — se re-render déjà toute seule si l'écran est encore la liste
       await chargerEtAfficherHistorique(compteurId);
     } catch (e) {
-      alert("Erreur : " + (e.message || e));
+      window.toast("Erreur : " + (e.message || e));
       btn.disabled = false;
     }
   }));
@@ -941,7 +941,7 @@ async function traiterReleveEnAttente(entry) {
 // =================================================================
 async function ouvrirReleve(compteurId, retourSiteId) {
   const compteur = state.compteurs.find(c => c.id === compteurId) || await getCompteurUnique(compteurId);
-  if (!compteur) { alert("Compteur introuvable (peut-être supprimé)."); return; }
+  if (!compteur) { window.toast("Compteur introuvable (peut-être supprimé)."); return; }
   ui.screen = "releve";
   ui.releveCompteurId = compteurId;
   ui.releveRetourSiteId = retourSiteId;
@@ -1019,7 +1019,7 @@ function renderReleve() {
       if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
       if (statut === "en_attente") {
         await load();
-        alert("📡 Pas de réseau : ce relevé a été enregistré sur cet appareil et sera envoyé automatiquement dès le retour de connexion.");
+        window.toast("📡 Pas de réseau : ce relevé a été enregistré sur cet appareil et sera envoyé automatiquement dès le retour de connexion.");
       } else {
         await load();
       }
@@ -1051,7 +1051,7 @@ function renderRapide() {
         </div>
       </div>
     `;
-    document.getElementById("cpt-rap-fin").addEventListener("click", () => { ui.rapideSiteId = null; ui.ouverts.add(site.id); load().catch(e => alert("Erreur : " + (e.message || e))); });
+    document.getElementById("cpt-rap-fin").addEventListener("click", () => { ui.rapideSiteId = null; ui.ouverts.add(site.id); load().catch(e => window.toast("Erreur : " + (e.message || e))); });
     return;
   }
 

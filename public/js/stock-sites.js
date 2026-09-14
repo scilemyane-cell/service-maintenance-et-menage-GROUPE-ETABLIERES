@@ -212,7 +212,7 @@ function renderListe() {
       const val = parseFloat(inp.value);
       if (isNaN(val) || val < 0) { inp.value = 0; return; }
       try { await modifierArticleSite(inp.dataset.qte, { quantite: val }); await load(); }
-      catch (e) { alert("Échec : " + (e.message || e)); }
+      catch (e) { window.toast("Échec : " + (e.message || e)); }
     });
   });
   mountedContainer.querySelectorAll("[data-cible]").forEach(inp => {
@@ -220,14 +220,14 @@ function renderListe() {
       const val = parseFloat(inp.value);
       if (isNaN(val) || val < 0) { inp.value = 0; return; }
       try { await modifierArticleSite(inp.dataset.cible, { quantiteCible: val }); await load(); }
-      catch (e) { alert("Échec : " + (e.message || e)); }
+      catch (e) { window.toast("Échec : " + (e.message || e)); }
     });
   });
   mountedContainer.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Retirer cet article du stock du site ?")) return;
+      if (!(await window.confirmDialog("Retirer cet article du stock du site ?", { danger: true, texteValider: "Retirer" }))) return;
       try { await supprimerArticleSite(btn.dataset.del); await load(); }
-      catch (e) { alert("Échec : " + (e.message || e)); }
+      catch (e) { window.toast("Échec : " + (e.message || e)); }
     });
   });
 
@@ -633,9 +633,9 @@ async function renderHistorique() {
     const m = sorties.find(x => x.id === btn.dataset.delMouvement);
     if (!m) return;
     const it = itemsParId.get(m.itemId);
-    if (!confirm(`Supprimer cette sortie de "${it?.nom || "cet article"}" (${m.quantiteSortie ?? 0} ${it?.unite || ""}) ? Le stock sera recrédité de cette quantité.`)) return;
+    if (!(await window.confirmDialog(`Supprimer cette sortie de "${it?.nom || "cet article"}" (${m.quantiteSortie ?? 0} ${it?.unite || ""}) ? Le stock sera recrédité de cette quantité.`, { danger: true, texteValider: "Supprimer" }))) return;
     try { await supprimerMouvementSite(m); await load(); await renderHistorique(); }
-    catch (e) { alert("Échec : " + (e.message || e)); }
+    catch (e) { window.toast("Échec : " + (e.message || e)); }
   }));
 }
 

@@ -131,7 +131,7 @@ function render() {
       try {
         await enregistrerCommande(g.nom, g.email, lignesPourGroupe(g), mountedUser?.uid || null);
       } catch (e) {
-        alert("Échec de l'enregistrement : " + (e.message || e));
+        window.toast("Échec de l'enregistrement : " + (e.message || e));
         btn.disabled = false; btn.textContent = "✓ Marquer comme commandée";
       }
     });

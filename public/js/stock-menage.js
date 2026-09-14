@@ -204,11 +204,11 @@ function renderParametresZones(container) {
     <div id="sm-perso-status" style="font-size:12px;margin-top:6px"></div>
   `;
   container.querySelectorAll("[data-zone-site]").forEach(sel => sel.addEventListener("change", async (e) => {
-    try { await definirZoneSite(sel.dataset.zoneSite, e.target.value || null); } catch (err) { alert("Erreur : " + (err.message || err)); }
+    try { await definirZoneSite(sel.dataset.zoneSite, e.target.value || null); } catch (err) { window.toast("Erreur : " + (err.message || err)); }
   }));
   container.querySelectorAll("[data-del-perso]").forEach(btn => btn.addEventListener("click", async () => {
-    if (!confirm("Supprimer ce site personnalisé ? Les sorties déjà enregistrées avec cette attribution restent inchangées dans l'historique.")) return;
-    try { await supprimerSitePersonnalise(btn.dataset.delPerso); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    if (!(await window.confirmDialog("Supprimer ce site personnalisé ? Les sorties déjà enregistrées avec cette attribution restent inchangées dans l'historique.", { danger: true, texteValider: "Supprimer" }))) return;
+    try { await supprimerSitePersonnalise(btn.dataset.delPerso); } catch (e) { window.toast("Erreur : " + (e.message || e)); }
   }));
   document.getElementById("sm-perso-add").addEventListener("click", async () => {
     const statusEl = document.getElementById("sm-perso-status");
@@ -500,8 +500,8 @@ function attacherEcouteursProduits() {
   mountedContainer.querySelectorAll("[data-del-sm]").forEach(btn => btn.addEventListener("click", async () => {
     const p = state.produits.find(x => x.id === btn.dataset.delSm);
     if (!p) return;
-    if (!confirm(`Mettre "${p.nom}" à la corbeille ?`)) return;
-    try { await supprimerProduit(p.id); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    if (!(await window.confirmDialog(`Mettre "${p.nom}" à la corbeille ?`, { danger: true, texteValider: "Mettre à la corbeille" }))) return;
+    try { await supprimerProduit(p.id); } catch (e) { window.toast("Erreur : " + (e.message || e)); }
   }));
   mountedContainer.querySelectorAll("[data-cancel-sm]").forEach(btn => btn.addEventListener("click", () => {
     ui.addingOpen = false; ui.editingId = null; render();
@@ -707,7 +707,7 @@ function renderHistorique(container) {
   container.querySelectorAll("[data-del-sortie-sm]").forEach(btn => btn.addEventListener("click", async () => {
     const s = state.sorties.find(x => x.id === btn.dataset.delSortieSm);
     if (!s) return;
-    if (!confirm(`Annuler cette sortie de "${s.produitNom}" (${s.quantite} ${s.unite || ""}) ? Le stock sera recrédité de cette quantité.`)) return;
-    try { await supprimerSortie(s); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    if (!(await window.confirmDialog(`Annuler cette sortie de "${s.produitNom}" (${s.quantite} ${s.unite || ""}) ? Le stock sera recrédité de cette quantité.`, { danger: true, texteValider: "Annuler la sortie" }))) return;
+    try { await supprimerSortie(s); } catch (e) { window.toast("Erreur : " + (e.message || e)); }
   }));
 }

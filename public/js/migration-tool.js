@@ -244,7 +244,7 @@ async function connectGoogle() {
     render();
   } catch (e) {
     btn.textContent = "1️⃣ Se connecter avec le compte Google (application.etablieres@gmail.com)";
-    alert("Échec de connexion Google : " + (e.message || e));
+    window.toast("Échec de connexion Google : " + (e.message || e));
   }
 }
 

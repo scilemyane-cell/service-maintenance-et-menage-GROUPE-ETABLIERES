@@ -58,7 +58,7 @@ export function attachTransfertListeners(container, next, user, onConfirmed) {
       } catch (e) {
         btn.disabled = false;
         btn.textContent = "✓ J'ai fait le transfert";
-        alert("Échec de l'enregistrement : " + (e.message || e));
+        window.toast("Échec de l'enregistrement : " + (e.message || e));
       }
     });
   }

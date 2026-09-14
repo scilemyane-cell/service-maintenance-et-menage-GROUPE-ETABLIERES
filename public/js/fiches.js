@@ -266,13 +266,13 @@ function render() {
   document.getElementById("fc-add-chambre")?.addEventListener("click", async () => {
     data.chambres.push({ chambre: "", date: "", observation: "" });
     render();
-    try { await saveFiche(id, data); } catch (e) { console.error(e); alert("Échec de l'enregistrement : " + e.message); }
+    try { await saveFiche(id, data); } catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
   });
   mountedContainer.querySelectorAll("[data-del-chambre]").forEach(btn => {
     btn.addEventListener("click", async () => {
       data.chambres.splice(parseInt(btn.dataset.delChambre, 10), 1);
       render();
-      try { await saveFiche(id, data); } catch (e) { console.error(e); alert("Échec de l'enregistrement : " + e.message); }
+      try { await saveFiche(id, data); } catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
     });
   });
   document.getElementById("fc-obs-generales").addEventListener("input", (e) => {
@@ -287,6 +287,6 @@ function render() {
   document.getElementById("fc-submit").addEventListener("click", async () => {
     data.submitted = !data.submitted;
     try { await saveFiche(id, data); render(); }
-    catch (e) { console.error(e); alert("Échec de l'enregistrement : " + e.message); }
+    catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
   });
 }

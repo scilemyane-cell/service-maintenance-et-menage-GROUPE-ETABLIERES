@@ -105,7 +105,7 @@ function renderListe() {
     const nom = prompt("Nom du site (tape le début du nom pour chercher) :");
     if (!nom) return;
     const match = state.sites.find(s => s.nom.toLowerCase().includes(nom.trim().toLowerCase()));
-    if (!match) { alert("Aucun site trouvé avec ce nom."); return; }
+    if (!match) { window.toast("Aucun site trouvé avec ce nom."); return; }
     ui.addingSiteId = match.id; ui.ouverts.add(match.id); render();
   });
   document.getElementById("mlk-export-recap").addEventListener("click", () => exporterRecap(state.sites));
@@ -144,7 +144,7 @@ function renderListe() {
     const c = state.codes.find(x => x.id === btn.dataset.delCode);
     if (!c) return;
     if (!confirm(`Supprimer "${c.nom}" (${c.dossierNom}) ? L'historique des codes précédents est conservé.`)) return;
-    try { await supprimerCode(c.id, c.dossierId); await load(); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    try { await supprimerCode(c.id, c.dossierId); await load(); } catch (e) { window.toast("Erreur : " + (e.message || e)); }
   }));
   mountedContainer.querySelectorAll("[data-toggle-hist]").forEach(btn => btn.addEventListener("click", async () => {
     const dossierId = btn.dataset.toggleHist;
@@ -426,7 +426,7 @@ function attachEditFormListeners() {
 // .print-fiche/.print-only déjà en place dans l'appli.
 function exporterRecap(sites) {
   const groupes = groupedSites(sites.filter(s => state.codes.some(c => c.dossierId === s.id)));
-  if (groupes.length === 0) { alert("Aucun code à exporter pour le moment."); return; }
+  if (groupes.length === 0) { window.toast("Aucun code à exporter pour le moment."); return; }
 
   const carteCode = (c) => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 10px;border:1px solid #e2ddd0;border-radius:6px;background:#FAF8F3;margin-bottom:4px">

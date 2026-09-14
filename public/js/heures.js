@@ -155,7 +155,7 @@ function renderSelf(container, user) {
 
   document.getElementById("add-heures").addEventListener("click", async () => {
     if (!ui.form.date || !ui.form.heuresInterne) return;
-    if (!isPlausibleDate(ui.form.date)) { alert("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
+    if (!isPlausibleDate(ui.form.date)) { window.toast("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
     await addHeures({
       uid: user.uid,
       personNom: user.nom || user.email,

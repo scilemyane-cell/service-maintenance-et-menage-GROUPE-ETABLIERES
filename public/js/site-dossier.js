@@ -1248,7 +1248,7 @@ function renderEdit(dOriginal, workingCopy) {
         try {
           await deleteDriveItem(photo.itemId);
         } catch (e) {
-          alert("Échec de la suppression sur SharePoint : " + (e.message || e));
+          window.toast("Échec de la suppression sur SharePoint : " + (e.message || e));
           btn.disabled = false;
           return;
         }

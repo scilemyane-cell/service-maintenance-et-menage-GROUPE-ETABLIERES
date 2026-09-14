@@ -154,7 +154,7 @@ function renderListe() {
   document.getElementById("pv-f-statut").addEventListener("change", (e) => { ui.filtreStatut = e.target.value; render(); });
 
   mountedContainer.querySelectorAll("[data-avancement]").forEach(sel => sel.addEventListener("change", async (e) => {
-    try { await changerAvancement(sel.dataset.avancement, e.target.value || null, mountedUser); } catch (err) { alert("Erreur : " + (err.message || err)); }
+    try { await changerAvancement(sel.dataset.avancement, e.target.value || null, mountedUser); } catch (err) { window.toast("Erreur : " + (err.message || err)); }
   }));
   mountedContainer.querySelectorAll("[data-edit-pv]").forEach(btn => btn.addEventListener("click", () => {
     ui.editingId = ui.editingId === btn.dataset.editPv ? null : btn.dataset.editPv;
@@ -163,11 +163,11 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-del-pv]").forEach(btn => btn.addEventListener("click", async () => {
     if (!confirm("Supprimer définitivement cette ligne de prévisionnel ?")) return;
-    try { await supprimerLigne(btn.dataset.delPv); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    try { await supprimerLigne(btn.dataset.delPv); } catch (e) { window.toast("Erreur : " + (e.message || e)); }
   }));
   mountedContainer.querySelectorAll("[data-statut]").forEach(btn => btn.addEventListener("click", async () => {
     const [id, statut] = btn.dataset.statut.split(":");
-    try { await changerStatut(id, statut, mountedUser); } catch (e) { alert("Erreur : " + (e.message || e)); }
+    try { await changerStatut(id, statut, mountedUser); } catch (e) { window.toast("Erreur : " + (e.message || e)); }
   }));
   mountedContainer.querySelectorAll("[data-resolve-img-pv]").forEach(async (img) => {
     try { img.src = await getImageDisplayUrl(img.dataset.resolveImgPv); } catch (e) { img.style.opacity = "0.3"; }
@@ -392,8 +392,8 @@ function exporterPourCA(lignes) {
 // actuellement affichée (filtres année/site/priorité/statut appliqués),
 // pour un tableau modifiable/triable plutôt qu'un PDF figé.
 function exporterExcel(lignes) {
-  if (!window.XLSX) { alert("Librairie Excel non chargée — vérifie ta connexion et recharge la page."); return; }
-  if (lignes.length === 0) { alert("Aucune ligne à exporter pour ces filtres."); return; }
+  if (!window.XLSX) { window.toast("Librairie Excel non chargée — vérifie ta connexion et recharge la page."); return; }
+  if (lignes.length === 0) { window.toast("Aucune ligne à exporter pour ces filtres."); return; }
   const donnees = lignes.map(l => ({
     "Site": l.dossierNom || "", "Catégorie": l.categorie || "", "Titre": l.titre || "",
     "Description": l.description || "", "Motif": l.motif || "",
@@ -451,6 +451,6 @@ function renderVueEnsemble() {
 
   document.getElementById("pv-retour-liste").addEventListener("click", () => { ui.vueEnsemble = false; render(); });
   mountedContainer.querySelectorAll("[data-avancement-ve]").forEach(sel => sel.addEventListener("change", async (e) => {
-    try { await changerAvancement(sel.dataset.avancementVe, e.target.value || null, mountedUser); } catch (err) { alert("Erreur : " + (err.message || err)); }
+    try { await changerAvancement(sel.dataset.avancementVe, e.target.value || null, mountedUser); } catch (err) { window.toast("Erreur : " + (err.message || err)); }
   }));
 }
