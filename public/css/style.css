@@ -280,3 +280,44 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .ssx-tip-content ul{ list-style:none; margin:0; padding:0; }
 .ssx-tip-content li{ padding:2px 0; font-size:12px; color:var(--text); display:flex; justify-content:space-between; gap:10px; }
 .ssx-tip-content li b{ color:var(--red); }
+
+/* ================================================================
+   MOUVEMENT — micro-interactions et transitions douces. Rien ne
+   s'affiche ni ne change d'un coup sec : chaque écran apparaît en
+   fondu, chaque bouton répond au toucher, chaque ligne de tableau
+   réagit au survol. C'est ce qui distingue un outil interne d'un
+   vrai produit, sans toucher aux couleurs ni aux icônes.
+   ================================================================ */
+
+@keyframes contentFadeIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+.stack{ animation:contentFadeIn .28s ease; }
+
+/* Petit ressort au clic — un bouton qui ne bouge jamais a l'air mort. */
+.nav-btn, .add-btn, .del-btn, .logout-btn, .login-btn, .back-btn{
+  transition:transform .12s ease, filter .15s ease, border-color .15s ease, color .15s ease, background-color .15s ease;
+}
+.nav-btn:active, .add-btn:active, .del-btn:active, .logout-btn:active, .login-btn:active{ transform:scale(.96); }
+
+.tab-btn{ transition:color .15s ease, border-color .2s ease; }
+
+/* Les cartes cliquables se soulèvent légèrement au survol — celles qui
+   ne le faisaient pas encore (tile-card) rejoignent bubble-card/cal-day. */
+.tile-card{ transition:transform .15s ease, border-color .15s ease, background-color .15s ease; }
+.tile-card:hover{ transform:translateY(-2px); }
+
+/* Les lignes de tableau étaient totalement inertes au survol. */
+tbody tr{ transition:background-color .12s ease; }
+tbody tr:hover td{ background:var(--panel-alt); }
+
+/* Un changement de thème (Sombre/Gris/Clair/Atelier) fond en douceur
+   au lieu de basculer brutalement d'une palette à l'autre. */
+body, .topbar, .tabs, .panel, .form-card, .table-wrap, table, th, td,
+.stat-chip, .cal-card, .cal-day, .hero, .hero-block, .login-card{
+  transition:background-color .25s ease, border-color .25s ease, color .25s ease;
+}
+
+/* Respecte les personnes sensibles au mouvement : tout redevient
+   instantané si elles l'ont demandé au niveau du système. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+}
