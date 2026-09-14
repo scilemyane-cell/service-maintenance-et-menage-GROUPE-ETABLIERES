@@ -20,7 +20,7 @@ let mountedContainer = null;
 let mountedUser = null;
 let state = { produits: [], sorties: [], sites: [], zonesSites: {} };
 let unsubs = [];
-let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null, qrGeneralZone: null, rapide: false, rapideIndex: 0 };
+let ui = { zone: "ecole", onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null, qrGeneralZone: null, rapide: false, rapideIndex: 0, ouvertsSortie: {}, ouvertsEntree: {} };
 
 const ROLES_GESTION = ["super_admin", "admin", "n1"];
 
@@ -38,7 +38,7 @@ export async function mountStockMenage(container, user) {
   mountedUser = user;
   state = { produits: [], sorties: [], sites: [], zonesSites: {} };
   const accessibles = zonesAccessibles(user);
-  ui = { zone: accessibles[0] || null, onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null, qrGeneralZone: null, rapide: false, rapideIndex: 0 };
+  ui = { zone: accessibles[0] || null, onglet: "produits", addingOpen: false, editingId: null, filtreAttribution: "toutes", filtreCategorie: "toutes", qrId: null, qrGeneralZone: null, rapide: false, rapideIndex: 0, ouvertsSortie: {}, ouvertsEntree: {} };
   unsubs.forEach(u => u());
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs = [
@@ -69,7 +69,7 @@ export async function mountStockMenage(container, user) {
       }
       if (!dejaEnRapide) render();
     }),
-    watchSorties((list) => { state.sorties = list; render(); }),
+    watchSorties((list) => { const dejaEnRapide = ui.rapide; state.sorties = list; if (!dejaEnRapide) render(); }),
     watchSitesDossiers((list) => { state.sites = list; render(); }),
     watchZonesSites((z) => { state.zonesSites = z; render(); }),
   ];
@@ -257,6 +257,7 @@ function renderProduits(container) {
   if (ui.deepLinkSortieId) {
     const id = ui.deepLinkSortieId;
     ui.deepLinkSortieId = null;
+    if (!ui.ouvertsSortie[id]) ui.ouvertsSortie[id] = { qte: "1", attribId: "", commentaire: "" };
     const holder = document.getElementById(`sm-sortie-form-${id}`);
     if (holder) {
       holder.innerHTML = renderFormSortie(id);
@@ -451,8 +452,8 @@ function renderCarteProduit(p) {
         </div>
       </div>
       ${ui.editingId === p.id ? renderFormProduit(p) : ""}
-      <div id="sm-sortie-form-${p.id}"></div>
-      <div id="sm-entree-form-${p.id}"></div>
+      <div id="sm-sortie-form-${p.id}">${ui.ouvertsSortie[p.id] ? renderFormSortie(p.id) : ""}</div>
+      <div id="sm-entree-form-${p.id}">${ui.ouvertsEntree[p.id] ? renderFormEntree(p.id) : ""}</div>
     </div>
   `;
 }
@@ -530,27 +531,36 @@ function attacherEcouteursProduits() {
 
   mountedContainer.querySelectorAll("[data-qr-sm]").forEach(btn => btn.addEventListener("click", () => { ui.qrId = btn.dataset.qrSm; render(); }));
   mountedContainer.querySelectorAll("[data-sortie]").forEach(btn => btn.addEventListener("click", () => {
-    const holder = document.getElementById(`sm-sortie-form-${btn.dataset.sortie}`);
-    holder.innerHTML = holder.innerHTML ? "" : renderFormSortie(btn.dataset.sortie);
-    if (holder.innerHTML) attacherEcouteurSortie(btn.dataset.sortie);
+    const id = btn.dataset.sortie;
+    if (ui.ouvertsSortie[id]) delete ui.ouvertsSortie[id];
+    else ui.ouvertsSortie[id] = { qte: "1", attribId: "", commentaire: "" };
+    render();
   }));
   mountedContainer.querySelectorAll("[data-entree]").forEach(btn => btn.addEventListener("click", () => {
-    const holder = document.getElementById(`sm-entree-form-${btn.dataset.entree}`);
-    holder.innerHTML = holder.innerHTML ? "" : renderFormEntree(btn.dataset.entree);
-    if (holder.innerHTML) attacherEcouteurEntree(btn.dataset.entree);
+    const id = btn.dataset.entree;
+    if (ui.ouvertsEntree[id]) delete ui.ouvertsEntree[id];
+    else ui.ouvertsEntree[id] = { qte: "1" };
+    render();
   }));
+  // Les formulaires sortie/entrée déjà ouverts (par ex. avant qu'un
+  // collègue valide une action ailleurs et déclenche un re-rendu) sont
+  // regénérés à l'identique via renderCarteProduit — on rattache juste
+  // leurs écouteurs ici, à chaque rendu.
+  Object.keys(ui.ouvertsSortie).forEach(id => { if (document.getElementById(`sm-sortie-form-${id}`)) attacherEcouteurSortie(id); });
+  Object.keys(ui.ouvertsEntree).forEach(id => { if (document.getElementById(`sm-entree-form-${id}`)) attacherEcouteurEntree(id); });
 }
 
 function renderFormSortie(produitId) {
+  const saved = ui.ouvertsSortie[produitId] || { qte: "1", attribId: "", commentaire: "" };
   return `
     <div class="form-card" style="margin-top:8px;background:var(--panel-alt)">
       <h4 style="margin:0 0 10px;font-size:13px">📤 Enregistrer une sortie</h4>
       <div class="form-grid">
-        <label>Quantité<input type="number" min="1" id="sm-sortie-qte-${produitId}" value="1"></label>
+        <label>Quantité<input type="number" min="1" id="sm-sortie-qte-${produitId}" value="${esc(saved.qte)}"></label>
         <label>Attribution (${ui.zone === "agropolis" ? "centre ou MNA" : "centre concerné"})
-          <select id="sm-sortie-attrib-${produitId}">${attributionOptions("")}</select>
+          <select id="sm-sortie-attrib-${produitId}">${attributionOptions(saved.attribId)}</select>
         </label>
-        <label>Commentaire (optionnel)<input id="sm-sortie-comment-${produitId}" placeholder="ex. réassort mensuel"></label>
+        <label>Commentaire (optionnel)<input id="sm-sortie-comment-${produitId}" placeholder="ex. réassort mensuel" value="${esc(saved.commentaire || "")}"></label>
       </div>
       <button class="add-btn" data-valider-sortie="${produitId}" style="margin-top:8px">💾 Valider la sortie</button>
       <div id="sm-sortie-status-${produitId}" style="font-size:12px;margin-top:8px"></div>
@@ -559,18 +569,29 @@ function renderFormSortie(produitId) {
 }
 
 function attacherEcouteurSortie(produitId) {
+  const qteEl = document.getElementById(`sm-sortie-qte-${produitId}`);
+  const attribEl = document.getElementById(`sm-sortie-attrib-${produitId}`);
+  const commentEl = document.getElementById(`sm-sortie-comment-${produitId}`);
+  // On garde ui.ouvertsSortie à jour à chaque frappe pour qu'un re-rendu
+  // déclenché par l'action d'un autre utilisateur (ex. il valide une
+  // sortie sur un autre produit) restitue ce qui était en train d'être
+  // saisi, au lieu de le faire disparaître.
+  const sync = () => { ui.ouvertsSortie[produitId] = { qte: qteEl.value, attribId: attribEl.value, commentaire: commentEl.value }; };
+  qteEl.addEventListener("input", sync);
+  attribEl.addEventListener("change", sync);
+  commentEl.addEventListener("input", sync);
   document.querySelector(`[data-valider-sortie="${produitId}"]`).addEventListener("click", async () => {
     const statusEl = document.getElementById(`sm-sortie-status-${produitId}`);
     const p = state.produits.find(x => x.id === produitId);
-    const qte = parseInt(document.getElementById(`sm-sortie-qte-${produitId}`).value, 10);
-    const attribSelect = document.getElementById(`sm-sortie-attrib-${produitId}`);
-    const attribId = attribSelect.value;
+    const qte = parseInt(qteEl.value, 10);
+    const attribId = attribEl.value;
     if (!qte || qte <= 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
     if (!attribId) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une attribution.</span>`; return; }
-    const commentaire = document.getElementById(`sm-sortie-comment-${produitId}`).value.trim();
+    const commentaire = commentEl.value.trim();
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
       await enregistrerSortie(p, qte, attribId, nomAttribution(attribId), commentaire, mountedUser);
+      delete ui.ouvertsSortie[produitId];
       document.getElementById(`sm-sortie-form-${produitId}`).innerHTML = "";
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
@@ -579,10 +600,11 @@ function attacherEcouteurSortie(produitId) {
 }
 
 function renderFormEntree(produitId) {
+  const saved = ui.ouvertsEntree[produitId] || { qte: "1" };
   return `
     <div class="form-card" style="margin-top:8px;background:var(--panel-alt)">
       <h4 style="margin:0 0 10px;font-size:13px">📥 Enregistrer une entrée (réapprovisionnement)</h4>
-      <label>Quantité reçue<input type="number" min="1" id="sm-entree-qte-${produitId}" value="1" style="max-width:160px"></label>
+      <label>Quantité reçue<input type="number" min="1" id="sm-entree-qte-${produitId}" value="${esc(saved.qte)}" style="max-width:160px"></label>
       <button class="add-btn" data-valider-entree="${produitId}" style="margin-top:8px">💾 Valider l'entrée</button>
       <div id="sm-entree-status-${produitId}" style="font-size:12px;margin-top:8px"></div>
     </div>
@@ -590,14 +612,17 @@ function renderFormEntree(produitId) {
 }
 
 function attacherEcouteurEntree(produitId) {
+  const qteEl = document.getElementById(`sm-entree-qte-${produitId}`);
+  qteEl.addEventListener("input", () => { ui.ouvertsEntree[produitId] = { qte: qteEl.value }; });
   document.querySelector(`[data-valider-entree="${produitId}"]`).addEventListener("click", async () => {
     const statusEl = document.getElementById(`sm-entree-status-${produitId}`);
     const p = state.produits.find(x => x.id === produitId);
-    const qte = parseInt(document.getElementById(`sm-entree-qte-${produitId}`).value, 10);
+    const qte = parseInt(qteEl.value, 10);
     if (!qte || qte <= 0) { statusEl.innerHTML = `<span style="color:var(--red)">Quantité invalide.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
       await enregistrerEntree(p, qte, mountedUser);
+      delete ui.ouvertsEntree[produitId];
       document.getElementById(`sm-entree-form-${produitId}`).innerHTML = "";
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
