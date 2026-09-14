@@ -11,18 +11,21 @@ import { watchStockProduits } from "./stock-data.js";
 import { qrPayloadFor } from "./stock.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { listerTousLesArticlesSite, listerSitesAvecStockDeporte, qrPayloadForSite } from "./stock-site-data.js";
+import { watchProduits as watchProduitsMenage, ZONES as ZONES_MENAGE } from "./stock-menage-data.js";
+import { qrPayloadFor as qrPayloadForMenage } from "./stock-menage.js";
 
 let mountedContainer = null;
-let state = { type: "produits", produits: [], sites: [], articlesSite: [], selection: new Set() };
+let state = { type: "produits", produits: [], sites: [], articlesSite: [], produitsMenage: [], selection: new Set() };
 let unsubs = [];
 
 export async function mountQrMasse(container) {
   mountedContainer = container;
-  state = { type: "produits", produits: [], sites: [], articlesSite: [], selection: new Set() };
+  state = { type: "produits", produits: [], sites: [], articlesSite: [], produitsMenage: [], selection: new Set() };
   unsubs.forEach(u => u());
   unsubs = [
     watchStockProduits((list) => { state.produits = list; if (state.type === "produits") render(); }),
     watchSitesDossiers((list) => { state.sites = list; if (state.type === "sites") render(); }),
+    watchProduitsMenage((list) => { state.produitsMenage = list; if (state.type === "menage") render(); }),
   ];
   // Stock déporté : lecture ponctuelle (pas de flux temps réel exposé),
   // recroisée avec le nom des sites pour l'affichage et l'étiquetage.
@@ -35,20 +38,25 @@ export async function mountQrMasse(container) {
 function itemsActuels() {
   if (state.type === "produits") return state.produits;
   if (state.type === "sites") return state.sites;
+  if (state.type === "menage") return state.produitsMenage;
   return state.articlesSite;
 }
 
 function payloadPour(item) {
   if (state.type === "produits") return qrPayloadFor(item.id);
   if (state.type === "sites") return `https://service-maintenance-et-menage.web.app/dossier-pdf-guest.html?dossier=${item.id}`;
+  if (state.type === "menage") return qrPayloadForMenage(item.id);
   return qrPayloadForSite(item.id);
 }
 
 // Libellé affiché sous le QR — pour le stock déporté, le nom du site est
 // indispensable (le même produit peut exister sur plusieurs sites, sinon
-// impossible de distinguer les étiquettes une fois imprimées).
+// impossible de distinguer les étiquettes une fois imprimées). Pour le
+// stock ménage, la zone (École/Agropolis) évite la même ambiguïté.
 function libellePour(item) {
-  return state.type === "articlesSite" && item.nomSite ? `${item.nom} — ${item.nomSite}` : item.nom;
+  if (state.type === "articlesSite" && item.nomSite) return `${item.nom} — ${item.nomSite}`;
+  if (state.type === "menage" && item.zone) return `${item.nom} — ${ZONES_MENAGE[item.zone] || item.zone}`;
+  return item.nom;
 }
 
 function render() {
@@ -62,6 +70,7 @@ function render() {
         <button class="nav-btn" id="qm-type-produits" style="${state.type === 'produits' ? 'border-color:var(--gold);color:var(--gold)' : ''}">📦 Produits (petites étiquettes)</button>
         <button class="nav-btn" id="qm-type-sites" style="${state.type === 'sites' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🏢 Dossiers de site (fiches)</button>
         <button class="nav-btn" id="qm-type-articlesSite" style="${state.type === 'articlesSite' ? 'border-color:var(--gold);color:var(--gold)' : ''}">📤 Stock déporté (petites étiquettes)</button>
+        <button class="nav-btn" id="qm-type-menage" style="${state.type === 'menage' ? 'border-color:var(--gold);color:var(--gold)' : ''}">🧻 Stock Ménage (petites étiquettes)</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="nav-btn" id="qm-tout">Tout sélectionner</button>
@@ -84,6 +93,7 @@ function render() {
   document.getElementById("qm-type-produits").addEventListener("click", () => { state.type = "produits"; state.selection = new Set(); render(); });
   document.getElementById("qm-type-sites").addEventListener("click", () => { state.type = "sites"; state.selection = new Set(); render(); });
   document.getElementById("qm-type-articlesSite").addEventListener("click", () => { state.type = "articlesSite"; state.selection = new Set(); render(); });
+  document.getElementById("qm-type-menage").addEventListener("click", () => { state.type = "menage"; state.selection = new Set(); render(); });
   document.getElementById("qm-tout").addEventListener("click", () => { itemsActuels().forEach(it => state.selection.add(it.id)); render(); });
   document.getElementById("qm-aucun").addEventListener("click", () => { state.selection.clear(); render(); });
   mountedContainer.querySelectorAll("[data-qm-item]").forEach(cb => cb.addEventListener("change", () => {
@@ -102,11 +112,11 @@ async function genererEtImprimer() {
   if (items.length === 0) return;
   statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération de ${items.length} QR code(s)…</span>`;
 
-  const estPetit = state.type === "produits" || state.type === "articlesSite";
+  const estPetit = state.type === "produits" || state.type === "articlesSite" || state.type === "menage";
   const colonnes = estPetit ? 3 : 2;
   const taille = estPetit ? 150 : 190; // le rendu SVG est net à n'importe quelle taille, plus besoin de sur-dimensionner en interne avant de réduire
 
-  const titreFeuille = { produits: "Étiquettes QR — Produits", sites: "Fiches QR — Dossiers de site", articlesSite: "Étiquettes QR — Stock déporté" }[state.type];
+  const titreFeuille = { produits: "Étiquettes QR — Produits", sites: "Fiches QR — Dossiers de site", articlesSite: "Étiquettes QR — Stock déporté", menage: "Étiquettes QR — Stock Ménage" }[state.type];
 
   const html = `
     <div class="print-fiche" style="background:#fff;padding:20px;color:#111">
