@@ -8,6 +8,7 @@
 import { esc } from "./astreinte-logic.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { dessinerFluxSVG } from "./flux-svg.js";
+import { renderUniteField, attacherUniteField } from "./unites-stock.js";
 import {
   listerSitesAvecStockDeporte, listerTousLesArticlesSite,
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
@@ -262,6 +263,7 @@ function renderListe() {
   }));
 
   attachAddFormListeners();
+  if (ui.addingSiteId && ui.addingMode === "libre") attacherUniteField(`ssx-libre-unite-${ui.addingSiteId}`);
 }
 
 // =================================================================
@@ -411,7 +413,7 @@ function renderAddForm(site) {
       <label>Nom de l'article<input id="ssx-libre-nom-${site.id}" placeholder="ex. pièce spécifique à ce site"></label>
       <label>Quantité<input type="number" min="0" step="1" id="ssx-libre-qte-${site.id}" value="1"></label>
       <label>Quantité à avoir en permanence<input type="number" min="0" step="1" id="ssx-libre-cible-${site.id}" value="1"></label>
-      <label>Unité<input id="ssx-libre-unite-${site.id}" placeholder="pièce, lot…" value="pièce"></label>
+      <label>Unité${renderUniteField(`ssx-libre-unite-${site.id}`, "pièce", esc)}</label>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="add-btn" data-libre-valider="${site.id}">✓ Ajouter</button>

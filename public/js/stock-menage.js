@@ -15,6 +15,7 @@ import {
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { dessinerFluxSVG } from "./flux-svg.js";
+import { renderUniteField, attacherUniteField } from "./unites-stock.js";
 
 let mountedContainer = null;
 let mountedUser = null;
@@ -251,6 +252,8 @@ function renderProduits(container) {
   document.getElementById("sm-add").addEventListener("click", () => { ui.addingOpen = !ui.addingOpen; ui.editingId = null; render(); });
   document.getElementById("sm-qr-general").addEventListener("click", () => { ui.qrGeneralZone = ui.zone; render(); });
   attacherEcouteursProduits();
+  if (ui.addingOpen) attacherUniteField("sm-new-unite");
+  if (ui.editingId) attacherUniteField(`sm-edit-${ui.editingId}-unite`);
 
   // Ouvre automatiquement la sortie du produit visé par un QR scanné,
   // une seule fois (voir mountStockMenage).
@@ -472,7 +475,7 @@ function renderFormProduit(p) {
             ${CATEGORIES_MENAGE.map(c => `<option value="${esc(c)}" ${data.categorie === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
           </select>
         </label>
-        <label>Unité<input id="${prefix}-unite" value="${esc(data.unite || 'pièce')}" placeholder="ex. rouleau, litre, pièce"></label>
+        <label>Unité${renderUniteField(`${prefix}-unite`, data.unite, esc)}</label>
         <label>Stock actuel<input type="number" min="0" id="${prefix}-stock" value="${data.stockActuel || 0}"></label>
         <label>Stock minimum (alerte)<input type="number" min="0" id="${prefix}-stockmin" value="${data.stockMin || 0}"></label>
         <label>Stock maximum<input type="number" min="0" id="${prefix}-stockmax" value="${data.stockMax || 0}"></label>

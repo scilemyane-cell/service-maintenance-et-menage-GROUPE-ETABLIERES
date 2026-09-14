@@ -4,6 +4,7 @@ import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, STO
 import { watchFournisseurs } from "./fournisseurs-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { activerGlisserDeposer } from "./drag-reorder.js";
+import { renderUniteField, attacherUniteField } from "./unites-stock.js";
 
 let state = { produits: [], fournisseurs: [] };
 let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
@@ -157,7 +158,7 @@ function renderEditForm(p, workingCopy) {
             </select>
           </label>
           ${selectionCategorie === "__nouvelle__" ? `<label>Nom de la nouvelle catégorie<input id="sk-categorie-nouvelle" value="${esc(data.categorie || '')}" placeholder="ex. Robinetterie"></label>` : ""}
-          <label>Unité<input id="sk-unite" value="${esc(data.unite)}" placeholder="pièce, lot, boîte…"></label>
+          <label>Unité${renderUniteField("sk-unite", data.unite, esc)}</label>
           <label>Stock actuel<input id="sk-actuel" type="number" min="0" value="${data.stockActuel ?? 0}"></label>
           <label>Stock cible (niveau normal)<input id="sk-cible" type="number" min="0" value="${data.stockCible ?? 0}"></label>
           <label>Seuil minimum (déclenche la commande)<input id="sk-min" type="number" min="0" value="${data.stockMin ?? 0}"></label>
@@ -246,6 +247,7 @@ function renderEditForm(p, workingCopy) {
   });
 
   document.getElementById("sk-back").addEventListener("click", () => { ui.editId = null; render(); });
+  attacherUniteField("sk-unite");
 
   document.getElementById("sk-del-photo")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sk-photo-status");
