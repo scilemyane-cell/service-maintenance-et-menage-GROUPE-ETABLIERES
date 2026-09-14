@@ -7,16 +7,17 @@ import { activerGlisserDeposer } from "./drag-reorder.js";
 import { renderUniteField, attacherUniteField } from "./unites-stock.js";
 
 let state = { produits: [], fournisseurs: [] };
-let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
+let ui = { filtre: "", categorie: "toutes", editId: null, qrId: null, analyseOuverte: false };
 let unsubs = [];
 let mountedContainer = null;
+let graphiquesStock = {};
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; Object.values(graphiquesStock).forEach(c => c.destroy()); graphiquesStock = {}; }
 
 export function mountStockProduits(container) {
   cleanup();
   mountedContainer = container;
-  ui = { filtre: "", categorie: "toutes", editId: null, qrId: null };
+  ui = { filtre: "", categorie: "toutes", editId: null, qrId: null, analyseOuverte: false };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchStockProduits((p) => { state.produits = p; if (!ui.editId && !ui.qrId) render(); }));
   unsubs.push(watchFournisseurs((f) => { state.fournisseurs = f; if (!ui.editId) render(); }));
@@ -55,9 +56,16 @@ function render() {
       <p class="hint">Produits de maintenance en stock — définis un stock cible et un seuil minimum par produit ; l'onglet "Commandes" liste automatiquement ce qui repasse sous le seuil.${sansFiltre ? " Utilise les flèches pour ranger la liste dans le même ordre que les étagères — utile pour l'inventaire rapide." : ""}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="sk-new">➕ Ajouter un produit</button>
+        <button class="nav-btn" id="sk-analyse" style="${ui.analyseOuverte ? 'border-color:var(--gold);color:var(--gold)' : ''}">📈 Analyse</button>
         <button class="nav-btn" id="sk-export">📊 Exporter en Excel (appel d'offre)</button>
         ${state.produits.length === 0 ? `<button class="nav-btn" id="sk-seed">📦 Charger la liste type (50 produits)</button>` : ""}
       </div>
+      ${ui.analyseOuverte ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par catégorie</h3><div style="position:relative;height:220px"><canvas id="sk-chart-cat"></canvas></div></div>
+          <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">État du stock</h3><div style="position:relative;height:220px"><canvas id="sk-chart-etat"></canvas></div></div>
+        </div>
+      ` : ""}
       <div class="filters-row">
         <input id="sk-search" placeholder="Rechercher un produit…" value="${esc(ui.filtre)}" style="flex:1;min-width:160px">
         <select id="sk-cat"><option value="toutes">Toutes catégories (${state.produits.length})</option>${categories().map(c => `<option value="${esc(c)}" ${ui.categorie === c ? 'selected' : ''}>${esc(c)} (${compteParCategorie(c)})</option>`).join("")}</select>
@@ -93,7 +101,9 @@ function render() {
   `;
 
   document.getElementById("sk-new").addEventListener("click", () => { ui.editId = "new"; render(); });
+  document.getElementById("sk-analyse").addEventListener("click", () => { ui.analyseOuverte = !ui.analyseOuverte; render(); });
   document.getElementById("sk-export").addEventListener("click", () => exporterProduitsExcel(state.produits));
+  if (ui.analyseOuverte) dessinerAnalyseStock();
   document.getElementById("sk-seed")?.addEventListener("click", async () => {
     if (!confirm("Charger les 50 produits type ? Tu pourras les modifier/supprimer ensuite.")) return;
     document.getElementById("sk-seed").textContent = "⏳ Chargement…";
@@ -326,6 +336,36 @@ function renderEditForm(p, workingCopy) {
     }
   });
   resolvePhotos(mountedContainer);
+}
+
+const COULEURS_STOCK = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
+
+function dessinerAnalyseStock() {
+  Object.values(graphiquesStock).forEach(c => c.destroy());
+  graphiquesStock = {};
+  if (!window.Chart) return; // librairie pas encore chargée (connexion lente) — le reste de l'écran reste utilisable
+
+  const parCat = {}; state.produits.forEach(p => { const c = p.categorie || "Sans catégorie"; parCat[c] = (parCat[c] || 0) + 1; });
+  const catArr = Object.entries(parCat).sort((a, b) => b[1] - a[1]);
+  const canvasCat = document.getElementById("sk-chart-cat");
+  if (canvasCat) {
+    graphiquesStock.cat = new window.Chart(canvasCat.getContext("2d"), {
+      type: "doughnut",
+      data: { labels: catArr.map(([n]) => n), datasets: [{ data: catArr.map(([, v]) => v), backgroundColor: catArr.map((_, i) => COULEURS_STOCK[i % COULEURS_STOCK.length]) }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
+    });
+  }
+
+  let ok = 0, attention = 0, critique = 0;
+  state.produits.forEach(p => { const s = stockStatus(p); if (s === "danger") critique++; else if (s === "warn") attention++; else ok++; });
+  const canvasEtat = document.getElementById("sk-chart-etat");
+  if (canvasEtat) {
+    graphiquesStock.etat = new window.Chart(canvasEtat.getContext("2d"), {
+      type: "bar",
+      data: { labels: ["Correct", "À surveiller", "Sous le seuil"], datasets: [{ data: [ok, attention, critique], backgroundColor: ["#3FB6AC", "#D9B24C", "#E5533D"], borderRadius: 5, maxBarThickness: 60 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0, color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, x: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
+    });
+  }
 }
 
 // Export Excel — tous les produits du stock central, triés par catégorie
