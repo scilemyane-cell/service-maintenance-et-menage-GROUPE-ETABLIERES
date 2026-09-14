@@ -256,15 +256,23 @@
     }
     if (!homeOrderSubscribed) {
       homeOrderSubscribed = true;
-      watchHomeOrder((o) => { homeOrder = o; render(); });
+      // homeOrder ne sert qu'à classer les tuiles de l'écran d'accueil :
+      // on ne redessine que si on est sur cet écran, pour ne jamais
+      // interrompre une saisie en cours dans un module ouvert.
+      watchHomeOrder((o) => { homeOrder = o; if (currentCategory === null) render(); });
     }
     if (!stockAlertSubscribed) {
       stockAlertSubscribed = true;
-      watchStockAlertCount((counts) => { stockAlertCount = counts; render(); });
+      // Idem pour les badges d'alerte stock : ils ne s'affichent que sur
+      // les tuiles de l'accueil, jamais dans les onglets du module —
+      // un remontage complet ici a déjà fait disparaître des saisies en
+      // cours (ex. formulaire "Ajouter un produit" ouvert par un autre
+      // utilisateur au même moment).
+      watchStockAlertCount((counts) => { stockAlertCount = counts; if (currentCategory === null) render(); });
     }
     if (!compteursAlertSubscribed) {
       compteursAlertSubscribed = true;
-      watchCompteursAlertCount((n) => { compteursAlertCount = n; render(); });
+      watchCompteursAlertCount((n) => { compteursAlertCount = n; if (currentCategory === null) render(); });
     }
     render();
   });
