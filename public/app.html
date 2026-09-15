@@ -272,9 +272,9 @@
       });
       watchAccess((a) => { accessMap = a; render(); });
       watchDispositifSettings((s) => { dispositifSettings = s; render(); });
-      // Export quotidien automatique vers SharePoint, en arrière-plan, sans
-      // bloquer ni ralentir l'affichage. Ne fait rien si déjà fait
-      // aujourd'hui ou si aucune session Microsoft n'est déjà active.
+      // Export vers SharePoint à chaque connexion, en arrière-plan, sans
+      // bloquer ni ralentir l'affichage. Ne fait rien si aucune session
+      // Microsoft n'est déjà active.
       runDailyExportIfNeeded();
     }
     if (!homeOrderSubscribed) {

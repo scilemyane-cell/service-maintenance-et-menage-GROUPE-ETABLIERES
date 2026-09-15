@@ -619,18 +619,20 @@ const MODULES = [
   { dossier: ["Relevé de compteur"], fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs (tous sites)", extraire: extraireRelevesCompteurs },
 ];
 
-// Déclenchée automatiquement à la connexion (voir app.html). N'exporte
-// qu'une fois par jour, et seulement si une session Microsoft est déjà
-// active dans le navigateur (jamais de popup de connexion imposée).
+// Déclenchée automatiquement à chaque connexion à l'appli (voir
+// app.html) — plus de limite "une fois par jour" : à chaque ouverture,
+// pour que les données sur SharePoint restent aussi fraîches que
+// possible sans dépendre d'un serveur programmé. Ne se déclenche que si
+// une session Microsoft est déjà active dans le navigateur (jamais de
+// popup de connexion imposée) — sinon, retentera à la prochaine
+// connexion.
 export async function runDailyExportIfNeeded() {
   try {
-    const snap = await getDoc(STATUS_DOC);
-    const statut = snap.exists() ? snap.data() : {};
-    if (statut.lastExportDate === todayStr()) return; // déjà fait aujourd'hui
-
     const token = await getGraphTokenSilentOnly();
     if (!token) return; // pas de session Microsoft active, on retentera au prochain login
 
+    const snap = await getDoc(STATUS_DOC);
+    const statut = snap.exists() ? snap.data() : {};
     const dernieresEmpreintes = { ...(statut.empreintes || {}) };
     for (const mod of MODULES) {
       const lignes = await mod.extraire();
@@ -642,7 +644,7 @@ export async function runDailyExportIfNeeded() {
 
     await setDoc(STATUS_DOC, { lastExportDate: todayStr(), lastExportAt: new Date().toISOString(), empreintes: dernieresEmpreintes }, { merge: true });
   } catch (e) {
-    console.error("Export quotidien SharePoint échoué :", e);
+    console.error("Export à la connexion SharePoint échoué :", e);
     // Échec silencieux — ne doit jamais bloquer l'usage normal de l'appli.
   }
 }
