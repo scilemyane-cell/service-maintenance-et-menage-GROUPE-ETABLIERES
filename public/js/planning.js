@@ -389,17 +389,18 @@ function calculerLignesNoteFrais(nom, mois) {
 // corriger le nombre de km d'un jour précis si le trajet habituel n'a
 // pas été suivi ce jour-là (autre point de départ, déplacement
 // exceptionnel...), plutôt que d'imprimer une valeur figée à l'aveugle.
-function ouvrirApercuNoteFrais(nom, mois) {
+function ouvrirApercuNoteFrais(nom, mois, declencheePar = null) {
   const statusEl = document.getElementById(`fiche-note-status-${nom}`);
   const c = state.coordonnees[nom] || {};
   const lignes = calculerLignesNoteFrais(nom, mois);
-  if (lignes.length === 0) { statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; return; }
+  if (lignes.length === 0) { if (statusEl) statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; else window.toast("Aucune intervention pour ce mois."); return; }
   if (!c.kmDomicileService) {
-    statusEl.innerHTML = `<span style="color:var(--red)">⚠️ Kilomètres domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} non renseignés. Complète-les dans la fiche ci-dessus avant de générer.</span>`;
+    const msg = `⚠️ Kilomètres domicile ↔ ${SERVICE_TECHNIQUE_NOM} non renseignés pour ${nom}. Complète-les dans sa fiche (Coordonnées) avant de générer.`;
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">${esc(msg)}</span>`; else window.toast(msg, "error");
     return;
   }
-  statusEl.innerHTML = "";
-  ui.noteFraisPreview = { nom, mois, lignes };
+  if (statusEl) statusEl.innerHTML = "";
+  ui.noteFraisPreview = { nom, mois, lignes, declencheePar };
   renderAll();
 }
 
@@ -1056,18 +1057,6 @@ function renderInterventions(container, perms) {
         <button class="add-btn" id="doc-generate">📄 Générer le document</button>
       </div>
       ${ui.docForm.generated ? renderDocPreview() : ""}
-
-      <div class="form-card">
-        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🖨️ Note de frais kilométrique</h3>
-        <p class="hint" style="margin:0 0 10px">Générée à partir des interventions enregistrées ci-dessus — chaque ligne renvoie au numéro de l'intervention correspondante.</p>
-        <div class="form-grid">
-          <label>Intervenant<select id="nf-interv-tech">${intervenants.map(t => `<option value="${esc(t)}" ${(ui.noteFraisTech || intervenants[0]) === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select></label>
-          <label>Mois<input type="month" id="nf-interv-mois" value="${ui.noteFraisMois}"></label>
-        </div>
-        <button class="add-btn" id="nf-interv-generer" style="margin-top:8px">🖨️ Générer la note de frais</button>
-        <div id="fiche-note-status-${esc(ui.noteFraisTech || intervenants[0] || "")}" style="font-size:12px;margin-top:8px"></div>
-        ${ui.noteFraisPreview && intervenants.includes(ui.noteFraisPreview.nom) ? renderApercuNoteFrais() : ""}
-      </div>
       ` : ""}
 
       <div class="table-wrap">
@@ -1088,8 +1077,10 @@ function renderInterventions(container, perms) {
                   ${perms.isEditor ? `<td>${i.transmis
                     ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
                     : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</td>` : ''}
-                  <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}</td>
-                </tr>`;
+                  <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}${perms.isEditor ? ` <button class="nav-btn" data-note-frais-ligne="${i.id}" style="padding:4px 8px;font-size:11px" title="Générer la note de frais du mois de cette intervention">🖨️</button>` : ""}</td>
+                </tr>
+                ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? `<tr><td colspan="10" style="padding:0;border:none">${renderApercuNoteFrais()}</td></tr>` : ""}
+                `;
               }).join("")}
           </tbody>
         </table>
@@ -1319,14 +1310,11 @@ function renderInterventions(container, perms) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
       }
     });
-    document.getElementById("nf-interv-tech")?.addEventListener("change", (e) => { ui.noteFraisTech = e.target.value; });
-    document.getElementById("nf-interv-mois")?.addEventListener("change", (e) => { ui.noteFraisMois = e.target.value; });
-    document.getElementById("nf-interv-generer")?.addEventListener("click", () => {
-      const nom = document.getElementById("nf-interv-tech").value;
-      const mois = document.getElementById("nf-interv-mois").value;
-      ui.noteFraisTech = nom; ui.noteFraisMois = mois;
-      ouvrirApercuNoteFrais(nom, mois);
-    });
+    mountedContainer.querySelectorAll("[data-note-frais-ligne]").forEach(btn => btn.addEventListener("click", () => {
+      const interv = state.interventions.find(x => x.id === btn.dataset.noteFraisLigne);
+      if (!interv) return;
+      ouvrirApercuNoteFrais(interv.technicien, interv.date.slice(0, 7), interv.id);
+    }));
     attacherApercuNoteFraisListeners();
   }
 }
