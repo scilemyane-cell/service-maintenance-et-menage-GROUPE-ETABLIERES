@@ -250,6 +250,10 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if isEditor();
     }
+    // ---- Suivi des tâches internes (Super Admin uniquement) ----
+    match /admin-taches/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
     // ---- Stock Menage (papier toilette, savon, produits d'entretien) ----
     // Lecture ouverte a tous les connectes (techniciens/agents d'entretien
     // ont besoin de voir le stock et faire des sorties). Creation d'un

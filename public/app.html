@@ -47,6 +47,7 @@
   import { runDailyExportIfNeeded } from "./js/export-sharepoint.js";
   import { mountExportSharepointAdmin } from "./js/export-sharepoint-admin.js";
   import { mountQrMasse } from "./js/qr-print-masse.js";
+  import { mountTaches } from "./js/taches.js";
   import { mountPrevisionnel } from "./js/previsionnel.js";
   import { mountStockMenage } from "./js/stock-menage.js";
   import { mountStatistiques } from "./js/statistiques.js";
@@ -88,6 +89,7 @@
   const MENAGE_ROLES = ["super_admin","admin","n1","direction","menage","mi_temps"];
   const GESTION = ["super_admin","admin","n1"]; // gestion quotidienne (contenu)
   const ADMIN_ONLY = ["super_admin","admin"]; // administration du systeme (comptes, corbeille...)
+  const SUPER_ADMIN_ONLY = ["super_admin"];
 
   function dispositifCategories(user) {
     return dispositifsList
@@ -137,6 +139,7 @@
           { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },
           { id: "export-sharepoint", label: "Export SharePoint", icon: "📤", roles: ADMIN_ONLY, mount: mountExportSharepointAdmin },
           { id: "qr-masse", label: "Impression QR en masse", icon: "🖨️", roles: ADMIN_ONLY, mount: mountQrMasse },
+          { id: "taches", label: "Suivi des tâches", icon: "✅", roles: SUPER_ADMIN_ONLY, mount: mountTaches },
         ],
       },
       {
