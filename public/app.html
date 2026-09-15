@@ -48,6 +48,7 @@
   import { mountExportSharepointAdmin } from "./js/export-sharepoint-admin.js";
   import { mountQrMasse } from "./js/qr-print-masse.js";
   import { mountTaches } from "./js/taches.js";
+  import { mountPermissionsDoc } from "./js/permissions-doc.js";
   import { mountPrevisionnel } from "./js/previsionnel.js";
   import { mountStockMenage } from "./js/stock-menage.js";
   import { mountStatistiques } from "./js/statistiques.js";
@@ -139,6 +140,7 @@
           { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },
           { id: "export-sharepoint", label: "Export SharePoint", icon: "📤", roles: ADMIN_ONLY, mount: mountExportSharepointAdmin },
           { id: "qr-masse", label: "Impression QR en masse", icon: "🖨️", roles: ADMIN_ONLY, mount: mountQrMasse },
+          { id: "permissions", label: "Permissions par rôle", icon: "🔍", roles: ADMIN_ONLY, mount: mountPermissionsDoc },
         ],
       },
       {
