@@ -19,7 +19,7 @@ import {
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
   trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve,
-  creerSectionDossierPourCompteur,
+  creerSectionDossierPourCompteur, libelleIndex,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -59,7 +59,7 @@ let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
   addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
-  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null,
+  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null, addingIndexPersonnalises: null,
   releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
   rapideSiteId: null, rapideIndex: 0, rapportSiteId: null,
 };
@@ -72,7 +72,7 @@ export async function mountCompteurs(container, user) {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
     addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
   addingFrequence: null, addingEcheanceJour: null, addingEcheanceMois: null,
-  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null,
+  addingNom: null, addingEmplacement: null, addingAutoNom: null, addingAutoEmplacement: null, addingNbIndex: null, addingIndexPersonnalises: null,
     releveCompteurId: null, releveRetourSiteId: null, releveEnCours: null,
     rapideSiteId: null, rapideIndex: 0, rapportSiteId: null,
   };
@@ -658,10 +658,12 @@ function renderAddForm(site) {
             <select id="cpt-new-nbindex">
               <option value="4" ${nbIndex === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
               <option value="1" ${nbIndex === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
+              <option value="custom" ${nbIndex === "custom" ? "selected" : ""}>Personnalisé — numéros différents affichés sur ce compteur</option>
             </select>
           </label>
         </div>
-        <p class="hint" style="margin:4px 0 0">Certains sites n'ont qu'un simple compteur électrique (1 index), d'autres un tarif Jaune/Vert à 4 index — à choisir selon ce que ce compteur affiche réellement.</p>
+        ${nbIndex === "custom" ? renderIndexPersonnalisesHTML("cpt-new", ui.addingIndexPersonnalises) : ""}
+        <p class="hint" style="margin:4px 0 0">Certains sites n'ont qu'un simple compteur électrique (1 index), d'autres un tarif Jaune/Vert à 4 index, d'autres des numéros qui ne correspondent à aucune convention connue — choisis "Personnalisé" dans ce cas et indique les numéros affichés sur l'écran du compteur.</p>
       ` : ""}
       ${suggestions.length > 0 ? `<p class="hint" style="margin:6px 0 0">💡 Suggestions de nom reprises des équipements de la fiche de ce dossier de site : ${suggestions.map(esc).join(", ")}</p>` : ""}
       ${ui.addingAutoNom ? `<p class="hint" style="margin:4px 0 0;color:var(--gold)">✓ Nom et emplacement repris automatiquement de "${esc(ui.addingAutoNom)}" (modifiable)</p>` : ""}
@@ -699,6 +701,53 @@ function frequenceFieldsHTML(prefix, frequence, jour, mois) {
   `;
 }
 
+// Éditeur de lignes "numéro d'index / intitulé" pour un compteur dont
+// les index ne suivent aucune convention standard connue (nbIndex ===
+// "custom") — l'utilisateur tape lui-même ce qui est réellement affiché
+// sur l'écran du compteur, plutôt que de deviner une convention qui
+// pourrait être fausse pour ce modèle/marque particulier.
+function renderIndexPersonnalisesHTML(prefix, liste) {
+  const lignes = liste && liste.length > 0 ? liste : [{ cle: "", label: "" }];
+  return `
+    <div style="margin-top:8px">
+      <p class="hint" style="margin:0 0 6px">Numéro(s) affiché(s) sur l'écran de ce compteur (ex. 170) et intitulé s'il y en a un (sinon laisser vide).</p>
+      ${lignes.map((l, i) => `
+        <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+          <input data-idx-cle="${prefix}-${i}" placeholder="ex. 170" value="${esc(l.cle || '')}" style="max-width:100px">
+          <input data-idx-label="${prefix}-${i}" placeholder="Intitulé (optionnel)" value="${esc(l.label || '')}" style="flex:1">
+          <button type="button" class="del-btn" data-idx-del="${prefix}-${i}">🗑️</button>
+        </div>
+      `).join("")}
+      <button type="button" class="nav-btn" data-idx-add="${prefix}" style="font-size:12px">➕ Ajouter un index</button>
+    </div>
+  `;
+}
+
+// Rattache les écouteurs de l'éditeur ci-dessus. `liste` doit être le
+// tableau vivant (référence mutable) porté par l'état de l'appelant —
+// ui.addingIndexPersonnalises pour l'ajout, c.indexPersonnalises pour
+// la modification — pour que les lignes tapées survivent au re-rendu.
+function attacherIndexPersonnalisesListeners(prefix, getListe, onChange) {
+  mountedContainer.querySelectorAll(`[data-idx-cle^="${prefix}-"]`).forEach(inp => inp.addEventListener("input", () => {
+    const i = parseInt(inp.dataset.idxCle.slice(prefix.length + 1), 10);
+    getListe()[i].cle = inp.value;
+  }));
+  mountedContainer.querySelectorAll(`[data-idx-label^="${prefix}-"]`).forEach(inp => inp.addEventListener("input", () => {
+    const i = parseInt(inp.dataset.idxLabel.slice(prefix.length + 1), 10);
+    getListe()[i].label = inp.value;
+  }));
+  mountedContainer.querySelectorAll(`[data-idx-del^="${prefix}-"]`).forEach(btn => btn.addEventListener("click", () => {
+    const i = parseInt(btn.dataset.idxDel.slice(prefix.length + 1), 10);
+    getListe().splice(i, 1);
+    onChange();
+  }));
+  const addBtn = mountedContainer.querySelector(`[data-idx-add="${prefix}"]`);
+  addBtn?.addEventListener("click", () => {
+    getListe().push({ cle: "", label: "" });
+    onChange();
+  });
+}
+
 function renderEditForm(c) {
   return `
     <div class="form-card" style="margin-top:10px;background:var(--panel-alt)">
@@ -713,9 +762,11 @@ function renderEditForm(c) {
             <select id="cpt-edit-nbindex">
               <option value="4" ${(c.nbIndex || 4) === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
               <option value="1" ${(c.nbIndex || 4) === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
+              <option value="custom" ${c.nbIndex === "custom" ? "selected" : ""}>Personnalisé — numéros différents affichés sur ce compteur</option>
             </select>
           </label>
         </div>
+        ${c.nbIndex === "custom" ? renderIndexPersonnalisesHTML("cpt-edit", c.indexPersonnalises) : ""}
       ` : ""}
       <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">🔁 Fréquence de relevé attendue</p>
       ${frequenceFieldsHTML("cpt-edit", c.frequence || "mensuel", c.echeanceJour || 1, c.echeanceMois || 1)}
@@ -736,6 +787,14 @@ function attachEditFormListeners() {
     c.frequence = e.target.value; // reflet local le temps du re-render, pas encore enregistré
     render();
   });
+  document.getElementById("cpt-edit-nbindex")?.addEventListener("change", (e) => {
+    c.nbIndex = e.target.value === "custom" ? "custom" : parseInt(e.target.value, 10);
+    if (c.nbIndex === "custom" && (!c.indexPersonnalises || c.indexPersonnalises.length === 0)) c.indexPersonnalises = [{ cle: "", label: "" }];
+    render();
+  });
+  if (c.nbIndex === "custom") {
+    attacherIndexPersonnalisesListeners("cpt-edit", () => c.indexPersonnalises, render);
+  }
   document.getElementById("cpt-edit-cancel").addEventListener("click", () => { ui.editingCompteurId = null; render(); });
   document.getElementById("cpt-edit-save").addEventListener("click", async () => {
     const statusEl = document.getElementById("cpt-edit-status");
@@ -743,7 +802,14 @@ function attachEditFormListeners() {
     const emplacement = document.getElementById("cpt-edit-emplacement").value.trim();
     const frequence = document.getElementById("cpt-edit-frequence").value;
     const patch = { nom: nom || c.nom, emplacement, frequence };
-    if (c.type === "elec") patch.nbIndex = parseInt(document.getElementById("cpt-edit-nbindex")?.value, 10) || 4;
+    if (c.type === "elec") {
+      const nbIndexVal = document.getElementById("cpt-edit-nbindex")?.value;
+      patch.nbIndex = nbIndexVal === "custom" ? "custom" : (parseInt(nbIndexVal, 10) || 4);
+      if (patch.nbIndex === "custom") {
+        patch.indexPersonnalises = (c.indexPersonnalises || []).map(l => ({ cle: (l.cle || "").trim(), label: (l.label || "").trim() })).filter(l => l.cle);
+        if (patch.indexPersonnalises.length === 0) { statusEl.innerHTML = `<span style="color:var(--red)">Indique au moins un numéro d'index.</span>`; return; }
+      }
+    }
     // Modifier l'emplacement à la main = ne plus vouloir qu'il soit
     // écrasé automatiquement plus tard (voir synchroniserEmplacementsCompteurs()).
     if (emplacement !== (c.emplacement || "")) patch.emplacementAuto = false;
@@ -777,9 +843,13 @@ function attachAddFormListeners() {
     render();
   });
   document.getElementById("cpt-new-nbindex")?.addEventListener("change", (e) => {
-    ui.addingNbIndex = parseInt(e.target.value, 10);
+    ui.addingNbIndex = e.target.value === "custom" ? "custom" : parseInt(e.target.value, 10);
+    if (ui.addingNbIndex === "custom" && !ui.addingIndexPersonnalises) ui.addingIndexPersonnalises = [{ cle: "", label: "" }];
     render();
   });
+  if (ui.addingNbIndex === "custom") {
+    attacherIndexPersonnalisesListeners("cpt-new", () => ui.addingIndexPersonnalises, render);
+  }
   document.getElementById("cpt-new-frequence").addEventListener("change", (e) => {
     ui.addingNom = document.getElementById("cpt-new-nom").value;
     ui.addingEmplacement = document.getElementById("cpt-new-emplacement").value;
@@ -799,7 +869,14 @@ function attachAddFormListeners() {
     const compteur = nouveauCompteur(type);
     if (nomInput) compteur.nom = nomInput;
     compteur.emplacement = emplacement;
-    if (type === "elec") compteur.nbIndex = parseInt(document.getElementById("cpt-new-nbindex")?.value, 10) || 4;
+    if (type === "elec") {
+      const nbIndexVal = document.getElementById("cpt-new-nbindex")?.value;
+      compteur.nbIndex = nbIndexVal === "custom" ? "custom" : (parseInt(nbIndexVal, 10) || 4);
+      if (compteur.nbIndex === "custom") {
+        compteur.indexPersonnalises = (ui.addingIndexPersonnalises || []).map(l => ({ cle: (l.cle || "").trim(), label: (l.label || "").trim() })).filter(l => l.cle);
+        if (compteur.indexPersonnalises.length === 0) { statusEl.innerHTML = `<span style="color:var(--red)">Indique au moins un numéro d'index.</span>`; return; }
+      }
+    }
     // Reste "automatique" (suivra les futures modifications de la fiche du
     // dossier de site) tant que l'utilisateur n'a pas tapé autre chose que
     // la suggestion proposée — voir synchroniserEmplacementsCompteurs().
@@ -816,6 +893,7 @@ function attachAddFormListeners() {
       ui.addingSiteId = null;
       ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null; ui.addingNbIndex = null;
       ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
+      ui.addingIndexPersonnalises = null;
       await load();
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
@@ -832,7 +910,8 @@ function attachAddFormListeners() {
 // =================================================================
 function labelPourCle(compteur, cle) {
   if (cle === "valeur") return "Photo du compteur";
-  return `${cle} — ${INDEX_LABELS[cle]}`;
+  const lbl = libelleIndex(compteur, cle);
+  return lbl ? `${cle} — ${lbl}` : cle;
 }
 
 function photosBlockHTML(prefix, compteur, photos, optionnel = false) {
@@ -980,7 +1059,7 @@ function renderReleve() {
   const complet = photosCompletes(compteur, photos, mountedUser);
   const champs = clesIndex(compteur).length > 1
     ? clesIndex(compteur).map(k => `
-        <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
+        <label>${k}${libelleIndex(compteur, k) ? ` <span style="color:var(--text-dim);font-weight:400">(${esc(libelleIndex(compteur, k))})</span>` : ""}
           <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh" ${illisibles[k] ? "disabled" : ""}>
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);margin:-6px 0 4px;grid-column:1/-1">

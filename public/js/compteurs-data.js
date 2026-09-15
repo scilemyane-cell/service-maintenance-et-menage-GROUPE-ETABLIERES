@@ -37,11 +37,27 @@ export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin
 // (compteur "base", mono-index) ou les 4 index tarifaires (multi-tarif),
 // selon le champ nbIndex choisi à la création de CE compteur (certains
 // sites n'ont qu'un simple compteur de base, d'autres un tarif Jaune/Vert
-// à 4 index — ce n'est pas systématique).
+// à 4 index, d'autres encore des index qui ne suivent aucune convention
+// standard connue — d'où l'option "custom", voir indexPersonnalises).
 export function clesIndex(compteur) {
+  if (compteur.type === "elec" && compteur.nbIndex === "custom") {
+    const liste = compteur.indexPersonnalises || [];
+    return liste.length > 0 ? liste.map(i => i.cle) : ["valeur"];
+  }
   if (compteur.type === "elec" && (compteur.nbIndex || 4) === 1) return ["valeur"];
   if (compteur.type === "elec") return INDEX_ELEC;
   return ["valeur"];
+}
+
+// Intitulé à afficher pour un index donné — celui personnalisé par le
+// site s'il y en a un (compteur à index "custom"), sinon la convention
+// standard HPSH/HCSH/HPSB/HCSB, sinon rien (index sans nom particulier).
+export function libelleIndex(compteur, cle) {
+  if (compteur.nbIndex === "custom") {
+    const trouve = (compteur.indexPersonnalises || []).find(i => i.cle === cle);
+    return trouve?.label || "";
+  }
+  return INDEX_LABELS[cle] || "";
 }
 
 // Unité affichée pour la valeur relevée — kWh pour l'électricité et le
