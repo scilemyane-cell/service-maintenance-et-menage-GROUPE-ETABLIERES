@@ -296,6 +296,8 @@ function renderListe() {
       ${peutAntidater(mountedUser) ? `
         <button class="nav-btn" id="cpt-activer-tous" style="width:fit-content">🔧 Activer les compteurs sur tous les dossiers de site existants</button>
         <div id="cpt-activer-tous-status" style="font-size:12px"></div>
+        <button class="nav-btn" id="cpt-sync-dossiers" style="width:fit-content">🔁 Ajouter les compteurs existants dans les dossiers de site</button>
+        <div id="cpt-sync-dossiers-status" style="font-size:12px"></div>
       ` : ""}
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
@@ -313,12 +315,28 @@ function renderListe() {
 
   document.getElementById("cpt-activer-tous")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("cpt-activer-tous-status");
-    if (!confirm("Activer les compteurs sur tous les dossiers de site qui ne les ont pas encore ? Ils apparaîtront ensuite ici (liste vide jusqu'à ce que tu y ajoutes des compteurs).")) return;
+    if (!(await window.confirmDialog("Activer les compteurs sur tous les dossiers de site qui ne les ont pas encore ? Ils apparaîtront ensuite ici (liste vide jusqu'à ce que tu y ajoutes des compteurs)."))) return;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Activation en cours…</span>`;
     try {
       const n = await activerCompteursSurTousLesDossiers();
       statusEl.innerHTML = `<span style="color:var(--gold)">✓ ${n} dossier(s) mis à jour.</span>`;
       await load();
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
+    }
+  });
+  document.getElementById("cpt-sync-dossiers")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("cpt-sync-dossiers-status");
+    if (!(await window.confirmDialog("Pour chaque compteur déjà créé, ajouter l'équipement correspondant dans son dossier de site s'il n'y est pas encore ? Rien n'est dupliqué si l'équipement existe déjà."))) return;
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Synchronisation en cours…</span>`;
+    try {
+      let n = 0;
+      for (const c of state.compteurs) {
+        if (c.supprimeLe) continue;
+        const cree = await creerSectionDossierPourCompteur(c.dossierId, c.type, c.nom);
+        if (cree) n++;
+      }
+      statusEl.innerHTML = `<span style="color:var(--gold)">✓ ${n} équipement(s) ajouté(s) dans les dossiers de site.</span>`;
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
     }

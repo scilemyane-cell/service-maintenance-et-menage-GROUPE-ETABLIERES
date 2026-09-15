@@ -125,16 +125,17 @@ const TITRE_SECTION_PAR_TYPE = {
 // apparaisse aussi là-bas sans ressaisie manuelle. Ne fait rien si une
 // section correspondante existe déjà (pour ne jamais créer de doublon).
 export async function creerSectionDossierPourCompteur(dossierId, type, nomCompteur) {
-  if (!dossierId) return;
+  if (!dossierId) return false;
   const dossier = await getDossierUnique(dossierId);
-  if (!dossier) return;
+  if (!dossier) return false;
   const sections = dossier.sections || [];
-  if (trouverSectionPourType(sections, type)) return; // déjà couvert, rien à faire
+  if (trouverSectionPourType(sections, type)) return false; // déjà couvert, rien à faire
   const nouvellesSections = [
     ...sections,
     { titre: nomCompteur || TITRE_SECTION_PAR_TYPE[type] || "Compteur", concerne: true, emplacement: "", procedure: "", photos: [] },
   ];
   await saveDossier(dossierId, { ...dossier, sections: nouvellesSections });
+  return true;
 }
 
 const JOURS_TOLERANCE_MENSUEL = 32; // au-delà, un relevé mensuel est considéré "en retard"
