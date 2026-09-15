@@ -1,7 +1,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, getDoc, setDoc, updateDoc,
-  collection, addDoc, deleteDoc, onSnapshot,
+  collection, addDoc, deleteDoc, onSnapshot, runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
@@ -41,7 +41,19 @@ export function watchInterventions(callback) {
   }, (err) => { console.error("watchInterventions:", err); callback([]); });
 }
 export async function addIntervention(record) {
-  await addDoc(collection(db, "interventions"), record);
+  // Numéro d'intervention séquentiel (ex. "INT-00042"), attribué de
+  // façon atomique via un compteur partagé — pour identifier chaque
+  // intervention de façon lisible, notamment sur la note de frais
+  // kilométrique qui y renvoie.
+  const compteurRef = doc(db, "config", "compteur-interventions");
+  const numero = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(compteurRef);
+    const dernier = snap.exists() ? (snap.data().dernier || 0) : 0;
+    const suivant = dernier + 1;
+    tx.set(compteurRef, { dernier: suivant }, { merge: true });
+    return suivant;
+  });
+  await addDoc(collection(db, "interventions"), { ...record, numero: `INT-${String(numero).padStart(5, "0")}` });
 }
 export async function updateIntervention(id, fields) {
   await updateDoc(doc(db, "interventions", id), fields);

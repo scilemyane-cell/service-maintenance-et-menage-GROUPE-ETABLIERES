@@ -69,6 +69,7 @@ let ui = {
   ficheOuverte: null, // nom de la personne dont la fiche technicien est dépliée
   noteFraisMois: new Date().toISOString().slice(0, 7),
   noteFraisPreview: null,
+  noteFraisTech: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
@@ -376,6 +377,7 @@ function calculerLignesNoteFrais(nom, mois) {
       date: jour,
       lieuDepart: c.adresseDomicile || "—",
       villeDestination: `${SERVICE_TECHNIQUE_NOM} — ${SERVICE_TECHNIQUE_ADRESSE}`,
+      numeros: interventionsJour.map(i => i.numero).filter(Boolean).join(", "),
       nature: interventionsJour.map(i => `${i.site}${i.type ? " (" + i.type + ")" : ""}`).join(" ; "),
       km: kmAllerRetour,
       fraisAnnexes: "",
@@ -409,11 +411,12 @@ function renderApercuNoteFrais() {
       <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Aperçu — modifie le trajet d'un jour si besoin avant d'imprimer</h4>
       <div class="table-wrap">
         <table style="font-size:12px">
-          <thead><tr><th>Date</th><th>Nature</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
+          <thead><tr><th>Date</th><th>N° intervention</th><th>Nature</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
           <tbody>
             ${lignes.map((l, i) => `
               <tr>
                 <td>${new Date(l.date).toLocaleDateString("fr-FR")}</td>
+                <td style="font-family:ui-monospace,monospace;font-size:11px">${esc(l.numeros || "—")}</td>
                 <td>${esc(l.nature)}</td>
                 <td><input type="number" min="0" step="0.1" data-note-km="${i}" value="${l.km}" style="width:80px"></td>
                 <td><input data-note-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="ex. repas x2" style="width:140px"></td>
@@ -496,7 +499,7 @@ function imprimerNoteDeFrais(nom, mois, lignes) {
               <td style="border:1px solid #999;padding:5px">${new Date(l.date).toLocaleDateString("fr-FR")}</td>
               <td style="border:1px solid #999;padding:5px">${esc(l.lieuDepart)}</td>
               <td style="border:1px solid #999;padding:5px">${esc(l.villeDestination)}</td>
-              <td style="border:1px solid #999;padding:5px">${esc(l.nature)}</td>
+              <td style="border:1px solid #999;padding:5px">${l.numeros ? `<b>${esc(l.numeros)}</b> — ` : ""}${esc(l.nature)}</td>
               <td style="border:1px solid #999;padding:5px;text-align:center">${l.km}</td>
               <td style="border:1px solid #999;padding:5px">${esc(l.fraisAnnexes)}</td>
             </tr>
@@ -1053,16 +1056,29 @@ function renderInterventions(container, perms) {
         <button class="add-btn" id="doc-generate">📄 Générer le document</button>
       </div>
       ${ui.docForm.generated ? renderDocPreview() : ""}
+
+      <div class="form-card">
+        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🖨️ Note de frais kilométrique</h3>
+        <p class="hint" style="margin:0 0 10px">Générée à partir des interventions enregistrées ci-dessus — chaque ligne renvoie au numéro de l'intervention correspondante.</p>
+        <div class="form-grid">
+          <label>Intervenant<select id="nf-interv-tech">${intervenants.map(t => `<option value="${esc(t)}" ${(ui.noteFraisTech || intervenants[0]) === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select></label>
+          <label>Mois<input type="month" id="nf-interv-mois" value="${ui.noteFraisMois}"></label>
+        </div>
+        <button class="add-btn" id="nf-interv-generer" style="margin-top:8px">🖨️ Générer la note de frais</button>
+        <div id="fiche-note-status-${esc(ui.noteFraisTech || intervenants[0] || "")}" style="font-size:12px;margin-top:8px"></div>
+        ${ui.noteFraisPreview && intervenants.includes(ui.noteFraisPreview.nom) ? renderApercuNoteFrais() : ""}
+      </div>
       ` : ""}
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis au manager</th>' : ''}<th></th></tr></thead>
+          <thead><tr><th>N°</th><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis au manager</th>' : ''}<th></th></tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="9" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="10" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
               sorted.map(i => {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
                 return `<tr>
+                  <td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-dim)">${esc(i.numero || "—")}</td>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
                   <td>${i.heures} h</td><td>${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}</td>
                   <td style="white-space:nowrap">
@@ -1303,6 +1319,15 @@ function renderInterventions(container, perms) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
       }
     });
+    document.getElementById("nf-interv-tech")?.addEventListener("change", (e) => { ui.noteFraisTech = e.target.value; });
+    document.getElementById("nf-interv-mois")?.addEventListener("change", (e) => { ui.noteFraisMois = e.target.value; });
+    document.getElementById("nf-interv-generer")?.addEventListener("click", () => {
+      const nom = document.getElementById("nf-interv-tech").value;
+      const mois = document.getElementById("nf-interv-mois").value;
+      ui.noteFraisTech = nom; ui.noteFraisMois = mois;
+      ouvrirApercuNoteFrais(nom, mois);
+    });
+    attacherApercuNoteFraisListeners();
   }
 }
 

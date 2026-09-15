@@ -60,6 +60,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isEditor();
     }
+    // Compteur du numéro d'intervention séquentiel : n'importe quel
+    // utilisateur pouvant créer une intervention (y compris un simple
+    // technicien, pas seulement admin/n1) doit pouvoir l'incrémenter —
+    // règle dédiée, plus permissive que /config/{docId} en général, mais
+    // limitée à ce seul document qui ne contient qu'un nombre.
+    match /config/compteur-interventions {
+      allow read, write: if isSignedIn();
+    }
 
     // ---- Absences ----
     match /absences/{docId} {
