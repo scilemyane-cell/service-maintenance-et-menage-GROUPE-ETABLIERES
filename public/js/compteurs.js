@@ -19,6 +19,7 @@ import {
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
   trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve,
+  creerSectionDossierPourCompteur,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -787,6 +788,7 @@ function attachAddFormListeners() {
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Ajout…</span>`;
     try {
       await creerCompteur(site.id, site.nom, compteur);
+      creerSectionDossierPourCompteur(site.id, type, compteur.nom).catch(e => console.error("Ajout équipement dossier de site échoué :", e));
       ui.addingSiteId = null;
       ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null; ui.addingNbIndex = null;
       ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;

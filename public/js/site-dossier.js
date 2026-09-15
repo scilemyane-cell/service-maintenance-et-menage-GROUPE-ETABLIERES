@@ -1112,8 +1112,8 @@ function renderEdit(dOriginal, workingCopy) {
             <label>Procédure / consignes<input data-sec-procedure="${i}" value="${esc(s.procedure || '')}" placeholder="ex. clé de levage requise…"></label>
           </div>
           `)}
-          ${!estBoiteACles && !s.multiLignes ? `
-          <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photos & documents</label>
+          ${!estBoiteACles && (!s.multiLignes || (s.photos && s.photos.length > 0)) ? `
+          <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">${s.multiLignes ? "Anciennes photos (avant passage en mode plusieurs éléments)" : "Photos & documents"}</label>
           ${photoGalleryHTML(s, i, true)}
           ` : ""}
         </div>
@@ -1149,7 +1149,14 @@ function renderEdit(dOriginal, workingCopy) {
   mountedContainer.querySelectorAll("[data-sec-multilignes]").forEach(cb => cb.addEventListener("change", () => {
     const s = data.sections[cb.dataset.secMultilignes];
     s.multiLignes = cb.checked;
-    if (s.multiLignes && !s.lignes) s.lignes = [];
+    if (s.multiLignes && !s.lignes) {
+      // Ne jamais faire disparaître ce qui était déjà saisi en mode
+      // simple : la première ligne reprend l'emplacement/procédure déjà
+      // renseignés, plutôt que de les laisser orphelins et invisibles.
+      s.lignes = (s.emplacement || s.procedure)
+        ? [{ titre: "", valeur: s.emplacement || "", notes: s.procedure || "", photos: [] }]
+        : [];
+    }
     renderEdit(dOriginal, data);
   }));
   mountedContainer.querySelectorAll("[data-ligne-titre]").forEach(inp => inp.addEventListener("input", () => {

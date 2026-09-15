@@ -12,6 +12,7 @@ import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
   collection, query, where,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
 
 const COMPTEURS = "compteurs";
 const RELEVES = "compteurs-releves";
@@ -109,6 +110,31 @@ export async function synchroniserEmplacementsCompteurs(dossierId, sections) {
       await updateDoc(doc(db, COMPTEURS, d.id), { emplacement: nouvelEmplacement });
     }
   }
+}
+
+const TITRE_SECTION_PAR_TYPE = {
+  eau: "Compteur d'eau", gaz: "Compteur de gaz",
+  elec: "Compteur électrique (Linky)", chauffage: "Compteur de chauffage urbain",
+};
+
+// À appeler juste après la création d'un nouveau compteur (voir
+// compteurs.js) : si le dossier de site de ce compteur n'a encore aucun
+// équipement correspondant au type créé (eau/gaz/élec/chauffage), en
+// ajoute un automatiquement — coché "Concerné" — à la liste des
+// équipements & organes techniques du dossier, pour que le compteur
+// apparaisse aussi là-bas sans ressaisie manuelle. Ne fait rien si une
+// section correspondante existe déjà (pour ne jamais créer de doublon).
+export async function creerSectionDossierPourCompteur(dossierId, type, nomCompteur) {
+  if (!dossierId) return;
+  const dossier = await getDossierUnique(dossierId);
+  if (!dossier) return;
+  const sections = dossier.sections || [];
+  if (trouverSectionPourType(sections, type)) return; // déjà couvert, rien à faire
+  const nouvellesSections = [
+    ...sections,
+    { titre: nomCompteur || TITRE_SECTION_PAR_TYPE[type] || "Compteur", concerne: true, emplacement: "", procedure: "", photos: [] },
+  ];
+  await saveDossier(dossierId, { ...dossier, sections: nouvellesSections });
 }
 
 const JOURS_TOLERANCE_MENSUEL = 32; // au-delà, un relevé mensuel est considéré "en retard"
