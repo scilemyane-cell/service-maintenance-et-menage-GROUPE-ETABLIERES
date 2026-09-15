@@ -138,9 +138,10 @@ function formatDate(ms) {
 function formatValeurs(compteur) {
   const v = compteur.dernierReleve?.valeurs;
   if (!v) return "—";
+  const illisibles = compteur.dernierReleve?.illisibles || {};
   const cles = clesIndex(compteur);
-  if (cles.length > 1) return cles.map(k => `${k}\u00A0${v[k] ?? "?"}`).join(" · ");
-  return `${v.valeur ?? "?"} ${uniteValeur(compteur)}`;
+  if (cles.length > 1) return cles.map(k => `${k}\u00A0${illisibles[k] ? "🌫️ illisible" : (v[k] ?? "?")}`).join(" · ");
+  return illisibles.valeur ? "🌫️ illisible" : `${v.valeur ?? "?"} ${uniteValeur(compteur)}`;
 }
 
 // =================================================================
@@ -496,7 +497,7 @@ function renderHistoriqueHTML(historique, compteur) {
             return `
             <tr>
               <td>${formatDate(r.createdAt)}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
-              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.valeurs?.[k] ?? "?"}`).join(" · ") : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`}</td>
+              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
               <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
               <td style="white-space:nowrap">
@@ -935,16 +936,16 @@ async function confirmerMalgreAnomalies(compteur, valeurs) {
 // synchronisation se fera automatiquement au retour de connexion.
 // Renvoie { statut: "envoye" | "en_attente" }, ou lève une erreur pour
 // tout autre problème (droits, etc.).
-async function finaliserEnregistrementReleve(compteur, valeurs, photos, dateAntidatee) {
+async function finaliserEnregistrementReleve(compteur, valeurs, photos, dateAntidatee, illisibles = {}) {
   try {
     const photosEnvoyees = await envoyerToutesLesPhotos(compteur, photos);
-    await enregistrerReleve(compteur, valeurs, photosEnvoyees, mountedUser, dateAntidatee);
+    await enregistrerReleve(compteur, valeurs, photosEnvoyees, mountedUser, dateAntidatee, illisibles);
     return { statut: "envoye" };
   } catch (e) {
     if (!estErreurReseau(e)) throw e;
     const photosFiles = {};
     for (const [cle, photo] of Object.entries(photos)) photosFiles[cle] = photo.file;
-    await enqueuePendingReleve({ compteur, valeurs, photosFiles, user: mountedUser, dateAntidatee });
+    await enqueuePendingReleve({ compteur, valeurs, photosFiles, user: mountedUser, dateAntidatee, illisibles });
     return { statut: "en_attente" };
   }
 }
@@ -957,7 +958,7 @@ async function traiterReleveEnAttente(entry) {
   const photos = {};
   for (const [cle, file] of Object.entries(entry.photosFiles)) photos[cle] = { file };
   const photosEnvoyees = await envoyerToutesLesPhotos(entry.compteur, photos);
-  await enregistrerReleve(entry.compteur, entry.valeurs, photosEnvoyees, entry.user, entry.dateAntidatee);
+  await enregistrerReleve(entry.compteur, entry.valeurs, photosEnvoyees, entry.user, entry.dateAntidatee, entry.illisibles || {});
 }
 
 // =================================================================
@@ -970,20 +971,28 @@ async function ouvrirReleve(compteurId, retourSiteId) {
   ui.screen = "releve";
   ui.releveCompteurId = compteurId;
   ui.releveRetourSiteId = retourSiteId;
-  ui.releveEnCours = { compteur, valeurs: {}, photos: {} };
+  ui.releveEnCours = { compteur, valeurs: {}, photos: {}, illisibles: {} };
   render();
 }
 
 function renderReleve() {
-  const { compteur, valeurs, photos } = ui.releveEnCours;
+  const { compteur, valeurs, photos, illisibles } = ui.releveEnCours;
   const complet = photosCompletes(compteur, photos, mountedUser);
   const champs = clesIndex(compteur).length > 1
     ? clesIndex(compteur).map(k => `
         <label>${k} <span style="color:var(--text-dim);font-weight:400">(${INDEX_LABELS[k]})</span>
-          <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh">
+          <input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-r-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh" ${illisibles[k] ? "disabled" : ""}>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);margin:-6px 0 4px;grid-column:1/-1">
+          <input type="checkbox" data-illisible="${k}" ${illisibles[k] ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--gold)">
+          🌫️ Illisible (buée, cadran cassé, inaccessible…)
         </label>
       `).join("")
-    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-r-valeur" value="${valeurs.valeur ?? ""}" placeholder="${uniteValeur(compteur)}"></label>`;
+    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-r-valeur" value="${valeurs.valeur ?? ""}" placeholder="${uniteValeur(compteur)}" ${illisibles.valeur ? "disabled" : ""}></label>
+       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);margin:-6px 0 4px;grid-column:1/-1">
+         <input type="checkbox" data-illisible="valeur" ${illisibles.valeur ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--gold)">
+         🌫️ Illisible (buée, cadran cassé, inaccessible…)
+       </label>`;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -1014,12 +1023,18 @@ function renderReleve() {
 
   function syncValeurs() {
     if (clesIndex(compteur).length > 1) {
-      clesIndex(compteur).forEach(k => { const el = document.getElementById(`cpt-r-${k}`); if (el) valeurs[k] = el.value; });
+      clesIndex(compteur).forEach(k => { const el = document.getElementById(`cpt-r-${k}`); if (el && !illisibles[k]) valeurs[k] = el.value; });
     } else {
-      const el = document.getElementById("cpt-r-valeur"); if (el) valeurs.valeur = el.value;
+      const el = document.getElementById("cpt-r-valeur"); if (el && !illisibles.valeur) valeurs.valeur = el.value;
     }
   }
   mountedContainer.querySelectorAll("input[type=number]").forEach(el => el.addEventListener("input", syncValeurs));
+  mountedContainer.querySelectorAll("[data-illisible]").forEach(cb => cb.addEventListener("change", () => {
+    const k = cb.dataset.illisible;
+    illisibles[k] = cb.checked;
+    if (cb.checked) valeurs[k] = ""; // une valeur illisible ne doit jamais être confondue avec un vrai relevé
+    render();
+  }));
 
   document.getElementById("cpt-r-quitter").addEventListener("click", () => {
     ui.screen = "liste"; ui.releveCompteurId = null; ui.releveEnCours = null;
@@ -1032,6 +1047,8 @@ function renderReleve() {
     syncValeurs();
     const statusEl = document.getElementById("cpt-r-status");
     if (!photosCompletes(compteur, photos, mountedUser)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    const incomplet = clesIndex(compteur).some(k => !illisibles[k] && (valeurs[k] === undefined || valeurs[k] === ""));
+    if (incomplet) { statusEl.innerHTML = `<span style="color:var(--red)">Renseigne une valeur pour chaque index, ou coche "Illisible" s'il ne peut pas être lu.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
     if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const dateChoisie = peutAntidater(mountedUser) ? dateInputVersTimestamp(document.getElementById("cpt-r-date")?.value) : null;
@@ -1039,7 +1056,7 @@ function renderReleve() {
     const estAnterieure = dateChoisie && document.getElementById("cpt-r-date").value !== aujourdHui;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      const { statut } = await finaliserEnregistrementReleve(compteur, valeurs, photos, estAnterieure ? dateChoisie : null);
+      const { statut } = await finaliserEnregistrementReleve(compteur, valeurs, photos, estAnterieure ? dateChoisie : null, illisibles);
       ui.screen = "liste"; ui.releveCompteurId = null; ui.releveEnCours = null;
       if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
       if (statut === "en_attente") {
@@ -1081,14 +1098,20 @@ function renderRapide() {
   }
 
   const compteur = liste[ui.rapideIndex];
-  ui.releveEnCours = ui.releveEnCours && ui.releveEnCours.compteur.id === compteur.id ? ui.releveEnCours : { compteur, valeurs: {}, photos: {} };
-  const { valeurs, photos } = ui.releveEnCours;
+  ui.releveEnCours = ui.releveEnCours && ui.releveEnCours.compteur.id === compteur.id ? ui.releveEnCours : { compteur, valeurs: {}, photos: {}, illisibles: {} };
+  const { valeurs, photos, illisibles } = ui.releveEnCours;
   const complet = photosCompletes(compteur, photos, mountedUser);
   const champs = clesIndex(compteur).length > 1
     ? clesIndex(compteur).map(k => `
-        <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh"></label>
+        <label>${k}<input type="number" inputmode="decimal" min="0" step="0.01" id="cpt-rap-${k}" value="${valeurs[k] ?? ""}" placeholder="kWh" ${illisibles[k] ? "disabled" : ""}></label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);margin:-6px 0 4px;grid-column:1/-1">
+          <input type="checkbox" data-illisible="${k}" ${illisibles[k] ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--gold)"> 🌫️ Illisible
+        </label>
       `).join("")
-    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-rap-valeur" value="${valeurs.valeur ?? ""}" placeholder="${uniteValeur(compteur)}"></label>`;
+    : `<label>Valeur relevée<input type="number" inputmode="decimal" min="0" step="0.001" id="cpt-rap-valeur" value="${valeurs.valeur ?? ""}" placeholder="${uniteValeur(compteur)}" ${illisibles.valeur ? "disabled" : ""}></label>
+       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);margin:-6px 0 4px;grid-column:1/-1">
+         <input type="checkbox" data-illisible="valeur" ${illisibles.valeur ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--gold)"> 🌫️ Illisible
+       </label>`;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -1121,12 +1144,18 @@ function renderRapide() {
 
   function syncValeurs() {
     if (clesIndex(compteur).length > 1) {
-      clesIndex(compteur).forEach(k => { const el = document.getElementById(`cpt-rap-${k}`); if (el) valeurs[k] = el.value; });
+      clesIndex(compteur).forEach(k => { const el = document.getElementById(`cpt-rap-${k}`); if (el && !illisibles[k]) valeurs[k] = el.value; });
     } else {
-      const el = document.getElementById("cpt-rap-valeur"); if (el) valeurs.valeur = el.value;
+      const el = document.getElementById("cpt-rap-valeur"); if (el && !illisibles.valeur) valeurs.valeur = el.value;
     }
   }
   mountedContainer.querySelectorAll("input[type=number]").forEach(el => el.addEventListener("input", syncValeurs));
+  mountedContainer.querySelectorAll("[data-illisible]").forEach(cb => cb.addEventListener("change", () => {
+    const k = cb.dataset.illisible;
+    illisibles[k] = cb.checked;
+    if (cb.checked) valeurs[k] = "";
+    render();
+  }));
 
   document.getElementById("cpt-rap-quitter").addEventListener("click", () => { ui.rapideSiteId = null; ui.releveEnCours = null; ui.ouverts.add(site.id); render(); });
   document.getElementById("cpt-rap-passer").addEventListener("click", () => { ui.rapideIndex++; ui.releveEnCours = null; render(); });
@@ -1136,6 +1165,8 @@ function renderRapide() {
     syncValeurs();
     const statusEl = document.getElementById("cpt-rap-status");
     if (!photosCompletes(compteur, photos, mountedUser)) { statusEl.innerHTML = `<span style="color:var(--red)">Il manque au moins une photo.</span>`; return; }
+    const incomplet = clesIndex(compteur).some(k => !illisibles[k] && (valeurs[k] === undefined || valeurs[k] === ""));
+    if (incomplet) { statusEl.innerHTML = `<span style="color:var(--red)">Renseigne une valeur pour chaque index, ou coche "Illisible".</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
     if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const aujourdHui = new Date().toISOString().slice(0, 10);
@@ -1143,8 +1174,8 @@ function renderRapide() {
     const dateChoisie = peutAntidater(mountedUser) && dateSaisie && dateSaisie !== aujourdHui ? dateInputVersTimestamp(dateSaisie) : null;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      const { statut } = await finaliserEnregistrementReleve(compteur, valeurs, photos, dateChoisie);
-      compteur.dernierReleve = { at: dateChoisie || Date.now(), valeurs, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
+      const { statut } = await finaliserEnregistrementReleve(compteur, valeurs, photos, dateChoisie, illisibles);
+      compteur.dernierReleve = { at: dateChoisie || Date.now(), valeurs, illisibles, releveParNom: mountedUser?.nom || mountedUser?.email }; // reflet immédiat, sans recharger
       if (statut === "en_attente") statusEl.innerHTML = `<span style="color:var(--gold)">📡 Pas de réseau — enregistré localement, sera envoyé automatiquement.</span>`;
       ui.rapideIndex++;
       ui.releveEnCours = null;

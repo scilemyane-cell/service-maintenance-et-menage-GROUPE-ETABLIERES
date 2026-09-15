@@ -247,7 +247,7 @@ export async function getCompteurUnique(id) {
 // saisir un relevé à une date passée (ex. oublié la semaine dernière) —
 // réservé aux éditeurs côté interface ET côté règles Firestore, un
 // technicien ne pouvant enregistrer qu'à la date/heure du moment.
-export async function enregistrerReleve(compteur, valeurs, photos, user, dateAntidatee = null) {
+export async function enregistrerReleve(compteur, valeurs, photos, user, dateAntidatee = null, illisibles = {}) {
   const at = dateAntidatee || Date.now();
   await addDoc(collection(db, RELEVES), {
     compteurId: compteur.id,
@@ -256,6 +256,7 @@ export async function enregistrerReleve(compteur, valeurs, photos, user, dateAnt
     type: compteur.type,
     nomCompteur: compteur.nom,
     valeurs,
+    illisibles, // { [clé]: true } — index relevé comme illisible (buée, cadran cassé…) plutôt qu'une vraie valeur
     photos, // { [clé]: { itemId, name } }
     releveParUid: user?.uid || null,
     releveParNom: user?.nom || user?.email || "Inconnu",
@@ -264,7 +265,7 @@ export async function enregistrerReleve(compteur, valeurs, photos, user, dateAnt
   });
   await updateDoc(doc(db, COMPTEURS, compteur.id), {
     dernierReleve: {
-      at, valeurs, photos,
+      at, valeurs, photos, illisibles,
       releveParNom: user?.nom || user?.email || "Inconnu",
     },
   });
