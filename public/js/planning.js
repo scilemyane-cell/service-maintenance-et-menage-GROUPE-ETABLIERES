@@ -221,9 +221,10 @@ function renderArchiveReleves(container, user) {
 // =================================================================
 const STATUTS_NOTE_FRAIS = {
   salarie_prive: "Salarié droit privé", salarie_public: "Salarié droit public",
-  intervenant: "Intervenant (facturation)", etudiant: "Étudiants",
+  etudiant: "Étudiants", intervenant: "Intervenant facturation",
+  intervenant_benevole: "Intervenant bénévole",
 };
-const TARIF_KM = 0.32;
+const TARIF_KM = 0.447; // taux officiel CG01 (0,447 €/km)
 // Le technicien est remboursé pour le trajet domicile ↔ service
 // technique (puis prend un véhicule de service pour se rendre sur le
 // site d'intervention lui-même — ce dernier trajet n'est pas à ses
@@ -473,26 +474,27 @@ function imprimerNoteDeFrais(nom, mois, lignes) {
           <b>Codification : CG 01</b><br>Rattachement : CG - Compta/Gestion
         </div>
       </div>
-      <h2 style="text-align:center;margin:0 0 14px;font-size:16px;background:#eee;padding:6px">NOTE DE FRAIS DE DEPLACEMENTS – ECOLE &amp; ARMONIA</h2>
+      <h2 style="text-align:center;margin:0 0 10px;font-size:16px;background:#eee;padding:6px">NOTE DE FRAIS DE DEPLACEMENTS – ECOLE &amp; ARMONIA</h2>
+      <p style="margin:0 0 10px;font-style:italic">Merci de compléter toutes les colonnes afin que votre demande soit traitée dans les meilleurs délais.</p>
       <p style="margin:0 0 4px"><b>NOM Prénom :</b> ${esc(nom)} &nbsp;&nbsp;&nbsp;&nbsp; <b>Mois :</b> ${esc(nomMois)}</p>
       <p style="margin:0 0 4px"><b>Association :</b> ${coche(c.association !== "ARMONIA")} ECOLE &nbsp; ${coche(c.association === "ARMONIA")} ARMONIA</p>
       <p style="margin:0 0 4px"><b>Statut :</b>
         ${coche((c.statut || "salarie_prive") === "salarie_prive")} Salarié droit privé &nbsp;
         ${coche(c.statut === "salarie_public")} Salarié droit public &nbsp;
-        ${coche(c.statut === "intervenant")} Intervenant (facturation) &nbsp;
-        ${coche(c.statut === "etudiant")} Étudiants
+        ${coche(c.statut === "etudiant")} Étudiants &nbsp;
+        ${coche(c.statut === "intervenant")} Intervenant facturation &nbsp;
+        ${coche(c.statut === "intervenant_benevole")} Intervenant bénévole
       </p>
-      <p style="margin:0 0 4px"><b>Site principal :</b> ${esc(c.sitePrincipal || "—")}</p>
-      <p style="margin:0 0 10px"><b>Adresse complète :</b> ${esc(c.adresseDomicile || "—")}</p>
+      <p style="margin:0 0 10px"><b>Site principal :</b> ${esc(c.sitePrincipal || "—")}</p>
 
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr>
           <th style="border:1px solid #999;padding:5px;background:#eee">DATE</th>
           <th style="border:1px solid #999;padding:5px;background:#eee">Lieu départ</th>
           <th style="border:1px solid #999;padding:5px;background:#eee">Ville de destination</th>
-          <th style="border:1px solid #999;padding:5px;background:#eee">Nature de la mission</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Nature la mission</th>
           <th style="border:1px solid #999;padding:5px;background:#eee">Nbr Km A/R</th>
-          <th style="border:1px solid #999;padding:5px;background:#eee">Frais annexes *</th>
+          <th style="border:1px solid #999;padding:5px;background:#eee">Frais annexes *<br><span style="font-weight:400;font-size:9px">(Péages, restaurant, parking…)</span></th>
         </tr></thead>
         <tbody>
           ${lignes.map(l => `
@@ -514,18 +516,20 @@ function imprimerNoteDeFrais(nom, mois, lignes) {
           </tr>
         </tfoot>
       </table>
-      <p style="font-size:10px;margin:6px 0 0">*Frais annexes : joindre les justificatifs. En cas de repas, indiquer nom et nombre de personnes.</p>
 
-      <div style="display:flex;justify-content:space-between;margin-top:24px">
-        <div style="width:45%;border:1px solid #999;padding:8px;font-size:11px">
-          <b>RESERVE ADMINISTRATION</b><br>Tarif de remboursement du km : ${TARIF_KM.toFixed(2).replace(".", ",")} €<br><br><br>
-          <i>Cachet « comptabilité » à remplir et valider par le Directeur Délégué</i>
+      <div style="display:flex;justify-content:space-between;margin-top:18px;gap:16px">
+        <div style="width:48%;border:1px solid #999;padding:8px;font-size:11px">
+          <b>SIGNATURE DU RESPONSABLE HIERARCHIQUE</b><br><span style="font-size:10px">Avant transmission au siège</span><br><br>
+          Tarif de remboursement du km : ${TARIF_KM.toFixed(3).replace(".", ",")} €
         </div>
-        <div style="width:45%;border:1px solid #999;padding:8px;font-size:11px;text-align:center">
+        <div style="width:48%;border:1px solid #999;padding:8px;font-size:11px;text-align:center">
           <b>SIGNATURE DU DEMANDEUR</b>
         </div>
       </div>
-      <p style="font-size:9px;color:#666;margin-top:12px">Le nombre de kms déclarés doit s'appuyer sur le trajet le plus court proposé par MAPPY entre la résidence administrative du salarié (lieu de travail habituel) et la ville de déplacement. C'est sur cette base que se fera le remboursement.</p>
+      <p style="font-size:10px;margin:10px 0 0">*Frais annexes : joindre les justificatifs. En cas de repas, indiquer nom et nombre de personnes.</p>
+      <p style="font-size:10px;margin:10px 0 4px">Dans le cas d'un remboursement par virement, merci de cocher la case ci-dessous et de joindre un RIB :</p>
+      <p style="font-size:10px;margin:0">☐ Je souhaite que le remboursement de mes frais générés dans le cadre de ma mission soit effectué par virement. Je joins à la présente autorisation un RIB et j'accepte donc de communiquer mes coordonnées bancaires afin d'obtenir le remboursement de mes déplacements et frais par virement bancaire pour toutes mes interventions auprès de l'association ainsi que pour mes prochaines interventions sauf avis contraire de ma part.</p>
+      <p style="font-size:9px;color:#666;margin-top:12px">Le nombre de kms déclarés doit s'appuyer sur le trajet le plus court proposé par MAPPY entre la ville de la résidence administrative du salarié (lieu de travail habituel) et la ville de déplacement. C'est sur cette base que se fera le remboursement. Un forfait est appliqué lors des déplacements entre les sites (CG11).</p>
     </div>
   `;
 
