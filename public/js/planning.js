@@ -415,7 +415,7 @@ function renderApercuNoteFrais() {
       <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Aperçu — décoche les journées à ne pas inclure, modifie le trajet si besoin, avant d'imprimer</h4>
       <div class="table-wrap">
         <table style="font-size:12px">
-          <thead><tr><th></th><th>Date</th><th>N° intervention</th><th>Nature</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
+          <thead><tr><th></th><th>Date</th><th>N° intervention</th><th>Nature</th><th>Ville de destination</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
           <tbody>
             ${lignes.map((l, i) => `
               <tr style="${l.incluse ? "" : "opacity:.45"}">
@@ -423,6 +423,7 @@ function renderApercuNoteFrais() {
                 <td>${new Date(l.date).toLocaleDateString("fr-FR")}</td>
                 <td style="font-family:ui-monospace,monospace;font-size:11px">${esc(l.numeros || "—")}</td>
                 <td>${esc(l.nature)}</td>
+                <td><input data-note-destination="${i}" value="${esc(l.villeDestination)}" style="width:200px" ${l.incluse ? "" : "disabled"}></td>
                 <td><input type="number" min="0" step="0.1" data-note-km="${i}" value="${l.km}" style="width:80px" ${l.incluse ? "" : "disabled"}></td>
                 <td><input data-note-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="ex. repas x2" style="width:140px" ${l.incluse ? "" : "disabled"}></td>
               </tr>
@@ -444,6 +445,9 @@ function attacherApercuNoteFraisListeners() {
   mountedContainer.querySelectorAll("[data-note-incluse]").forEach(cb => cb.addEventListener("change", () => {
     ui.noteFraisPreview.lignes[parseInt(cb.dataset.noteIncluse, 10)].incluse = cb.checked;
     renderAll();
+  }));
+  mountedContainer.querySelectorAll("[data-note-destination]").forEach(inp => inp.addEventListener("input", () => {
+    ui.noteFraisPreview.lignes[parseInt(inp.dataset.noteDestination, 10)].villeDestination = inp.value;
   }));
   mountedContainer.querySelectorAll("[data-note-km]").forEach(inp => inp.addEventListener("input", () => {
     ui.noteFraisPreview.lignes[parseInt(inp.dataset.noteKm, 10)].km = parseFloat(inp.value) || 0;
