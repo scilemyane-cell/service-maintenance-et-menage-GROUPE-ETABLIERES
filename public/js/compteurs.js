@@ -525,7 +525,7 @@ let graphiquesActifs = {}; // conserve les instances Chart.js pour les détruire
 // Graphique en bâtons de la consommation mensuelle sur les 12 derniers
 // mois — plus parlant qu'une courbe brute des index pour repérer une
 // tendance ou un mois anormal. Pour l'électricité, uniquement les 4
-// index d'ÉNERGIE (HPH/HCH/HPE/HCE) : les 4 index de PUISSANCE MAXIMALE
+// index d'ÉNERGIE (HPSH/HCSH/HPSB/HCSB) : les 4 index de PUISSANCE MAXIMALE
 // (120/121/122/123) ne se soustraient pas d'un mois à l'autre de la même
 // façon (ce ne sont pas des compteurs cumulatifs de consommation), ils
 // restent visibles dans le tableau d'historique mais pas dans ce graphique.
@@ -631,7 +631,7 @@ function renderAddForm(site) {
         <div class="form-grid" style="margin-top:10px">
           <label>Nombre d'index de ce compteur
             <select id="cpt-new-nbindex">
-              <option value="4" ${nbIndex === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPH/HCH/HPE/HCE)</option>
+              <option value="4" ${nbIndex === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
               <option value="1" ${nbIndex === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
             </select>
           </label>
@@ -686,7 +686,7 @@ function renderEditForm(c) {
         <div class="form-grid" style="margin-top:10px">
           <label>Nombre d'index de ce compteur
             <select id="cpt-edit-nbindex">
-              <option value="4" ${(c.nbIndex || 4) === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPH/HCH/HPE/HCE)</option>
+              <option value="4" ${(c.nbIndex || 4) === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
               <option value="1" ${(c.nbIndex || 4) === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
             </select>
           </label>

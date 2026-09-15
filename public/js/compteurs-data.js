@@ -1,11 +1,11 @@
 // compteurs-data.js
 // Relevés de compteurs (eau, gaz, électricité) par site — nouvel onglet
 // indépendant "Relevé compteur". Un compteur électrique porte 4 index
-// tarifaires standards pour les bâtiments tertiaires en Tarif Jaune/Vert :
-// HPH (Heures Pleines Hiver), HCH (Heures Creuses Hiver), HPE (Heures
-// Pleines Été), HCE (Heures Creuses Été) — à relever ensemble à chaque
-// passage, avec une seule photo du tableau. Un compteur eau/gaz n'a
-// qu'un seul index.
+// tarifaires pour les bâtiments tertiaires en Tarif Vert/Contrat Flexible :
+// HPSH (Heures Pleines Saison Haute), HCSH (Heures Creuses Saison Haute),
+// HPSB (Heures Pleines Saison Basse), HCSB (Heures Creuses Saison Basse)
+// — à relever ensemble à chaque passage, avec une seule photo du tableau.
+// Un compteur eau/gaz n'a qu'un seul index.
 
 import { db } from "./firebase-init.js";
 import {
@@ -16,15 +16,18 @@ import {
 const COMPTEURS = "compteurs";
 const RELEVES = "compteurs-releves";
 
-// 4 index tarifaires pour l'électricité (Tarif Jaune/Vert, bâtiments
-// tertiaires) — "120/121/122/123" sont les codes affichés directement
-// sur l'écran du compteur (l'équivalent des libellés HPH/HCH/HPE/HCE),
-// pas une donnée différente : ce sont juste deux façons de nommer les
-// mêmes 4 périodes tarifaires.
+// 4 index tarifaires pour l'électricité (Tarif Vert/Contrat Flexible,
+// bâtiments tertiaires à forte puissance souscrite) — "120/121/122/123"
+// sont les codes affichés directement sur l'écran du compteur, et
+// correspondent aux 4 périodes tarifaires Saison Haute (nov-mars) /
+// Saison Basse (avr-oct) x Heures Pleines / Heures Creuses :
+// HPSH, HCSH, HPSB, HCSB (terminologie RTE/EDF officielle pour ce type
+// de contrat — vérifiée le 15/09/2026, à ne pas confondre avec
+// HPH/HCH/HPE/HCE qui est la terminologie d'un autre type de contrat).
 export const INDEX_ELEC = ["120", "121", "122", "123"];
 export const INDEX_LABELS = {
-  "120": "HPH — Heures Pleines Hiver", "121": "HCH — Heures Creuses Hiver",
-  "122": "HPE — Heures Pleines Été", "123": "HCE — Heures Creuses Été",
+  "120": "HPSH — Heures Pleines Saison Haute", "121": "HCSH — Heures Creuses Saison Haute",
+  "122": "HPSB — Heures Pleines Saison Basse", "123": "HCSB — Heures Creuses Saison Basse",
 };
 export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
@@ -210,7 +213,7 @@ export async function getCompteurUnique(id) {
 // Enregistre un relevé (historique) et met à jour le cache "dernier
 // relevé" sur le compteur lui-même, pour un affichage rapide sans avoir
 // à interroger l'historique à chaque fois. `photos` est un objet avec
-// les mêmes clés que `valeurs` (HPH/HCH/HPE/HCE pour l'électricité,
+// les mêmes clés que `valeurs` (HPSH/HCSH/HPSB/HCSB pour l'électricité,
 // "valeur" pour eau/gaz) — une photo par index relevé, l'écran d'un
 // compteur multi-tarif n'affichant souvent qu'un seul index à la fois.
 // `dateAntidatee` (optionnel, en ms) permet à un superviseur/admin de
