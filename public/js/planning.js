@@ -68,6 +68,7 @@ let ui = {
   editingId: null,
   ficheOuverte: null, // nom de la personne dont la fiche technicien est dépliée
   noteFraisMois: new Date().toISOString().slice(0, 7),
+  noteFraisPreview: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
@@ -285,6 +286,7 @@ function renderCoordonnees(container, perms) {
     renderAll();
   }));
   attacherFicheTechnicienListeners();
+  attacherApercuNoteFraisListeners();
 }
 
 // Fiche détaillée d'un technicien : adresse, association, statut, site
@@ -319,6 +321,7 @@ function renderFicheTechnicien(nom, c) {
         <button class="add-btn" data-generer-note="${esc(nom)}" style="font-size:12px">🖨️ Générer la note de frais</button>
       </div>
       <div id="fiche-note-status-${esc(nom)}" style="font-size:12px;margin-top:6px"></div>
+      ${ui.noteFraisPreview && ui.noteFraisPreview.nom === nom ? renderApercuNoteFrais() : ""}
     </div>
   `;
 }
@@ -348,41 +351,110 @@ function attacherFicheTechnicienListeners() {
     const nom = btn.dataset.genererNote;
     const mois = document.getElementById(`fiche-mois-${nom}`).value;
     ui.noteFraisMois = mois;
-    await genererNoteDeFrais(nom, mois);
+    ouvrirApercuNoteFrais(nom, mois);
   }));
 }
 
-// Génère la note de frais de déplacements du mois pour un technicien,
-// en reproduisant le formulaire officiel papier (CG01) du groupe
-// Établières — imprimable/enregistrable en PDF via la boîte de dialogue
-// d'impression du navigateur.
-async function genererNoteDeFrais(nom, mois) {
-  const statusEl = document.getElementById(`fiche-note-status-${nom}`);
+// Calcule les lignes de la note de frais (une par jour travaillé) sans
+// rien afficher — réutilisé à la fois pour l'aperçu modifiable et pour
+// l'impression finale, qui part des valeurs éventuellement corrigées
+// dans l'aperçu plutôt que de tout recalculer depuis les interventions.
+function calculerLignesNoteFrais(nom, mois) {
   const c = state.coordonnees[nom] || {};
   const kmAllerRetour = c.kmDomicileService || 0;
-  const [annee, moisNum] = mois.split("-").map(Number);
   const interventionsMois = state.interventions
     .filter(i => i.technicien === nom && i.date && i.date.startsWith(mois))
     .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (interventionsMois.length === 0) { statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; return; }
-  if (!kmAllerRetour) {
-    statusEl.innerHTML = `<span style="color:var(--red)">⚠️ Kilomètres domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} non renseignés. Complète-les dans la fiche ci-dessus avant de générer.</span>`;
-    return;
-  }
-  statusEl.innerHTML = "";
-
-  // Un seul trajet domicile ↔ service technique par JOUR travaillé, même
-  // si plusieurs interventions (sur des sites différents) ont eu lieu ce
-  // jour-là — le technicien ne fait cet aller-retour qu'une fois avant de
-  // prendre le véhicule de service pour la suite.
   const parJour = new Map();
   interventionsMois.forEach(i => {
     if (!parJour.has(i.date)) parJour.set(i.date, []);
     parJour.get(i.date).push(i);
   });
-  const jours = [...parJour.keys()].sort();
-  const totalKm = kmAllerRetour * jours.length;
+  return [...parJour.keys()].sort().map(jour => {
+    const interventionsJour = parJour.get(jour);
+    return {
+      date: jour,
+      lieuDepart: c.adresseDomicile || "—",
+      villeDestination: `${SERVICE_TECHNIQUE_NOM} — ${SERVICE_TECHNIQUE_ADRESSE}`,
+      nature: interventionsJour.map(i => `${i.site}${i.type ? " (" + i.type + ")" : ""}`).join(" ; "),
+      km: kmAllerRetour,
+      fraisAnnexes: "",
+    };
+  });
+}
+
+// Ouvre l'aperçu modifiable — avant impression, pour permettre de
+// corriger le nombre de km d'un jour précis si le trajet habituel n'a
+// pas été suivi ce jour-là (autre point de départ, déplacement
+// exceptionnel...), plutôt que d'imprimer une valeur figée à l'aveugle.
+function ouvrirApercuNoteFrais(nom, mois) {
+  const statusEl = document.getElementById(`fiche-note-status-${nom}`);
+  const c = state.coordonnees[nom] || {};
+  const lignes = calculerLignesNoteFrais(nom, mois);
+  if (lignes.length === 0) { statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; return; }
+  if (!c.kmDomicileService) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠️ Kilomètres domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} non renseignés. Complète-les dans la fiche ci-dessus avant de générer.</span>`;
+    return;
+  }
+  statusEl.innerHTML = "";
+  ui.noteFraisPreview = { nom, mois, lignes };
+  renderAll();
+}
+
+function renderApercuNoteFrais() {
+  const { lignes } = ui.noteFraisPreview;
+  const totalKm = lignes.reduce((s, l) => s + (parseFloat(l.km) || 0), 0);
+  return `
+    <div class="form-card" style="margin-top:12px;background:var(--panel)">
+      <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Aperçu — modifie le trajet d'un jour si besoin avant d'imprimer</h4>
+      <div class="table-wrap">
+        <table style="font-size:12px">
+          <thead><tr><th>Date</th><th>Nature</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
+          <tbody>
+            ${lignes.map((l, i) => `
+              <tr>
+                <td>${new Date(l.date).toLocaleDateString("fr-FR")}</td>
+                <td>${esc(l.nature)}</td>
+                <td><input type="number" min="0" step="0.1" data-note-km="${i}" value="${l.km}" style="width:80px"></td>
+                <td><input data-note-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="ex. repas x2" style="width:140px"></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Total : ${totalKm.toFixed(1)} km</p>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="add-btn" id="note-frais-imprimer" style="font-size:12px">🖨️ Imprimer</button>
+        <button class="nav-btn" id="note-frais-annuler" style="font-size:12px">Annuler</button>
+      </div>
+    </div>
+  `;
+}
+
+function attacherApercuNoteFraisListeners() {
+  if (!ui.noteFraisPreview) return;
+  mountedContainer.querySelectorAll("[data-note-km]").forEach(inp => inp.addEventListener("input", () => {
+    ui.noteFraisPreview.lignes[parseInt(inp.dataset.noteKm, 10)].km = parseFloat(inp.value) || 0;
+  }));
+  mountedContainer.querySelectorAll("[data-note-frais]").forEach(inp => inp.addEventListener("input", () => {
+    ui.noteFraisPreview.lignes[parseInt(inp.dataset.noteFrais, 10)].fraisAnnexes = inp.value;
+  }));
+  document.getElementById("note-frais-annuler")?.addEventListener("click", () => { ui.noteFraisPreview = null; renderAll(); });
+  document.getElementById("note-frais-imprimer")?.addEventListener("click", () => {
+    const { nom, mois, lignes } = ui.noteFraisPreview;
+    imprimerNoteDeFrais(nom, mois, lignes);
+  });
+}
+
+// Génère et imprime la note de frais de déplacements du mois pour un
+// technicien, en reproduisant le formulaire officiel papier (CG01) du
+// groupe Établières — imprimable/enregistrable en PDF via la boîte de
+// dialogue d'impression du navigateur. Part des lignes de l'aperçu
+// (éventuellement corrigées à la main) plutôt que de tout recalculer.
+function imprimerNoteDeFrais(nom, mois, lignes) {
+  const c = state.coordonnees[nom] || {};
+  const [annee, moisNum] = mois.split("-").map(Number);
+  const totalKm = lignes.reduce((s, l) => s + (parseFloat(l.km) || 0), 0);
   const nomMois = new Date(annee, moisNum - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const coche = (condition) => condition ? "☒" : "☐";
 
@@ -419,19 +491,16 @@ async function genererNoteDeFrais(nom, mois) {
           <th style="border:1px solid #999;padding:5px;background:#eee">Frais annexes *</th>
         </tr></thead>
         <tbody>
-          ${jours.map(jour => {
-            const interventionsJour = parJour.get(jour);
-            const nature = interventionsJour.map(i => `${i.site}${i.type ? " (" + i.type + ")" : ""}`).join(" ; ");
-            return `
+          ${lignes.map(l => `
             <tr>
-              <td style="border:1px solid #999;padding:5px">${new Date(jour).toLocaleDateString("fr-FR")}</td>
-              <td style="border:1px solid #999;padding:5px">${esc(c.adresseDomicile || "—")}</td>
-              <td style="border:1px solid #999;padding:5px">${esc(SERVICE_TECHNIQUE_NOM)} — ${esc(SERVICE_TECHNIQUE_ADRESSE)}</td>
-              <td style="border:1px solid #999;padding:5px">${esc(nature)}</td>
-              <td style="border:1px solid #999;padding:5px;text-align:center">${kmAllerRetour}</td>
-              <td style="border:1px solid #999;padding:5px"></td>
+              <td style="border:1px solid #999;padding:5px">${new Date(l.date).toLocaleDateString("fr-FR")}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(l.lieuDepart)}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(l.villeDestination)}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(l.nature)}</td>
+              <td style="border:1px solid #999;padding:5px;text-align:center">${l.km}</td>
+              <td style="border:1px solid #999;padding:5px">${esc(l.fraisAnnexes)}</td>
             </tr>
-          `;}).join("")}
+          `).join("")}
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
@@ -463,6 +532,8 @@ async function genererNoteDeFrais(nom, mois) {
   document.body.appendChild(printRoot);
   window.print();
   setTimeout(() => printRoot.remove(), 1000);
+  ui.noteFraisPreview = null;
+  renderAll();
 }
 
 // =================================================================
