@@ -396,6 +396,31 @@ export function watchCompteursAlertCount(callback) {
 // dernière valeur connue avant la fin du mois moins la dernière valeur
 // connue avant son début ; un mois sans donnée suffisante renvoie null
 // plutôt que 0 (pour ne pas laisser croire à une consommation nulle).
+export function consommationMensuelle(releves, cle, nbMois = 12) {
+  const chrono = [...releves].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const valeurAvant = (ms) => {
+    let derniere = null;
+    for (const r of chrono) {
+      if ((r.createdAt || 0) >= ms) break;
+      const v = parseFloat(r.valeurs?.[cle]);
+      if (!isNaN(v)) derniere = v;
+    }
+    return derniere;
+  };
+
+  const maintenant = new Date();
+  const mois = [];
+  for (let i = nbMois - 1; i >= 0; i--) {
+    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1);
+    const fin = new Date(maintenant.getFullYear(), maintenant.getMonth() - i + 1, 1);
+    const avant = valeurAvant(debut.getTime());
+    const apres = valeurAvant(fin.getTime());
+    const conso = (avant !== null && apres !== null) ? Math.max(0, apres - avant) : null;
+    mois.push({ label: debut.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }), valeur: conso });
+  }
+  return mois;
+}
+
 // Historique complet, tous compteurs confondus — pour le tableau de
 // bord global (consommation agrégée par type, comparaison entre sites).
 // Un seul aller-retour Firestore plutôt qu'une requête par compteur.
