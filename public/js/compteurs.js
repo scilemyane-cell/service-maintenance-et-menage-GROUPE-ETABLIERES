@@ -54,6 +54,7 @@ let state = { sites: [], compteurs: [], associations: [] };
 let pendingCount = 0;
 let syncDemarre = false; // la synchro tourne en tache de fond, independamment de l'onglet ouvert
 let associationsSubscribed = false;
+let associationsActuelles = []; // dernière valeur connue, conservée même si l'onglet est remonté (voir mountCompteurs)
 let ui = {
   screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
   addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
@@ -66,7 +67,7 @@ let ui = {
 export async function mountCompteurs(container, user) {
   mountedContainer = container;
   mountedUser = user;
-  state = { sites: [], compteurs: [], associations: [] };
+  state = { sites: [], compteurs: [], associations: associationsActuelles };
   ui = {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
     addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
@@ -84,7 +85,11 @@ export async function mountCompteurs(container, user) {
   }
   if (!associationsSubscribed) {
     associationsSubscribed = true;
-    watchAssociations((a) => { state.associations = a; if (ui.screen === "liste" && !ui.rapideSiteId) render(); });
+    watchAssociations((a) => {
+      associationsActuelles = a;
+      state.associations = a;
+      if (ui.screen === "liste" && !ui.rapideSiteId) render();
+    });
   }
   pendingCount = await countPendingReleves();
 
