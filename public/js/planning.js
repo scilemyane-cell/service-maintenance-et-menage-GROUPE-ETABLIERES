@@ -382,6 +382,7 @@ function calculerLignesNoteFrais(nom, mois) {
       nature: interventionsJour.map(i => `${i.site}${i.type ? " (" + i.type + ")" : ""}`).join(" ; "),
       km: kmAllerRetour,
       fraisAnnexes: "",
+      incluse: true,
     };
   });
 }
@@ -407,29 +408,31 @@ function ouvrirApercuNoteFrais(nom, mois, declencheePar = null) {
 
 function renderApercuNoteFrais() {
   const { lignes } = ui.noteFraisPreview;
-  const totalKm = lignes.reduce((s, l) => s + (parseFloat(l.km) || 0), 0);
+  const totalKm = lignes.filter(l => l.incluse).reduce((s, l) => s + (parseFloat(l.km) || 0), 0);
+  const nbIncluses = lignes.filter(l => l.incluse).length;
   return `
     <div class="form-card" style="margin-top:12px;background:var(--panel)">
-      <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Aperçu — modifie le trajet d'un jour si besoin avant d'imprimer</h4>
+      <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Aperçu — décoche les journées à ne pas inclure, modifie le trajet si besoin, avant d'imprimer</h4>
       <div class="table-wrap">
         <table style="font-size:12px">
-          <thead><tr><th>Date</th><th>N° intervention</th><th>Nature</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
+          <thead><tr><th></th><th>Date</th><th>N° intervention</th><th>Nature</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
           <tbody>
             ${lignes.map((l, i) => `
-              <tr>
+              <tr style="${l.incluse ? "" : "opacity:.45"}">
+                <td><input type="checkbox" data-note-incluse="${i}" ${l.incluse ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--gold)"></td>
                 <td>${new Date(l.date).toLocaleDateString("fr-FR")}</td>
                 <td style="font-family:ui-monospace,monospace;font-size:11px">${esc(l.numeros || "—")}</td>
                 <td>${esc(l.nature)}</td>
-                <td><input type="number" min="0" step="0.1" data-note-km="${i}" value="${l.km}" style="width:80px"></td>
-                <td><input data-note-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="ex. repas x2" style="width:140px"></td>
+                <td><input type="number" min="0" step="0.1" data-note-km="${i}" value="${l.km}" style="width:80px" ${l.incluse ? "" : "disabled"}></td>
+                <td><input data-note-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="ex. repas x2" style="width:140px" ${l.incluse ? "" : "disabled"}></td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
-      <p class="hint" style="margin:8px 0 0">Total : ${totalKm.toFixed(1)} km</p>
+      <p class="hint" style="margin:8px 0 0">Total : ${totalKm.toFixed(1)} km sur ${nbIncluses} journée(s) sélectionnée(s) (sur ${lignes.length})</p>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="add-btn" id="note-frais-imprimer" style="font-size:12px">🖨️ Imprimer</button>
+        <button class="add-btn" id="note-frais-imprimer" ${nbIncluses === 0 ? 'disabled style="opacity:.5"' : ''} style="font-size:12px">🖨️ Imprimer (${nbIncluses})</button>
         <button class="nav-btn" id="note-frais-annuler" style="font-size:12px">Annuler</button>
       </div>
     </div>
@@ -438,6 +441,10 @@ function renderApercuNoteFrais() {
 
 function attacherApercuNoteFraisListeners() {
   if (!ui.noteFraisPreview) return;
+  mountedContainer.querySelectorAll("[data-note-incluse]").forEach(cb => cb.addEventListener("change", () => {
+    ui.noteFraisPreview.lignes[parseInt(cb.dataset.noteIncluse, 10)].incluse = cb.checked;
+    renderAll();
+  }));
   mountedContainer.querySelectorAll("[data-note-km]").forEach(inp => inp.addEventListener("input", () => {
     ui.noteFraisPreview.lignes[parseInt(inp.dataset.noteKm, 10)].km = parseFloat(inp.value) || 0;
   }));
@@ -447,7 +454,7 @@ function attacherApercuNoteFraisListeners() {
   document.getElementById("note-frais-annuler")?.addEventListener("click", () => { ui.noteFraisPreview = null; renderAll(); });
   document.getElementById("note-frais-imprimer")?.addEventListener("click", () => {
     const { nom, mois, lignes } = ui.noteFraisPreview;
-    imprimerNoteDeFrais(nom, mois, lignes);
+    imprimerNoteDeFrais(nom, mois, lignes.filter(l => l.incluse));
   });
 }
 
