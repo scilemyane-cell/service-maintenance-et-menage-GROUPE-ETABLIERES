@@ -47,12 +47,17 @@ async function createUserAccount(email, password, nom, role) {
 let usersState = { users: [] };
 let newUserForm = { email: "", password: "", nom: "", role: "menage" };
 let currentUser = null;
+let dispositifsPourOnglets = []; // dispositifs MNA distincts, ajoutés dynamiquement à la liste des onglets bonus (ex. "Daoud Mahdi")
 
 export function mountUtilisateurs(container, user) {
   cleanup();
   currentUser = user;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchUsers((u) => { usersState.users = u; renderUtilisateurs(container); }));
+  unsubs.push(watchSites((sites) => {
+    dispositifsPourOnglets = [...new Set(sites.map(siteDispositif))].sort();
+    renderUtilisateurs(container);
+  }));
 }
 
 // Un Admin (pas Super Admin) ne peut ni attribuer, ni modifier un compte
@@ -119,7 +124,7 @@ function renderUtilisateurs(container) {
                     <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
                   </td>
                   <td style="font-size:11px;min-width:160px">
-                    ${ONGLETS_BONUS_DISPONIBLES.map(o => `<label style="display:block;white-space:nowrap"><input type="checkbox" data-user-onglet="${u.uid}:${o.id}" ${(u.extraOnglets || []).includes(o.id) ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}
+                    ${[...ONGLETS_BONUS_DISPONIBLES, ...dispositifsPourOnglets.map(d => ({ id: "disp-" + d, label: "🧽 " + d }))].map(o => `<label style="display:block;white-space:nowrap"><input type="checkbox" data-user-onglet="${u.uid}:${o.id}" ${(u.extraOnglets || []).includes(o.id) ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}
                   </td>
                   <td>
                     <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>

@@ -93,7 +93,7 @@
 
   function dispositifCategories(user) {
     return dispositifsList
-      .filter(d => hasAccess(accessMap, d, user))
+      .filter(d => hasAccess(accessMap, d, user) || (user.extraOnglets || []).includes("disp-" + d))
       .map(d => ({
         id: "disp-" + d, label: d, icon: "🧽", desc: "Fiches, traçabilité",
         subtabs: [
