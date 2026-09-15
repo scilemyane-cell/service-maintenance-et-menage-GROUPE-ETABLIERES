@@ -20,6 +20,7 @@ import {
   estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
   trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve,
   creerSectionDossierPourCompteur, libelleIndex,
+  listerTousLesReleves, consommationMensuelleAgregee, consommationRecente,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
@@ -68,6 +69,7 @@ export async function mountCompteurs(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], compteurs: [], associations: associationsActuelles };
+  statsReleves = null; // redemande l'historique complet à chaque (re)montage, plutôt qu'un cache qui pourrait dater
   ui = {
     screen: "liste", ouverts: new Set(), qrOuverts: new Set(), historiqueOuverts: new Set(),
     addingSiteId: null, addingType: null, sectionsParSite: {}, editingCompteurId: null,
@@ -127,6 +129,7 @@ function render() {
   if (ui.screen === "releve") return renderReleve();
   if (ui.rapideSiteId) return renderRapide();
   if (ui.rapportSiteId) return renderRapportSite();
+  if (ui.screen === "stats") return renderStats();
   renderListe();
 }
 
@@ -305,6 +308,7 @@ function renderListe() {
         <button class="nav-btn" id="cpt-sync-dossiers" style="width:fit-content">🔁 Ajouter les compteurs existants dans les dossiers de site</button>
         <div id="cpt-sync-dossiers-status" style="font-size:12px"></div>
       ` : ""}
+      <button class="nav-btn" id="cpt-voir-stats" style="width:fit-content;border-color:var(--gold);color:var(--gold)">📊 Tableau de bord</button>
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : groupes.map(g => `
@@ -347,6 +351,7 @@ function renderListe() {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
     }
   });
+  document.getElementById("cpt-voir-stats")?.addEventListener("click", () => { ui.screen = "stats"; render(); });
   mountedContainer.querySelectorAll("[data-toggle-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.toggleSite;
     if (ui.ouverts.has(id)) ui.ouverts.delete(id); else ui.ouverts.add(id);
@@ -546,6 +551,9 @@ async function chargerEtAfficherHistorique(compteurId) {
 }
 
 let graphiquesActifs = {}; // conserve les instances Chart.js pour les détruire avant d'en recréer une
+let graphiquesStats = {};
+let statsReleves = null; // historique complet, tous compteurs — chargé une fois à l'ouverture du tableau de bord
+let statsTypeTop = "eau"; // type sélectionné pour le classement des sites les plus consommateurs
 
 // Graphique en bâtons de la consommation mensuelle sur les 12 derniers
 // mois — plus parlant qu'une courbe brute des index pour repérer une
@@ -1044,6 +1052,137 @@ async function traiterReleveEnAttente(entry) {
 // Écran de relevé (un seul compteur) — atteint par le bouton "Relever"
 // ou par un QR scanné hors appli
 // =================================================================
+// =================================================================
+// Tableau de bord — vue d'ensemble tous compteurs/sites confondus :
+// à jour vs en retard, répartition par type/association, évolution de
+// consommation mensuelle par type, sites les plus consommateurs.
+// =================================================================
+const COULEURS_CPT = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A"];
+
+function detruireGraphiquesStats() {
+  Object.values(graphiquesStats).forEach(c => c.destroy());
+  graphiquesStats = {};
+}
+
+async function renderStats() {
+  detruireGraphiquesStats();
+  mountedContainer.innerHTML = `<div class="stack"><button class="nav-btn" id="cpt-stats-retour">← Retour</button><p class="hint">⏳ Chargement de l'historique complet…</p></div>`;
+  document.getElementById("cpt-stats-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+
+  if (!statsReleves) {
+    try { statsReleves = await listerTousLesReleves(); }
+    catch (e) { mountedContainer.innerHTML = `<div class="stack"><p class="hint" style="color:var(--red)">❌ ${esc(e.message || String(e))}</p></div>`; return; }
+  }
+  if (ui.screen !== "stats") return; // l'utilisateur a changé d'écran pendant le chargement
+
+  const compteurs = state.compteurs;
+  const parAssoc = new Map();
+  state.sites.forEach(s => { if (s.association) parAssoc.set(s.id, s.association); });
+
+  const enRetard = compteurs.filter(estEnRetard);
+  const aJour = compteurs.length - enRetard.length;
+  const illisiblesRecents = statsReleves.filter(r => {
+    if ((Date.now() - (r.createdAt || 0)) > 90 * 24 * 3600 * 1000) return false;
+    return r.illisibles && Object.values(r.illisibles).some(Boolean);
+  }).length;
+
+  const parType = {}; compteurs.forEach(c => { parType[c.type] = (parType[c.type] || 0) + 1; });
+  const typesPresents = TYPES_COMPTEUR.filter(t => parType[t] > 0);
+
+  const parAssocCount = {}; compteurs.forEach(c => { const a = parAssoc.get(c.dossierId) || "Sans association"; parAssocCount[a] = (parAssocCount[a] || 0) + 1; });
+  const assocArr = Object.entries(parAssocCount).sort((a, b) => b[1] - a[1]);
+
+  const topSitesArr = (() => {
+    const compteursDuType = compteurs.filter(c => c.type === statsTypeTop);
+    const parSite = {};
+    compteursDuType.forEach(c => {
+      const conso = consommationRecente(c, statsReleves, 365);
+      if (conso === null) return;
+      parSite[c.dossierNom] = (parSite[c.dossierNom] || 0) + conso;
+    });
+    return Object.entries(parSite).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  })();
+
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="cpt-stats-retour">← Retour</button>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+        <div class="stat-chip" style="border-color:var(--teal);color:var(--teal)">${compteurs.length} compteur(s) actif(s)</div>
+        <div class="stat-chip" style="border-color:${enRetard.length > 0 ? "var(--red)" : "var(--teal)"};color:${enRetard.length > 0 ? "var(--red)" : "var(--teal)"}">${aJour} à jour · ${enRetard.length} en retard</div>
+        <div class="stat-chip" style="border-color:var(--gold);color:var(--gold)">🌫️ ${illisiblesRecents} illisible(s) (3 derniers mois)</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par type</h3><div style="position:relative;height:200px"><canvas id="cpt-stats-type"></canvas></div></div>
+        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par association</h3><div style="position:relative;height:200px"><canvas id="cpt-stats-assoc"></canvas></div></div>
+      </div>
+
+      ${typesPresents.map(t => `
+        <div class="form-card">
+          <h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">${TYPE_ICONE[t]} Évolution ${TYPE_LABEL[t]} — 12 derniers mois (tous compteurs, ${uniteValeur({ type: t })})</h3>
+          <div style="position:relative;height:200px"><canvas id="cpt-stats-evo-${t}"></canvas></div>
+        </div>
+      `).join("")}
+
+      <div class="form-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <h3 style="margin:0;font-size:13px;color:var(--text-dim)">Sites les plus consommateurs (12 derniers mois)</h3>
+          <select id="cpt-stats-top-type">
+            ${TYPES_COMPTEUR.filter(t => parType[t] > 0).map(t => `<option value="${t}" ${statsTypeTop === t ? "selected" : ""}>${TYPE_ICONE[t]} ${TYPE_LABEL[t]}</option>`).join("")}
+          </select>
+        </div>
+        ${topSitesArr.length === 0 ? `<p class="hint">Pas assez d'historique pour ce type pour l'instant.</p>` : `<div style="position:relative;height:${Math.max(160, topSitesArr.length * 32)}px"><canvas id="cpt-stats-top"></canvas></div>`}
+      </div>
+
+      ${enRetard.length > 0 ? `
+        <div class="form-card">
+          <h3 style="margin:0 0 10px;font-size:13px;color:var(--red)">⚠️ Compteurs en retard (${enRetard.length})</h3>
+          ${enRetard.map(c => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <span>${TYPE_ICONE[c.type]} ${esc(c.nom)} — <span class="hint">${esc(c.dossierNom)}</span></span>
+              <button class="nav-btn" data-stats-relever="${c.id}" style="font-size:12px">Relever</button>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+  document.getElementById("cpt-stats-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
+  document.getElementById("cpt-stats-top-type")?.addEventListener("change", (e) => { statsTypeTop = e.target.value; render(); });
+  mountedContainer.querySelectorAll("[data-stats-relever]").forEach(btn => btn.addEventListener("click", () => ouvrirReleve(btn.dataset.statsRelever, null)));
+
+  if (!window.Chart) return; // librairie pas encore chargée (connexion lente) — chiffres et liste restent utilisables
+
+  graphiquesStats.type = new window.Chart(document.getElementById("cpt-stats-type").getContext("2d"), {
+    type: "doughnut",
+    data: { labels: typesPresents.map(t => `${TYPE_ICONE[t]} ${TYPE_LABEL[t]}`), datasets: [{ data: typesPresents.map(t => parType[t]), backgroundColor: typesPresents.map((_, i) => COULEURS_CPT[i % COULEURS_CPT.length]) }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
+  });
+  graphiquesStats.assoc = new window.Chart(document.getElementById("cpt-stats-assoc").getContext("2d"), {
+    type: "doughnut",
+    data: { labels: assocArr.map(([n]) => n), datasets: [{ data: assocArr.map(([, v]) => v), backgroundColor: assocArr.map((_, i) => COULEURS_CPT[i % COULEURS_CPT.length]) }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
+  });
+  typesPresents.forEach(t => {
+    const canvas = document.getElementById(`cpt-stats-evo-${t}`);
+    if (!canvas) return;
+    const { labels, valeurs } = consommationMensuelleAgregee(compteurs.filter(c => c.type === t), statsReleves);
+    graphiquesStats[`evo-${t}`] = new window.Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: { labels, datasets: [{ data: valeurs, backgroundColor: "rgba(217,178,76,.75)", borderColor: "#D9B24C", borderWidth: 1.5, borderRadius: 5, maxBarThickness: 26 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, x: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
+    });
+  });
+  const canvasTop = document.getElementById("cpt-stats-top");
+  if (canvasTop && topSitesArr.length > 0) {
+    graphiquesStats.top = new window.Chart(canvasTop.getContext("2d"), {
+      type: "bar",
+      data: { labels: topSitesArr.map(([n]) => n), datasets: [{ data: topSitesArr.map(([, v]) => Math.round(v)), backgroundColor: topSitesArr.map((_, i) => COULEURS_CPT[i % COULEURS_CPT.length]) }] },
+      options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, y: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
+    });
+  }
+}
+
 async function ouvrirReleve(compteurId, retourSiteId) {
   const compteur = state.compteurs.find(c => c.id === compteurId) || await getCompteurUnique(compteurId);
   if (!compteur) { window.toast("Compteur introuvable (peut-être supprimé)."); return; }

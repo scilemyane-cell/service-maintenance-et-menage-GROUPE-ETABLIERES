@@ -396,27 +396,75 @@ export function watchCompteursAlertCount(callback) {
 // dernière valeur connue avant la fin du mois moins la dernière valeur
 // connue avant son début ; un mois sans donnée suffisante renvoie null
 // plutôt que 0 (pour ne pas laisser croire à une consommation nulle).
-export function consommationMensuelle(releves, cle, nbMois = 12) {
-  const chrono = [...releves].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-  const valeurAvant = (ms) => {
-    let derniere = null;
-    for (const r of chrono) {
-      if ((r.createdAt || 0) >= ms) break;
-      const v = parseFloat(r.valeurs?.[cle]);
-      if (!isNaN(v)) derniere = v;
-    }
-    return derniere;
-  };
+// Historique complet, tous compteurs confondus — pour le tableau de
+// bord global (consommation agrégée par type, comparaison entre sites).
+// Un seul aller-retour Firestore plutôt qu'une requête par compteur.
+export async function listerTousLesReleves() {
+  const snap = await getDocs(collection(db, RELEVES));
+  const list = [];
+  snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+  return list;
+}
 
+// Valeur totale d'un compteur (somme de tous ses index — utile pour un
+// compteur électrique multi-tarif où la "consommation" globale est la
+// somme des 4 index) à un instant donné, à partir de son historique
+// trié chronologiquement. Renvoie null si aucun relevé chiffré avant
+// cet instant (un relevé entièrement "illisible" ne compte pas).
+function valeurTotaleAvant(relevesChrono, cles, ms) {
+  let derniere = null;
+  for (const r of relevesChrono) {
+    if ((r.createdAt || 0) >= ms) break;
+    let total = 0, ok = false;
+    cles.forEach(k => { const v = parseFloat(r.valeurs?.[k]); if (!isNaN(v)) { total += v; ok = true; } });
+    if (ok) derniere = total;
+  }
+  return derniere;
+}
+
+// Consommation mensuelle agrégée sur les N derniers mois, additionnée
+// sur tous les compteurs d'un même type (ex. tous les compteurs d'eau
+// du groupe) — même principe que consommationMensuelle() mais toutes
+// installations confondues, pour une vue d'ensemble plutôt que
+// compteur par compteur.
+export function consommationMensuelleAgregee(compteurs, tousReleves, nbMois = 12) {
   const maintenant = new Date();
   const mois = [];
   for (let i = nbMois - 1; i >= 0; i--) {
-    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1);
-    const fin = new Date(maintenant.getFullYear(), maintenant.getMonth() - i + 1, 1);
-    const avant = valeurAvant(debut.getTime());
-    const apres = valeurAvant(fin.getTime());
-    const conso = (avant !== null && apres !== null) ? Math.max(0, apres - avant) : null;
-    mois.push({ label: debut.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }), valeur: conso });
+    mois.push({
+      debut: new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1),
+      fin: new Date(maintenant.getFullYear(), maintenant.getMonth() - i + 1, 1),
+      label: new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }),
+    });
   }
-  return mois;
+  const totaux = mois.map(() => 0);
+  const compteursAvecDonnees = mois.map(() => 0); // pour ne pas laisser croire à 0 si aucun compteur n'a de données ce mois-là
+  compteurs.forEach(compteur => {
+    const cles = clesIndex(compteur);
+    const relevesChrono = tousReleves.filter(r => r.compteurId === compteur.id).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    if (relevesChrono.length === 0) return;
+    mois.forEach((m, i) => {
+      const avant = valeurTotaleAvant(relevesChrono, cles, m.debut.getTime());
+      const apres = valeurTotaleAvant(relevesChrono, cles, m.fin.getTime());
+      if (avant !== null && apres !== null) {
+        totaux[i] += Math.max(0, apres - avant);
+        compteursAvecDonnees[i]++;
+      }
+    });
+  });
+  return { labels: mois.map(m => m.label), valeurs: totaux.map((v, i) => compteursAvecDonnees[i] > 0 ? v : null) };
+}
+
+// Consommation totale d'un compteur sur les derniers `jours` jours
+// (ex. 30, 365) — pour classer les sites les plus consommateurs.
+// Renvoie null si l'historique ne couvre pas assez loin pour comparer.
+export function consommationRecente(compteur, tousReleves, jours) {
+  const cles = clesIndex(compteur);
+  const relevesChrono = tousReleves.filter(r => r.compteurId === compteur.id).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  if (relevesChrono.length === 0) return null;
+  const maintenant = Date.now();
+  const avant = valeurTotaleAvant(relevesChrono, cles, maintenant - jours * 24 * 3600 * 1000);
+  const apres = valeurTotaleAvant(relevesChrono, cles, maintenant + 1);
+  if (avant === null || apres === null) return null;
+  return Math.max(0, apres - avant);
 }
