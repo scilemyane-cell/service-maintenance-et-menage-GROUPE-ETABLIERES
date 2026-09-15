@@ -139,7 +139,6 @@
           { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },
           { id: "export-sharepoint", label: "Export SharePoint", icon: "📤", roles: ADMIN_ONLY, mount: mountExportSharepointAdmin },
           { id: "qr-masse", label: "Impression QR en masse", icon: "🖨️", roles: ADMIN_ONLY, mount: mountQrMasse },
-          { id: "taches", label: "Suivi des tâches", icon: "✅", roles: SUPER_ADMIN_ONLY, mount: mountTaches },
         ],
       },
       {
@@ -165,6 +164,12 @@
         id: "previsionnel", label: "Prévisionnel Travaux", icon: "📋", desc: "Budget travaux/investissement, pour le conseil d'administration",
         subtabs: [
           { id: "liste", label: "Besoins", icon: "📋", roles: [...GESTION,"technicien"], mount: mountPrevisionnel },
+        ],
+      },
+      {
+        id: "taches", label: "Suivi des tâches", icon: "✅", desc: "À faire, en cours, avancement — usage interne Super Admin",
+        subtabs: [
+          { id: "liste", label: "Tâches", icon: "✅", roles: SUPER_ADMIN_ONLY, mount: mountTaches },
         ],
       },
       {
