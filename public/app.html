@@ -301,6 +301,12 @@
   });
 
   function categorySubtabsFor(category, user) {
+    // Un utilisateur avec un accès bonus explicite sur cette catégorie
+    // (user.extraOnglets, attribué au cas par cas dans Utilisateurs) voit
+    // tous ses sous-onglets, même si son rôle habituel ne les couvre pas
+    // — permet à certains techniciens de voir davantage d'onglets que
+    // d'autres sans changer leur rôle de base.
+    if ((user.extraOnglets || []).includes(category.id)) return category.subtabs;
     return category.subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {

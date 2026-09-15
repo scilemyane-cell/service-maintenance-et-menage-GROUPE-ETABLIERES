@@ -67,6 +67,21 @@ function peutModifierRoleDe(user, targetRole) {
   return targetRole !== "super_admin" && targetRole !== "admin";
 }
 
+// Catégories qu'un Super Admin/Admin peut accorder au cas par cas à un
+// utilisateur précis, en plus de ce que son rôle donne normalement —
+// volontairement sans "Administration" ni "Suivi des tâches" (Super
+// Admin), trop sensibles pour ce mécanisme au cas par cas.
+const ONGLETS_BONUS_DISPONIBLES = [
+  { id: "sites", label: "Dossiers de site" },
+  { id: "compteurs", label: "Relevé compteur" },
+  { id: "masterlock", label: "Codes Masterlock" },
+  { id: "previsionnel", label: "Prévisionnel Travaux" },
+  { id: "stock-menage", label: "Stock Ménage" },
+  { id: "stock", label: "Stock maintenance" },
+  { id: "astreinte", label: "Astreinte" },
+  { id: "statistiques", label: "Statistiques" },
+];
+
 function renderUtilisateurs(container) {
   if (!document.contains(container)) { cleanup(); return; }
   container.innerHTML = `
@@ -89,9 +104,9 @@ function renderUtilisateurs(container) {
       <p class="hint">Modifie le nom affiché, l'email ou le rôle de chaque compte existant. Si l'email est vide ci-dessous (comptes créés avant cette mise à jour), renseigne-le manuellement — nécessaire pour "Réinitialiser". "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Zones Stock Ménage</th><th>Mot de passe</th></tr></thead>
+          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Zones Stock Ménage</th><th>Onglets bonus</th><th>Mot de passe</th></tr></thead>
           <tbody>
-            ${usersState.users.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucun utilisateur.</td></tr>` :
+            ${usersState.users.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun utilisateur.</td></tr>` :
               usersState.users.map(u => `
                 <tr>
                   <td><input data-user-email="${u.uid}" value="${esc(u.email || '')}" placeholder="email manquant — à renseigner" style="min-width:200px${!u.email ? ';border-color:var(--red)' : ''}"></td>
@@ -102,6 +117,9 @@ function renderUtilisateurs(container) {
                   <td style="white-space:nowrap;font-size:12px">
                     <label style="margin-right:8px"><input type="checkbox" data-user-zone="${u.uid}:ecole" ${(u.stockMenageZones || []).includes("ecole") ? "checked" : ""}> École</label>
                     <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
+                  </td>
+                  <td style="font-size:11px;min-width:160px">
+                    ${ONGLETS_BONUS_DISPONIBLES.map(o => `<label style="display:block;white-space:nowrap"><input type="checkbox" data-user-onglet="${u.uid}:${o.id}" ${(u.extraOnglets || []).includes(o.id) ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}
                   </td>
                   <td>
                     <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
@@ -163,6 +181,15 @@ function renderUtilisateurs(container) {
       const zones = new Set(u?.stockMenageZones || []);
       if (cb.checked) zones.add(zone); else zones.delete(zone);
       await updateUser(uid, { stockMenageZones: [...zones] });
+    });
+  });
+  container.querySelectorAll("[data-user-onglet]").forEach(cb => {
+    cb.addEventListener("change", async () => {
+      const [uid, ongletId] = cb.dataset.userOnglet.split(":");
+      const u = usersState.users.find(x => x.uid === uid);
+      const onglets = new Set(u?.extraOnglets || []);
+      if (cb.checked) onglets.add(ongletId); else onglets.delete(ongletId);
+      await updateUser(uid, { extraOnglets: [...onglets] });
     });
   });
   container.querySelectorAll("[data-reset-pwd]").forEach(btn => {
