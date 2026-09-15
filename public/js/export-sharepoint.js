@@ -45,18 +45,25 @@ function empreinte(lignes) {
 function construireRapportHTML(titre, lignes) {
   const colonnes = lignes.length > 0 ? Object.keys(lignes[0]) : [];
   return `
-    <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;padding:24px;width:100%">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-        <span style="font-size:20px;font-weight:700">${esc(titre)}</span>
-        <span style="font-size:11px;color:#666">Groupe Établières · Service Maintenance et Ménage</span>
-      </div>
-      <p style="font-size:11px;color:#666;margin:0 0 18px">Généré le ${esc(new Date().toLocaleString("fr-FR"))} · ${lignes.length} ligne(s)</p>
-      ${lignes.length === 0 ? `<p style="font-size:13px;color:#666">Aucune donnée pour l'instant.</p>` : `
-        <div style="display:grid;grid-template-columns:repeat(${colonnes.length},1fr);width:100%">
-          ${colonnes.map(c => `<div style="border:1px solid #999;background:#B08D46;color:#fff;padding:5px 7px;font-size:10px;font-weight:700;overflow-wrap:break-word;word-break:break-word">${esc(c)}</div>`).join("")}
-          ${lignes.map((ligne, i) => colonnes.map(c => `<div style="border:1px solid #ccc;background:${i % 2 === 0 ? '#ffffff' : '#F5F3EE'};padding:4px 7px;font-size:10px;overflow-wrap:break-word;word-break:break-word">${esc(ligne[c] == null ? '' : String(ligne[c]))}</div>`).join("")).join("")}
+    <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;width:100%">
+      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:14px 20px;display:flex;align-items:center;gap:14px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:40px;background:#fff;border-radius:6px;padding:4px">
+        <div>
+          <p style="margin:0;color:#D9B24C;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
+          <h1 style="margin:1px 0 0;color:#fff;font-size:17px">${esc(titre)}</h1>
         </div>
-      `}
+      </div>
+      <div style="padding:18px 20px 24px">
+        <p style="font-size:11px;color:#666;margin:0 0 18px">Généré le ${esc(new Date().toLocaleString("fr-FR"))} · ${lignes.length} ligne(s)</p>
+        ${lignes.length === 0 ? `<p style="font-size:13px;color:#666">Aucune donnée pour l'instant.</p>` : `
+          <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:repeat(${colonnes.length},1fr);width:100%">
+              ${colonnes.map(c => `<div style="border:1px solid #999;background:#B08D46;color:#fff;padding:5px 7px;font-size:10px;font-weight:700;overflow-wrap:break-word;word-break:break-word">${esc(c)}</div>`).join("")}
+              ${lignes.map((ligne, i) => colonnes.map(c => `<div style="border:1px solid #ccc;background:${i % 2 === 0 ? '#ffffff' : '#F5F3EE'};padding:4px 7px;font-size:10px;overflow-wrap:break-word;word-break:break-word">${esc(ligne[c] == null ? '' : String(ligne[c]))}</div>`).join("")).join("")}
+            </div>
+          </div>
+        `}
+      </div>
     </div>
   `;
 }
@@ -74,10 +81,10 @@ async function genererPdf(titre, lignes) {
   // cible capturée a elle-même position:fixed.
   const cible = hidden.firstElementChild;
 
-  // Laisse le navigateur mettre en page le contenu ajouté avant de le
-  // capturer — sans ce délai, html2canvas peut photographier une zone
-  // encore vide (page blanche) juste après l'insertion dans le DOM.
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  // Attend que le logo ait fini de charger avant la capture — sans ça,
+  // html2canvas peut photographier le bandeau alors que l'image n'est
+  // pas encore affichée, laissant un espace vide à la place du logo.
+  await attendreImages(cible);
 
   try {
     return await window.html2pdf()
@@ -367,30 +374,39 @@ async function genererPdfCompteur(compteur, releves) {
   const enteteStyle = `border:1px solid #999;background:#B08D46;color:#fff;padding:5px 7px;font-size:10px;font-weight:700`;
 
   const html = `
-    <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;padding:24px;width:100%">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-        <span style="font-size:20px;font-weight:700">${esc(compteur.nom)} — ${esc(compteur.dossierNom)}</span>
-        <span style="font-size:11px;color:#666">Groupe Établières · Service Maintenance et Ménage</span>
-      </div>
-      <p style="font-size:11px;color:#666;margin:0 0 18px">${esc(TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type)}${compteur.emplacement ? " · " + esc(compteur.emplacement) : ""} · Généré le ${esc(new Date().toLocaleString("fr-FR"))}</p>
-      ${releves.length >= 2 ? `<canvas id="cpt-export-chart" width="900" height="280" style="width:100%;max-width:900px;margin-bottom:20px"></canvas>` : ""}
-      ${releves.length === 0 ? `<p style="font-size:13px;color:#666">Aucun relevé enregistré pour l'instant.</p>` : anneesTriees.map(annee => `
-        <h3 style="font-size:14px;margin:18px 0 8px;border-bottom:2px solid #B08D46;padding-bottom:4px">Année scolaire ${esc(annee)}</h3>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);width:100%">
-          <div style="${enteteStyle}">Date</div><div style="${enteteStyle}">Valeur(s)</div>
-          <div style="${enteteStyle}">Relevé par</div><div style="${enteteStyle}">Antidaté</div>
-          ${parAnnee.get(annee).map((r, i) => {
-            const valeurs = formatValeursReleve(r);
-            const bg = i % 2 === 0 ? "#ffffff" : "#F5F3EE";
-            return `
-              <div style="${ligneStyle(bg)}">${esc(r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "")}</div>
-              <div style="${ligneStyle(bg)}">${esc(valeurs)}</div>
-              <div style="${ligneStyle(bg)}">${esc(r.releveParNom || "")}</div>
-              <div style="${ligneStyle(bg)}">${r.saisiHorsDate ? "Oui" : "Non"}</div>
-            `;
-          }).join("")}
+    <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;width:100%">
+      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:14px 20px;display:flex;align-items:center;gap:14px">
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:40px;background:#fff;border-radius:6px;padding:4px">
+        <div>
+          <p style="margin:0;color:#D9B24C;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
+          <h1 style="margin:1px 0 0;color:#fff;font-size:17px">${esc(compteur.nom)} — ${esc(compteur.dossierNom)}</h1>
         </div>
-      `).join("")}
+      </div>
+      <div style="padding:18px 20px 24px">
+        <p style="font-size:11px;color:#666;margin:0 0 18px">${esc(TYPE_LABEL_COMPTEUR[compteur.type] || compteur.type)}${compteur.emplacement ? " · " + esc(compteur.emplacement) : ""} · Généré le ${esc(new Date().toLocaleString("fr-FR"))}</p>
+        ${releves.length >= 2 ? `<div style="border:1px solid #eee;border-radius:8px;padding:12px 12px 4px;margin-bottom:22px"><canvas id="cpt-export-chart" width="900" height="280" style="width:100%;max-width:900px"></canvas></div>` : ""}
+        ${releves.length === 0 ? `<p style="font-size:13px;color:#666">Aucun relevé enregistré pour l'instant.</p>` : anneesTriees.map(annee => `
+          <h3 style="font-size:13px;margin:18px 0 8px;color:#111;display:flex;align-items:center;gap:8px">
+            <span style="background:#B08D46;color:#fff;border-radius:5px;padding:2px 10px;font-size:11px;letter-spacing:.3px">Année scolaire ${esc(annee)}</span>
+          </h3>
+          <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);width:100%">
+              <div style="${enteteStyle}">Date</div><div style="${enteteStyle}">Valeur(s)</div>
+              <div style="${enteteStyle}">Relevé par</div><div style="${enteteStyle}">Antidaté</div>
+              ${parAnnee.get(annee).map((r, i) => {
+                const valeurs = formatValeursReleve(r);
+                const bg = i % 2 === 0 ? "#ffffff" : "#F5F3EE";
+                return `
+                  <div style="${ligneStyle(bg)}">${esc(r.createdAt ? new Date(r.createdAt).toLocaleString("fr-FR") : "")}</div>
+                  <div style="${ligneStyle(bg)}">${esc(valeurs)}</div>
+                  <div style="${ligneStyle(bg)}">${esc(r.releveParNom || "")}</div>
+                  <div style="${ligneStyle(bg)}">${r.saisiHorsDate ? "Oui" : "Non"}</div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 
@@ -399,7 +415,7 @@ async function genererPdfCompteur(compteur, releves) {
   document.body.appendChild(hidden);
   hidden.innerHTML = html;
   const cible = hidden.firstElementChild;
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await attendreImages(cible); // sinon html2canvas peut capturer avant la fin du chargement du logo
 
   // Graphique en bâtons de la consommation mensuelle sur 12 mois.
   let chart = null;
