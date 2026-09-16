@@ -796,7 +796,6 @@ function renderCalendar(container, perms) {
   if (perms.canEditNames) {
     attacherNomsEditorListeners(container);
   }
-  }
   document.getElementById("cal-prev").addEventListener("click", () => { ui.calMonth--; if (ui.calMonth < 0) { ui.calMonth = 11; ui.calYear--; } renderAll(); });
   document.getElementById("cal-next").addEventListener("click", () => { ui.calMonth++; if (ui.calMonth > 11) { ui.calMonth = 0; ui.calYear++; } renderAll(); });
   document.getElementById("cal-today").addEventListener("click", () => {
