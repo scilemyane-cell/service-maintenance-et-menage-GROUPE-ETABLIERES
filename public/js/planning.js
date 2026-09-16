@@ -13,6 +13,7 @@ import { watchAssociations } from "./associations-data.js";
 import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 
@@ -71,6 +72,7 @@ let ui = {
   noteFraisPreview: null,
   noteFraisTech: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
+  prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null,
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
 let unsubs = [];
@@ -813,23 +815,121 @@ function renderCalendar(container, perms) {
 // =================================================================
 // Absences
 // =================================================================
+function moisDeLAnneeAstreinte() {
+  const mois = [];
+  let cur = new Date(YEAR_START.getFullYear(), YEAR_START.getMonth(), 1);
+  while (cur <= YEAR_END) {
+    mois.push({ cle: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`, label: cur.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }), debut: new Date(cur), fin: new Date(cur.getFullYear(), cur.getMonth() + 1, 0) });
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+  }
+  return mois;
+}
+
+// Vue d'ensemble : une ligne par personne, une colonne par mois de
+// l'année d'astreinte, jours d'absence de chaque type ce mois-là — pour
+// voir en un coup d'œil qui est absent quand, sans dérouler tout le
+// tableau détaillé en dessous.
+function renderVueEnsembleAbsences(allPeople) {
+  const mois = moisDeLAnneeAstreinte();
+  return `
+    <div class="form-card">
+      <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Vue d'ensemble — jours d'absence par mois</h3>
+      <div class="table-wrap">
+        <table style="font-size:11px">
+          <thead><tr><th>Personne</th>${mois.map(m => `<th>${esc(m.label)}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${allPeople.map(p => `
+              <tr>
+                <td style="font-weight:700;white-space:nowrap">${esc(p)}</td>
+                ${mois.map(m => {
+                  const dans = state.absences.filter(a => a.person === p && new Date(a.start) <= m.fin && new Date(a.end) >= m.debut);
+                  if (dans.length === 0) return `<td style="color:var(--text-dim)">—</td>`;
+                  const parType = {};
+                  dans.forEach(a => {
+                    const debutEffectif = new Date(Math.max(new Date(a.start), m.debut));
+                    const finEffective = new Date(Math.min(new Date(a.end), m.fin));
+                    const j = Math.round((finEffective - debutEffectif) / 86400000) + 1;
+                    parType[a.type] = (parType[a.type] || 0) + j;
+                  });
+                  const couleur = parType.arret ? "var(--red)" : parType.conge ? "var(--gold)" : "var(--teal)";
+                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? "RTT" : "arrêt"}`).join(", ");
+                  return `<td style="color:${couleur};font-weight:700" title="${esc(detail)}">${Object.values(parType).reduce((s, v) => s + v, 0)}j</td>`;
+                }).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderImportPrtt(allPeople) {
+  return `
+    <div class="form-card">
+      <button type="button" class="nav-btn" id="prtt-toggle" style="width:fit-content">${ui.prttImportOuvert ? "▲ Fermer l'import PRTT" : "📥 Importer un planning PRTT (Excel)"}</button>
+      ${ui.prttImportOuvert ? `
+        <p class="hint" style="margin:10px 0">Lit directement le fichier PRTT (planning prévisionnel de modulation, format RH10) pour proposer les jours de congé/RTT à bloquer dans l'astreinte — évite de ressaisir à la main ce qui est déjà dans le planning RH. Les week-ends et jours fériés sont ignorés (une case vide un week-end n'est pas une absence).</p>
+        <div class="form-grid">
+          <label>Personne concernée<select id="prtt-personne">${allPeople.map(p => `<option value="${esc(p)}" ${ui.prttPersonne === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+          <label>Fichier Excel PRTT<input type="file" id="prtt-fichier" accept=".xlsx,.xls"></label>
+        </div>
+        ${ui.prttFeuilles.length > 0 ? `
+          <label style="display:block;margin-top:8px">Feuille du classeur<select id="prtt-feuille">${ui.prttFeuilles.map(f => `<option value="${esc(f)}" ${ui.prttFeuilleChoisie === f ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></label>
+        ` : ""}
+        <div id="prtt-status" style="font-size:12px;margin-top:8px"></div>
+        ${ui.prttPreview ? renderApercuPrtt() : ""}
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderApercuPrtt() {
+  if (ui.prttPreview.length === 0) return `<p class="hint" style="margin-top:10px">Aucun jour de congé/RTT détecté sur cette feuille.</p>`;
+  return `
+    <div style="margin-top:12px">
+      <p style="font-size:12px;font-weight:700;margin:0 0 8px">Aperçu — ${ui.prttPreview.length} période(s) proposée(s) pour ${esc(ui.prttPersonne)} (à corriger si besoin avant de valider)</p>
+      <div class="table-wrap">
+        <table style="font-size:12px">
+          <thead><tr><th>Type</th><th>Du</th><th>Au</th><th>Jours</th><th></th></tr></thead>
+          <tbody>
+            ${ui.prttPreview.map((p, i) => `
+              <tr>
+                <td><select data-prtt-type="${i}"><option value="conge" ${p.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${p.type === "rtt" ? "selected" : ""}>RTT</option></select></td>
+                <td>${fmtShort(p.start)}</td><td>${fmtShort(p.end)}</td>
+                <td>${Math.round((p.end - p.start) / 86400000) + 1}</td>
+                <td><button type="button" class="del-btn" data-prtt-retirer="${i}">🗑️</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="add-btn" id="prtt-confirmer" style="margin-top:10px">✓ Valider l'import (${ui.prttPreview.length})</button>
+    </div>
+  `;
+}
+
 function renderAbsences(container, perms) {
   const allPeople = [...state.people.n1, ...state.people.n2];
-  const totals = {};
+  const totals = {}, totalsRtt = {};
   allPeople.forEach(p => {
-    totals[p] = state.absences.filter(a => a.person === p).reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
+    const joursAbs = state.absences.filter(a => a.person === p);
+    totals[p] = joursAbs.reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
+    totalsRtt[p] = joursAbs.filter(a => a.type === "rtt").reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
   });
   const sorted = [...state.absences].sort((a, b) => (a.start < b.start ? 1 : -1));
 
   container.innerHTML = `
     <div class="stack">
       <p class="hint">Ajoute une plage de dates précise. Le planning se recalcule automatiquement.</p>
-      <div class="stat-row">${allPeople.map(p => `<div class="stat-chip">${esc(p)} : <b>${totals[p]}</b> j</div>`).join("")}</div>
+      <div class="stat-row">${allPeople.map(p => `<div class="stat-chip">${esc(p)} : <b>${totals[p]}</b> j${totalsRtt[p] > 0 ? ` (dont <b>${totalsRtt[p]}</b> RTT)` : ""}</div>`).join("")}</div>
+      ${renderVueEnsembleAbsences(allPeople)}
+      ${perms.canManageAbsences ? renderImportPrtt(allPeople) : ""}
       ${perms.canManageAbsences ? `
       <div class="form-card">
         <div class="form-grid">
           <label>Personne<select id="a-person">${allPeople.map(p => `<option value="${esc(p)}" ${ui.absForm.person === p ? 'selected' : ''}>${esc(p)}</option>`).join("")}</select></label>
-          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
+          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>RTT</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
           <label>Du<input type="date" id="a-start" value="${esc(ui.absForm.start)}"></label>
           <label>Au<input type="date" id="a-end" value="${esc(ui.absForm.end)}"></label>
           <label class="desc-field">Note<input id="a-note" value="${esc(ui.absForm.note)}" placeholder="optionnel"></label>
@@ -845,7 +945,7 @@ function renderAbsences(container, perms) {
                 const days = (new Date(a.end) - new Date(a.start)) / 86400000 + 1;
                 return `<tr>
                   <td>${esc(a.person)}</td>
-                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : 'var(--red)'};${a.type === 'arret' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : 'Arrêt'}</span></td>
+                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? 'RTT' : 'Arrêt'}</span></td>
                   <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td><td>${esc(a.note || "")}</td>
                   ${perms.canManageAbsences ? `<td><button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
                 </tr>`;
@@ -877,6 +977,70 @@ function renderAbsences(container, perms) {
       btn.addEventListener("click", async () => { await deleteAbsence(btn.dataset.del); });
     });
   }
+  attacherImportPrttListeners(container);
+}
+
+function attacherImportPrttListeners(container) {
+  document.getElementById("prtt-toggle")?.addEventListener("click", () => { ui.prttImportOuvert = !ui.prttImportOuvert; renderAll(); });
+  document.getElementById("prtt-personne")?.addEventListener("change", (e) => { ui.prttPersonne = e.target.value; });
+  document.getElementById("prtt-fichier")?.addEventListener("change", async (e) => {
+    const fichier = e.target.files[0];
+    const statusEl = document.getElementById("prtt-status");
+    if (!fichier) return;
+    if (!window.XLSX) { statusEl.innerHTML = `<span style="color:var(--red)">Librairie Excel non chargée.</span>`; return; }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Lecture du fichier…</span>`;
+    try {
+      const buffer = await fichier.arrayBuffer();
+      const wb = window.XLSX.read(buffer, { type: "array", cellDates: true });
+      ui.prttWorkbook = wb;
+      const candidates = listerFeuillesCandidates(wb);
+      ui.prttFeuilles = candidates.length > 0 ? candidates : wb.SheetNames;
+      ui.prttFeuilleChoisie = ui.prttFeuilles[ui.prttFeuilles.length - 1]; // la feuille nominative est généralement la dernière du classeur
+      ui.prttPreview = null;
+      statusEl.innerHTML = "";
+      renderAll();
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+    }
+  });
+  document.getElementById("prtt-feuille")?.addEventListener("change", (e) => {
+    ui.prttFeuilleChoisie = e.target.value;
+    const statusEl = document.getElementById("prtt-status");
+    try {
+      const sheet = ui.prttWorkbook.Sheets[ui.prttFeuilleChoisie];
+      ui.prttPreview = analyserPlanningPrtt(sheet, window.XLSX);
+      statusEl.innerHTML = "";
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+      ui.prttPreview = null;
+    }
+    renderAll();
+  });
+  container.querySelectorAll("[data-prtt-type]").forEach(sel => sel.addEventListener("change", () => {
+    ui.prttPreview[parseInt(sel.dataset.prttType, 10)].type = sel.value;
+  }));
+  container.querySelectorAll("[data-prtt-retirer]").forEach(btn => btn.addEventListener("click", () => {
+    ui.prttPreview.splice(parseInt(btn.dataset.prttRetirer, 10), 1);
+    renderAll();
+  }));
+  document.getElementById("prtt-confirmer")?.addEventListener("click", async () => {
+    const statusEl = document.getElementById("prtt-status");
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Import en cours…</span>`;
+    try {
+      for (const p of ui.prttPreview) {
+        await addAbsence({
+          person: ui.prttPersonne, type: p.type,
+          start: p.start.toISOString().slice(0, 10), end: p.end.toISOString().slice(0, 10),
+          note: "Importé du planning PRTT", createdBy: mountedUser.uid,
+        });
+      }
+      window.toast(`${ui.prttPreview.length} période(s) importée(s).`, "success");
+      ui.prttPreview = null; ui.prttFeuilles = []; ui.prttWorkbook = null; ui.prttImportOuvert = false;
+      renderAll();
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+    }
+  });
 }
 
 // =================================================================
