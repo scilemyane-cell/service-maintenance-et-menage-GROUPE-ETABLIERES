@@ -102,6 +102,20 @@ async function genererPdf(titre, lignes) {
   }
 }
 
+// Génère un classeur Excel (.xlsx) à partir des mêmes lignes que le PDF
+// — même structure de colonnes, mais exploitable directement (tri,
+// filtre, recalcul) plutôt qu'un simple document à lire.
+function genererExcel(titre, lignes) {
+  if (!window.XLSX) throw new Error("Librairie Excel non chargée (vérifier app.html)");
+  const feuille = window.XLSX.utils.json_to_sheet(lignes);
+  const colonnes = lignes.length > 0 ? Object.keys(lignes[0]) : [];
+  feuille["!cols"] = colonnes.map(c => ({ wch: Math.min(40, Math.max(10, c.length + 4)) }));
+  const classeur = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(classeur, feuille, titre.slice(0, 31) || "Données"); // 31 caractères = limite Excel pour un nom de feuille
+  const buffer = window.XLSX.write(classeur, { bookType: "xlsx", type: "array" });
+  return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
 // Envoie la version "actuelle" (nom fixe, toujours remplacée — accès
 // rapide au dernier état) et, si les données ont changé depuis le dernier
 // export, archive aussi une copie datée (jamais écrasée — conserve un
@@ -111,16 +125,37 @@ async function genererPdf(titre, lignes) {
 // ["Stock"], ["Relevé de compteur", "LE CAP"]...). `cleEmpreinte` distingue les
 // fichiers de même nom dans des dossiers différents (ex. plusieurs sites)
 // dans le suivi "a changé depuis le dernier export ?".
+//
+// En plus du PDF, un fichier Excel (.xlsx) équivalent est envoyé à côté
+// — mêmes données, doublage pour qui préfère retravailler les chiffres
+// (tri, filtre) plutôt que consulter un document mis en forme.
 async function genererEtEnvoyerPdf(token, dossierSegments, nomFichier, titre, lignes, dernieresEmpreintes, cleEmpreinte = nomFichier) {
   const blob = await genererPdf(titre, lignes);
   const fileActuel = new File([blob], nomFichier, { type: "application/pdf" });
   await uploadToDrive(fileActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichier });
+
+  const nomFichierExcel = nomFichier.replace(/\.pdf$/, ".xlsx");
+  try {
+    const blobExcel = genererExcel(titre, lignes);
+    const fileExcelActuel = new File([blobExcel], nomFichierExcel, { type: blobExcel.type });
+    await uploadToDrive(fileExcelActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichierExcel });
+  } catch (e) {
+    console.error(`Export Excel de ${nomFichier} échoué (le PDF, lui, a bien été envoyé) :`, e);
+  }
 
   const emp = empreinte(lignes);
   if (dernieresEmpreintes[cleEmpreinte] !== emp) {
     const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
     const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
     await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
+    try {
+      const blobExcel = genererExcel(titre, lignes);
+      const nomArchiveExcel = `${nomFichierExcel.replace(/\.xlsx$/, "")}_${todayStr()}.xlsx`;
+      const fileArchiveExcel = new File([blobExcel], nomArchiveExcel, { type: blobExcel.type });
+      await uploadToDrive(fileArchiveExcel, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchiveExcel });
+    } catch (e) {
+      console.error(`Archive Excel de ${nomFichier} échouée :`, e);
+    }
     dernieresEmpreintes[cleEmpreinte] = emp;
   }
 }
