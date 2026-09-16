@@ -46,7 +46,7 @@ function construireRapportHTML(titre, lignes) {
   const colonnes = lignes.length > 0 ? Object.keys(lignes[0]) : [];
   return `
     <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;width:100%">
-      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:14px 20px;display:flex;align-items:center;gap:14px">
+      <div style="background-color:#1a1a1a;padding:14px 20px;display:flex;align-items:center;gap:14px">
         <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:40px;background:#fff;border-radius:6px;padding:4px">
         <div>
           <p style="margin:0;color:#D9B24C;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
@@ -92,7 +92,7 @@ async function genererPdf(titre, lignes) {
         margin: 10,
         filename: `${titre}.pdf`,
         image: { type: "jpeg", quality: 0.92 },
-        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false },
         jsPDF: { unit: "mm", format: "a4", orientation: lignes.length > 0 && Object.keys(lignes[0]).length > 6 ? "landscape" : "portrait" },
       })
       .from(cible)
@@ -375,7 +375,7 @@ async function genererPdfCompteur(compteur, releves) {
 
   const html = `
     <div style="font-family:Calibri,Arial,sans-serif;background:#fff;color:#111;width:100%">
-      <div style="background:linear-gradient(135deg,#1a1a1a,#2b2b2b);padding:14px 20px;display:flex;align-items:center;gap:14px">
+      <div style="background-color:#1a1a1a;padding:14px 20px;display:flex;align-items:center;gap:14px">
         <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:40px;background:#fff;border-radius:6px;padding:4px">
         <div>
           <p style="margin:0;color:#D9B24C;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Groupe Établières · Service Maintenance et Ménage</p>
@@ -461,7 +461,7 @@ async function genererPdfCompteur(compteur, releves) {
       .set({
         margin: 10, filename: `${compteur.nom}.pdf`,
         image: { type: "jpeg", quality: 0.92 },
-        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       })
       .from(cible)
@@ -515,11 +515,15 @@ async function exporterPdfParCompteur(token, dernieresEmpreintes) {
 // laissant un espace vide dans le PDF généré.
 function attendreImages(container) {
   const imgs = [...container.querySelectorAll("img")];
-  return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+  return Promise.all(imgs.map(img => img.complete && img.naturalWidth > 0 ? Promise.resolve() : new Promise(resolve => {
     img.addEventListener("load", resolve, { once: true });
     img.addEventListener("error", resolve, { once: true }); // on continue quand même plutôt que de bloquer indéfiniment
     setTimeout(resolve, 3000); // filet de sécurité
-  })));
+  }))).then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Le double requestAnimationFrame laisse le navigateur peindre
+  // effectivement l'image une fois chargée avant que html2canvas ne
+  // capture — un logo "complete" peut être chargé en mémoire sans que
+  // le rendu visuel ait encore eu lieu à la frame courante.
 }
 
 // ---- Codes Masterlock (avec logo, meme style visuel que le recap
@@ -577,7 +581,7 @@ async function genererPdfMasterlock(codes) {
       .set({
         margin: 10, filename: "Codes_masterlock.pdf",
         image: { type: "jpeg", quality: 0.92 },
-        html2canvas: { scale: 2, backgroundColor: "#ffffff" },
+        html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       })
       .from(cible)
