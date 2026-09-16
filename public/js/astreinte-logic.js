@@ -79,29 +79,27 @@ export function isAbsentOnDate(absences, person, date) {
   return absences.some(a => a.person === person && k >= a.start && k <= a.end);
 }
 
-// Désigne, pour chaque semaine, la personne disponible ayant le score
-// cumulé le plus bas (les jours de week-end comptent 1,5x, fériés 2x).
-// Algorithme déterministe, rejoué à chaque changement de personnes/absences.
+// Désigne, pour chaque semaine, qui assure le niveau 1 et le niveau 2.
+// Niveau 1 : pas de roulement — la première personne de la liste (le
+// titulaire principal) assure systématiquement le niveau 1, et ce n'est
+// que lorsqu'elle est absente toute la semaine qu'on bascule sur la
+// personne suivante de la liste (le remplaçant), dans l'ordre où elles
+// sont classées. Niveau 2 : les techniciens tournent, en équilibrant la
+// charge (jours de week-end comptent 1,5x, fériés 2x), rejoué à chaque
+// changement de personnes/absences.
 export function computeWeeklyTitulaires(people, absences) {
   const scoresN1 = {}, scoresN2 = {};
   people.n1.forEach(p => scoresN1[p] = 0);
   people.n2.forEach(p => scoresN2[p] = 0);
   const titN1 = [], titN2 = [];
-  let lastN1 = null;
   WEEKS.forEach((w, idx) => {
     let weight = 0;
     const dayFlags = [];
     for (let i = 0; i < 7; i++) { const d = addDays(w.start, i); dayFlags.push(d); weight += dayWeight(d); }
 
     const availN1 = people.n1.filter(p => dayFlags.some(d => !isAbsentOnDate(absences, p, d)));
-    let chosenN1;
-    if (availN1.length > 0) {
-      const sorted = [...availN1].sort((a, b) => scoresN1[a] - scoresN1[b]);
-      chosenN1 = sorted[0];
-      if (sorted.length > 1 && scoresN1[sorted[0]] === scoresN1[sorted[1]] && lastN1 === sorted[0]) chosenN1 = sorted[1];
-      scoresN1[chosenN1] += weight;
-      lastN1 = chosenN1;
-    } else { chosenN1 = people.n1[0]; }
+    const chosenN1 = availN1.length > 0 ? availN1[0] : people.n1[0];
+    if (chosenN1 !== undefined) scoresN1[chosenN1] = (scoresN1[chosenN1] || 0) + weight;
     titN1[idx] = chosenN1;
 
     const availN2 = people.n2.filter(p => dayFlags.some(d => !isAbsentOnDate(absences, p, d)));
