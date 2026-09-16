@@ -104,8 +104,34 @@ export function regrouperEnPlages(joursClasses) {
 }
 
 // Fonction complète : feuille → plages d'absence proposées.
+// Une même date calendaire peut apparaître plusieurs fois sur la
+// feuille (en-tête de mois, tableau de calcul annexe, second passage…)
+// avec des valeurs parfois contradictoires — ex. une ligne d'en-tête
+// vide à côté de la vraie ligne journalière qui indique 8h travaillées.
+// Règle de fusion, du plus fiable au moins fiable : si une seule
+// occurrence de la date indique un nombre d'heures travaillées, le jour
+// est considéré travaillé (aucune absence) ; sinon, si une occurrence
+// porte le code congé, c'est un congé ; sinon, seulement si TOUTES les
+// occurrences sont vides/à 0, c'est un jour à traiter comme RTT.
 export function analyserPlanningPrtt(sheet, XLSX) {
   const jours = extraireJours(sheet, XLSX);
-  const classes = jours.map(j => ({ date: j.date, type: classerJour(j.valeur, j.date) })).filter(j => j.type);
+  const valeursParDate = new Map();
+  jours.forEach(j => {
+    const cle = j.date.toDateString();
+    if (!valeursParDate.has(cle)) valeursParDate.set(cle, { date: j.date, valeurs: [] });
+    valeursParDate.get(cle).valeurs.push(j.valeur);
+  });
+
+  const classes = [...valeursParDate.values()].map(({ date, valeurs }) => {
+    if (valeurs.some(v => typeof v === "number" && v > 0)) return { date, type: null }; // travaillé au moins une fois recensé → jamais une absence
+    const congeTrouve = valeurs.some(v => typeof v === "string" && v.trim().toLowerCase() === "c");
+    if (congeTrouve) return { date, type: "conge" };
+    const ferieTrouve = valeurs.some(v => typeof v === "string" && /^f[ée]ri[ée]$/i.test(v.trim()));
+    if (ferieTrouve) return { date, type: null };
+    // Tout le reste (vide/0 partout) suit la règle habituelle, y
+    // compris l'exclusion des week-ends.
+    return { date, type: classerJour(valeurs.find(v => v !== undefined), date) };
+  }).filter(j => j.type);
+
   return regrouperEnPlages(classes);
 }
