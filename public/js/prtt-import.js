@@ -12,18 +12,47 @@ export function listerFeuillesCandidates(workbook) {
   return workbook.SheetNames.filter(n => /prtt/i.test(n));
 }
 
+// Repère la période de référence annoncée dans le fichier lui-même
+// (ex. "Période de référence 01/09/2026 - 31/08/2027") — sert de garde-
+// fou : le fichier contient d'autres tableaux ailleurs sur la même
+// feuille (suivi cumulé, reliquat...) avec leurs propres dates, qui ne
+// doivent surtout pas être confondues avec le calendrier quotidien réel.
+export function trouverPeriodeReference(sheet, XLSX) {
+  if (!sheet["!ref"]) return null;
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === "string" && /période de référence/i.test(cell.v)) {
+        const m = cell.v.match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m) {
+          return {
+            debut: new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])),
+            fin: new Date(Number(m[6]), Number(m[5]) - 1, Number(m[4])),
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 // Parcourt une feuille et repère chaque cellule contenant une date ;
 // lit la valeur juste à droite (colonne "Prévu") sur la même ligne —
 // robuste à la mise en page réelle du fichier (plusieurs mois côte à
-// côte, blocs de 3 colonnes Date/Prévu/Écart).
+// côte, blocs de 3 colonnes Date/Prévu/Écart). Si une période de
+// référence est trouvée sur la feuille, les dates en dehors sont
+// ignorées (autres tableaux de la même feuille, hors calendrier réel).
 export function extraireJours(sheet, XLSX) {
   if (!sheet["!ref"]) return [];
+  const periode = trouverPeriodeReference(sheet, XLSX);
   const range = XLSX.utils.decode_range(sheet["!ref"]);
   const jours = [];
   for (let r = range.s.r; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r, c })];
       if (cell && cell.t === "d" && cell.v instanceof Date) {
+        if (periode && (cell.v < periode.debut || cell.v > periode.fin)) continue;
         const valCell = sheet[XLSX.utils.encode_cell({ r, c: c + 1 })];
         jours.push({ date: cell.v, valeur: valCell ? valCell.v : undefined });
       }
