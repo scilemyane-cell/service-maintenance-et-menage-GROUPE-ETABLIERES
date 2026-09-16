@@ -72,7 +72,7 @@ let ui = {
   noteFraisPreview: null,
   noteFraisTech: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
-  prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null,
+  prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
 };
 let unsubs = [];
@@ -874,6 +874,7 @@ function renderImportPrtt(allPeople) {
           <label>Personne concernée<select id="prtt-personne">${allPeople.map(p => `<option value="${esc(p)}" ${ui.prttPersonne === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
           <label>Fichier Excel PRTT<input type="file" id="prtt-fichier" accept=".xlsx,.xls"></label>
         </div>
+        ${ui.prttNomFichier ? `<p class="hint" style="margin:6px 0 0">📄 ${esc(ui.prttNomFichier)}</p>` : ""}
         ${ui.prttFeuilles.length > 0 ? `
           <label style="display:block;margin-top:8px">Feuille du classeur<select id="prtt-feuille">${ui.prttFeuilles.map(f => `<option value="${esc(f)}" ${ui.prttFeuilleChoisie === f ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></label>
         ` : ""}
@@ -993,10 +994,15 @@ function attacherImportPrttListeners(container) {
       const buffer = await fichier.arrayBuffer();
       const wb = window.XLSX.read(buffer, { type: "array", cellDates: true });
       ui.prttWorkbook = wb;
+      ui.prttNomFichier = fichier.name;
       const candidates = listerFeuillesCandidates(wb);
       ui.prttFeuilles = candidates.length > 0 ? candidates : wb.SheetNames;
       ui.prttFeuilleChoisie = ui.prttFeuilles[ui.prttFeuilles.length - 1]; // la feuille nominative est généralement la dernière du classeur
-      ui.prttPreview = null;
+      // Calcule tout de suite l'aperçu pour cette feuille par défaut —
+      // sans ça, rien ne s'affiche tant que l'utilisateur ne change pas
+      // manuellement la feuille (l'événement "change" du menu déroulant
+      // ne se déclenche pas juste parce qu'on l'a présélectionnée).
+      ui.prttPreview = analyserPlanningPrtt(wb.Sheets[ui.prttFeuilleChoisie], window.XLSX);
       statusEl.innerHTML = "";
       renderAll();
     } catch (err) {
@@ -1035,7 +1041,7 @@ function attacherImportPrttListeners(container) {
         });
       }
       window.toast(`${ui.prttPreview.length} période(s) importée(s).`, "success");
-      ui.prttPreview = null; ui.prttFeuilles = []; ui.prttWorkbook = null; ui.prttImportOuvert = false;
+      ui.prttPreview = null; ui.prttFeuilles = []; ui.prttWorkbook = null; ui.prttImportOuvert = false; ui.prttNomFichier = "";
       renderAll();
     } catch (err) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
