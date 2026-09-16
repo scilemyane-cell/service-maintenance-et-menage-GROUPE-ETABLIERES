@@ -672,9 +672,35 @@ function renderCalendar(container, perms) {
       ${perms.canEditNames ? `
       <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
         <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Noms des personnes</summary>
-        <div class="form-grid" style="margin-top:12px">
-          ${state.people.n1.map((name, i) => `<label>N1 — Titulaire ${i === 0 ? "A" : "B"}<input data-name-group="n1" data-name-idx="${i}" value="${esc(name)}"></label>`).join("")}
-          ${state.people.n2.map((name, i) => `<label>N2 — Technicien ${i + 1}<input data-name-group="n2" data-name-idx="${i}" value="${esc(name)}"></label>`).join("")}
+        <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du roulement N1 (réception d'appel) ou N2 (intervention) — le calendrier se réajuste automatiquement sur les personnes restantes.</p>
+        <p style="font-size:12px;font-weight:700;margin:10px 0 6px">Niveau 1 — réception</p>
+        <div class="form-grid">
+          ${state.people.n1.map((name, i) => `
+            <label style="display:flex;align-items:center;gap:6px">
+              <span style="flex:1">N1 — Titulaire ${i === 0 ? "A" : String.fromCharCode(65 + i)}<input data-name-group="n1" data-name-idx="${i}" value="${esc(name)}"></span>
+              ${state.people.n1.length > 1 ? `<button type="button" class="del-btn" data-name-del="n1:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
+            </label>
+          `).join("")}
+        </div>
+        <button type="button" class="nav-btn" id="names-add-n1" style="margin-top:8px;font-size:12px">➕ Ajouter une personne en N1</button>
+        <div id="names-add-n1-form" style="display:none;gap:8px;margin-top:8px">
+          <input id="names-add-n1-input" placeholder="Nom" style="flex:1">
+          <button type="button" class="add-btn" id="names-add-n1-valider" style="font-size:12px">Ajouter</button>
+        </div>
+
+        <p style="font-size:12px;font-weight:700;margin:16px 0 6px">Niveau 2 — intervention</p>
+        <div class="form-grid">
+          ${state.people.n2.map((name, i) => `
+            <label style="display:flex;align-items:center;gap:6px">
+              <span style="flex:1">N2 — Technicien ${i + 1}<input data-name-group="n2" data-name-idx="${i}" value="${esc(name)}"></span>
+              ${state.people.n2.length > 1 ? `<button type="button" class="del-btn" data-name-del="n2:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
+            </label>
+          `).join("")}
+        </div>
+        <button type="button" class="nav-btn" id="names-add-n2" style="margin-top:8px;font-size:12px">➕ Ajouter une personne en N2</button>
+        <div id="names-add-n2-form" style="display:none;gap:8px;margin-top:8px">
+          <input id="names-add-n2-input" placeholder="Nom" style="flex:1">
+          <button type="button" class="add-btn" id="names-add-n2-valider" style="font-size:12px">Ajouter</button>
         </div>
       </details>` : ""}
 
@@ -728,6 +754,32 @@ function renderCalendar(container, perms) {
         next[grp][idx] = val;
         await savePeople(next);
       });
+    });
+    container.querySelectorAll("[data-name-del]").forEach(btn => btn.addEventListener("click", async () => {
+      const [grp, idxStr] = btn.dataset.nameDel.split(":");
+      const idx = parseInt(idxStr, 10);
+      const nomRetire = state.people[grp][idx];
+      if (!(await window.confirmDialog(`Retirer "${nomRetire}" du roulement ${grp.toUpperCase()} ? L'historique des astreintes déjà passées n'est pas modifié.`, { danger: true, texteValider: "Retirer" }))) return;
+      const next = { ...state.people, [grp]: state.people[grp].filter((_, i) => i !== idx) };
+      await savePeople(next);
+    }));
+    document.getElementById("names-add-n1")?.addEventListener("click", () => {
+      const form = document.getElementById("names-add-n1-form");
+      form.style.display = "flex";
+      document.getElementById("names-add-n1-input").focus();
+    });
+    document.getElementById("names-add-n1-valider")?.addEventListener("click", async () => {
+      const nom = document.getElementById("names-add-n1-input").value.trim(); if (!nom) return;
+      await savePeople({ ...state.people, n1: [...state.people.n1, nom] });
+    });
+    document.getElementById("names-add-n2")?.addEventListener("click", () => {
+      const form = document.getElementById("names-add-n2-form");
+      form.style.display = "flex";
+      document.getElementById("names-add-n2-input").focus();
+    });
+    document.getElementById("names-add-n2-valider")?.addEventListener("click", async () => {
+      const nom = document.getElementById("names-add-n2-input").value.trim(); if (!nom) return;
+      await savePeople({ ...state.people, n2: [...state.people.n2, nom] });
     });
   }
   document.getElementById("cal-prev").addEventListener("click", () => { ui.calMonth--; if (ui.calMonth < 0) { ui.calMonth = 11; ui.calYear--; } renderAll(); });
