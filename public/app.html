@@ -197,8 +197,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, stockMenage, stock];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, stockMenage, stock] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, stockMenage, stock];
   }
 
   watchAuth((user) => {
