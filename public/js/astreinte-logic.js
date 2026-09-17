@@ -80,13 +80,17 @@ export function isAbsentOnDate(absences, person, date) {
 }
 
 // Désigne, pour chaque semaine, qui assure le niveau 1 et le niveau 2.
-// Niveau 1 : pas de roulement — la première personne de la liste (le
-// titulaire principal) assure systématiquement le niveau 1, et ce n'est
-// que lorsqu'elle est absente toute la semaine qu'on bascule sur la
-// personne suivante de la liste (le remplaçant), dans l'ordre où elles
-// sont classées. Niveau 2 : les techniciens tournent, en équilibrant la
-// charge (jours de week-end comptent 1,5x, fériés 2x), rejoué à chaque
-// changement de personnes/absences.
+// Dans les deux cas, l'astreinte d'une semaine (lundi-dimanche) n'est
+// jamais coupée en cours de route : on ne retient comme candidat que
+// quelqu'un de disponible TOUTE la semaine (absent ne serait-ce qu'un
+// jour = exclu pour cette semaine-là entière). Niveau 1 : pas de
+// roulement — la première personne de la liste (le titulaire principal)
+// assure le niveau 1 tant qu'elle est dispo toute la semaine ; sinon la
+// personne suivante de la liste prend TOUTE la semaine. Niveau 2 : les
+// techniciens tournent, en équilibrant la charge (jours de week-end
+// comptent 1,5x, fériés 2x), parmi ceux dispo toute la semaine ; si
+// personne ne l'est, on retient qui a le moins de jours d'absence cette
+// semaine-là (au pire, l'interruption reste inévitable ce cas précis).
 export function computeWeeklyTitulaires(people, absences) {
   const scoresN1 = {}, scoresN2 = {};
   people.n1.forEach(p => scoresN1[p] = 0);
@@ -96,19 +100,21 @@ export function computeWeeklyTitulaires(people, absences) {
     let weight = 0;
     const dayFlags = [];
     for (let i = 0; i < 7; i++) { const d = addDays(w.start, i); dayFlags.push(d); weight += dayWeight(d); }
+    const joursAbsents = (p) => dayFlags.filter(d => isAbsentOnDate(absences, p, d)).length;
+    const meilleurSiPersonneDispo = (liste) => [...liste].sort((a, b) => joursAbsents(a) - joursAbsents(b))[0];
 
-    const availN1 = people.n1.filter(p => dayFlags.some(d => !isAbsentOnDate(absences, p, d)));
-    const chosenN1 = availN1.length > 0 ? availN1[0] : people.n1[0];
+    const availN1 = people.n1.filter(p => joursAbsents(p) === 0);
+    const chosenN1 = availN1.length > 0 ? availN1[0] : meilleurSiPersonneDispo(people.n1);
     if (chosenN1 !== undefined) scoresN1[chosenN1] = (scoresN1[chosenN1] || 0) + weight;
     titN1[idx] = chosenN1;
 
-    const availN2 = people.n2.filter(p => dayFlags.some(d => !isAbsentOnDate(absences, p, d)));
+    const availN2 = people.n2.filter(p => joursAbsents(p) === 0);
     let chosenN2;
     if (availN2.length > 0) {
       const sorted = [...availN2].sort((a, b) => scoresN2[a] - scoresN2[b]);
       chosenN2 = sorted[0];
       scoresN2[chosenN2] += weight;
-    } else { chosenN2 = people.n2[0]; }
+    } else { chosenN2 = meilleurSiPersonneDispo(people.n2); }
     titN2[idx] = chosenN2;
   });
   return { titN1, titN2, scoresN1, scoresN2 };
