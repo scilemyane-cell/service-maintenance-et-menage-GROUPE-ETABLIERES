@@ -88,21 +88,41 @@ function estWeekend(date) {
   return j === 0 || j === 6;
 }
 
-// Classe chaque jour : "conge" (code "c"), "rtt" (case vide ou 0 un jour
-// de semaine — jour normalement travaillé mais compensé), ou null (rien
-// à importer : jour travaillé, jour férié, ou week-end). Les week-ends
-// sont volontairement ignorés — une case vide un samedi/dimanche ne
+// Reconnaissance des codes rencontrés dans les deux formats de fichier
+// PRTT vus jusqu'ici :
+// - Modulation horaire (ex. techniciens) : un nombre d'heures (8, 4…) =
+//   travaillé ; case vide ou 0 = repos/RTT ; "c" = congé.
+// - Forfait jours (ex. cadres) : "TT"/"T" = travaillé (jour/demi-jour) ;
+//   "RR"/"R" = repos (équivalent RTT) ; "C" = congé.
+// Les deux se ramènent aux mêmes 3 catégories utiles pour l'astreinte :
+// travaillé (jamais une absence), congé, repos/RTT.
+function estTravaille(valeur) {
+  if (typeof valeur === "number") return valeur > 0;
+  if (typeof valeur === "string") return ["tt", "t"].includes(valeur.trim().toLowerCase());
+  return false;
+}
+function estCongeValeur(valeur) {
+  return typeof valeur === "string" && valeur.trim().toLowerCase() === "c";
+}
+function estFerieValeur(valeur) {
+  return typeof valeur === "string" && /^f[ée]ri[ée]$/i.test(valeur.trim());
+}
+function estReposValeur(valeur) {
+  if (typeof valeur === "string") return ["rr", "r"].includes(valeur.trim().toLowerCase());
+  return valeur === undefined || valeur === null || valeur === "" || valeur === 0; // modulation horaire : case vide/0 = repos
+}
+
+// Classe un jour à partir d'une seule valeur trouvée (utilisé quand une
+// date n'a qu'une seule occurrence sur la feuille). Les week-ends sont
+// volontairement ignorés — une case vide/repos un samedi ou dimanche ne
 // signifie pas une absence, juste un jour normalement non travaillé, et
 // ne doit pas empêcher une astreinte ce jour-là.
 export function classerJour(valeur, date) {
-  if (typeof valeur === "string") {
-    const v = valeur.trim().toLowerCase();
-    if (v === "c") return "conge";
-    if (v === "ferie" || v === "férié") return null;
-  }
+  if (estCongeValeur(valeur)) return "conge";
+  if (estFerieValeur(valeur) || estTravaille(valeur)) return null;
   if (estWeekend(date)) return null;
-  if (valeur === undefined || valeur === null || valeur === "" || valeur === 0) return "rtt";
-  return null; // jour travaillé (nombre d'heures > 0)
+  if (estReposValeur(valeur)) return "rtt";
+  return null;
 }
 
 // Regroupe les jours consécutifs de même type en une seule plage
@@ -129,12 +149,14 @@ export function regrouperEnPlages(joursClasses) {
 // Une même date calendaire peut apparaître plusieurs fois sur la
 // feuille (en-tête de mois, tableau de calcul annexe, second passage…)
 // avec des valeurs parfois contradictoires — ex. une ligne d'en-tête
-// vide à côté de la vraie ligne journalière qui indique 8h travaillées.
+// vide à côté de la vraie ligne journalière qui indique "TT" (travaillé).
 // Règle de fusion, du plus fiable au moins fiable : si une seule
-// occurrence de la date indique un nombre d'heures travaillées, le jour
-// est considéré travaillé (aucune absence) ; sinon, si une occurrence
-// porte le code congé, c'est un congé ; sinon, seulement si TOUTES les
-// occurrences sont vides/à 0, c'est un jour à traiter comme RTT.
+// occurrence de la date indique un jour travaillé, le jour est considéré
+// travaillé (aucune absence) ; sinon, si une occurrence porte le code
+// congé, c'est un congé ; sinon férié = rien à importer ; sinon,
+// seulement si aucune occurrence n'indique un jour travaillé ni férié,
+// c'est un jour à traiter comme repos/RTT (règle habituelle, y compris
+// l'exclusion des week-ends).
 export function analyserPlanningPrtt(sheet, XLSX) {
   const jours = extraireJours(sheet, XLSX);
   const valeursParDate = new Map();
@@ -145,13 +167,9 @@ export function analyserPlanningPrtt(sheet, XLSX) {
   });
 
   const classes = [...valeursParDate.values()].map(({ date, valeurs }) => {
-    if (valeurs.some(v => typeof v === "number" && v > 0)) return { date, type: null }; // travaillé au moins une fois recensé → jamais une absence
-    const congeTrouve = valeurs.some(v => typeof v === "string" && v.trim().toLowerCase() === "c");
-    if (congeTrouve) return { date, type: "conge" };
-    const ferieTrouve = valeurs.some(v => typeof v === "string" && /^f[ée]ri[ée]$/i.test(v.trim()));
-    if (ferieTrouve) return { date, type: null };
-    // Tout le reste (vide/0 partout) suit la règle habituelle, y
-    // compris l'exclusion des week-ends.
+    if (valeurs.some(estTravaille)) return { date, type: null };
+    if (valeurs.some(estCongeValeur)) return { date, type: "conge" };
+    if (valeurs.some(estFerieValeur)) return { date, type: null };
     return { date, type: classerJour(valeurs.find(v => v !== undefined), date) };
   }).filter(j => j.type);
 
