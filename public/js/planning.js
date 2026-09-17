@@ -365,14 +365,14 @@ function attacherFicheTechnicienListeners() {
 // rien afficher — réutilisé à la fois pour l'aperçu modifiable et pour
 // l'impression finale, qui part des valeurs éventuellement corrigées
 // dans l'aperçu plutôt que de tout recalculer depuis les interventions.
-function calculerLignesNoteFrais(nom, mois) {
+function calculerLignesNoteFrais(nom, mois, touteLHistoire = false) {
   const c = state.coordonnees[nom] || {};
   const kmAllerRetour = c.kmDomicileService || 0;
-  const interventionsMois = state.interventions
-    .filter(i => i.technicien === nom && i.date && i.date.startsWith(mois))
+  const interventionsRetenues = state.interventions
+    .filter(i => i.technicien === nom && i.date && !i.fraisRembourse && (touteLHistoire || i.date.startsWith(mois)))
     .sort((a, b) => a.date.localeCompare(b.date));
   const parJour = new Map();
-  interventionsMois.forEach(i => {
+  interventionsRetenues.forEach(i => {
     if (!parJour.has(i.date)) parJour.set(i.date, []);
     parJour.get(i.date).push(i);
   });
@@ -387,6 +387,7 @@ function calculerLignesNoteFrais(nom, mois) {
       km: kmAllerRetour,
       fraisAnnexes: "",
       incluse: true,
+      interventionIds: interventionsJour.map(i => i.id),
     };
   });
 }
@@ -395,28 +396,32 @@ function calculerLignesNoteFrais(nom, mois) {
 // corriger le nombre de km d'un jour précis si le trajet habituel n'a
 // pas été suivi ce jour-là (autre point de départ, déplacement
 // exceptionnel...), plutôt que d'imprimer une valeur figée à l'aveugle.
-function ouvrirApercuNoteFrais(nom, mois, declencheePar = null) {
+function ouvrirApercuNoteFrais(nom, mois, declencheePar = null, touteLHistoire = false) {
   const statusEl = document.getElementById(`fiche-note-status-${nom}`);
   const c = state.coordonnees[nom] || {};
-  const lignes = calculerLignesNoteFrais(nom, mois);
-  if (lignes.length === 0) { if (statusEl) statusEl.innerHTML = `<span class="hint">Aucune intervention pour ce mois.</span>`; else window.toast("Aucune intervention pour ce mois."); return; }
+  const lignes = calculerLignesNoteFrais(nom, mois, touteLHistoire);
+  if (lignes.length === 0) { const msg = touteLHistoire ? "Aucune intervention non remboursée pour l'instant." : "Aucune intervention pour ce mois."; if (statusEl) statusEl.innerHTML = `<span class="hint">${msg}</span>`; else window.toast(msg); return; }
   if (!c.kmDomicileService) {
     const msg = `⚠️ Kilomètres domicile ↔ ${SERVICE_TECHNIQUE_NOM} non renseignés pour ${nom}. Complète-les dans sa fiche (Coordonnées) avant de générer.`;
     if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">${esc(msg)}</span>`; else window.toast(msg, "error");
     return;
   }
   if (statusEl) statusEl.innerHTML = "";
-  ui.noteFraisPreview = { nom, mois, lignes, declencheePar };
+  ui.noteFraisPreview = { nom, mois, lignes, declencheePar, touteLHistoire };
   renderAll();
 }
 
 function renderApercuNoteFrais() {
-  const { lignes } = ui.noteFraisPreview;
+  const { lignes, nom, mois, declencheePar, touteLHistoire } = ui.noteFraisPreview;
   const totalKm = lignes.filter(l => l.incluse).reduce((s, l) => s + (parseFloat(l.km) || 0), 0);
   const nbIncluses = lignes.filter(l => l.incluse).length;
   return `
     <div class="form-card" style="margin-top:12px;background:var(--panel)">
       <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Aperçu — décoche les journées à ne pas inclure, modifie le trajet si besoin, avant d'imprimer</h4>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:0 0 10px">
+        <input type="checkbox" id="note-frais-tout-historique" ${touteLHistoire ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--gold)">
+        Inclure tout l'historique non remboursé (pas seulement ce mois)
+      </label>
       <div class="table-wrap">
         <table style="font-size:12px">
           <thead><tr><th></th><th>Date</th><th>N° intervention</th><th>Nature</th><th>Ville de destination</th><th>Km A/R</th><th>Frais annexes</th></tr></thead>
@@ -436,8 +441,9 @@ function renderApercuNoteFrais() {
         </table>
       </div>
       <p class="hint" style="margin:8px 0 0">Total : ${totalKm.toFixed(1)} km sur ${nbIncluses} journée(s) sélectionnée(s) (sur ${lignes.length})</p>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="add-btn" id="note-frais-imprimer" ${nbIncluses === 0 ? 'disabled style="opacity:.5"' : ''} style="font-size:12px">🖨️ Imprimer (${nbIncluses})</button>
+        <button class="nav-btn" id="note-frais-marquer-rembourse" ${nbIncluses === 0 ? 'disabled style="opacity:.5"' : ''} style="font-size:12px;border-color:var(--teal);color:var(--teal)" title="À utiliser une fois le remboursement obtenu, pour ne plus faire réapparaître ces journées la prochaine fois">✓ Marquer remboursement demandé</button>
         <button class="nav-btn" id="note-frais-annuler" style="font-size:12px">Annuler</button>
       </div>
     </div>
@@ -459,10 +465,29 @@ function attacherApercuNoteFraisListeners() {
   mountedContainer.querySelectorAll("[data-note-frais]").forEach(inp => inp.addEventListener("input", () => {
     ui.noteFraisPreview.lignes[parseInt(inp.dataset.noteFrais, 10)].fraisAnnexes = inp.value;
   }));
+  document.getElementById("note-frais-tout-historique")?.addEventListener("change", (e) => {
+    const { nom, declencheePar } = ui.noteFraisPreview;
+    const mois = ui.noteFraisMois;
+    ouvrirApercuNoteFrais(nom, mois, declencheePar, e.target.checked);
+  });
   document.getElementById("note-frais-annuler")?.addEventListener("click", () => { ui.noteFraisPreview = null; renderAll(); });
   document.getElementById("note-frais-imprimer")?.addEventListener("click", () => {
     const { nom, mois, lignes } = ui.noteFraisPreview;
     imprimerNoteDeFrais(nom, mois, lignes.filter(l => l.incluse));
+  });
+  document.getElementById("note-frais-marquer-rembourse")?.addEventListener("click", async () => {
+    const lignesIncluses = ui.noteFraisPreview.lignes.filter(l => l.incluse);
+    const idsATraiter = lignesIncluses.flatMap(l => l.interventionIds || []);
+    if (idsATraiter.length === 0) return;
+    if (!(await window.confirmDialog(`Marquer ${lignesIncluses.length} journée(s) comme remboursement demandé ? Elles ne réapparaîtront plus dans les prochaines notes de frais.`, { texteValider: "Marquer" }))) return;
+    try {
+      await Promise.all(idsATraiter.map(id => updateIntervention(id, { fraisRembourse: true })));
+      window.toast(`${lignesIncluses.length} journée(s) marquée(s) comme remboursement demandé.`, "success");
+      ui.noteFraisPreview = null;
+      renderAll();
+    } catch (e) {
+      window.toast("Erreur : " + (e.message || e), "error");
+    }
   });
 }
 
