@@ -1103,8 +1103,8 @@ function renderDocPreview() {
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Arrivée</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Retour</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Compte-rendu</th>
-          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures</th>
-          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Nuit</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Heures totales</th>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Dont nuit</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Prime dim.</th>
         </tr></thead>
         <tbody>
@@ -1119,7 +1119,7 @@ function renderDocPreview() {
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${esc(i.heureFin || "—")}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.description)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heures}</td>
-                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heuresNuit > 0 ? i.heuresNuit.toFixed(2) + "h" : ""}</td>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.heuresNuit > 0 ? i.heuresNuit.toFixed(2) + "h" : "—"}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">${i.primeDimanche > 0 ? "+" + i.primeDimanche + "€" : ""}</td>
               </tr>`).join("")}
         </tbody>
@@ -1132,7 +1132,7 @@ function renderDocPreview() {
           </tr>
         </tfoot>
       </table>
-      <p style="font-size:10px;color:#666;margin-bottom:12px">Heures de nuit calculées sur la plage 21h-6h (indicatif — à valider avec la convention collective). Prime dimanche : ${PRIME_DIMANCHE}€ par jour d'intervention un dimanche.</p>
+      <p style="font-size:10px;color:#666;margin-bottom:12px">« Dont nuit » = la part des heures totales effectuée entre 21h et 6h (déjà comptée dans le total, pas en plus — sert juste à repérer la majoration nuit à appliquer). Calcul indicatif, à valider avec la convention collective. Prime dimanche : ${PRIME_DIMANCHE}€ par jour d'intervention un dimanche.</p>
 
       <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
         <span>Signature salarié</span>
