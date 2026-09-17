@@ -881,6 +881,7 @@ function renderVueEnsembleAbsences(allPeople) {
 }
 
 function renderImportPrtt(allPeople) {
+  if (!ui.prttPersonne && allPeople.length > 0) ui.prttPersonne = allPeople[0]; // le menu affiche déjà le 1er nom par défaut (comportement natif du <select>) — sans ceci, la variable interne restait vide tant qu'on ne cliquait pas dessus, et cherchait le régime de "" plutôt que de la bonne personne
   return `
     <div class="form-card">
       <button type="button" class="nav-btn" id="prtt-toggle" style="width:fit-content">${ui.prttImportOuvert ? "▲ Fermer l'import PRTT" : "📥 Importer un planning PRTT (Excel)"}</button>
