@@ -1394,7 +1394,11 @@ function renderInterventions(container, perms) {
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
     document.getElementById("f-date").addEventListener("change", (e) => {
-      if (!isPlausibleDate(e.target.value)) { e.target.value = ui.form.date; return; }
+      // On accepte toujours ce qui est tapé, même une valeur intermédiaire
+      // improbable en cours de frappe — la remettre de force à l'ancienne
+      // valeur ici empêchait de taper une nouvelle date au clavier
+      // (le champ se réinitialisait avant que l'année soit complète).
+      // La vérification a lieu seulement au moment d'utiliser la date.
       ui.form.date = e.target.value;
       const indicator = document.getElementById("interv-nuit-indicator");
       if (indicator) indicator.innerHTML = nuitIndicatorHTML();
@@ -1434,6 +1438,7 @@ function renderInterventions(container, perms) {
     }
     document.getElementById("add-interv").addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
+      if (!isPlausibleDate(ui.form.date)) { statusEl.innerHTML = `<span style="color:var(--red)">La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement.</span>`; return; }
       if (ui.form.appelN1) {
         // Un appel au N1 peut se suffire à lui-même (ex. alerte à distance,
         // sans déplacement sur site) — pas besoin d'intervenant N2,
@@ -1535,11 +1540,11 @@ function renderInterventions(container, perms) {
   if (perms.isEditor) {
     document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
     document.getElementById("doc-start").addEventListener("change", (e) => {
-      if (!isPlausibleDate(e.target.value)) { e.target.value = ui.docForm.start; return; }
+      // Idem : on n'empêche plus de taper, on valide seulement au moment
+      // de générer le document (bouton plus bas).
       ui.docForm.start = e.target.value; if (ui.docForm.generated) renderAll();
     });
     document.getElementById("doc-end").addEventListener("change", (e) => {
-      if (!isPlausibleDate(e.target.value)) { e.target.value = ui.docForm.end; return; }
       ui.docForm.end = e.target.value; if (ui.docForm.generated) renderAll();
     });
     document.getElementById("doc-generate").addEventListener("click", () => {
