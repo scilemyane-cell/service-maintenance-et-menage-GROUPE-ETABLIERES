@@ -617,16 +617,26 @@ function renderTransferts(container, user) {
 // Éditeur commun "Noms des personnes" (ajout/retrait/renommage des N1 et
 // N2) — utilisé à la fois depuis Astreinte (Calendrier) et Coordonnées,
 // pour ne pas avoir à naviguer entre les deux pour la même chose.
+// Le mot à utiliser pour un jour à 0h dépend du régime de travail de la
+// personne : "RTT" pour un forfait jours (ex. cadre), "Jour à 0" pour
+// une modulation horaire (ex. technicien) — les deux visent la même
+// case du fichier PRTT (RR/R ou case vide), seul le mot change à
+// l'affichage. Par défaut (régime non précisé) : "Jour à 0".
+function libelleRtt(nom) {
+  return (state.people.regimes || {})[nom] === "forfait" ? "RTT" : "Jour à 0";
+}
+
 function renderNomsEditor() {
   return `
     <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
       <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Noms des personnes</summary>
-      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre.</p>
+      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre. Le régime de travail détermine juste le mot utilisé pour un jour à 0h (RTT pour un forfait jours, Jour à 0 pour une modulation horaire) — sans effet sur le calendrier.</p>
       <p style="font-size:12px;font-weight:700;margin:10px 0 6px">Niveau 1 — réception</p>
       <div class="form-grid">
         ${state.people.n1.map((name, i) => `
           <label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1">N1 — ${i === 0 ? "Principal" : "Remplaçant" + (state.people.n1.length > 2 ? " " + i : "")}<input data-name-group="n1" data-name-idx="${i}" value="${esc(name)}"></span>
+            <span style="margin-top:18px"><select data-name-regime="${esc(name)}"><option value="horaire" ${(state.people.regimes || {})[name] !== "forfait" ? "selected" : ""}>Modulation horaire</option><option value="forfait" ${(state.people.regimes || {})[name] === "forfait" ? "selected" : ""}>Forfait jours</option></select></span>
             ${state.people.n1.length > 1 ? `<button type="button" class="del-btn" data-name-del="n1:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
           </label>
         `).join("")}
@@ -642,6 +652,7 @@ function renderNomsEditor() {
         ${state.people.n2.map((name, i) => `
           <label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1">N2 — Technicien ${i + 1}<input data-name-group="n2" data-name-idx="${i}" value="${esc(name)}"></span>
+            <span style="margin-top:18px"><select data-name-regime="${esc(name)}"><option value="horaire" ${(state.people.regimes || {})[name] !== "forfait" ? "selected" : ""}>Modulation horaire</option><option value="forfait" ${(state.people.regimes || {})[name] === "forfait" ? "selected" : ""}>Forfait jours</option></select></span>
             ${state.people.n2.length > 1 ? `<button type="button" class="del-btn" data-name-del="n2:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
           </label>
         `).join("")}
@@ -672,6 +683,11 @@ function attacherNomsEditorListeners(container, onSaved) {
     if (!(await window.confirmDialog(`Retirer "${nomRetire}" du roulement ${grp.toUpperCase()} ? L'historique des astreintes déjà passées n'est pas modifié.`, { danger: true, texteValider: "Retirer" }))) return;
     const next = { ...state.people, [grp]: state.people[grp].filter((_, i) => i !== idx) };
     await savePeople(next);
+  }));
+  container.querySelectorAll("[data-name-regime]").forEach(sel => sel.addEventListener("change", async () => {
+    const nom = sel.dataset.nameRegime;
+    const regimes = { ...(state.people.regimes || {}), [nom]: sel.value };
+    await savePeople({ ...state.people, regimes });
   }));
   document.getElementById("names-add-n1")?.addEventListener("click", () => {
     const form = document.getElementById("names-add-n1-form");
@@ -852,7 +868,7 @@ function renderVueEnsembleAbsences(allPeople) {
                     parType[a.type] = (parType[a.type] || 0) + j;
                   });
                   const couleur = parType.arret ? "var(--red)" : parType.conge ? "var(--gold)" : "var(--teal)";
-                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? "RTT" : "arrêt"}`).join(", ");
+                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? libelleRtt(p) : "arrêt"}`).join(", ");
                   return `<td style="color:${couleur};font-weight:700" title="${esc(detail)}">${Object.values(parType).reduce((s, v) => s + v, 0)}j</td>`;
                 }).join("")}
               </tr>
@@ -896,7 +912,7 @@ function renderApercuPrtt() {
           <tbody>
             ${ui.prttPreview.map((p, i) => `
               <tr>
-                <td><select data-prtt-type="${i}"><option value="conge" ${p.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${p.type === "rtt" ? "selected" : ""}>RTT</option></select></td>
+                <td><select data-prtt-type="${i}"><option value="conge" ${p.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${p.type === "rtt" ? "selected" : ""}>${libelleRtt(ui.prttPersonne)}</option></select></td>
                 <td>${fmtShort(p.start)}</td><td>${fmtShort(p.end)}</td>
                 <td>${Math.round((p.end - p.start) / 86400000) + 1}</td>
                 <td><button type="button" class="del-btn" data-prtt-retirer="${i}">🗑️</button></td>
@@ -923,14 +939,14 @@ function renderAbsences(container, perms) {
   container.innerHTML = `
     <div class="stack">
       <p class="hint">Ajoute une plage de dates précise. Le planning se recalcule automatiquement.</p>
-      <div class="stat-row">${allPeople.map(p => `<div class="stat-chip">${esc(p)} : <b>${totals[p]}</b> j${totalsRtt[p] > 0 ? ` (dont <b>${totalsRtt[p]}</b> RTT)` : ""}</div>`).join("")}</div>
+      <div class="stat-row">${allPeople.map(p => `<div class="stat-chip">${esc(p)} : <b>${totals[p]}</b> j${totalsRtt[p] > 0 ? ` (dont <b>${totalsRtt[p]}</b> ${libelleRtt(p)})` : ""}</div>`).join("")}</div>
       ${renderVueEnsembleAbsences(allPeople)}
       ${perms.canManageAbsences ? renderImportPrtt(allPeople) : ""}
       ${perms.canManageAbsences ? `
       <div class="form-card">
         <div class="form-grid">
           <label>Personne<select id="a-person">${allPeople.map(p => `<option value="${esc(p)}" ${ui.absForm.person === p ? 'selected' : ''}>${esc(p)}</option>`).join("")}</select></label>
-          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>RTT</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
+          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>${libelleRtt(ui.absForm.person || allPeople[0])}</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
           <label>Du<input type="date" id="a-start" value="${esc(ui.absForm.start)}"></label>
           <label>Au<input type="date" id="a-end" value="${esc(ui.absForm.end)}"></label>
           <label class="desc-field">Note<input id="a-note" value="${esc(ui.absForm.note)}" placeholder="optionnel"></label>
@@ -946,7 +962,7 @@ function renderAbsences(container, perms) {
                 const days = (new Date(a.end) - new Date(a.start)) / 86400000 + 1;
                 return `<tr>
                   <td>${esc(a.person)}</td>
-                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? 'RTT' : 'Arrêt'}</span></td>
+                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? libelleRtt(a.person) : 'Arrêt'}</span></td>
                   <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td><td>${esc(a.note || "")}</td>
                   ${perms.canManageAbsences ? `<td><button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
                 </tr>`;
@@ -961,7 +977,7 @@ function renderAbsences(container, perms) {
     ["person", "type", "start", "end", "note"].forEach(f => {
       const el = document.getElementById("a-" + f);
       el.addEventListener("input", () => { ui.absForm[f] = el.value; });
-      el.addEventListener("change", () => { ui.absForm[f] = el.value; });
+      el.addEventListener("change", () => { ui.absForm[f] = el.value; if (f === "person") renderAll(); });
     });
     document.getElementById("add-abs").addEventListener("click", async () => {
       if (!ui.absForm.start || !ui.absForm.end) return;
