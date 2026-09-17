@@ -37,19 +37,41 @@ export function trouverPeriodeReference(sheet, XLSX) {
   return null;
 }
 
+// Repère la colonne au-delà de laquelle la feuille ne contient plus le
+// vrai calendrier mais une zone annexe ("Contrat se terminant au-delà
+// de la période de référence") — sert de deuxième garde-fou, en plus de
+// la période de référence, contre les tableaux de calcul présents plus
+// loin sur la même feuille (source des faux "0" qui annulaient à tort
+// de vrais RTT).
+export function trouverBorneDroite(sheet, XLSX) {
+  if (!sheet["!ref"]) return null;
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === "string" && /contrat se terminant/i.test(cell.v)) return c;
+    }
+  }
+  return null;
+}
+
 // Parcourt une feuille et repère chaque cellule contenant une date ;
 // lit la valeur juste à droite (colonne "Prévu") sur la même ligne —
 // robuste à la mise en page réelle du fichier (plusieurs mois côte à
 // côte, blocs de 3 colonnes Date/Prévu/Écart). Si une période de
 // référence est trouvée sur la feuille, les dates en dehors sont
-// ignorées (autres tableaux de la même feuille, hors calendrier réel).
+// ignorées (autres tableaux de la même feuille, hors calendrier réel) ;
+// de même, tout ce qui est à la colonne "Contrat se terminant au-delà"
+// ou après est ignoré (zone annexe, pas le calendrier réel).
 export function extraireJours(sheet, XLSX) {
   if (!sheet["!ref"]) return [];
   const periode = trouverPeriodeReference(sheet, XLSX);
+  const borneDroite = trouverBorneDroite(sheet, XLSX);
   const range = XLSX.utils.decode_range(sheet["!ref"]);
+  const colMax = borneDroite !== null ? Math.min(range.e.c, borneDroite - 1) : range.e.c;
   const jours = [];
   for (let r = range.s.r; r <= range.e.r; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
+    for (let c = range.s.c; c <= colMax; c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r, c })];
       if (cell && cell.t === "d" && cell.v instanceof Date) {
         if (periode && (cell.v < periode.debut || cell.v > periode.fin)) continue;

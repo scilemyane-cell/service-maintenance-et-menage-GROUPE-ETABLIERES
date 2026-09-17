@@ -852,7 +852,7 @@ function renderVueEnsembleAbsences(allPeople) {
                     parType[a.type] = (parType[a.type] || 0) + j;
                   });
                   const couleur = parType.arret ? "var(--red)" : parType.conge ? "var(--gold)" : "var(--teal)";
-                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? "RTT" : "arrêt"}`).join(", ");
+                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? "jour à 0" : "arrêt"}`).join(", ");
                   return `<td style="color:${couleur};font-weight:700" title="${esc(detail)}">${Object.values(parType).reduce((s, v) => s + v, 0)}j</td>`;
                 }).join("")}
               </tr>
@@ -869,7 +869,7 @@ function renderImportPrtt(allPeople) {
     <div class="form-card">
       <button type="button" class="nav-btn" id="prtt-toggle" style="width:fit-content">${ui.prttImportOuvert ? "▲ Fermer l'import PRTT" : "📥 Importer un planning PRTT (Excel)"}</button>
       ${ui.prttImportOuvert ? `
-        <p class="hint" style="margin:10px 0">Lit directement le fichier PRTT (planning prévisionnel de modulation, format RH10) pour proposer les jours de congé/RTT à bloquer dans l'astreinte — évite de ressaisir à la main ce qui est déjà dans le planning RH. Les week-ends et jours fériés sont ignorés (une case vide un week-end n'est pas une absence).</p>
+        <p class="hint" style="margin:10px 0">Lit directement le fichier PRTT (planning prévisionnel de modulation, format RH10) pour proposer les jours de congé/jour à 0 à bloquer dans l'astreinte — évite de ressaisir à la main ce qui est déjà dans le planning RH. Les week-ends et jours fériés sont ignorés (une case vide un week-end n'est pas une absence).</p>
         <div class="form-grid">
           <label>Personne concernée<select id="prtt-personne">${allPeople.map(p => `<option value="${esc(p)}" ${ui.prttPersonne === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
           <label>Fichier Excel PRTT<input type="file" id="prtt-fichier" accept=".xlsx,.xls"></label>
@@ -886,7 +886,7 @@ function renderImportPrtt(allPeople) {
 }
 
 function renderApercuPrtt() {
-  if (ui.prttPreview.length === 0) return `<p class="hint" style="margin-top:10px">Aucun jour de congé/RTT détecté sur cette feuille.</p>`;
+  if (ui.prttPreview.length === 0) return `<p class="hint" style="margin-top:10px">Aucun jour de congé/jour à 0 détecté sur cette feuille.</p>`;
   return `
     <div style="margin-top:12px">
       <p style="font-size:12px;font-weight:700;margin:0 0 8px">Aperçu — ${ui.prttPreview.length} période(s) proposée(s) pour ${esc(ui.prttPersonne)} (à corriger si besoin avant de valider)</p>
@@ -896,7 +896,7 @@ function renderApercuPrtt() {
           <tbody>
             ${ui.prttPreview.map((p, i) => `
               <tr>
-                <td><select data-prtt-type="${i}"><option value="conge" ${p.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${p.type === "rtt" ? "selected" : ""}>RTT</option></select></td>
+                <td><select data-prtt-type="${i}"><option value="conge" ${p.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${p.type === "rtt" ? "selected" : ""}>Jour à 0</option></select></td>
                 <td>${fmtShort(p.start)}</td><td>${fmtShort(p.end)}</td>
                 <td>${Math.round((p.end - p.start) / 86400000) + 1}</td>
                 <td><button type="button" class="del-btn" data-prtt-retirer="${i}">🗑️</button></td>
@@ -923,14 +923,14 @@ function renderAbsences(container, perms) {
   container.innerHTML = `
     <div class="stack">
       <p class="hint">Ajoute une plage de dates précise. Le planning se recalcule automatiquement.</p>
-      <div class="stat-row">${allPeople.map(p => `<div class="stat-chip">${esc(p)} : <b>${totals[p]}</b> j${totalsRtt[p] > 0 ? ` (dont <b>${totalsRtt[p]}</b> RTT)` : ""}</div>`).join("")}</div>
+      <div class="stat-row">${allPeople.map(p => `<div class="stat-chip">${esc(p)} : <b>${totals[p]}</b> j${totalsRtt[p] > 0 ? ` (dont <b>${totalsRtt[p]}</b> jour(s) à 0)` : ""}</div>`).join("")}</div>
       ${renderVueEnsembleAbsences(allPeople)}
       ${perms.canManageAbsences ? renderImportPrtt(allPeople) : ""}
       ${perms.canManageAbsences ? `
       <div class="form-card">
         <div class="form-grid">
           <label>Personne<select id="a-person">${allPeople.map(p => `<option value="${esc(p)}" ${ui.absForm.person === p ? 'selected' : ''}>${esc(p)}</option>`).join("")}</select></label>
-          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>RTT</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
+          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>Jour à 0</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
           <label>Du<input type="date" id="a-start" value="${esc(ui.absForm.start)}"></label>
           <label>Au<input type="date" id="a-end" value="${esc(ui.absForm.end)}"></label>
           <label class="desc-field">Note<input id="a-note" value="${esc(ui.absForm.note)}" placeholder="optionnel"></label>
@@ -946,7 +946,7 @@ function renderAbsences(container, perms) {
                 const days = (new Date(a.end) - new Date(a.start)) / 86400000 + 1;
                 return `<tr>
                   <td>${esc(a.person)}</td>
-                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? 'RTT' : 'Arrêt'}</span></td>
+                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? 'Jour à 0' : 'Arrêt'}</span></td>
                   <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td><td>${esc(a.note || "")}</td>
                   ${perms.canManageAbsences ? `<td><button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
                 </tr>`;
