@@ -1,7 +1,7 @@
 import { db } from "./firebase-init.js";
 import {
-  doc, getDoc, setDoc, updateDoc,
-  collection, addDoc, deleteDoc, onSnapshot, runTransaction,
+  doc, getDoc, getDocs, setDoc, updateDoc,
+  collection, addDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
@@ -36,7 +36,7 @@ export async function deleteAbsence(id) {
 export function watchInterventions(callback) {
   return onSnapshot(collection(db, "interventions"), (snap) => {
     const list = [];
-    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
     callback(list);
   }, (err) => { console.error("watchInterventions:", err); callback([]); });
 }
@@ -58,6 +58,21 @@ export async function addIntervention(record) {
 export async function updateIntervention(id, fields) {
   await updateDoc(doc(db, "interventions", id), fields);
 }
-export async function deleteIntervention(id) {
+// Suppression récupérable (corbeille, 60 jours) — remplace l'ancienne
+// suppression directe et définitive, à l'origine d'une perte de données
+// accidentelle sans aucun moyen de rattrapage.
+export async function envoyerInterventionCorbeille(id) {
+  await updateDoc(doc(db, "interventions", id), { supprimeLe: serverTimestamp() });
+}
+export async function restaurerIntervention(id) {
+  await updateDoc(doc(db, "interventions", id), { supprimeLe: deleteField() });
+}
+export async function purgerInterventionDefinitivement(id) {
   await deleteDoc(doc(db, "interventions", id));
+}
+export async function listerInterventionsCorbeille() {
+  const snap = await getDocs(collection(db, "interventions"));
+  const list = [];
+  snap.forEach((d) => { if (d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
+  return list;
 }

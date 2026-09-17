@@ -5,7 +5,7 @@ import {
 } from "./astreinte-logic.js";
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
-  watchInterventions, addIntervention, updateIntervention, deleteIntervention,
+  watchInterventions, addIntervention, updateIntervention, envoyerInterventionCorbeille,
 } from "./firestore-data.js";
 import { watchTransferts, annulerTransfert } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
@@ -1518,9 +1518,12 @@ function renderInterventions(container, perms) {
     container.querySelectorAll("[data-del]").forEach(btn => {
       btn.addEventListener("click", async () => {
         const id = btn.dataset.del;
+        const interv = state.interventions.find(i => i.id === id);
+        const libelle = interv ? `l'intervention du ${new Date(interv.date).toLocaleDateString("fr-FR")} chez ${interv.site} (${interv.technicien})` : "cette intervention";
+        if (!(await window.confirmDialog(`Mettre ${libelle} à la corbeille ? Récupérable pendant 60 jours dans Administration > Corbeille.`, { danger: true, texteValider: "Mettre à la corbeille" }))) return;
         state.interventions = state.interventions.filter(i => i.id !== id);
         renderAll();
-        await deleteIntervention(id);
+        await envoyerInterventionCorbeille(id);
       });
     });
     container.querySelectorAll("[data-remettre-attente]").forEach(btn => {
