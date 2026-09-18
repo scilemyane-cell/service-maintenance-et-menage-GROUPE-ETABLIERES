@@ -1289,6 +1289,8 @@ function renderInterventions(container, perms) {
       <div class="form-card">
         <div class="form-grid">
           <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
+          ${ui.editingId && mountedUser.role === "super_admin" ? `
+          <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
           <label>Intervenant
             ${isLockedTech
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
@@ -1393,6 +1395,7 @@ function renderInterventions(container, perms) {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
+    document.getElementById("f-numero")?.addEventListener("input", (e) => { ui.form.numero = e.target.value; });
     document.getElementById("f-date").addEventListener("change", (e) => {
       // On accepte toujours ce qui est tapé, même une valeur intermédiaire
       // improbable en cours de frappe — la remettre de force à l'ancienne
@@ -1465,6 +1468,13 @@ function renderInterventions(container, perms) {
         appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
         motifAppelN1: ui.form.appelN1 ? ui.form.motifAppelN1 : "", decisionN1: ui.form.appelN1 ? ui.form.decisionN1 : "",
       };
+      // Correction manuelle du numéro d'intervention (INT-00042), réservée
+      // au Super Admin, en cas d'erreur de numérotation (doublon, décalage
+      // après une purge, etc.) — uniquement lors d'une modification, jamais
+      // à la création (le numéro est toujours généré automatiquement).
+      if (ui.editingId && mountedUser.role === "super_admin" && ui.form.numero && ui.form.numero.trim()) {
+        payload.numero = ui.form.numero.trim();
+      }
       try {
         if (ui.editingId) {
           await updateIntervention(ui.editingId, payload);
@@ -1510,6 +1520,7 @@ function renderInterventions(container, perms) {
           site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
           photos: i.photos || [],
           appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
+          numero: i.numero || "",
         };
         renderAll();
         mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
