@@ -1121,6 +1121,7 @@ function renderDocPreview() {
 
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
         <thead><tr>
+          <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">N°</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Date</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Intervenant</th>
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">Site</th>
@@ -1133,9 +1134,10 @@ function renderDocPreview() {
           <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:center">Prime dim.</th>
         </tr></thead>
         <tbody>
-          ${filtered.length === 0 ? `<tr><td colspan="10" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
+          ${filtered.length === 0 ? `<tr><td colspan="11" style="border:1px solid #999;padding:8px;text-align:center;font-size:12px">Aucune intervention sur cette période.</td></tr>` :
             filtered.map(i => `
               <tr>
+                <td style="border:1px solid #999;padding:4px 6px;font-size:10px;font-family:ui-monospace,monospace">${esc(i.numero || "—")}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${new Date(i.date).toLocaleDateString("fr-FR")}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.technicien)}</td>
                 <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(i.site)}</td>
@@ -1150,7 +1152,7 @@ function renderDocPreview() {
         </tbody>
         <tfoot>
           <tr style="font-weight:700">
-            <td colspan="7" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
+            <td colspan="8" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:right">Total</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${total.toFixed(2)} h</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${totalNuit.toFixed(2)} h</td>
             <td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${totalPrimes > 0 ? totalPrimes + "€" : "0€"}</td>
