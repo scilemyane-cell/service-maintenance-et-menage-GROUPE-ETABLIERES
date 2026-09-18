@@ -1554,12 +1554,15 @@ function renderInterventions(container, perms) {
   if (perms.isEditor) {
     document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
     document.getElementById("doc-start").addEventListener("change", (e) => {
-      // Idem : on n'empêche plus de taper, on valide seulement au moment
-      // de générer le document (bouton plus bas).
-      ui.docForm.start = e.target.value; if (ui.docForm.generated) renderAll();
+      // On n'empêche plus de taper, et on ne relance plus un rendu complet
+      // ici : un renderAll() en cours de frappe recréait le champ et
+      // coupait la saisie du clavier (ex. année tapée à moitié). La
+      // validation et le re-rendu n'ont lieu qu'au clic sur "Générer le
+      // document".
+      ui.docForm.start = e.target.value;
     });
     document.getElementById("doc-end").addEventListener("change", (e) => {
-      ui.docForm.end = e.target.value; if (ui.docForm.generated) renderAll();
+      ui.docForm.end = e.target.value;
     });
     document.getElementById("doc-generate").addEventListener("click", () => {
       if (!isPlausibleDate(ui.docForm.start) || !isPlausibleDate(ui.docForm.end)) {
