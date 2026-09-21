@@ -231,13 +231,17 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
    QR code isolé (étiquette produit, QR du mode rapide, QR de dossier) ---- */
 .print-only{ display:none; }
 @media print{
-  /* Portrait (le paysage réduit la hauteur utile de la page et fait
-     basculer les relevés à plusieurs interventions sur 2+ pages, ce qui
-     n'est pas souhaité) : le tableau est contraint à la largeur de la
-     page ci-dessous (width:100%, table-layout:fixed, retour à la ligne)
-     plutôt que d'obtenir de la place en changeant l'orientation — c'est
-     ça qui coupait les dernières colonnes (ex. "Prime dim."). */
-  @page{ size:A4 portrait; margin:10mm; }
+  /* Paysage : plus de largeur pour les tableaux à beaucoup de colonnes
+     (relevé d'heures avec numéro d'intervention, site, type, horaires,
+     compte-rendu, totaux...) — au prix de basculer sur 2 pages ou plus
+     quand il y a beaucoup d'interventions, mais avec un numéro de page
+     et un en-tête de tableau répété sur chaque page pour rester propre. */
+  @page{
+    size:A4 landscape; margin:14mm 12mm 16mm 12mm;
+    /* Numérotation de page — support Chrome/Chromium correct depuis
+       plusieurs versions pour l'impression et l'export PDF. */
+    @bottom-center{ content:"Page " counter(page) " / " counter(pages); font-size:9px; color:#666; }
+  }
   body{ background:#fff !important; color:#000 !important; }
   .print-only{ display:block !important; }
   /* Masque tout, sauf le bloc .print-fiche et son contenu — fonctionne
@@ -253,8 +257,14 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
      déborder hors impression (min-width fixé pour le défilement mobile,
      inutile et néfaste ici) : largeur forcée à 100%, colonnes réparties
      selon leur contenu, texte qui retourne à la ligne au besoin. */
-  .print-fiche table{ color:#000; width:100% !important; min-width:0 !important; table-layout:fixed; font-size:9px !important; }
-  .print-fiche th, .print-fiche td{ border:1px solid #999 !important; color:#000 !important; word-wrap:break-word; overflow-wrap:break-word; padding:2px 4px !important; }
+  .print-fiche table{ color:#000; width:100% !important; min-width:0 !important; table-layout:fixed; font-size:10px !important; border-collapse:collapse !important; }
+  .print-fiche th, .print-fiche td{ border:1px solid #999 !important; color:#000 !important; word-wrap:break-word; overflow-wrap:break-word; padding:3px 5px !important; }
+  /* Mise en page propre sur plusieurs pages : l'en-tête du tableau se
+     répète en haut de chaque page, et une ligne du tableau ne se coupe
+     jamais au milieu entre deux pages. */
+  .print-fiche thead{ display:table-header-group; }
+  .print-fiche tfoot{ display:table-footer-group; }
+  .print-fiche tr{ page-break-inside:avoid; break-inside:avoid; }
   .print-fiche h3{ color:#000 !important; }
 
   /* Impression d'un QR isolé — voir printQrCard() dans qr-logo.js, qui
