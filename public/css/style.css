@@ -237,6 +237,27 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .del-btn{ background:none; border:none; color:var(--red); cursor:pointer; padding:4px; font-size:14px; }
 .empty-row{ text-align:center; color:var(--text-dim); padding:26px; }
 
+/* Planning individuel — calendrier annuel par personne */
+.year-cal{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; margin-top:10px; }
+.year-cal-month{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; }
+.year-cal-month-title{ margin:0 0 8px; font-size:12px; font-weight:800; color:var(--text); text-transform:uppercase; letter-spacing:.05em; }
+.year-cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+.year-cal-dow{ margin-bottom:3px; font-size:9px; color:var(--text-dim); text-align:center; }
+.year-cal-day{
+  position:relative; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  font-size:10px; border-radius:5px; background:var(--panel-alt); color:var(--text-dim);
+}
+.year-cal-day.hors-mois{ visibility:hidden; }
+.year-cal-day.weekend{ background:transparent; color:var(--text-dim); opacity:.55; }
+.year-cal-day.conge{ background:var(--gold); color:#1A1305; font-weight:700; }
+.year-cal-day.rtt{ background:var(--teal); color:#04211E; font-weight:700; }
+.year-cal-day.arret{ background:var(--red); color:#fff; font-weight:700; }
+.year-cal-day.today{ outline:2px solid var(--gold); outline-offset:1px; }
+.year-cal-dot{ position:absolute; bottom:1px; right:1px; width:4px; height:4px; border-radius:50%; background:currentColor; box-shadow:0 0 0 1px rgba(0,0,0,.3); }
+.year-cal-legend{ display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--text-dim); align-items:center; }
+.year-cal-legend-dot{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:middle; }
+.year-cal-legend-dot-outline{ background:transparent; border:2px solid var(--text-dim); border-radius:50%; width:6px; height:6px; }
+
 .cal-day.today{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 14px rgba(217,178,76,.45); animation:cal-pulse-gold 2.2s ease-in-out infinite; }
 .cal-day.alert-day{ border-color:var(--red); box-shadow:0 0 0 1px var(--red), 0 0 14px rgba(229,83,61,.45); animation:cal-pulse-red 1.5s ease-in-out infinite; }
 @keyframes cal-pulse-gold{ 0%,100%{ box-shadow:0 0 0 1px var(--gold), 0 0 8px rgba(217,178,76,.3);} 50%{ box-shadow:0 0 0 1px var(--gold), 0 0 20px rgba(217,178,76,.6);} }

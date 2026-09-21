@@ -75,6 +75,7 @@ let ui = {
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
+  planningIndivPerson: null, planningIndivYear: new Date().getFullYear(),
 };
 let unsubs = [];
 let clearCountdown = null;
@@ -135,6 +136,7 @@ export function mountSyntheseTab(container, user) { startListeners(container, us
 export function mountTransfertsTab(container, user) { startListeners(container, user, "transferts"); }
 export function mountCoordonneesTab(container, user) { startListeners(container, user, "coordonnees"); }
 export function mountArchiveRelevesTab(container, user) { startListeners(container, user, "archive-releves"); }
+export function mountPlanningIndividuelTab(container, user) { startListeners(container, user, "planning-individuel"); }
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
@@ -153,6 +155,7 @@ function renderAll() {
   if (ui.subtab === "transferts") return renderTransferts(mountedContainer, mountedUser);
   if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
   if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer, mountedUser);
+  if (ui.subtab === "planning-individuel") return renderPlanningIndividuel(mountedContainer, perms);
 }
 
 // =================================================================
@@ -714,13 +717,14 @@ function renderNomsEditor() {
   return `
     <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
       <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Noms des personnes</summary>
-      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre. Le régime de travail détermine juste le mot utilisé pour un jour à 0h (RTT pour un forfait jours, Jour à 0 pour une modulation horaire) — sans effet sur le calendrier.</p>
+      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre. Le régime de travail détermine juste le mot utilisé pour un jour à 0h (RTT pour un forfait jours, Jour à 0 pour une modulation horaire) — sans effet sur le calendrier. Décoche "Astreinte" pour une personne présente dans la liste (note de frais, planning individuel, interventions) mais qui ne doit jamais être tirée au sort dans le roulement — ex. un agent qui n'est pas d'astreinte.</p>
       <p style="font-size:12px;font-weight:700;margin:10px 0 6px">Niveau 1 — réception</p>
       <div class="form-grid">
         ${state.people.n1.map((name, i) => `
           <label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1">N1 — ${i === 0 ? "Principal" : "Remplaçant" + (state.people.n1.length > 2 ? " " + i : "")}<input data-name-group="n1" data-name-idx="${i}" value="${esc(name)}"></span>
             <span style="margin-top:18px"><select data-name-regime="${esc(name)}"><option value="horaire" ${(state.people.regimes || {})[name] !== "forfait" ? "selected" : ""}>Modulation horaire</option><option value="forfait" ${(state.people.regimes || {})[name] === "forfait" ? "selected" : ""}>Forfait jours</option></select></span>
+            <label style="display:flex;align-items:center;gap:3px;margin-top:18px;font-size:10px;white-space:nowrap"><input type="checkbox" data-name-astreinte="${esc(name)}" ${(state.people.astreinteActive || {})[name] !== false ? "checked" : ""} style="width:14px;height:14px">Astreinte</label>
             ${state.people.n1.length > 1 ? `<button type="button" class="del-btn" data-name-del="n1:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
           </label>
         `).join("")}
@@ -737,6 +741,7 @@ function renderNomsEditor() {
           <label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1">N2 — Technicien ${i + 1}<input data-name-group="n2" data-name-idx="${i}" value="${esc(name)}"></span>
             <span style="margin-top:18px"><select data-name-regime="${esc(name)}"><option value="horaire" ${(state.people.regimes || {})[name] !== "forfait" ? "selected" : ""}>Modulation horaire</option><option value="forfait" ${(state.people.regimes || {})[name] === "forfait" ? "selected" : ""}>Forfait jours</option></select></span>
+            <label style="display:flex;align-items:center;gap:3px;margin-top:18px;font-size:10px;white-space:nowrap"><input type="checkbox" data-name-astreinte="${esc(name)}" ${(state.people.astreinteActive || {})[name] !== false ? "checked" : ""} style="width:14px;height:14px">Astreinte</label>
             ${state.people.n2.length > 1 ? `<button type="button" class="del-btn" data-name-del="n2:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
           </label>
         `).join("")}
@@ -773,6 +778,11 @@ function attacherNomsEditorListeners(container, onSaved) {
     const regimes = { ...(state.people.regimes || {}), [nom]: sel.value };
     await savePeople({ ...state.people, regimes });
   }));
+  container.querySelectorAll("[data-name-astreinte]").forEach(chk => chk.addEventListener("change", async () => {
+    const nom = chk.dataset.nameAstreinte;
+    const astreinteActive = { ...(state.people.astreinteActive || {}), [nom]: chk.checked };
+    await savePeople({ ...state.people, astreinteActive });
+  }));
   document.getElementById("names-add-n1")?.addEventListener("click", () => {
     const form = document.getElementById("names-add-n1-form");
     form.style.display = "flex";
@@ -793,27 +803,115 @@ function attacherNomsEditorListeners(container, onSaved) {
   });
 }
 
+// =================================================================
+// Planning individuel — calendrier annuel d'une personne (congés,
+// RTT, arrêts de travail et interventions), y compris pour quelqu'un
+// qui n'est pas dans le roulement d'astreinte (ex. un agent des
+// espaces verts). Les absences importées depuis un fichier PRTT
+// (voir prtt-import.js) alimentent automatiquement ce planning
+// puisqu'elles sont enregistrées comme n'importe quelle absence.
+// =================================================================
+const PLANNING_MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+function absenceDuJour(person, dateStr) {
+  return state.absences.find(a => a.person === person && dateStr >= a.start && dateStr <= a.end) || null;
+}
+
+function renderPlanningIndividuel(container, perms) {
+  const allPeople = [...new Set([...state.people.n1, ...state.people.n2])];
+  if (!ui.planningIndivPerson || !allPeople.includes(ui.planningIndivPerson)) {
+    ui.planningIndivPerson = allPeople[0] || null;
+  }
+  const person = ui.planningIndivPerson;
+  const year = ui.planningIndivYear;
+  const todayKey = dateKey(new Date());
+
+  const interventionsPersonne = new Set(
+    state.interventions.filter(i => i.technicien === person && (i.date || "").startsWith(String(year))).map(i => i.date)
+  );
+
+  const moisHTML = PLANNING_MOIS_LABELS.map((label, mIdx) => {
+    const jours = monthGrid(year, mIdx);
+    const cells = jours.map(d => {
+      const k = dateKey(d);
+      const horsMois = d.getMonth() !== mIdx;
+      const weekend = d.getDay() === 0 || d.getDay() === 6;
+      const abs = person ? absenceDuJour(person, k) : null;
+      const aIntervention = person && interventionsPersonne.has(k);
+      const classes = ["year-cal-day"];
+      if (horsMois) classes.push("hors-mois");
+      else if (weekend) classes.push("weekend");
+      if (abs) classes.push(abs.type === "arret" ? "arret" : abs.type === "rtt" ? "rtt" : "conge");
+      if (k === todayKey) classes.push("today");
+      const titre = abs ? (abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : "";
+      return `<div class="${classes.join(" ")}" title="${esc(titre)}">${d.getDate()}${aIntervention ? '<span class="year-cal-dot" title="Intervention"></span>' : ""}</div>`;
+    }).join("");
+    return `
+      <div class="year-cal-month">
+        <p class="year-cal-month-title">${label}</p>
+        <div class="year-cal-grid year-cal-dow">${["L", "M", "M", "J", "V", "S", "D"].map(j => `<div>${j}</div>`).join("")}</div>
+        <div class="year-cal-grid">${cells}</div>
+      </div>`;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="stack">
+      <p class="hint">Planning annuel d'une personne : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention. Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>
+      <div class="toolbar">
+        <label>Personne
+          <select id="pi-personne">${allPeople.length === 0 ? `<option value="">Aucune personne configurée</option>` : allPeople.map(p => `<option value="${esc(p)}" ${p === person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+        </label>
+        <label>Année
+          <select id="pi-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}</option>`).join("")}</select>
+        </label>
+      </div>
+      <div class="year-cal-legend">
+        <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> ${esc(libelleRtt(person || ""))}</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--red)"></i> Arrêt de travail</span>
+        <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Jour avec intervention</span>
+      </div>
+      ${!person ? `<p class="hint">Ajoute une personne (N1 ou N2) dans les Coordonnées pour afficher un planning.</p>` : `<div class="year-cal">${moisHTML}</div>`}
+    </div>
+  `;
+
+  document.getElementById("pi-personne")?.addEventListener("change", (e) => { ui.planningIndivPerson = e.target.value; renderAll(); });
+  document.getElementById("pi-annee")?.addEventListener("change", (e) => { ui.planningIndivYear = Number(e.target.value); renderAll(); });
+}
+
 function renderCalendar(container, perms) {
-  const { titN1, titN2, scoresN1, scoresN2 } = computeWeeklyTitulaires(state.people, state.absences);
+  // Une personne peut figurer dans les listes N1/N2 (note de frais,
+  // interventions, planning individuel...) sans jamais être tirée au
+  // sort dans le roulement d'astreinte (ex. un agent non-astreinte,
+  // décoché dans "Noms des personnes") : le calcul du roulement se base
+  // sur une version filtrée des listes, jamais sur state.people brut.
+  const astreinteActive = state.people.astreinteActive || {};
+  const peopleAstreinte = {
+    ...state.people,
+    n1: state.people.n1.filter(nom => astreinteActive[nom] !== false),
+    n2: state.people.n2.filter(nom => astreinteActive[nom] !== false),
+  };
+
+  const { titN1, titN2, scoresN1, scoresN2 } = computeWeeklyTitulaires(peopleAstreinte, state.absences);
   const today = new Date();
   const todayInRange = today >= addDays(YEAR_START, -7) && today <= addDays(YEAR_END, 7);
   const refDate = todayInRange ? today : YEAR_START;
-  const n1Today = resolveDayN1(refDate, state.people, state.absences, titN1);
-  const n2Today = resolveDayN2(refDate, state.people, state.absences, titN2);
+  const n1Today = resolveDayN1(refDate, peopleAstreinte, state.absences, titN1);
+  const n2Today = resolveDayN2(refDate, peopleAstreinte, state.absences, titN2);
   const holidayToday = HOLIDAYS.get(dateKey(refDate));
-  const next = todayInRange ? nextHandover(refDate, state.people, state.absences, titN1, resolveDayN1, 3) : null;
+  const next = todayInRange ? nextHandover(refDate, peopleAstreinte, state.absences, titN1, resolveDayN1, 3) : null;
   const confirmedRecord = next ? state.transferts.find(t => t.id === dateKey(next.date)) : null;
 
   let alertDays = [];
   for (let d = new Date(YEAR_START); d <= YEAR_END; d = addDays(d, 1)) {
-    const a = resolveDayN1(d, state.people, state.absences, titN1), b = resolveDayN2(d, state.people, state.absences, titN2);
+    const a = resolveDayN1(d, peopleAstreinte, state.absences, titN1), b = resolveDayN2(d, peopleAstreinte, state.absences, titN2);
     if (a.assigned === "A DÉFINIR" || b.assigned === "A DÉFINIR") alertDays.push(new Date(d));
   }
 
   const compteurs = {};
-  [...state.people.n1, ...state.people.n2].forEach(p => compteurs[p] = { n1: 0, n2: 0, score: 0 });
+  [...peopleAstreinte.n1, ...peopleAstreinte.n2].forEach(p => compteurs[p] = { n1: 0, n2: 0, score: 0 });
   for (let d = new Date(YEAR_START); d <= YEAR_END; d = addDays(d, 1)) {
-    const a = resolveDayN1(d, state.people, state.absences, titN1), b = resolveDayN2(d, state.people, state.absences, titN2);
+    const a = resolveDayN1(d, peopleAstreinte, state.absences, titN1), b = resolveDayN2(d, peopleAstreinte, state.absences, titN2);
     if (compteurs[a.assigned]) compteurs[a.assigned].n1++;
     if (compteurs[b.assigned]) compteurs[b.assigned].n2++;
   }
@@ -824,8 +922,8 @@ function renderCalendar(container, perms) {
   const days = monthGrid(ui.calYear, ui.calMonth);
   const dow = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   const selected = ui.selectedDate ? new Date(ui.selectedDate) : refDate;
-  const selN1 = resolveDayN1(selected, state.people, state.absences, titN1);
-  const selN2 = resolveDayN2(selected, state.people, state.absences, titN2);
+  const selN1 = resolveDayN1(selected, peopleAstreinte, state.absences, titN1);
+  const selN2 = resolveDayN2(selected, peopleAstreinte, state.absences, titN2);
   const selHoliday = HOLIDAYS.get(dateKey(selected));
 
   container.innerHTML = `
@@ -870,8 +968,8 @@ function renderCalendar(container, perms) {
             const isToday = sameDay(d, new Date());
             const isSel = sameDay(d, selected);
             const inRange = d >= addDays(YEAR_START, -7) && d <= addDays(YEAR_END, 7);
-            const a = inRange ? resolveDayN1(d, state.people, state.absences, titN1) : null;
-            const b = inRange ? resolveDayN2(d, state.people, state.absences, titN2) : null;
+            const a = inRange ? resolveDayN1(d, peopleAstreinte, state.absences, titN1) : null;
+            const b = inRange ? resolveDayN2(d, peopleAstreinte, state.absences, titN2) : null;
             const hol = HOLIDAYS.get(dateKey(d));
             const isAlert = a && b && (a.assigned === "A DÉFINIR" || b.assigned === "A DÉFINIR");
             return `<div class="cal-day ${inMonth ? '' : 'outside'} ${isToday && !isAlert ? 'today' : ''} ${isAlert ? 'alert-day' : ''} ${isSel ? 'selected' : ''}" data-date="${dateKey(d)}">
