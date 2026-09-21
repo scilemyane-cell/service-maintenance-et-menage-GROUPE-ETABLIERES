@@ -135,6 +135,7 @@ let ui = {
   prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
   planningIndivPerson: null, planningIndivYear: null, // année scolaire de départ ; résolue à anneeScolaireCourante() au premier rendu
+  planningVueMulti: false, planningMultiPersonnes: null, planningMultiMoisIdx: null,
   recurForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" },
   recurEditingId: null,
   planningQuickDate: null,
@@ -906,6 +907,11 @@ function anneeScolaireCourante() {
   const d = new Date();
   return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
 }
+function moisScolaireIdxCourant() {
+  const m = new Date().getMonth();
+  const idx = PLANNING_MOIS_SCOLAIRE.findIndex(x => x.mois === m);
+  return idx === -1 ? 0 : idx;
+}
 const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 function absenceDuJour(person, dateStr) {
@@ -1076,13 +1082,99 @@ function renderAjoutPonctuel(person) {
   `;
 }
 
+// Vue combinée : plusieurs agendas ouverts en même temps, sur un même
+// mois de l'année scolaire, pour voir d'un coup d'œil qui est présent,
+// absent ou déjà en intervention ce jour-là (utile en réunion de
+// planification, plutôt que d'ouvrir les plannings un par un).
+function renderVueMultiPersonnes(container, allPeople) {
+  const year = ui.planningIndivYear;
+  if (!ui.planningMultiPersonnes) ui.planningMultiPersonnes = [...allPeople];
+  else ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => allPeople.includes(p));
+  if (ui.planningMultiMoisIdx === null) ui.planningMultiMoisIdx = moisScolaireIdxCourant();
+  const moisInfo = PLANNING_MOIS_SCOLAIRE[ui.planningMultiMoisIdx];
+  const anneeReelle = year + moisInfo.decalage;
+  const nbJours = new Date(anneeReelle, moisInfo.mois + 1, 0).getDate();
+  const jours = Array.from({ length: nbJours }, (_, i) => new Date(anneeReelle, moisInfo.mois, i + 1));
+  const todayKey = dateKey(new Date());
+  const personnes = ui.planningMultiPersonnes;
+
+  const interventionsParPersonneDate = {};
+  state.interventions.forEach(i => {
+    if (!personnes.includes(i.technicien)) return;
+    interventionsParPersonneDate[`${i.technicien}|${i.date}`] = true;
+  });
+
+  container.innerHTML = `
+    <div class="stack">
+      <p class="hint">Vue combinée de plusieurs agendas sur un même mois — pour voir en un coup d'œil qui est présent, absent ou déjà en intervention ce jour-là.</p>
+      <div class="toolbar">
+        <button type="button" class="nav-btn" id="pm-retour">← Planning d'une personne</button>
+        <label>Année scolaire
+          <select id="pm-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}-${y + 1}</option>`).join("")}</select>
+        </label>
+        <label>Mois
+          <select id="pm-mois">${PLANNING_MOIS_SCOLAIRE.map((m, i) => `<option value="${i}" ${i === ui.planningMultiMoisIdx ? "selected" : ""}>${m.label}</option>`).join("")}</select>
+        </label>
+      </div>
+      <div class="stat-row" style="gap:6px">
+        ${allPeople.map(p => `<label style="display:flex;align-items:center;gap:4px;font-size:11px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:3px 10px;cursor:pointer">
+          <input type="checkbox" data-multi-personne="${esc(p)}" ${personnes.includes(p) ? "checked" : ""} style="width:13px;height:13px">${esc(p)}
+        </label>`).join("")}
+      </div>
+      <div class="year-cal-legend">
+        <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> RTT</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--red)"></i> Arrêt de travail</span>
+        <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention</span>
+      </div>
+      <div class="table-wrap">
+        <table style="font-size:11px">
+          <thead><tr><th style="position:sticky;left:0;background:var(--panel)">Personne</th>${jours.map(d => `<th style="text-align:center;${d.getDay() === 0 || d.getDay() === 6 ? "color:var(--text-dim)" : ""}">${d.getDate()}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${personnes.length === 0 ? `<tr><td colspan="${jours.length + 1}" class="empty-row">Sélectionne au moins une personne ci-dessus.</td></tr>` : personnes.map(p => `
+              <tr>
+                <td style="font-weight:700;white-space:nowrap;position:sticky;left:0;background:var(--panel)">${esc(p)}</td>
+                ${jours.map(d => {
+                  const k = dateKey(d);
+                  const abs = absenceDuJour(p, k);
+                  const interv = interventionsParPersonneDate[`${p}|${k}`];
+                  const weekend = d.getDay() === 0 || d.getDay() === 6;
+                  let bg = "transparent", titre = "Présent";
+                  if (abs) { bg = abs.type === "arret" ? "var(--red)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
+                  else if (weekend) { titre = "Week-end"; }
+                  return `<td style="text-align:center;padding:2px;${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
+                    <div title="${esc(titre)}" style="width:18px;height:18px;margin:0 auto;border-radius:5px;background:${bg};${weekend && !abs ? "opacity:.4" : ""};position:relative">
+                      ${interv ? `<span style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 1px rgba(0,0,0,.3)" title="Intervention"></span>` : ""}
+                    </div>
+                  </td>`;
+                }).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("pm-retour").addEventListener("click", () => { ui.planningVueMulti = false; renderAll(); });
+  document.getElementById("pm-annee").addEventListener("change", (e) => { ui.planningIndivYear = Number(e.target.value); renderAll(); });
+  document.getElementById("pm-mois").addEventListener("change", (e) => { ui.planningMultiMoisIdx = Number(e.target.value); renderAll(); });
+  container.querySelectorAll("[data-multi-personne]").forEach(chk => chk.addEventListener("change", () => {
+    const nom = chk.dataset.multiPersonne;
+    if (chk.checked) { if (!ui.planningMultiPersonnes.includes(nom)) ui.planningMultiPersonnes.push(nom); }
+    else { ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => p !== nom); }
+    renderAll();
+  }));
+}
+
 function renderPlanningIndividuel(container, perms) {
   const allPeople = [...new Set([...state.people.n1, ...state.people.n2])];
+  if (ui.planningIndivYear === null) ui.planningIndivYear = anneeScolaireCourante();
+  if (ui.planningVueMulti) return renderVueMultiPersonnes(container, allPeople);
   if (!ui.planningIndivPerson || !allPeople.includes(ui.planningIndivPerson)) {
     ui.planningIndivPerson = allPeople[0] || null;
   }
   const person = ui.planningIndivPerson;
-  if (ui.planningIndivYear === null) ui.planningIndivYear = anneeScolaireCourante();
   const year = ui.planningIndivYear; // année scolaire de départ (year → year+1)
   const todayKey = dateKey(new Date());
   const peutProgrammer = perms.canManageAbsences; // même niveau que la gestion des absences
@@ -1133,6 +1225,7 @@ function renderPlanningIndividuel(container, perms) {
         <label>Année scolaire
           <select id="pi-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}-${y + 1}</option>`).join("")}</select>
         </label>
+        <button type="button" class="nav-btn" id="pi-vue-multi" style="align-self:flex-end">👥 Voir plusieurs agendas</button>
       </div>
       <div class="year-cal-legend">
         <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
@@ -1150,6 +1243,7 @@ function renderPlanningIndividuel(container, perms) {
 
   document.getElementById("pi-personne")?.addEventListener("change", (e) => { ui.planningIndivPerson = e.target.value; ui.planningQuickDate = null; ui.recurEditingId = null; renderAll(); });
   document.getElementById("pi-annee")?.addEventListener("change", (e) => { ui.planningIndivYear = Number(e.target.value); renderAll(); });
+  document.getElementById("pi-vue-multi")?.addEventListener("click", () => { ui.planningVueMulti = true; renderAll(); });
 
   if (person && peutProgrammer) {
     attacherSiteSelectorListeners("rf", ui.recurForm);
