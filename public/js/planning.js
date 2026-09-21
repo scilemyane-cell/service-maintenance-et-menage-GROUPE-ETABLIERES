@@ -353,6 +353,7 @@ function renderFicheTechnicien(nom, roles, c) {
           <label>Association
             <select data-fiche-association="${esc(nom)}">
               <option value="ECOLE" ${(c.association || "ECOLE") === "ECOLE" ? "selected" : ""}>ECOLE</option>
+              <option value="AGROPOLIS" ${c.association === "AGROPOLIS" ? "selected" : ""}>AGROPOLIS</option>
               <option value="ARMONIA" ${c.association === "ARMONIA" ? "selected" : ""}>ARMONIA</option>
             </select>
           </label>
@@ -566,16 +567,16 @@ function imprimerNoteDeFrais(nom, mois, lignes) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #333;padding-bottom:8px;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:10px">
           <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:38px">
-          <div style="font-size:11px;line-height:1.3">Association ECOLE<br>Association ARMONIA</div>
+          <div style="font-size:11px;line-height:1.3">Association ECOLE<br>Association AGROPOLIS<br>Association ARMONIA</div>
         </div>
         <div style="font-size:10px;text-align:right;line-height:1.4">
           <b>Codification : CG 01</b><br>Rattachement : CG - Compta/Gestion
         </div>
       </div>
-      <h2 style="text-align:center;margin:0 0 10px;font-size:16px;background:#eee;padding:6px">NOTE DE FRAIS DE DEPLACEMENTS – ECOLE &amp; ARMONIA</h2>
+      <h2 style="text-align:center;margin:0 0 10px;font-size:16px;background:#eee;padding:6px">NOTE DE FRAIS DE DEPLACEMENTS – ECOLE &amp; AGROPOLIS &amp; ARMONIA</h2>
       <p style="margin:0 0 10px;font-style:italic">Merci de compléter toutes les colonnes afin que votre demande soit traitée dans les meilleurs délais.</p>
       <p style="margin:0 0 4px"><b>NOM Prénom :</b> ${esc(nom)} &nbsp;&nbsp;&nbsp;&nbsp; <b>Mois :</b> ${esc(nomMois)}</p>
-      <p style="margin:0 0 4px"><b>Association :</b> ${coche(c.association !== "ARMONIA")} ECOLE &nbsp; ${coche(c.association === "ARMONIA")} ARMONIA</p>
+      <p style="margin:0 0 4px"><b>Association :</b> ${coche(!c.association || c.association === "ECOLE")} ECOLE &nbsp; ${coche(c.association === "AGROPOLIS")} AGROPOLIS &nbsp; ${coche(c.association === "ARMONIA")} ARMONIA</p>
       <p style="margin:0 0 4px"><b>Statut :</b>
         ${coche((c.statut || "salarie_prive") === "salarie_prive")} Salarié droit privé &nbsp;
         ${coche(c.statut === "salarie_public")} Salarié droit public &nbsp;
