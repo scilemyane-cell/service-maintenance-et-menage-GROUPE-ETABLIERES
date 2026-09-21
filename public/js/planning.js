@@ -134,7 +134,7 @@ let ui = {
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
   prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
-  planningIndivPerson: null, planningIndivYear: new Date().getFullYear(),
+  planningIndivPerson: null, planningIndivYear: null, // année scolaire de départ ; résolue à anneeScolaireCourante() au premier rendu
   recurForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" },
   recurEditingId: null,
   planningQuickDate: null,
@@ -891,7 +891,21 @@ function attacherNomsEditorListeners(container, onSaved) {
 // (voir prtt-import.js) alimentent automatiquement ce planning
 // puisqu'elles sont enregistrées comme n'importe quelle absence.
 // =================================================================
-const PLANNING_MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+// Affiché en année scolaire (septembre → août), comme le reste du module
+// astreinte (YEAR_START/YEAR_END) plutôt qu'en année civile — "année N"
+// signifie ici "année scolaire N → N+1".
+const PLANNING_MOIS_SCOLAIRE = [
+  { label: "Septembre", mois: 8, decalage: 0 }, { label: "Octobre", mois: 9, decalage: 0 },
+  { label: "Novembre", mois: 10, decalage: 0 }, { label: "Décembre", mois: 11, decalage: 0 },
+  { label: "Janvier", mois: 0, decalage: 1 }, { label: "Février", mois: 1, decalage: 1 },
+  { label: "Mars", mois: 2, decalage: 1 }, { label: "Avril", mois: 3, decalage: 1 },
+  { label: "Mai", mois: 4, decalage: 1 }, { label: "Juin", mois: 5, decalage: 1 },
+  { label: "Juillet", mois: 6, decalage: 1 }, { label: "Août", mois: 7, decalage: 1 },
+];
+function anneeScolaireCourante() {
+  const d = new Date();
+  return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
+}
 const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 function absenceDuJour(person, dateStr) {
@@ -1068,22 +1082,25 @@ function renderPlanningIndividuel(container, perms) {
     ui.planningIndivPerson = allPeople[0] || null;
   }
   const person = ui.planningIndivPerson;
-  const year = ui.planningIndivYear;
+  if (ui.planningIndivYear === null) ui.planningIndivYear = anneeScolaireCourante();
+  const year = ui.planningIndivYear; // année scolaire de départ (year → year+1)
   const todayKey = dateKey(new Date());
   const peutProgrammer = perms.canManageAbsences; // même niveau que la gestion des absences
 
+  const debutAnneeScolaire = `${year}-09-01`, finAnneeScolaire = `${year + 1}-08-31`;
   const interventionsParDate = {};
-  state.interventions.filter(i => i.technicien === person && (i.date || "").startsWith(String(year))).forEach(i => {
+  state.interventions.filter(i => i.technicien === person && i.date >= debutAnneeScolaire && i.date <= finAnneeScolaire).forEach(i => {
     const cur = interventionsParDate[i.date] || { recurrente: false };
     if (i.recurrenceId) cur.recurrente = true;
     interventionsParDate[i.date] = cur;
   });
 
-  const moisHTML = PLANNING_MOIS_LABELS.map((label, mIdx) => {
-    const jours = monthGrid(year, mIdx);
+  const moisHTML = PLANNING_MOIS_SCOLAIRE.map(({ label, mois: mIdx, decalage }) => {
+    const anneeReelle = year + decalage;
+    const jours = monthGrid(anneeReelle, mIdx);
     const cells = jours.map(d => {
       const k = dateKey(d);
-      const horsMois = d.getMonth() !== mIdx;
+      const horsMois = d.getMonth() !== mIdx || d.getFullYear() !== anneeReelle;
       const weekend = d.getDay() === 0 || d.getDay() === 6;
       const abs = person ? absenceDuJour(person, k) : null;
       const infoInterv = person ? interventionsParDate[k] : null;
@@ -1108,13 +1125,13 @@ function renderPlanningIndividuel(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Planning annuel d'une personne : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention — y compris pour un agent qui n'est pas dans le roulement d'astreinte (ex. l'agent des espaces verts). Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>
+      <p class="hint">Planning sur une année scolaire (septembre → août), comme l'astreinte : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention — y compris pour un agent qui n'est pas dans le roulement d'astreinte (ex. l'agent des espaces verts). Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>
       <div class="toolbar">
         <label>Personne
           <select id="pi-personne">${allPeople.length === 0 ? `<option value="">Aucune personne configurée</option>` : allPeople.map(p => `<option value="${esc(p)}" ${p === person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
         </label>
-        <label>Année
-          <select id="pi-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}</option>`).join("")}</select>
+        <label>Année scolaire
+          <select id="pi-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}-${y + 1}</option>`).join("")}</select>
         </label>
       </div>
       <div class="year-cal-legend">
