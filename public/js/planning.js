@@ -14,6 +14,7 @@ import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js";
+import { imprimerFicheIsolee } from "./print-fiche.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 
@@ -1110,7 +1111,7 @@ function renderDocPreview() {
       <button class="nav-btn" id="doc-close">✕ Fermer l'aperçu</button>
     </div>
     <div id="doc-valid-status" style="font-size:12px;margin:6px 0"></div>
-    <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+    <div class="print-fiche" id="doc-print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
         <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
         <span style="font-size:13px">Le ${fmtShort(new Date())}</span>
@@ -1601,7 +1602,9 @@ function renderInterventions(container, perms) {
         renderAll();
       });
     });
-    document.getElementById("doc-print")?.addEventListener("click", () => { window.print(); });
+    document.getElementById("doc-print")?.addEventListener("click", () => {
+      imprimerFicheIsolee(document.getElementById("doc-print-fiche"));
+    });
     document.getElementById("doc-close")?.addEventListener("click", () => { ui.docForm.generated = false; renderAll(); });
     document.getElementById("doc-valider")?.addEventListener("click", async () => {
       const statusEl = document.getElementById("doc-valid-status");
