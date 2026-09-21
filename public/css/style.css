@@ -231,11 +231,13 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
    QR code isolé (étiquette produit, QR du mode rapide, QR de dossier) ---- */
 .print-only{ display:none; }
 @media print{
-  /* Paysage : les tableaux larges (relevé d'heures avec numéro
-     d'intervention, site, type, horaires, compte-rendu, totaux...)
-     dépassaient la largeur d'une page A4 portrait, ce qui coupait les
-     dernières colonnes (ex. "Prime dim.") à l'impression/export PDF. */
-  @page{ size:A4 landscape; margin:12mm; }
+  /* Portrait (le paysage réduit la hauteur utile de la page et fait
+     basculer les relevés à plusieurs interventions sur 2+ pages, ce qui
+     n'est pas souhaité) : le tableau est contraint à la largeur de la
+     page ci-dessous (width:100%, table-layout:fixed, retour à la ligne)
+     plutôt que d'obtenir de la place en changeant l'orientation — c'est
+     ça qui coupait les dernières colonnes (ex. "Prime dim."). */
+  @page{ size:A4 portrait; margin:10mm; }
   body{ background:#fff !important; color:#000 !important; }
   .print-only{ display:block !important; }
   /* Masque tout, sauf le bloc .print-fiche et son contenu — fonctionne
@@ -251,8 +253,8 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
      déborder hors impression (min-width fixé pour le défilement mobile,
      inutile et néfaste ici) : largeur forcée à 100%, colonnes réparties
      selon leur contenu, texte qui retourne à la ligne au besoin. */
-  .print-fiche table{ color:#000; width:100% !important; min-width:0 !important; table-layout:fixed; font-size:10px !important; }
-  .print-fiche th, .print-fiche td{ border:1px solid #999 !important; color:#000 !important; word-wrap:break-word; overflow-wrap:break-word; }
+  .print-fiche table{ color:#000; width:100% !important; min-width:0 !important; table-layout:fixed; font-size:9px !important; }
+  .print-fiche th, .print-fiche td{ border:1px solid #999 !important; color:#000 !important; word-wrap:break-word; overflow-wrap:break-word; padding:2px 4px !important; }
   .print-fiche h3{ color:#000 !important; }
 
   /* Impression d'un QR isolé — voir printQrCard() dans qr-logo.js, qui
