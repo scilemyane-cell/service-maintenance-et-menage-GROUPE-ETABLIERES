@@ -257,7 +257,7 @@ function renderCoordonnees(container, perms) {
                   <td>${esc(p.role)}</td>
                   <td>${perms.isEditor
                     ? `<input type="tel" data-coord-tel="${esc(p.nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78" style="min-width:150px">`
-                    : (c.telephone ? `<a href="tel:${esc(c.telephone)}" style="color:var(--gold)">${esc(c.telephone)}</a>` : `<span class="hint">—</span>`)}</td>
+                    : (c.telephone ? `<a href="tel:${esc(c.telephone)}" style="color:var(--gold)">${esc(c.telephone)}</a>` : `<span class="hint">—</span>`)}${c.telephone2 ? `<br><a href="tel:${esc(c.telephone2)}" style="color:var(--gold);font-size:11px">${esc(c.telephone2)}</a>` : ""}</td>
                   <td>${perms.isEditor
                     ? `<input type="email" data-coord-email="${esc(p.nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr" style="min-width:200px">`
                     : (c.email ? esc(c.email) : `<span class="hint">—</span>`)}</td>
@@ -308,6 +308,7 @@ function renderFicheTechnicien(nom, c) {
       <div class="form-grid">
         <label>Adresse du domicile (lieu de départ)<input data-fiche-adresse="${esc(nom)}" value="${esc(c.adresseDomicile || '')}" placeholder="ex. 12 rue des Lilas, 85000 La Roche-sur-Yon"></label>
         <label>Km aller-retour domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)}<input type="number" min="0" step="0.1" data-fiche-km-service="${esc(nom)}" value="${c.kmDomicileService || ''}" placeholder="ex. 24"></label>
+        <label>Téléphone secondaire<input type="tel" data-fiche-tel2="${esc(nom)}" value="${esc(c.telephone2 || '')}" placeholder="06 12 34 56 78"></label>
         <label>Association
           <select data-fiche-association="${esc(nom)}">
             <option value="ECOLE" ${(c.association || "ECOLE") === "ECOLE" ? "selected" : ""}>ECOLE</option>
@@ -353,6 +354,10 @@ function attacherFicheTechnicienListeners() {
   mountedContainer.querySelectorAll("[data-fiche-km-service]").forEach(inp => inp.addEventListener("change", async () => {
     const nom = inp.dataset.ficheKmService;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), kmDomicileService: parseFloat(inp.value) || 0 });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-tel2]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.ficheTel2;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), telephone2: inp.value.trim() });
   }));
   mountedContainer.querySelectorAll("[data-generer-note]").forEach(btn => btn.addEventListener("click", async () => {
     const nom = btn.dataset.genererNote;
