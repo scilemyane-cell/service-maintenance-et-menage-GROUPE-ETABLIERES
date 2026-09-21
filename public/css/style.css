@@ -203,24 +203,24 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .add-btn{ margin-top:14px; display:flex; align-items:center; gap:6px; background:linear-gradient(135deg,var(--gold),#B98F2B); color:#1A1305; border:none; padding:10px 18px; border-radius:8px; font-weight:800; font-size:13px; cursor:pointer; }
 .add-btn:hover{ filter:brightness(1.08); }
 
-/* ---- Coordonnées (Astreinte > Coordonnées) : une carte/bulle par
-   personne plutôt qu'un tableau — plus lisible sur mobile, plus
-   accueillant, chaque carte s'ouvre sur sa fiche complète. */
-.tech-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; margin-top:6px; }
+/* ---- Coordonnées (Astreinte > Coordonnées) : une carte/bulle simple par
+   personne (consultation uniquement — nom, rôle, téléphone, email), qui
+   ouvre sa fiche complète en pleine page au clic (voir renderCoordonnees
+   et le bouton .back-btn pour y revenir). */
+.tech-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; margin-top:6px; }
 .tech-card{
   background:var(--panel); border:1px solid var(--border); border-radius:16px;
-  padding:18px; display:flex; flex-direction:column; gap:14px; transition:border-color .15s;
+  padding:16px; display:flex; flex-direction:column; gap:12px; transition:border-color .15s, background .15s;
 }
-.tech-card:hover{ border-color:var(--gold); }
-.tech-card-ouverte{ border-color:var(--gold); grid-column:1/-1; }
-.tech-card-header{ display:flex; align-items:center; gap:14px; }
-.tech-card-contact{ display:flex; flex-direction:column; gap:8px; }
-.tech-card-contact label{ display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--text-dim); }
-.tech-card-contact input{ background:var(--panel-alt); border:1px solid var(--border); border-radius:7px; padding:8px 10px; color:var(--text); font-size:13px; width:100%; font-family:inherit; }
-.tech-card-contact input:focus{ outline:none; border-color:var(--gold); }
-.tech-card-toggle{ width:100%; justify-content:center; }
-.fiche-tech-detail{ border-top:1px solid var(--border); margin-top:2px; padding-top:16px; }
+.tech-card[data-open-fiche]{ cursor:pointer; }
+.tech-card[data-open-fiche]:hover, .tech-card[data-open-fiche]:focus-visible{ border-color:var(--gold); background:var(--panel-alt); outline:none; }
+.tech-card-header{ display:flex; align-items:center; gap:12px; }
+.tech-card-quick-contact{ display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--text-dim); }
 
+/* Fiche complète (page dédiée après clic sur une carte) : plus large et
+   plus posée qu'une carte de la grille, avec un peu plus de respiration. */
+.fiche-tech-card{ background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:26px; max-width:720px; }
+.fiche-tech-header{ display:flex; align-items:center; gap:16px; padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--border); }
 .fiche-tech-avatar{
   width:48px; height:48px; border-radius:50%; flex-shrink:0;
   background:linear-gradient(135deg,var(--gold),#B98F2B); color:#1A1305;

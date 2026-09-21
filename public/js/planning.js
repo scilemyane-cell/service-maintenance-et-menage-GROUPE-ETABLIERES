@@ -241,70 +241,58 @@ function renderCoordonnees(container, perms) {
     ...state.people.n2.map(nom => ({ nom, role: "Technicien" })),
   ];
 
+  // Une personne est ouverte : on affiche sa fiche complète en pleine
+  // largeur (page dédiée avec bouton retour), plus la grille en dessous —
+  // plus simple et plus net qu'une carte qui s'étire au milieu des autres.
+  const personneOuverte = perms.isEditor ? all.find(p => p.nom === ui.ficheOuverte) : null;
+  if (personneOuverte) {
+    const c = state.coordonnees[personneOuverte.nom] || {};
+    container.innerHTML = `
+      <div class="stack">
+        <button class="back-btn" id="fiche-retour">← Retour aux coordonnées</button>
+        ${renderFicheTechnicien(personneOuverte.nom, personneOuverte.role, c)}
+      </div>
+    `;
+    document.getElementById("fiche-retour").addEventListener("click", () => { ui.ficheOuverte = null; renderAll(); });
+    attacherFicheTechnicienListeners();
+    attacherApercuNoteFraisListeners();
+    return;
+  }
+
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Coordonnées des cadres d'astreinte et techniciens. ${perms.isEditor ? "Clique sur une carte pour modifier le téléphone/email, ou sur «Fiche complète» pour l'adresse, le statut et la note de frais." : ""}</p>
+      <p class="hint">Coordonnées des cadres d'astreinte et techniciens.${perms.isEditor ? " Clique sur une carte pour ouvrir sa fiche complète." : ""}</p>
       ${perms.canEditNames ? renderNomsEditor() : ""}
       <div class="tech-grid">
         ${all.length === 0 ? `<p class="hint">Aucune personne configurée.</p>` :
           all.map(p => {
             const c = state.coordonnees[p.nom] || {};
-            const ouvert = ui.ficheOuverte === p.nom;
-            const statutLabel = STATUTS_NOTE_FRAIS[c.statut || "salarie_prive"] || "—";
             return `
-              <div class="tech-card${ouvert ? " tech-card-ouverte" : ""}">
+              <div class="tech-card"${perms.isEditor ? ` data-open-fiche="${esc(p.nom)}" role="button" tabindex="0"` : ""}>
                 <div class="tech-card-header">
                   <div class="fiche-tech-avatar">${esc(initiales(p.nom))}</div>
                   <div>
                     <div class="fiche-tech-name">${esc(p.nom)}</div>
-                    <div class="fiche-tech-sub">
-                      <span class="tag" style="background:var(--gold)">${esc(p.role)}</span>
-                      ${perms.isEditor ? `<span class="tag" style="background:var(--teal)">${esc(statutLabel)}</span>` : ""}
-                    </div>
+                    <div class="fiche-tech-sub"><span class="tag" style="background:var(--gold)">${esc(p.role)}</span></div>
                   </div>
                 </div>
-                <div class="tech-card-contact">
-                  ${perms.isEditor
-                    ? `<label>📞 Téléphone<input type="tel" data-coord-tel="${esc(p.nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78"></label>`
-                    : `<div class="fiche-tech-contact-item">📞 ${c.telephone ? `<a href="tel:${esc(c.telephone)}">${esc(c.telephone)}</a>` : `<span class="hint">non renseigné</span>`}</div>`}
-                  ${c.telephone2 && !perms.isEditor ? `<div class="fiche-tech-contact-item">📱 <a href="tel:${esc(c.telephone2)}">${esc(c.telephone2)}</a></div>` : ""}
-                  ${perms.isEditor
-                    ? `<label>✉️ Email<input type="email" data-coord-email="${esc(p.nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr"></label>`
-                    : `<div class="fiche-tech-contact-item">✉️ ${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : `<span class="hint">non renseigné</span>`}</div>`}
+                <div class="tech-card-quick-contact">
+                  <div class="fiche-tech-contact-item">📞 ${c.telephone ? `<a href="tel:${esc(c.telephone)}" onclick="event.stopPropagation()">${esc(c.telephone)}</a>` : `<span class="hint">non renseigné</span>`}</div>
+                  <div class="fiche-tech-contact-item">✉️ ${c.email ? `<a href="mailto:${esc(c.email)}" onclick="event.stopPropagation()">${esc(c.email)}</a>` : `<span class="hint">non renseigné</span>`}</div>
                 </div>
-                ${perms.isEditor ? `
-                <button class="nav-btn tech-card-toggle" data-toggle-fiche="${esc(p.nom)}">${ouvert ? "▲ Fermer la fiche" : "📋 Fiche complète"}</button>
-                ${ouvert ? renderFicheTechnicien(p.nom, p.role, c) : ""}
-                ` : ""}
               </div>`;
           }).join("")}
       </div>
     </div>
   `;
 
-  if (!perms.isEditor) return;
-
   if (perms.canEditNames) attacherNomsEditorListeners(container);
-  container.querySelectorAll("[data-coord-tel]").forEach(inp => {
-    inp.addEventListener("change", async () => {
-      const nom = inp.dataset.coordTel;
-      const existing = state.coordonnees[nom] || {};
-      await saveCoordonnee(nom, { ...existing, telephone: inp.value.trim() });
-    });
+  if (!perms.isEditor) return;
+  container.querySelectorAll("[data-open-fiche]").forEach(card => {
+    const ouvrir = () => { ui.ficheOuverte = card.dataset.openFiche; renderAll(); };
+    card.addEventListener("click", ouvrir);
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ouvrir(); } });
   });
-  container.querySelectorAll("[data-coord-email]").forEach(inp => {
-    inp.addEventListener("change", async () => {
-      const nom = inp.dataset.coordEmail;
-      const existing = state.coordonnees[nom] || {};
-      await saveCoordonnee(nom, { ...existing, email: inp.value.trim() });
-    });
-  });
-  container.querySelectorAll("[data-toggle-fiche]").forEach(btn => btn.addEventListener("click", () => {
-    ui.ficheOuverte = ui.ficheOuverte === btn.dataset.toggleFiche ? null : btn.dataset.toggleFiche;
-    renderAll();
-  }));
-  attacherFicheTechnicienListeners();
-  attacherApercuNoteFraisListeners();
 }
 
 // Initiales d'un nom (avatar de la fiche technicien) — ex. "Jean Dupont"
@@ -316,19 +304,31 @@ function initiales(nom) {
   return mots.slice(0, 2).map(m => m[0].toUpperCase()).join("");
 }
 
-// Fiche détaillée d'un technicien : sections adresse/trajet, statut
-// administratif et note de frais, affichées à l'intérieur de sa carte
-// (l'en-tête identité/rôle/statut et les coordonnées principales sont
-// déjà dans la carte elle-même — voir renderCoordonnees). Données et
-// logique inchangées (mêmes attributs data-fiche-*), seule la
-// présentation a été retravaillée.
+// Fiche complète d'un technicien — page dédiée (avec bouton retour dans
+// renderCoordonnees) : identité, coordonnées, domicile/trajet, statut
+// administratif et note de frais. Données et logique inchangées (mêmes
+// attributs data-fiche-*/data-coord-*), seule la présentation change.
 function renderFicheTechnicien(nom, role, c) {
+  const statutLabel = STATUTS_NOTE_FRAIS[c.statut || "salarie_prive"] || "—";
   return `
-    <div class="fiche-tech-detail">
+    <div class="fiche-tech-card">
+      <div class="fiche-tech-header">
+        <div class="fiche-tech-avatar">${esc(initiales(nom))}</div>
+        <div>
+          <div class="fiche-tech-name">${esc(nom)}</div>
+          <div class="fiche-tech-sub">
+            <span class="tag" style="background:var(--gold)">${esc(role)}</span>
+            <span class="tag" style="background:var(--teal)">${esc(statutLabel)}</span>
+          </div>
+        </div>
+      </div>
+
       <div class="fiche-tech-section">
-        <p class="fiche-tech-eyebrow">Téléphone secondaire</p>
+        <p class="fiche-tech-eyebrow">Coordonnées</p>
         <div class="form-grid">
+          <label>Téléphone<input type="tel" data-coord-tel="${esc(nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78"></label>
           <label>Téléphone secondaire<input type="tel" data-fiche-tel2="${esc(nom)}" value="${esc(c.telephone2 || '')}" placeholder="06 12 34 56 78"></label>
+          <label>Email<input type="email" data-coord-email="${esc(nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr"></label>
         </div>
       </div>
 
@@ -373,6 +373,14 @@ function renderFicheTechnicien(nom, role, c) {
 }
 
 function attacherFicheTechnicienListeners() {
+  mountedContainer.querySelectorAll("[data-coord-tel]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.coordTel;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), telephone: inp.value.trim() });
+  }));
+  mountedContainer.querySelectorAll("[data-coord-email]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.coordEmail;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), email: inp.value.trim() });
+  }));
   mountedContainer.querySelectorAll("[data-fiche-adresse]").forEach(inp => inp.addEventListener("change", async () => {
     const nom = inp.dataset.ficheAdresse;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), adresseDomicile: inp.value.trim() });
