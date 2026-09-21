@@ -257,6 +257,9 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .year-cal-legend{ display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--text-dim); align-items:center; }
 .year-cal-legend-dot{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:middle; }
 .year-cal-legend-dot-outline{ background:transparent; border:2px solid var(--text-dim); border-radius:50%; width:6px; height:6px; }
+.year-cal-dot-recur{ background:var(--violet); }
+.year-cal-legend-dot-recur{ border-color:var(--violet); }
+.year-cal-day.clickable:hover{ outline:1px dashed var(--violet); outline-offset:1px; }
 
 .cal-day.today{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 14px rgba(217,178,76,.45); animation:cal-pulse-gold 2.2s ease-in-out infinite; }
 .cal-day.alert-day{ border-color:var(--red); box-shadow:0 0 0 1px var(--red), 0 0 14px rgba(229,83,61,.45); animation:cal-pulse-red 1.5s ease-in-out infinite; }

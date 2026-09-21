@@ -75,6 +75,17 @@ service cloud.firestore {
       allow write: if isEditor();
     }
 
+    // ---- Récurrences (planning récurrent d'entretien, ex. espaces
+    // verts) : règles de génération automatique d'interventions
+    // (fréquence, jour, site, type...), gérées par un éditeur au même
+    // titre que les absences. Les interventions générées à partir
+    // d'une récurrence restent des documents "interventions" normaux,
+    // soumis à leurs propres règles ci-dessous.
+    match /recurrences/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
+
     // ---- Interventions ----
     // Tout le monde peut lire. Un éditeur (admin/n1) peut tout écrire.
     // Un technicien peut créer une intervention et supprimer UNIQUEMENT

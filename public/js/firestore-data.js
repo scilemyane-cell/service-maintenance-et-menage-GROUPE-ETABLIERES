@@ -32,6 +32,29 @@ export async function deleteAbsence(id) {
   await deleteDoc(doc(db, "absences", id));
 }
 
+// ---- Récurrences (planning récurrent d'entretien, ex. espaces verts) ----
+// Une récurrence décrit une règle ("tous les X, tel jour, sur tel site")
+// à partir de laquelle de vraies interventions sont générées à l'avance
+// (voir genererOccurrencesRecurrence dans planning.js) — la récurrence
+// elle-même ne contient jamais d'heures travaillées.
+export function watchRecurrences(callback) {
+  return onSnapshot(collection(db, "recurrences"), (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    callback(list);
+  }, (err) => { console.error("watchRecurrences:", err); callback([]); });
+}
+export async function addRecurrence(record) {
+  const ref = await addDoc(collection(db, "recurrences"), record);
+  return ref.id;
+}
+export async function updateRecurrence(id, fields) {
+  await updateDoc(doc(db, "recurrences", id), fields);
+}
+export async function deleteRecurrence(id) {
+  await deleteDoc(doc(db, "recurrences", id));
+}
+
 // ---- Interventions ----
 export function watchInterventions(callback) {
   return onSnapshot(collection(db, "interventions"), (snap) => {

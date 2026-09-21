@@ -6,6 +6,7 @@ import {
 import {
   watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
   watchInterventions, addIntervention, updateIntervention, envoyerInterventionCorbeille,
+  watchRecurrences, addRecurrence, updateRecurrence, deleteRecurrence,
 } from "./firestore-data.js";
 import { watchTransferts, annulerTransfert } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
@@ -118,7 +119,7 @@ function analyseReposIntervention(i, toutes) {
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 let graphiquesSynthese = {}; // instances Chart.js actives — détruites avant chaque nouveau rendu
 
-let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [], releves: [] };
+let state = { people: { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] }, absences: [], interventions: [], transferts: [], coordonnees: {}, associations: [], releves: [], recurrences: [] };
 let ui = {
   subtab: "calendrier",
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
@@ -134,6 +135,10 @@ let ui = {
   prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
   planningIndivPerson: null, planningIndivYear: new Date().getFullYear(),
+  recurForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" },
+  recurEditingId: null,
+  planningQuickDate: null,
+  planningQuickForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "" },
 };
 let unsubs = [];
 let clearCountdown = null;
@@ -185,6 +190,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; renderAll(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; renderAll(); }));
   unsubs.push(watchReleves((r) => { state.releves = r; renderAll(); }));
+  unsubs.push(watchRecurrences((r) => { state.recurrences = r; renderAll(); }));
 }
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
@@ -886,9 +892,174 @@ function attacherNomsEditorListeners(container, onSaved) {
 // puisqu'elles sont enregistrées comme n'importe quelle absence.
 // =================================================================
 const PLANNING_MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 function absenceDuJour(person, dateStr) {
   return state.absences.find(a => a.person === person && dateStr >= a.start && dateStr <= a.end) || null;
+}
+
+// ---- Sélecteur association / sous-service / site, réutilisé par le
+// formulaire de récurrence et l'ajout ponctuel du planning individuel
+// (même logique en cascade que le formulaire d'intervention principal).
+function assocInfo(assocNom) {
+  const a = state.associations.find(x => x.nom === assocNom);
+  if (!a) return { groupes: [], hasSansGroupe: false, sites: [] };
+  const groupes = [...new Set(a.sites.filter(s => s.groupe).map(s => s.groupe))];
+  return { groupes, hasSansGroupe: a.sites.some(s => !s.groupe), sites: a.sites };
+}
+function siteSelectorHTML(idPrefix, form) {
+  const info = assocInfo(form.association);
+  const sites = info.sites.filter(s => form.groupe ? s.groupe === form.groupe : !s.groupe);
+  const siteDisabled = !form.association || (info.groupes.length > 0 && !form.groupe && !info.hasSansGroupe);
+  return `
+    <label>Association
+      <select id="${idPrefix}-association">
+        <option value="">— Choisir —</option>
+        ${state.associations.map(a => `<option value="${esc(a.nom)}" ${form.association === a.nom ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}
+      </select>
+    </label>
+    ${info.groupes.length > 0 ? `
+    <label>Sous-service
+      <select id="${idPrefix}-groupe">
+        ${info.hasSansGroupe ? `<option value="" ${!form.groupe ? "selected" : ""}>— Aucun —</option>` : `<option value="">— Choisir —</option>`}
+        ${info.groupes.map(g => `<option value="${esc(g)}" ${form.groupe === g ? "selected" : ""}>${esc(g)}</option>`).join("")}
+      </select>
+    </label>` : ""}
+    <label>Site
+      <select id="${idPrefix}-site" ${siteDisabled ? "disabled" : ""}>
+        <option value="">— Choisir —</option>
+        ${sites.map(s => `<option value="${esc(s.nom)}" ${form.site === s.nom ? "selected" : ""}>${esc(s.nom)}</option>`).join("")}
+      </select>
+    </label>`;
+}
+function attacherSiteSelectorListeners(idPrefix, form) {
+  document.getElementById(`${idPrefix}-association`)?.addEventListener("change", (e) => { form.association = e.target.value; form.groupe = ""; form.site = ""; renderAll(); });
+  document.getElementById(`${idPrefix}-groupe`)?.addEventListener("change", (e) => { form.groupe = e.target.value; form.site = ""; renderAll(); });
+  document.getElementById(`${idPrefix}-site`)?.addEventListener("change", (e) => { form.site = e.target.value; });
+}
+
+// Convertit le jour de récurrence (0=Lundi..6=Dimanche, ordre affiché à
+// l'écran) vers la convention Date#getDay() (0=Dimanche..6=Samedi).
+function jourSemaineVersGetDay(j) { return (j + 1) % 7; }
+
+// Calcule les dates d'occurrence d'une récurrence entre aujourd'hui (ou sa
+// date de début si future) et un horizon donné, en respectant sa
+// fréquence en semaines, son jour de semaine et sa date de fin
+// éventuelle — sans jamais dériver du rythme fixé par sa date de début.
+function genererOccurrencesRecurrence(rec, horizon) {
+  if (!rec.dateDebut) return [];
+  const freq = Math.max(1, parseInt(rec.frequenceSemaines, 10) || 1);
+  const cibleDow = jourSemaineVersGetDay(parseInt(rec.jourSemaine, 10) || 0);
+  const debut = new Date(rec.dateDebut + "T00:00:00");
+  const fin = rec.dateFin ? new Date(rec.dateFin + "T00:00:00") : horizon;
+  const limite = fin < horizon ? fin : horizon;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let d = debut > today ? new Date(debut) : new Date(today);
+  while (d.getDay() !== cibleDow) d = addDays(d, 1);
+  const semainesDepuisDebut = Math.round((d - debut) / (7 * 86400000));
+  const reste = ((semainesDepuisDebut % freq) + freq) % freq;
+  if (reste !== 0) d = addDays(d, (freq - reste) * 7);
+  const dates = [];
+  while (d <= limite) { dates.push(dateKey(d)); d = addDays(d, freq * 7); }
+  return dates;
+}
+
+// Matérialise, pour une récurrence donnée, les vraies interventions
+// manquantes sur les ~4 prochains mois glissants (dé-duplication sur
+// recurrenceId + date) — à relancer périodiquement pour prolonger le
+// planning au fur et à mesure. Chaque intervention générée reste un
+// document "interventions" normal, éditable/supprimable individuellement
+// sans affecter la règle de récurrence.
+async function genererInterventionsRecurrence(rec, user) {
+  const horizon = addDays(new Date(), 120);
+  const dates = genererOccurrencesRecurrence(rec, horizon);
+  const dejaGenerees = new Set(state.interventions.filter(i => i.recurrenceId === rec.id).map(i => i.date));
+  const aCreer = dates.filter(d => !dejaGenerees.has(d));
+  const duree = dureeHeures(rec.heureDebut, rec.heureFin);
+  for (const date of aCreer) {
+    await addIntervention({
+      date, technicien: rec.person, association: rec.association || "", groupe: rec.groupe || "", site: rec.site || "",
+      type: rec.type || "Espaces verts", heures: duree !== null ? duree : 0,
+      heureDebut: rec.heureDebut || "", heureFin: rec.heureFin || "", description: rec.description || "",
+      heuresNuit: 0, primeDimanche: estDimanche(date) ? PRIME_DIMANCHE : 0, photos: [],
+      appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "",
+      recurrenceId: rec.id, genereAuto: true,
+      createdBy: user.uid, createdByName: user.nom || user.email,
+    });
+  }
+  return aCreer.length;
+}
+
+function renderRecurrencesPanel(person) {
+  const recs = state.recurrences.filter(r => r.person === person);
+  const f = ui.recurForm;
+  return `
+    <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px" ${recs.length || ui.recurEditingId ? "open" : ""}>
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">🔁 Planning récurrent — entretiens réguliers de ${esc(person)}</summary>
+      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Définis une règle (ex. "toutes les 2 semaines, le mardi, tonte de la Résidence Le Mail") puis clique "Générer" pour créer les interventions à venir (~4 mois) — elles apparaissent ensuite normalement dans l'onglet Interventions et ici (pastille violette). Reclique "Générer" de temps en temps pour prolonger le planning. Pour un entretien ponctuel hors récurrence, clique directement une date du calendrier ci-dessous.</p>
+      ${recs.length ? `
+      <div class="table-wrap" style="margin-bottom:12px">
+        <table>
+          <thead><tr><th>Fréquence</th><th>Jour</th><th>Site</th><th>Type</th><th>Période</th><th></th></tr></thead>
+          <tbody>
+            ${recs.map(r => `<tr>
+              <td>${Number(r.frequenceSemaines) === 1 ? "Toutes les semaines" : `Toutes les ${esc(r.frequenceSemaines)} semaines`}</td>
+              <td>${esc(JOURS_SEMAINE[r.jourSemaine] || "—")}</td>
+              <td>${esc(r.site || "—")}</td>
+              <td>${esc(r.type || "—")}</td>
+              <td style="font-size:11px">${r.dateDebut ? new Date(r.dateDebut).toLocaleDateString("fr-FR") : "—"} → ${r.dateFin ? new Date(r.dateFin).toLocaleDateString("fr-FR") : "indéterminée"}</td>
+              <td style="white-space:nowrap">
+                <button type="button" class="nav-btn" data-recur-generer="${r.id}" style="padding:4px 8px;font-size:11px" title="Générer les prochaines interventions (jusqu'à 4 mois)">📅 Générer</button>
+                <button type="button" class="nav-btn" data-recur-edit="${r.id}" style="padding:4px 8px;font-size:11px">✏️</button>
+                <button type="button" class="del-btn" data-recur-del="${r.id}">🗑️</button>
+              </td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : ""}
+      <div class="form-grid">
+        <label>Fréquence
+          <select id="rf-freq">
+            <option value="1" ${Number(f.frequenceSemaines) === 1 ? "selected" : ""}>Toutes les semaines</option>
+            <option value="2" ${Number(f.frequenceSemaines) === 2 ? "selected" : ""}>Toutes les 2 semaines</option>
+            <option value="3" ${Number(f.frequenceSemaines) === 3 ? "selected" : ""}>Toutes les 3 semaines</option>
+            <option value="4" ${Number(f.frequenceSemaines) === 4 ? "selected" : ""}>Toutes les 4 semaines (≈ mensuel)</option>
+          </select>
+        </label>
+        <label>Jour<select id="rf-jour">${JOURS_SEMAINE.map((j, i) => `<option value="${i}" ${Number(f.jourSemaine) === i ? "selected" : ""}>${j}</option>`).join("")}</select></label>
+        ${siteSelectorHTML("rf", f)}
+        <label>Type<input id="rf-type" list="types-rf" value="${esc(f.type)}"><datalist id="types-rf">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
+        <label>Heure de départ<input type="time" id="rf-heure-debut" value="${esc(f.heureDebut)}"></label>
+        <label>Heure de retour<input type="time" id="rf-heure-fin" value="${esc(f.heureFin)}"></label>
+        <label>Début de la récurrence<input type="date" id="rf-date-debut" value="${esc(f.dateDebut)}"></label>
+        <label>Fin (optionnel)<input type="date" id="rf-date-fin" value="${esc(f.dateFin)}"></label>
+        <label class="desc-field">Description<input id="rf-desc" value="${esc(f.description)}" placeholder="ex. tonte, taille de haies…"></label>
+      </div>
+      <button type="button" class="add-btn" id="rf-valider">${ui.recurEditingId ? "💾 Enregistrer les modifications" : "➕ Ajouter cette récurrence"}</button>
+      ${ui.recurEditingId ? `<button type="button" class="nav-btn" id="rf-annuler" style="margin-left:8px">✕ Annuler</button>` : ""}
+      <div id="rf-status" style="margin-top:8px;font-size:12px"></div>
+    </details>
+  `;
+}
+
+function renderAjoutPonctuel(person) {
+  if (!ui.planningQuickDate) return "";
+  const f = ui.planningQuickForm;
+  return `
+    <div class="form-card" style="margin-top:10px">
+      <h3 style="margin:0 0 10px;font-size:13px;color:var(--gold)">➕ Intervention ponctuelle du ${new Date(ui.planningQuickDate).toLocaleDateString("fr-FR")} — ${esc(person)}</h3>
+      <div class="form-grid">
+        ${siteSelectorHTML("qf", f)}
+        <label>Type<input id="qf-type" list="types-qf" value="${esc(f.type)}" placeholder="ex. Espaces verts"><datalist id="types-qf">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
+        <label>Heure de départ<input type="time" id="qf-heure-debut" value="${esc(f.heureDebut)}"></label>
+        <label>Heure de retour<input type="time" id="qf-heure-fin" value="${esc(f.heureFin)}"></label>
+        <label class="desc-field">Description<input id="qf-desc" value="${esc(f.description)}"></label>
+      </div>
+      <button type="button" class="add-btn" id="qf-valider">➕ Ajouter l'intervention</button>
+      <button type="button" class="nav-btn" id="qf-annuler" style="margin-left:8px">✕ Annuler</button>
+      <div id="qf-status" style="margin-top:8px;font-size:12px"></div>
+    </div>
+  `;
 }
 
 function renderPlanningIndividuel(container, perms) {
@@ -899,10 +1070,14 @@ function renderPlanningIndividuel(container, perms) {
   const person = ui.planningIndivPerson;
   const year = ui.planningIndivYear;
   const todayKey = dateKey(new Date());
+  const peutProgrammer = perms.canManageAbsences; // même niveau que la gestion des absences
 
-  const interventionsPersonne = new Set(
-    state.interventions.filter(i => i.technicien === person && (i.date || "").startsWith(String(year))).map(i => i.date)
-  );
+  const interventionsParDate = {};
+  state.interventions.filter(i => i.technicien === person && (i.date || "").startsWith(String(year))).forEach(i => {
+    const cur = interventionsParDate[i.date] || { recurrente: false };
+    if (i.recurrenceId) cur.recurrente = true;
+    interventionsParDate[i.date] = cur;
+  });
 
   const moisHTML = PLANNING_MOIS_LABELS.map((label, mIdx) => {
     const jours = monthGrid(year, mIdx);
@@ -911,14 +1086,17 @@ function renderPlanningIndividuel(container, perms) {
       const horsMois = d.getMonth() !== mIdx;
       const weekend = d.getDay() === 0 || d.getDay() === 6;
       const abs = person ? absenceDuJour(person, k) : null;
-      const aIntervention = person && interventionsPersonne.has(k);
+      const infoInterv = person ? interventionsParDate[k] : null;
+      const cliquable = person && peutProgrammer && !horsMois && !abs;
       const classes = ["year-cal-day"];
       if (horsMois) classes.push("hors-mois");
       else if (weekend) classes.push("weekend");
       if (abs) classes.push(abs.type === "arret" ? "arret" : abs.type === "rtt" ? "rtt" : "conge");
       if (k === todayKey) classes.push("today");
-      const titre = abs ? (abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : "";
-      return `<div class="${classes.join(" ")}" title="${esc(titre)}">${d.getDate()}${aIntervention ? '<span class="year-cal-dot" title="Intervention"></span>' : ""}</div>`;
+      if (cliquable) classes.push("clickable");
+      const titre = abs ? (abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : (cliquable ? "Cliquer pour ajouter une intervention ponctuelle" : "");
+      const dotTitre = infoInterv ? (infoInterv.recurrente ? "Intervention programmée (récurrence)" : "Intervention") : "";
+      return `<div class="${classes.join(" ")}" title="${esc(titre)}" ${cliquable ? `data-date="${k}"` : ""} style="${cliquable ? "cursor:pointer" : ""}">${d.getDate()}${infoInterv ? `<span class="year-cal-dot${infoInterv.recurrente ? " year-cal-dot-recur" : ""}" title="${esc(dotTitre)}"></span>` : ""}</div>`;
     }).join("");
     return `
       <div class="year-cal-month">
@@ -930,7 +1108,7 @@ function renderPlanningIndividuel(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Planning annuel d'une personne : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention. Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>
+      <p class="hint">Planning annuel d'une personne : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention — y compris pour un agent qui n'est pas dans le roulement d'astreinte (ex. l'agent des espaces verts). Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>
       <div class="toolbar">
         <label>Personne
           <select id="pi-personne">${allPeople.length === 0 ? `<option value="">Aucune personne configurée</option>` : allPeople.map(p => `<option value="${esc(p)}" ${p === person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
@@ -943,14 +1121,125 @@ function renderPlanningIndividuel(container, perms) {
         <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
         <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> ${esc(libelleRtt(person || ""))}</span>
         <span><i class="year-cal-legend-dot" style="background:var(--red)"></i> Arrêt de travail</span>
-        <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Jour avec intervention</span>
+        <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention ponctuelle</span>
+        <span><i class="year-cal-legend-dot year-cal-legend-dot-outline year-cal-legend-dot-recur"></i> Intervention programmée (récurrence)</span>
       </div>
-      ${!person ? `<p class="hint">Ajoute une personne (N1 ou N2) dans les Coordonnées pour afficher un planning.</p>` : `<div class="year-cal">${moisHTML}</div>`}
+      ${!person ? `<p class="hint">Ajoute une personne (N1 ou N2) dans les Coordonnées pour afficher un planning.</p>` : ""}
+      ${person && peutProgrammer ? renderRecurrencesPanel(person) : ""}
+      ${person ? renderAjoutPonctuel(person) : ""}
+      ${person ? `<div class="year-cal">${moisHTML}</div>` : ""}
     </div>
   `;
 
-  document.getElementById("pi-personne")?.addEventListener("change", (e) => { ui.planningIndivPerson = e.target.value; renderAll(); });
+  document.getElementById("pi-personne")?.addEventListener("change", (e) => { ui.planningIndivPerson = e.target.value; ui.planningQuickDate = null; ui.recurEditingId = null; renderAll(); });
   document.getElementById("pi-annee")?.addEventListener("change", (e) => { ui.planningIndivYear = Number(e.target.value); renderAll(); });
+
+  if (person && peutProgrammer) {
+    attacherSiteSelectorListeners("rf", ui.recurForm);
+    document.getElementById("rf-freq")?.addEventListener("change", (e) => { ui.recurForm.frequenceSemaines = Number(e.target.value); });
+    document.getElementById("rf-jour")?.addEventListener("change", (e) => { ui.recurForm.jourSemaine = Number(e.target.value); });
+    document.getElementById("rf-type")?.addEventListener("input", (e) => { ui.recurForm.type = e.target.value; });
+    document.getElementById("rf-heure-debut")?.addEventListener("input", (e) => { ui.recurForm.heureDebut = e.target.value; });
+    document.getElementById("rf-heure-fin")?.addEventListener("input", (e) => { ui.recurForm.heureFin = e.target.value; });
+    document.getElementById("rf-date-debut")?.addEventListener("change", (e) => { ui.recurForm.dateDebut = e.target.value; });
+    document.getElementById("rf-date-fin")?.addEventListener("change", (e) => { ui.recurForm.dateFin = e.target.value; });
+    document.getElementById("rf-desc")?.addEventListener("input", (e) => { ui.recurForm.description = e.target.value; });
+    document.getElementById("rf-valider")?.addEventListener("click", async () => {
+      const statusEl = document.getElementById("rf-status");
+      const f = ui.recurForm;
+      if (!f.association || !f.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association et un site.</span>`; return; }
+      if (!f.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
+      if (!f.dateDebut) { statusEl.innerHTML = `<span style="color:var(--red)">Indique une date de début.</span>`; return; }
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      const payload = {
+        person, association: f.association, groupe: f.groupe || "", site: f.site, type: f.type,
+        heureDebut: f.heureDebut || "", heureFin: f.heureFin || "", description: f.description || "",
+        frequenceSemaines: Number(f.frequenceSemaines) || 1, jourSemaine: Number(f.jourSemaine) || 0,
+        dateDebut: f.dateDebut, dateFin: f.dateFin || "",
+      };
+      try {
+        if (ui.recurEditingId) {
+          await updateRecurrence(ui.recurEditingId, payload);
+          ui.recurEditingId = null;
+        } else {
+          await addRecurrence({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
+        }
+        ui.recurForm = { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" };
+        renderAll();
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+      }
+    });
+    document.getElementById("rf-annuler")?.addEventListener("click", () => { ui.recurEditingId = null; renderAll(); });
+    container.querySelectorAll("[data-recur-edit]").forEach(btn => btn.addEventListener("click", () => {
+      const rec = state.recurrences.find(r => r.id === btn.dataset.recurEdit); if (!rec) return;
+      ui.recurEditingId = rec.id;
+      ui.recurForm = {
+        association: rec.association || "", groupe: rec.groupe || "", site: rec.site || "", type: rec.type || "Espaces verts",
+        heureDebut: rec.heureDebut || "", heureFin: rec.heureFin || "", description: rec.description || "",
+        frequenceSemaines: rec.frequenceSemaines || 1, jourSemaine: rec.jourSemaine || 0,
+        dateDebut: rec.dateDebut || new Date().toISOString().slice(0, 10), dateFin: rec.dateFin || "",
+      };
+      renderAll();
+    }));
+    container.querySelectorAll("[data-recur-del]").forEach(btn => btn.addEventListener("click", async () => {
+      if (!(await window.confirmDialog("Supprimer cette récurrence ? Les interventions déjà générées ne sont pas supprimées.", { danger: true, texteValider: "Supprimer" }))) return;
+      await deleteRecurrence(btn.dataset.recurDel);
+    }));
+    container.querySelectorAll("[data-recur-generer]").forEach(btn => btn.addEventListener("click", async () => {
+      const rec = state.recurrences.find(r => r.id === btn.dataset.recurGenerer); if (!rec) return;
+      btn.disabled = true; const texteInitial = btn.textContent; btn.textContent = "⏳…";
+      try {
+        const n = await genererInterventionsRecurrence(rec, mountedUser);
+        window.toast(n > 0 ? `${n} intervention${n > 1 ? "s" : ""} générée${n > 1 ? "s" : ""}.` : "Déjà à jour, rien à générer sur les 4 prochains mois.");
+      } catch (e) {
+        window.toast("Échec de la génération : " + (e.message || e));
+      }
+      btn.disabled = false; btn.textContent = texteInitial;
+    }));
+  }
+
+  if (person && peutProgrammer) {
+    container.querySelectorAll(".year-cal-day[data-date]").forEach(cell => {
+      cell.addEventListener("click", () => {
+        const k = cell.dataset.date;
+        ui.planningQuickDate = ui.planningQuickDate === k ? null : k;
+        ui.planningQuickForm = { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "" };
+        renderAll();
+      });
+    });
+  }
+
+  if (ui.planningQuickDate && peutProgrammer) {
+    attacherSiteSelectorListeners("qf", ui.planningQuickForm);
+    document.getElementById("qf-type")?.addEventListener("input", (e) => { ui.planningQuickForm.type = e.target.value; });
+    document.getElementById("qf-heure-debut")?.addEventListener("input", (e) => { ui.planningQuickForm.heureDebut = e.target.value; });
+    document.getElementById("qf-heure-fin")?.addEventListener("input", (e) => { ui.planningQuickForm.heureFin = e.target.value; });
+    document.getElementById("qf-desc")?.addEventListener("input", (e) => { ui.planningQuickForm.description = e.target.value; });
+    document.getElementById("qf-annuler")?.addEventListener("click", () => { ui.planningQuickDate = null; renderAll(); });
+    document.getElementById("qf-valider")?.addEventListener("click", async () => {
+      const statusEl = document.getElementById("qf-status");
+      const f = ui.planningQuickForm;
+      if (!f.association || !f.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association et un site.</span>`; return; }
+      if (!f.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
+      statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      const duree = dureeHeures(f.heureDebut, f.heureFin);
+      try {
+        await addIntervention({
+          date: ui.planningQuickDate, technicien: person, association: f.association, groupe: f.groupe || "", site: f.site,
+          type: f.type, heures: duree !== null ? duree : 0, description: f.description || "",
+          heureDebut: f.heureDebut || "", heureFin: f.heureFin || "",
+          heuresNuit: heuresDeNuit(f.heureDebut, f.heureFin), primeDimanche: estDimanche(ui.planningQuickDate) ? PRIME_DIMANCHE : 0,
+          photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "",
+          createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
+        });
+        ui.planningQuickDate = null;
+        renderAll();
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+      }
+    });
+  }
 }
 
 function renderCalendar(container, perms) {
