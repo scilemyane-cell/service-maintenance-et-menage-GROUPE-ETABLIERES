@@ -235,11 +235,17 @@ const TARIF_KM = 0.447; // taux officiel CG01 (0,447 €/km)
 const SERVICE_TECHNIQUE_NOM = "Service technique";
 const SERVICE_TECHNIQUE_ADRESSE = "Route de Nantes, 85000 La Roche-sur-Yon";
 
+// Couleur de badge par rôle — Cadre astreinte (doré) et Technicien
+// (turquoise) se distinguent d'un coup d'œil ; une personne qui cumule
+// les deux (ex. Lionel, cadre ET technicien) affiche les deux badges sur
+// une seule carte plutôt que deux cartes en double pour le même nom.
+const ROLE_COULEUR = { "Cadre astreinte": "var(--gold)", "Technicien": "var(--teal)" };
+
 function renderCoordonnees(container, perms) {
-  const all = [
-    ...state.people.n1.map(nom => ({ nom, role: "Cadre astreinte" })),
-    ...state.people.n2.map(nom => ({ nom, role: "Technicien" })),
-  ];
+  const rolesParNom = new Map();
+  state.people.n1.forEach(nom => { if (!rolesParNom.has(nom)) rolesParNom.set(nom, []); rolesParNom.get(nom).push("Cadre astreinte"); });
+  state.people.n2.forEach(nom => { if (!rolesParNom.has(nom)) rolesParNom.set(nom, []); rolesParNom.get(nom).push("Technicien"); });
+  const all = [...rolesParNom.entries()].map(([nom, roles]) => ({ nom, roles }));
 
   // Une personne est ouverte : on affiche sa fiche complète en pleine
   // largeur (page dédiée avec bouton retour), plus la grille en dessous —
@@ -250,7 +256,7 @@ function renderCoordonnees(container, perms) {
     container.innerHTML = `
       <div class="stack">
         <button class="back-btn" id="fiche-retour">← Retour aux coordonnées</button>
-        ${renderFicheTechnicien(personneOuverte.nom, personneOuverte.role, c)}
+        ${renderFicheTechnicien(personneOuverte.nom, personneOuverte.roles, c)}
       </div>
     `;
     document.getElementById("fiche-retour").addEventListener("click", () => { ui.ficheOuverte = null; renderAll(); });
@@ -273,7 +279,7 @@ function renderCoordonnees(container, perms) {
                   <div class="fiche-tech-avatar">${esc(initiales(p.nom))}</div>
                   <div>
                     <div class="fiche-tech-name">${esc(p.nom)}</div>
-                    <div class="fiche-tech-sub"><span class="tag" style="background:var(--gold)">${esc(p.role)}</span></div>
+                    <div class="fiche-tech-sub">${p.roles.map(r => `<span class="tag" style="background:${ROLE_COULEUR[r]}">${esc(r)}</span>`).join(" ")}</div>
                   </div>
                 </div>
                 <div class="tech-card-quick-contact">
@@ -308,7 +314,7 @@ function initiales(nom) {
 // renderCoordonnees) : identité, coordonnées, domicile/trajet, statut
 // administratif et note de frais. Données et logique inchangées (mêmes
 // attributs data-fiche-*/data-coord-*), seule la présentation change.
-function renderFicheTechnicien(nom, role, c) {
+function renderFicheTechnicien(nom, roles, c) {
   const statutLabel = STATUTS_NOTE_FRAIS[c.statut || "salarie_prive"] || "—";
   return `
     <div class="fiche-tech-card">
@@ -317,8 +323,8 @@ function renderFicheTechnicien(nom, role, c) {
         <div>
           <div class="fiche-tech-name">${esc(nom)}</div>
           <div class="fiche-tech-sub">
-            <span class="tag" style="background:var(--gold)">${esc(role)}</span>
-            <span class="tag" style="background:var(--teal)">${esc(statutLabel)}</span>
+            ${roles.map(r => `<span class="tag" style="background:${ROLE_COULEUR[r]}">${esc(r)}</span>`).join(" ")}
+            <span class="tag" style="background:#8F5FBF;color:#fff">${esc(statutLabel)}</span>
           </div>
         </div>
       </div>
