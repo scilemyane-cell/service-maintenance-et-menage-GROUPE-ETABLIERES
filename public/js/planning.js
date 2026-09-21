@@ -57,6 +57,64 @@ function dureeHeures(depart, retour) {
   if (end <= start) end += 1440;
   return Math.round(((end - start) / 60) * 100) / 100;
 }
+// Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) :
+// sauf la durée de l'intervention elle-même, l'astreinte compte comme du
+// repos ; mais dès qu'il y a intervention, les 11h de repos doivent être
+// intégralement redonnées à partir de la FIN de l'intervention avant toute
+// reprise de poste. Calculs indicatifs pour aider au suivi terrain — ne
+// remplacent pas une analyse juridique/RH au cas par cas.
+const REPOS_QUOTIDIEN_HEURES = 11;
+
+// Date/heure de fin réelle d'une intervention, en gérant le passage à
+// minuit (ex. départ 23h, retour 2h → la fin est le lendemain).
+function finInterventionDateTime(i) {
+  if (!i.date || !i.heureDebut || !i.heureFin) return null;
+  const [hD, mD] = i.heureDebut.split(":").map(Number);
+  const [hF, mF] = i.heureFin.split(":").map(Number);
+  const debut = new Date(i.date + "T00:00:00"); debut.setHours(hD, mD, 0, 0);
+  let fin = new Date(i.date + "T00:00:00"); fin.setHours(hF, mF, 0, 0);
+  if (fin <= debut) fin = addDays(fin, 1);
+  return fin;
+}
+
+// Heure à partir de laquelle la personne peut légalement reprendre le
+// travail après cette intervention (fin + 11h consécutives).
+function reposObligatoireJusqua(i) {
+  const fin = finInterventionDateTime(i);
+  if (!fin) return null;
+  return new Date(fin.getTime() + REPOS_QUOTIDIEN_HEURES * 3600 * 1000);
+}
+
+function fmtHeureJour(d) {
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + " le " + fmtShort(d);
+}
+
+// Prochaine prise de poste "normale" suivant la fin de l'intervention,
+// selon l'heure de reprise habituelle configurée (par défaut 8h00).
+function repriseNormaleApres(fin) {
+  const [hR, mR] = (state.people.heureRepriseDefaut || "08:00").split(":").map(Number);
+  let reprise = new Date(fin); reprise.setHours(hR, mR, 0, 0);
+  if (fin >= reprise) reprise = addDays(reprise, 1);
+  return reprise;
+}
+
+// Calcule, pour une intervention donnée, si le repos de 11h impose de
+// décaler la reprise normale, et si une intervention ultérieure de la même
+// personne a démarré avant la fin de ce repos obligatoire (violation).
+function analyseReposIntervention(i, toutes) {
+  const reposJusqua = reposObligatoireJusqua(i);
+  if (!reposJusqua) return null;
+  const repriseNormale = repriseNormaleApres(finInterventionDateTime(i));
+  const decalageNecessaire = reposJusqua > repriseNormale;
+  const violee = toutes.some(autre => {
+    if (autre === i || autre.technicien !== i.technicien || !autre.date || !autre.heureDebut) return false;
+    const [hD, mD] = autre.heureDebut.split(":").map(Number);
+    const debutAutre = new Date(autre.date + "T00:00:00"); debutAutre.setHours(hD, mD, 0, 0);
+    return debutAutre > finInterventionDateTime(i) && debutAutre < reposJusqua;
+  });
+  return { reposJusqua, decalageNecessaire, violee };
+}
+
 const PIE_COLORS = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A", "#D98BC9", "#C9A66B"];
 let graphiquesSynthese = {}; // instances Chart.js actives — détruites avant chaque nouveau rendu
 
@@ -652,10 +710,19 @@ function imprimerNoteDeFrais(nom, mois, lignes) {
 function nuitIndicatorHTML() {
   const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
   const dimanche = ui.form.date && estDimanche(ui.form.date);
-  if (!nuit && !dimanche) return "";
+  // Aperçu en direct du repos quotidien de 11h obligatoire (art. L3121-10),
+  // pendant la saisie du formulaire — avant même d'enregistrer, pour que
+  // le technicien voie tout de suite à partir de quelle heure il peut
+  // légalement reprendre le travail.
+  const fauxIntervention = { date: ui.form.date, heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin, technicien: ui.form.technicien };
+  const fin = finInterventionDateTime(fauxIntervention);
+  const reposJusqua = fin ? reposObligatoireJusqua(fauxIntervention) : null;
+  const decalageNecessaire = reposJusqua && reposJusqua > repriseNormaleApres(fin);
+  if (!nuit && !dimanche && !decalageNecessaire) return "";
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     ${nuit > 0 ? `<span class="tag" style="background:#3A3160">🌙 ${nuit.toFixed(2)}h de nuit (21h-6h, indicatif)</span>` : ""}
     ${dimanche ? `<span class="tag" style="background:#8F5FBF">🌞 Dimanche — prime +${PRIME_DIMANCHE}€</span>` : ""}
+    ${decalageNecessaire ? `<span class="tag" style="background:var(--gold);color:#1A1305" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">🛌 Repos 11h obligatoire : reprise possible seulement à partir du ${fmtHeureJour(reposJusqua)}</span>` : ""}
   </div>`;
 }
 
@@ -718,6 +785,10 @@ function renderNomsEditor() {
     <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
       <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Noms des personnes</summary>
       <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre. Le régime de travail détermine juste le mot utilisé pour un jour à 0h (RTT pour un forfait jours, Jour à 0 pour une modulation horaire) — sans effet sur le calendrier. Décoche "Astreinte" pour une personne présente dans la liste (note de frais, planning individuel, interventions) mais qui ne doit jamais être tirée au sort dans le roulement — ex. un agent qui n'est pas d'astreinte.</p>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:4px 0 12px;max-width:340px">
+        <span style="flex:1">Heure de prise de poste habituelle (repos 11h)<br><span style="font-size:10px;color:var(--text-dim);font-weight:400">Sert à calculer l'heure de reprise autorisée après une intervention d'astreinte.</span></span>
+        <input type="time" id="heure-reprise-defaut" value="${esc(state.people.heureRepriseDefaut || "08:00")}" style="width:90px">
+      </label>
       <p style="font-size:12px;font-weight:700;margin:10px 0 6px">Niveau 1 — réception</p>
       <div class="form-grid">
         ${state.people.n1.map((name, i) => `
@@ -756,6 +827,9 @@ function renderNomsEditor() {
 }
 
 function attacherNomsEditorListeners(container, onSaved) {
+  container.querySelector("#heure-reprise-defaut")?.addEventListener("change", async (e) => {
+    await savePeople({ ...state.people, heureRepriseDefaut: e.target.value || "08:00" });
+  });
   container.querySelectorAll("input[data-name-group]").forEach(inp => {
     inp.addEventListener("change", async () => {
       const grp = inp.dataset.nameGroup, idx = parseInt(inp.dataset.nameIdx, 10);
@@ -1520,10 +1594,15 @@ function renderInterventions(container, perms) {
             ${sorted.length === 0 ? `<tr><td colspan="10" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
               sorted.map(i => {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
+                const repos = analyseReposIntervention(i, state.interventions);
+                const reposHTML = repos && (repos.decalageNecessaire || repos.violee) ? `
+                  <br><span class="tag" style="background:${repos.violee ? "var(--red)" : "var(--gold)"};${repos.violee ? "color:#fff" : "color:#1A1305"};font-size:10px" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">
+                    ${repos.violee ? "⚠️ Repos 11h non respecté" : "🛌 Reprise possible seulement à partir du"} ${fmtHeureJour(repos.reposJusqua)}
+                  </span>` : "";
                 return `<tr>
                   <td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-dim)">${esc(i.numero || "—")}</td>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
-                  <td>${i.heures} h</td><td>${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}</td>
+                  <td>${i.heures} h</td><td>${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
