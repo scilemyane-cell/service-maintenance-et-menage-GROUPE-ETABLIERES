@@ -243,30 +243,41 @@ function renderCoordonnees(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Coordonnées des cadres d'astreinte et techniciens. ${perms.isEditor ? "Clique sur un champ pour le modifier. Déplie la fiche d'un technicien pour renseigner son adresse et ses kilomètres par site, puis générer sa note de frais de déplacements." : ""}</p>
+      <p class="hint">Coordonnées des cadres d'astreinte et techniciens. ${perms.isEditor ? "Clique sur une carte pour modifier le téléphone/email, ou sur «Fiche complète» pour l'adresse, le statut et la note de frais." : ""}</p>
       ${perms.canEditNames ? renderNomsEditor() : ""}
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Nom</th><th>Rôle</th><th>Téléphone</th><th>Email</th><th></th></tr></thead>
-          <tbody>
-            ${all.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucune personne configurée.</td></tr>` :
-              all.map(p => {
-                const c = state.coordonnees[p.nom] || {};
-                return `<tr>
-                  <td><b>${esc(p.nom)}</b></td>
-                  <td>${esc(p.role)}</td>
-                  <td>${perms.isEditor
-                    ? `<input type="tel" data-coord-tel="${esc(p.nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78" style="min-width:150px">`
-                    : (c.telephone ? `<a href="tel:${esc(c.telephone)}" style="color:var(--gold)">${esc(c.telephone)}</a>` : `<span class="hint">—</span>`)}${c.telephone2 ? `<br><a href="tel:${esc(c.telephone2)}" style="color:var(--gold);font-size:11px">${esc(c.telephone2)}</a>` : ""}</td>
-                  <td>${perms.isEditor
-                    ? `<input type="email" data-coord-email="${esc(p.nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr" style="min-width:200px">`
-                    : (c.email ? esc(c.email) : `<span class="hint">—</span>`)}</td>
-                  <td>${perms.isEditor ? `<button class="nav-btn" data-toggle-fiche="${esc(p.nom)}" style="padding:5px 9px;font-size:11px">${ui.ficheOuverte === p.nom ? "▲ Fermer" : "📋 Fiche technicien"}</button>` : ""}</td>
-                </tr>
-                ${perms.isEditor && ui.ficheOuverte === p.nom ? `<tr><td colspan="5" style="padding:0;border:none">${renderFicheTechnicien(p.nom, p.role, c)}</td></tr>` : ""}`;
-              }).join("")}
-          </tbody>
-        </table>
+      <div class="tech-grid">
+        ${all.length === 0 ? `<p class="hint">Aucune personne configurée.</p>` :
+          all.map(p => {
+            const c = state.coordonnees[p.nom] || {};
+            const ouvert = ui.ficheOuverte === p.nom;
+            const statutLabel = STATUTS_NOTE_FRAIS[c.statut || "salarie_prive"] || "—";
+            return `
+              <div class="tech-card${ouvert ? " tech-card-ouverte" : ""}">
+                <div class="tech-card-header">
+                  <div class="fiche-tech-avatar">${esc(initiales(p.nom))}</div>
+                  <div>
+                    <div class="fiche-tech-name">${esc(p.nom)}</div>
+                    <div class="fiche-tech-sub">
+                      <span class="tag" style="background:var(--gold)">${esc(p.role)}</span>
+                      ${perms.isEditor ? `<span class="tag" style="background:var(--teal)">${esc(statutLabel)}</span>` : ""}
+                    </div>
+                  </div>
+                </div>
+                <div class="tech-card-contact">
+                  ${perms.isEditor
+                    ? `<label>📞 Téléphone<input type="tel" data-coord-tel="${esc(p.nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78"></label>`
+                    : `<div class="fiche-tech-contact-item">📞 ${c.telephone ? `<a href="tel:${esc(c.telephone)}">${esc(c.telephone)}</a>` : `<span class="hint">non renseigné</span>`}</div>`}
+                  ${c.telephone2 && !perms.isEditor ? `<div class="fiche-tech-contact-item">📱 <a href="tel:${esc(c.telephone2)}">${esc(c.telephone2)}</a></div>` : ""}
+                  ${perms.isEditor
+                    ? `<label>✉️ Email<input type="email" data-coord-email="${esc(p.nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr"></label>`
+                    : `<div class="fiche-tech-contact-item">✉️ ${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : `<span class="hint">non renseigné</span>`}</div>`}
+                </div>
+                ${perms.isEditor ? `
+                <button class="nav-btn tech-card-toggle" data-toggle-fiche="${esc(p.nom)}">${ouvert ? "▲ Fermer la fiche" : "📋 Fiche complète"}</button>
+                ${ouvert ? renderFicheTechnicien(p.nom, p.role, c) : ""}
+                ` : ""}
+              </div>`;
+          }).join("")}
       </div>
     </div>
   `;
@@ -305,34 +316,17 @@ function initiales(nom) {
   return mots.slice(0, 2).map(m => m[0].toUpperCase()).join("");
 }
 
-// Fiche détaillée d'un technicien, présentée comme une vraie fiche RH :
-// en-tête (identité, rôle, statut), coordonnées regroupées, puis les
-// sections adresse/trajet et note de frais. Données et logique
-// inchangées (mêmes attributs data-fiche-* que la version précédente),
-// seule la présentation est retravaillée.
+// Fiche détaillée d'un technicien : sections adresse/trajet, statut
+// administratif et note de frais, affichées à l'intérieur de sa carte
+// (l'en-tête identité/rôle/statut et les coordonnées principales sont
+// déjà dans la carte elle-même — voir renderCoordonnees). Données et
+// logique inchangées (mêmes attributs data-fiche-*), seule la
+// présentation a été retravaillée.
 function renderFicheTechnicien(nom, role, c) {
-  const statutLabel = STATUTS_NOTE_FRAIS[c.statut || "salarie_prive"] || "—";
   return `
-    <div class="fiche-tech-card">
-      <div class="fiche-tech-header">
-        <div class="fiche-tech-avatar">${esc(initiales(nom))}</div>
-        <div>
-          <div class="fiche-tech-name">${esc(nom)}</div>
-          <div class="fiche-tech-sub">
-            <span class="tag" style="background:var(--gold)">${esc(role)}</span>
-            <span class="tag" style="background:var(--teal)">${esc(statutLabel)}</span>
-            <span>${esc(c.association || "ECOLE")}</span>
-          </div>
-        </div>
-      </div>
-
+    <div class="fiche-tech-detail">
       <div class="fiche-tech-section">
-        <p class="fiche-tech-eyebrow">Coordonnées</p>
-        <div class="fiche-tech-contact-row">
-          <span class="fiche-tech-contact-item">📞 ${c.telephone ? `<a href="tel:${esc(c.telephone)}">${esc(c.telephone)}</a>` : `<span class="hint">non renseigné</span>`}</span>
-          <span class="fiche-tech-contact-item">✉️ ${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : `<span class="hint">non renseigné</span>`}</span>
-        </div>
-        <p class="hint" style="margin:8px 0 10px">Le téléphone principal et l'email se modifient depuis les colonnes du tableau ci-dessus.</p>
+        <p class="fiche-tech-eyebrow">Téléphone secondaire</p>
         <div class="form-grid">
           <label>Téléphone secondaire<input type="tel" data-fiche-tel2="${esc(nom)}" value="${esc(c.telephone2 || '')}" placeholder="06 12 34 56 78"></label>
         </div>
