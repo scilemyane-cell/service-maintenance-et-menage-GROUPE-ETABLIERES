@@ -263,7 +263,7 @@ function renderCoordonnees(container, perms) {
                     : (c.email ? esc(c.email) : `<span class="hint">—</span>`)}</td>
                   <td>${perms.isEditor ? `<button class="nav-btn" data-toggle-fiche="${esc(p.nom)}" style="padding:5px 9px;font-size:11px">${ui.ficheOuverte === p.nom ? "▲ Fermer" : "📋 Fiche technicien"}</button>` : ""}</td>
                 </tr>
-                ${perms.isEditor && ui.ficheOuverte === p.nom ? `<tr><td colspan="5" style="padding:0;border:none">${renderFicheTechnicien(p.nom, c)}</td></tr>` : ""}`;
+                ${perms.isEditor && ui.ficheOuverte === p.nom ? `<tr><td colspan="5" style="padding:0;border:none">${renderFicheTechnicien(p.nom, p.role, c)}</td></tr>` : ""}`;
               }).join("")}
           </tbody>
         </table>
@@ -296,40 +296,84 @@ function renderCoordonnees(container, perms) {
   attacherApercuNoteFraisListeners();
 }
 
-// Fiche détaillée d'un technicien : adresse, association, statut, site
-// principal, table des kilomètres aller-retour par site (alimentée au
-// fur et à mesure, complétée automatiquement à la génération de la note
-// de frais si un site manque), puis le générateur de note de frais.
-function renderFicheTechnicien(nom, c) {
+// Initiales d'un nom (avatar de la fiche technicien) — ex. "Jean Dupont"
+// → "JD", "Valentin" → "V". Gère les accents/espaces multiples sans se
+// soucier de la casse d'origine.
+function initiales(nom) {
+  const mots = (nom || "").trim().split(/\s+/).filter(Boolean);
+  if (mots.length === 0) return "?";
+  return mots.slice(0, 2).map(m => m[0].toUpperCase()).join("");
+}
+
+// Fiche détaillée d'un technicien, présentée comme une vraie fiche RH :
+// en-tête (identité, rôle, statut), coordonnées regroupées, puis les
+// sections adresse/trajet et note de frais. Données et logique
+// inchangées (mêmes attributs data-fiche-* que la version précédente),
+// seule la présentation est retravaillée.
+function renderFicheTechnicien(nom, role, c) {
+  const statutLabel = STATUTS_NOTE_FRAIS[c.statut || "salarie_prive"] || "—";
   return `
-    <div class="form-card" style="margin:8px 0;background:var(--panel-alt)">
-      <h4 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📋 Fiche technicien — ${esc(nom)}</h4>
-      <p class="hint" style="margin:0 0 10px">Le trajet remboursé est domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} (${esc(SERVICE_TECHNIQUE_ADRESSE)}) — le technicien prend ensuite un véhicule de service pour se rendre sur le site d'intervention, non remboursé séparément.</p>
-      <div class="form-grid">
-        <label>Adresse du domicile (lieu de départ)<input data-fiche-adresse="${esc(nom)}" value="${esc(c.adresseDomicile || '')}" placeholder="ex. 12 rue des Lilas, 85000 La Roche-sur-Yon"></label>
-        <label>Km aller-retour domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)}<input type="number" min="0" step="0.1" data-fiche-km-service="${esc(nom)}" value="${c.kmDomicileService || ''}" placeholder="ex. 24"></label>
-        <label>Téléphone secondaire<input type="tel" data-fiche-tel2="${esc(nom)}" value="${esc(c.telephone2 || '')}" placeholder="06 12 34 56 78"></label>
-        <label>Association
-          <select data-fiche-association="${esc(nom)}">
-            <option value="ECOLE" ${(c.association || "ECOLE") === "ECOLE" ? "selected" : ""}>ECOLE</option>
-            <option value="ARMONIA" ${c.association === "ARMONIA" ? "selected" : ""}>ARMONIA</option>
-          </select>
-        </label>
-        <label>Statut
-          <select data-fiche-statut="${esc(nom)}">
-            ${Object.entries(STATUTS_NOTE_FRAIS).map(([k, v]) => `<option value="${k}" ${(c.statut || "salarie_prive") === k ? "selected" : ""}>${v}</option>`).join("")}
-          </select>
-        </label>
-        <label>Site principal (informatif)<input data-fiche-siteprincipal="${esc(nom)}" value="${esc(c.sitePrincipal || '')}" placeholder="ex. Service technique"></label>
+    <div class="fiche-tech-card">
+      <div class="fiche-tech-header">
+        <div class="fiche-tech-avatar">${esc(initiales(nom))}</div>
+        <div>
+          <div class="fiche-tech-name">${esc(nom)}</div>
+          <div class="fiche-tech-sub">
+            <span class="tag" style="background:var(--gold)">${esc(role)}</span>
+            <span class="tag" style="background:var(--teal)">${esc(statutLabel)}</span>
+            <span>${esc(c.association || "ECOLE")}</span>
+          </div>
+        </div>
       </div>
 
-      <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:16px 0 6px">🖨️ Note de frais de déplacements</p>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="month" id="fiche-mois-${esc(nom)}" value="${ui.noteFraisMois}">
-        <button class="add-btn" data-generer-note="${esc(nom)}" style="font-size:12px">🖨️ Générer la note de frais</button>
+      <div class="fiche-tech-section">
+        <p class="fiche-tech-eyebrow">Coordonnées</p>
+        <div class="fiche-tech-contact-row">
+          <span class="fiche-tech-contact-item">📞 ${c.telephone ? `<a href="tel:${esc(c.telephone)}">${esc(c.telephone)}</a>` : `<span class="hint">non renseigné</span>`}</span>
+          <span class="fiche-tech-contact-item">✉️ ${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : `<span class="hint">non renseigné</span>`}</span>
+        </div>
+        <p class="hint" style="margin:8px 0 10px">Le téléphone principal et l'email se modifient depuis les colonnes du tableau ci-dessus.</p>
+        <div class="form-grid">
+          <label>Téléphone secondaire<input type="tel" data-fiche-tel2="${esc(nom)}" value="${esc(c.telephone2 || '')}" placeholder="06 12 34 56 78"></label>
+        </div>
       </div>
-      <div id="fiche-note-status-${esc(nom)}" style="font-size:12px;margin-top:6px"></div>
-      ${ui.noteFraisPreview && ui.noteFraisPreview.nom === nom ? renderApercuNoteFrais() : ""}
+
+      <div class="fiche-tech-section">
+        <p class="fiche-tech-eyebrow">Domicile &amp; trajet</p>
+        <p class="hint" style="margin:0 0 10px">Le trajet remboursé est domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)} (${esc(SERVICE_TECHNIQUE_ADRESSE)}) — le technicien prend ensuite un véhicule de service pour se rendre sur le site d'intervention, non remboursé séparément.</p>
+        <div class="form-grid">
+          <label>Adresse du domicile (lieu de départ)<input data-fiche-adresse="${esc(nom)}" value="${esc(c.adresseDomicile || '')}" placeholder="ex. 12 rue des Lilas, 85000 La Roche-sur-Yon"></label>
+          <label>Km aller-retour domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)}<input type="number" min="0" step="0.1" data-fiche-km-service="${esc(nom)}" value="${c.kmDomicileService || ''}" placeholder="ex. 24"></label>
+        </div>
+      </div>
+
+      <div class="fiche-tech-section">
+        <p class="fiche-tech-eyebrow">Statut administratif</p>
+        <div class="form-grid">
+          <label>Association
+            <select data-fiche-association="${esc(nom)}">
+              <option value="ECOLE" ${(c.association || "ECOLE") === "ECOLE" ? "selected" : ""}>ECOLE</option>
+              <option value="ARMONIA" ${c.association === "ARMONIA" ? "selected" : ""}>ARMONIA</option>
+            </select>
+          </label>
+          <label>Statut
+            <select data-fiche-statut="${esc(nom)}">
+              ${Object.entries(STATUTS_NOTE_FRAIS).map(([k, v]) => `<option value="${k}" ${(c.statut || "salarie_prive") === k ? "selected" : ""}>${v}</option>`).join("")}
+            </select>
+          </label>
+          <label>Site principal (informatif)<input data-fiche-siteprincipal="${esc(nom)}" value="${esc(c.sitePrincipal || '')}" placeholder="ex. Service technique"></label>
+        </div>
+      </div>
+
+      <div class="fiche-tech-section">
+        <p class="fiche-tech-eyebrow">🖨️ Note de frais de déplacements</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="month" id="fiche-mois-${esc(nom)}" value="${ui.noteFraisMois}">
+          <button class="add-btn" data-generer-note="${esc(nom)}" style="font-size:12px">🖨️ Générer la note de frais</button>
+        </div>
+        <div id="fiche-note-status-${esc(nom)}" style="font-size:12px;margin-top:6px"></div>
+        ${ui.noteFraisPreview && ui.noteFraisPreview.nom === nom ? renderApercuNoteFrais() : ""}
+      </div>
     </div>
   `;
 }
