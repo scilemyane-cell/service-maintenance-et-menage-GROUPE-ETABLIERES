@@ -328,6 +328,8 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
   color:var(--text); font-size:13px; font-family:inherit;
 }
 .demandes-filtre-recherche{ flex:1 1 240px; min-width:200px; }
+.demandes-filtre-sites select[multiple]{ min-height:88px; padding:4px; }
+.demandes-filtre-sites select[multiple] option{ padding:3px 6px; border-radius:4px; }
 .demandes-reset-btn{
   background:none; border:1px solid var(--border); border-radius:8px; padding:8px 14px;
   color:var(--text-dim); font-size:12px; font-weight:700; cursor:pointer; height:fit-content;

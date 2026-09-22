@@ -148,7 +148,7 @@ let ui = {
   moisOuvert: null,
   filtreStatut: "a-traiter", // "a-traiter" | "tous" | un statut précis
   filtreUrgence: "",
-  filtreSite: "",
+  filtreSites: [], // tableau vide = tous les sites ; sinon liste des sites cochés (sélection multiple)
   filtreAssociation: "",
   recherche: "",
 };
@@ -258,6 +258,7 @@ function ligneDepuisDoc(d) {
     association: d.association || "Autres", type: d.type || "", descr: d.descriptif || "",
     urgence: d.urgence || "Non renseignée", statut: d.statut || "Non renseigné",
     intervenant: d.intervenant || "", commentaireTech: d.commentaireTech || "",
+    dateIntervention: d.dateIntervention || "",
   };
 }
 
@@ -269,7 +270,7 @@ function lignesFiltrees() {
   return toutesLesLignes().filter(l => {
     if (ui.filtreStatut === "a-traiter" ? STATUTS_TRAITES.includes(l.statut) : (ui.filtreStatut && ui.filtreStatut !== "tous" && l.statut !== ui.filtreStatut)) return false;
     if (ui.filtreUrgence && l.urgence !== ui.filtreUrgence) return false;
-    if (ui.filtreSite && l.site !== ui.filtreSite) return false;
+    if (ui.filtreSites.length > 0 && !ui.filtreSites.includes(l.site)) return false;
     if (ui.filtreAssociation && l.association !== ui.filtreAssociation) return false;
     if (ui.recherche) {
       const q = ui.recherche.toLowerCase();
@@ -310,6 +311,19 @@ function statutSelectHTML(id, valeur) {
   return `<select class="demandes-cell-select" id="${id}">
     ${DEMANDES_SEED.statuts.map(s => `<option value="${esc(s)}" ${s === valeur ? "selected" : ""}>${esc(s)}</option>`).join("")}
   </select>`;
+}
+
+// Multi-sélection de sites : un <select multiple> natif (Ctrl/Cmd+clic ou
+// glisser pour cocher plusieurs sites à la fois) — pour qu'un technicien
+// qui tourne sur 2-3 sites voie tout d'un coup, pas un site à la fois.
+function siteMultiSelectHTML(sites, selectionnes) {
+  return `
+    <label class="demandes-filtre demandes-filtre-sites">
+      <span>Site(s)</span>
+      <select id="demandes-f-sites" multiple size="4">
+        ${sites.map(s => `<option value="${esc(s)}" ${selectionnes.includes(s) ? "selected" : ""}>${esc(s)}</option>`).join("")}
+      </select>
+    </label>`;
 }
 
 function renderTableau(container) {
@@ -381,19 +395,20 @@ function renderTableau(container) {
         </label>
         ${selectHTML("demandes-f-urgence", "Urgence", DEMANDES_SEED.urgences, ui.filtreUrgence)}
         ${selectHTML("demandes-f-association", "Association", DEMANDES_SEED.assocs, ui.filtreAssociation)}
-        ${selectHTML("demandes-f-site", "Site", [...DEMANDES_SEED.sites].sort(), ui.filtreSite)}
+        ${siteMultiSelectHTML([...DEMANDES_SEED.sites].sort(), ui.filtreSites)}
         <button type="button" class="demandes-reset-btn" id="demandes-reset-filtres">✕ Réinitialiser</button>
       </div>
+      ${ui.filtreSites.length > 0 ? `<p class="hint">Sites sélectionnés : ${ui.filtreSites.map(esc).join(", ")}</p>` : ""}
 
       <div class="demandes-table-wrap">
         <table class="demandes-table">
           <thead>
             <tr>
-              <th>N°</th><th>Date</th><th>Site</th><th>Association</th><th>Description</th><th>Urgence</th><th>Statut</th><th>Intervenant</th>
+              <th>N°</th><th>Date</th><th>Site</th><th>Association</th><th>Description</th><th>Urgence</th><th>Statut</th><th>Intervenant</th><th>Date interv.</th>
             </tr>
           </thead>
           <tbody>
-            ${lignes.length === 0 ? `<tr><td colspan="8" class="demandes-table-empty">Aucune demande ne correspond à ces filtres.</td></tr>` : lignes.map(l => `
+            ${lignes.length === 0 ? `<tr><td colspan="9" class="demandes-table-empty">Aucune demande ne correspond à ces filtres.</td></tr>` : lignes.map(l => `
               <tr data-id="${esc(l.id)}">
                 <td class="mono">${esc(l.n)}</td>
                 <td class="mono">${fmtDateFR(l.date)}</td>
@@ -402,13 +417,14 @@ function renderTableau(container) {
                 <td class="demandes-table-descr" title="${esc(l.descr)}${l.type ? " — " + esc(l.type) : ""}${l.commentaireTech ? " — Note : " + esc(l.commentaireTech) : ""}">${esc(l.descr) || "<span class=\"text-dim\">—</span>"}${l.commentaireTech ? ` <span class="demandes-note-flag" title="${esc(l.commentaireTech)}">📝</span>` : ""}</td>
                 <td>${badgeUrgence(l.urgence)}</td>
                 <td>${perms.peutTraiter ? statutSelectHTML(`statut-${esc(l.id)}`, l.statut) : badgeStatut(l.statut)}</td>
-                <td>${perms.peutTraiter ? `<input type="text" class="demandes-cell-input" id="interv-${esc(l.id)}" value="${esc(l.intervenant)}" placeholder="—">` : (esc(l.intervenant) || "<span class=\"text-dim\">—</span>")}</td>
+                <td>${perms.peutTraiter ? `<input type="text" class="demandes-cell-input demandes-input-intervenant" id="interv-${esc(l.id)}" value="${esc(l.intervenant)}" placeholder="—">` : (esc(l.intervenant) || "<span class=\"text-dim\">—</span>")}</td>
+                <td>${perms.peutTraiter ? `<input type="date" class="demandes-cell-input demandes-input-date-interv" id="dateinterv-${esc(l.id)}" value="${esc(l.dateIntervention)}">` : (fmtDateFR(l.dateIntervention) === "—" ? "<span class=\"text-dim\">—</span>" : fmtDateFR(l.dateIntervention))}</td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
-      ${perms.peutTraiter ? `<p class="hint">Astuce : clique sur 📝 ou passe la souris sur une description pour voir la note technicien laissée dessus. Pour en ajouter une, ouvre la demande — pas encore possible depuis cet écran, dis-moi si tu en as besoin.</p>` : ""}
+      ${perms.peutTraiter ? `<p class="hint">Astuce : clique sur 📝 ou passe la souris sur une description pour voir la note technicien laissée dessus. Renseigne la "Date interv." quand tu interviens réellement, ça sert pour les statistiques de délai. Pour ajouter une note, ouvre la demande — pas encore possible depuis cet écran, dis-moi si tu en as besoin.</p>` : ""}
     </div>
   `;
 
@@ -425,9 +441,12 @@ function renderTableau(container) {
   document.getElementById("demandes-f-statut").addEventListener("change", e => { ui.filtreStatut = e.target.value; render(container); });
   document.getElementById("demandes-f-urgence").addEventListener("change", e => { ui.filtreUrgence = e.target.value; render(container); });
   document.getElementById("demandes-f-association").addEventListener("change", e => { ui.filtreAssociation = e.target.value; render(container); });
-  document.getElementById("demandes-f-site").addEventListener("change", e => { ui.filtreSite = e.target.value; render(container); });
+  document.getElementById("demandes-f-sites").addEventListener("change", e => {
+    ui.filtreSites = Array.from(e.target.selectedOptions).map(o => o.value);
+    render(container);
+  });
   document.getElementById("demandes-reset-filtres").addEventListener("click", () => {
-    ui.filtreStatut = "a-traiter"; ui.filtreUrgence = ""; ui.filtreSite = ""; ui.filtreAssociation = ""; ui.recherche = "";
+    ui.filtreStatut = "a-traiter"; ui.filtreUrgence = ""; ui.filtreSites = []; ui.filtreAssociation = ""; ui.recherche = "";
     render(container);
   });
 
@@ -441,12 +460,20 @@ function renderTableau(container) {
         // Pas de réactivation en cas de succès : le onSnapshot Firestore va rafraîchir tout l'écran de toute façon.
       });
     });
-    container.querySelectorAll(".demandes-cell-input").forEach(inp => {
+    container.querySelectorAll(".demandes-input-intervenant").forEach(inp => {
       inp.addEventListener("change", async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
         try { await updateDemande(id, { intervenant: e.target.value.trim() }); }
         catch (err) { console.error("updateDemande intervenant:", err); alert("Échec de l'enregistrement de l'intervenant — réessaie."); e.target.disabled = false; }
+      });
+    });
+    container.querySelectorAll(".demandes-input-date-interv").forEach(inp => {
+      inp.addEventListener("change", async (e) => {
+        const id = e.target.closest("tr").dataset.id;
+        e.target.disabled = true;
+        try { await updateDemande(id, { dateIntervention: e.target.value }); }
+        catch (err) { console.error("updateDemande dateIntervention:", err); alert("Échec de l'enregistrement de la date — réessaie."); e.target.disabled = false; }
       });
     });
   }

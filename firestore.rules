@@ -100,7 +100,7 @@ service cloud.firestore {
       allow delete: if isEditor();
       allow update: if isEditor()
         || (isSignedIn() && myRole() == 'technicien'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateMaj']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj']));
     }
 
     // ---- Interventions ----
