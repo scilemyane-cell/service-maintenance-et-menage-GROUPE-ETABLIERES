@@ -2,6 +2,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
   collection, addDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, deleteField,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
@@ -98,4 +99,46 @@ export async function listerInterventionsCorbeille() {
   const list = [];
   snap.forEach((d) => { if (d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
   return list;
+}
+
+// ---- Demandes d'intervention (import du fichier Excel "SG_Suivi_Demandes")
+// ----
+// Contrairement au reste de l'appli, ces demandes proviennent au départ
+// d'un fichier Excel externe (les demandeurs y saisissent leurs demandes,
+// hors de l'appli). Une fois importées ici, ce sont ces documents
+// Firestore qui font foi pour le suivi/traitement par les techniciens ;
+// le champ `numero` (ex. "SG-001") sert de clé pour retrouver la ligne
+// correspondante dans le fichier Excel au moment de la resynchronisation.
+export function watchDemandes(callback) {
+  return onSnapshot(collection(db, "demandes"), (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    callback(list);
+  }, (err) => { console.error("watchDemandes:", err); callback([]); });
+}
+// Import initial (ou réimport) en masse depuis le fichier Excel — n'écrase
+// pas les demandes déjà présentes (identifiées par leur `numero`) pour ne
+// jamais perdre un traitement déjà fait par un technicien dans l'appli ;
+// n'ajoute que les numéros absents de la base.
+export async function importerDemandes(lignes) {
+  const existant = await getDocs(collection(db, "demandes"));
+  const numerosConnus = new Set();
+  existant.forEach((d) => numerosConnus.add(d.data().numero));
+  const aAjouter = lignes.filter((l) => !numerosConnus.has(l.numero));
+  for (let i = 0; i < aAjouter.length; i += 450) {
+    const lot = aAjouter.slice(i, i + 450);
+    const batch = writeBatch(db);
+    lot.forEach((l) => batch.set(doc(collection(db, "demandes")), { ...l, importeLe: serverTimestamp() }));
+    await batch.commit();
+  }
+  return aAjouter.length;
+}
+export async function updateDemande(id, fields) {
+  await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
+}
+export async function ajouterDemande(record) {
+  await addDoc(collection(db, "demandes"), { ...record, dateMaj: serverTimestamp() });
+}
+export async function supprimerDemande(id) {
+  await deleteDoc(doc(db, "demandes", id));
 }

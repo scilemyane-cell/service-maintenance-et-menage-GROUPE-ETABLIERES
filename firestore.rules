@@ -86,6 +86,23 @@ service cloud.firestore {
       allow write: if isEditor();
     }
 
+    // ---- Demandes d'intervention (import du fichier Excel externe
+    // "SG_Suivi_Demandes") ----
+    // Tout le monde peut lire. Import/ajout/suppression réservés à un
+    // éditeur (admin/n1) — c'est lui qui gère l'import depuis le fichier
+    // Excel. Un technicien peut UNIQUEMENT changer le statut, ajouter un
+    // commentaire, ou s'assigner comme intervenant sur une demande déjà
+    // existante — jamais modifier le site, la description ou l'urgence
+    // d'origine (qui viennent du fichier source).
+    match /demandes/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isEditor();
+      allow delete: if isEditor();
+      allow update: if isEditor()
+        || (isSignedIn() && myRole() == 'technicien'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateMaj']));
+    }
+
     // ---- Interventions ----
     // Tout le monde peut lire. Un éditeur (admin/n1) peut tout écrire.
     // Un technicien peut créer une intervention et supprimer UNIQUEMENT

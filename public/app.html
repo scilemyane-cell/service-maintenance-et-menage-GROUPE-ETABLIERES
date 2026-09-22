@@ -182,9 +182,9 @@
         ],
       },
       {
-        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", desc: "Statistiques du fichier externe de demandes d'intervention (mois, statut, association, site, urgence)",
+        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
-          { id: "liste", label: "Statistiques", icon: "📄", roles: [...GESTION,"direction"], mount: mountSuiviDemandesTab },
+          { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien"], mount: mountSuiviDemandesTab },
         ],
       },
       {
