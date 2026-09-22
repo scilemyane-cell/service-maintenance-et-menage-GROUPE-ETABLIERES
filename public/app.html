@@ -48,6 +48,7 @@
   import { mountExportSharepointAdmin } from "./js/export-sharepoint-admin.js";
   import { mountQrMasse } from "./js/qr-print-masse.js";
   import { mountTaches } from "./js/taches.js";
+  import { mountSuiviDemandesTab } from "./js/suivi-demandes.js";
   import { mountPermissionsDoc } from "./js/permissions-doc.js";
   import { mountPrevisionnel } from "./js/previsionnel.js";
   import { mountStockMenage } from "./js/stock-menage.js";
@@ -181,6 +182,12 @@
         ],
       },
       {
+        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", desc: "Statistiques du fichier externe de demandes d'intervention (mois, statut, association, site, urgence)",
+        subtabs: [
+          { id: "liste", label: "Statistiques", icon: "📄", roles: [...GESTION,"direction"], mount: mountSuiviDemandesTab },
+        ],
+      },
+      {
         id: "stock-menage", label: "Stock Ménage", icon: "🧻", desc: "PQ, savon, entretien — sorties attribuées à un centre ou au dispositif MNA",
         subtabs: [
           { id: "liste", label: "Stock", icon: "🧻", roles: [...GESTION,"menage","technicien"], mount: mountStockMenage },
@@ -203,8 +210,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, stockMenage, stock] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, stockMenage, stock];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, suiviDemandes, stockMenage, stock] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, suiviDemandes, stockMenage, stock];
   }
 
   watchAuth((user) => {
