@@ -29,6 +29,9 @@ export function watchAbsences(callback) {
 export async function addAbsence(record) {
   await addDoc(collection(db, "absences"), record);
 }
+export async function updateAbsence(id, fields) {
+  await updateDoc(doc(db, "absences", id), fields);
+}
 export async function deleteAbsence(id) {
   await deleteDoc(doc(db, "absences", id));
 }

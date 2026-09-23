@@ -4,7 +4,7 @@ import {
   isAbsentOnDate, esc, initials, colorForPerson, nextHandover, isPlausibleDate,
 } from "./astreinte-logic.js";
 import {
-  watchPeople, savePeople, watchAbsences, addAbsence, deleteAbsence,
+  watchPeople, savePeople, watchAbsences, addAbsence, updateAbsence, deleteAbsence,
   watchInterventions, addIntervention, updateIntervention, envoyerInterventionCorbeille,
   watchRecurrences, addRecurrence, updateRecurrence, deleteRecurrence,
 } from "./firestore-data.js";
@@ -132,6 +132,9 @@ let ui = {
   noteFraisPreview: null,
   noteFraisTech: null,
   absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
+  absEditingId: null,
+  absFiltrePersonne: "Tous",
+  absFiltreOrigine: "tous", // "tous" | "prtt" | "manuel"
   prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
   docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
   planningIndivPerson: null, planningIndivYear: null, // année scolaire de départ ; résolue à anneeScolaireCourante() au premier rendu
@@ -1757,7 +1760,16 @@ function renderAbsences(container, perms) {
     totals[p] = joursAbs.reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
     totalsRtt[p] = joursAbs.filter(a => a.type === "rtt").reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
   });
-  const sorted = [...state.absences].sort((a, b) => (a.start < b.start ? 1 : -1));
+  // Origine "PRTT" : marquée par source:"prtt" sur les imports récents, ou
+  // par la note historique pour les imports faits avant l'ajout de ce
+  // champ — sert à isoler rapidement les congés importés du planning RH
+  // (souvent ceux à corriger après coup) plutôt que de les chercher au
+  // milieu des absences saisies à la main.
+  const estPrtt = (a) => a.source === "prtt" || a.note === "Importé du planning PRTT";
+  const sorted = [...state.absences]
+    .filter(a => ui.absFiltrePersonne === "Tous" || a.person === ui.absFiltrePersonne)
+    .filter(a => ui.absFiltreOrigine === "tous" || (ui.absFiltreOrigine === "prtt" ? estPrtt(a) : !estPrtt(a)))
+    .sort((a, b) => (a.start < b.start ? 1 : -1));
 
   container.innerHTML = `
     <div class="stack">
@@ -1774,20 +1786,30 @@ function renderAbsences(container, perms) {
           <label>Au<input type="date" id="a-end" value="${esc(ui.absForm.end)}"></label>
           <label class="desc-field">Note<input id="a-note" value="${esc(ui.absForm.note)}" placeholder="optionnel"></label>
         </div>
-        <button class="add-btn" id="add-abs">➕ Ajouter l'absence</button>
+        <button class="add-btn" id="add-abs">${ui.absEditingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'absence"}</button>
+        ${ui.absEditingId ? `<button type="button" class="nav-btn" id="cancel-abs-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
       </div>` : ""}
+      <div class="form-grid" style="margin-top:2px">
+        <label>Filtrer par personne<select id="abs-filtre-personne"><option value="Tous">Toutes les personnes</option>${allPeople.map(p => `<option value="${esc(p)}" ${ui.absFiltrePersonne === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+        <label>Filtrer par origine<select id="abs-filtre-origine">
+          <option value="tous" ${ui.absFiltreOrigine === "tous" ? "selected" : ""}>Toutes origines</option>
+          <option value="prtt" ${ui.absFiltreOrigine === "prtt" ? "selected" : ""}>📥 Importées du PRTT uniquement</option>
+          <option value="manuel" ${ui.absFiltreOrigine === "manuel" ? "selected" : ""}>Ajoutées manuellement uniquement</option>
+        </select></label>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Personne</th><th>Type</th><th>Du</th><th>Au</th><th>Jours</th><th>Note</th>${perms.canManageAbsences ? '<th></th>' : ''}</tr></thead>
           <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="7" class="empty-row">Aucune absence.</td></tr>` :
+            ${sorted.length === 0 ? `<tr><td colspan="7" class="empty-row">Aucune absence ne correspond à ce filtre.</td></tr>` :
               sorted.map(a => {
                 const days = (new Date(a.end) - new Date(a.start)) / 86400000 + 1;
-                return `<tr>
+                return `<tr ${ui.absEditingId === a.id ? 'style="outline:2px solid var(--gold);outline-offset:-2px"' : ""}>
                   <td>${esc(a.person)}</td>
                   <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? libelleRtt(a.person) : 'Arrêt'}</span></td>
-                  <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td><td>${esc(a.note || "")}</td>
-                  ${perms.canManageAbsences ? `<td><button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
+                  <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td>
+                  <td>${esc(a.note || "")}${estPrtt(a) ? ` <span class="tag" style="font-size:9px">📥 PRTT</span>` : ""}</td>
+                  ${perms.canManageAbsences ? `<td style="white-space:nowrap"><button class="nav-btn" data-edit-abs="${a.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
                 </tr>`;
               }).join("")}
           </tbody>
@@ -1802,6 +1824,8 @@ function renderAbsences(container, perms) {
       el.addEventListener("input", () => { ui.absForm[f] = el.value; });
       el.addEventListener("change", () => { ui.absForm[f] = el.value; if (f === "person") renderAll(); });
     });
+    document.getElementById("abs-filtre-personne")?.addEventListener("change", (e) => { ui.absFiltrePersonne = e.target.value; renderAll(); });
+    document.getElementById("abs-filtre-origine")?.addEventListener("change", (e) => { ui.absFiltreOrigine = e.target.value; renderAll(); });
     document.getElementById("add-abs").addEventListener("click", async () => {
       if (!ui.absForm.start || !ui.absForm.end) return;
       if (!isPlausibleDate(ui.absForm.start) || !isPlausibleDate(ui.absForm.end)) {
@@ -1809,9 +1833,29 @@ function renderAbsences(container, perms) {
         return;
       }
       if (ui.absForm.end < ui.absForm.start) { window.toast("La date de fin doit être après la date de début."); return; }
-      await addAbsence({ person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, createdBy: mountedUser.uid });
+      if (ui.absEditingId) {
+        await updateAbsence(ui.absEditingId, { person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note });
+        ui.absEditingId = null;
+      } else {
+        await addAbsence({ person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, createdBy: mountedUser.uid });
+      }
       ui.absForm.note = "";
       renderAll();
+    });
+    document.getElementById("cancel-abs-edit")?.addEventListener("click", () => {
+      ui.absEditingId = null;
+      ui.absForm = { person: ui.absForm.person, start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" };
+      renderAll();
+    });
+    container.querySelectorAll("[data-edit-abs]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const a = state.absences.find(x => x.id === btn.dataset.editAbs);
+        if (!a) return;
+        ui.absEditingId = a.id;
+        ui.absForm = { person: a.person, type: a.type, start: a.start, end: a.end, note: a.note || "" };
+        renderAll();
+        mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     });
     container.querySelectorAll("[data-del]").forEach(btn => {
       btn.addEventListener("click", async () => { await deleteAbsence(btn.dataset.del); });
@@ -1876,7 +1920,7 @@ function attacherImportPrttListeners(container) {
         await addAbsence({
           person: ui.prttPersonne, type: p.type,
           start: p.start.toISOString().slice(0, 10), end: p.end.toISOString().slice(0, 10),
-          note: "Importé du planning PRTT", createdBy: mountedUser.uid,
+          note: "Importé du planning PRTT", source: "prtt", createdBy: mountedUser.uid,
         });
       }
       window.toast(`${ui.prttPreview.length} période(s) importée(s).`, "success");
