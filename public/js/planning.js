@@ -2071,6 +2071,13 @@ function renderInterventions(container, perms) {
   const intervenants = [...state.people.n1, ...state.people.n2];
   if (!ui.form.technicien && intervenants.length > 0 && !ui.form.appelN1) ui.form.technicien = intervenants[0];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
+  // Détection des N° d'intervention en double (ex. INT-00013 attribué deux
+  // fois) : ça n'arrive plus tout seul depuis le contrôle d'unicité ajouté
+  // sur la correction manuelle Super Admin, mais on continue de le signaler
+  // clairement s'il en reste (données déjà en double avant ce correctif).
+  const compteNumeros = {};
+  sorted.forEach(i => { if (i.numero) compteNumeros[i.numero] = (compteNumeros[i.numero] || 0) + 1; });
+  const numerosEnDouble = Object.keys(compteNumeros).filter(n => compteNumeros[n] > 1);
   const isLockedTech = perms.isTech && !perms.isEditor;
 
   const currentAssoc = state.associations.find(a => a.nom === ui.form.association);
@@ -2152,6 +2159,10 @@ function renderInterventions(container, perms) {
       ${ui.docForm.generated ? renderDocPreview() : ""}
       ` : ""}
 
+      ${numerosEnDouble.length > 0 && perms.isEditor ? `
+      <div class="form-card" style="border:1px solid var(--red);background:rgba(230,80,80,.08)">
+        <p style="margin:0;font-size:12px;color:var(--red)">⚠️ <b>${numerosEnDouble.length} numéro${numerosEnDouble.length > 1 ? "s" : ""} d'intervention en double</b> : ${numerosEnDouble.map(esc).join(", ")}. Les lignes concernées sont surlignées ci-dessous. Ouvre l'une des deux interventions (✏️) et attribue-lui un numéro libre via le champ "N° d'intervention (Super Admin)".</p>
+      </div>` : ""}
       <div class="table-wrap">
         <table>
           <thead><tr><th>N°</th><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis au manager</th>' : ''}<th></th></tr></thead>
@@ -2160,12 +2171,13 @@ function renderInterventions(container, perms) {
               sorted.map(i => {
                 const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
                 const repos = analyseReposIntervention(i, state.interventions);
+                const enDouble = i.numero && numerosEnDouble.includes(i.numero);
                 const reposHTML = repos && (repos.decalageNecessaire || repos.violee) ? `
                   <br><span class="tag" style="background:${repos.violee ? "var(--red)" : "var(--gold)"};${repos.violee ? "color:#fff" : "color:#1A1305"};font-size:10px" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">
                     ${repos.violee ? "⚠️ Repos 11h non respecté" : "🛌 Reprise possible seulement à partir du"} ${fmtHeureJour(repos.reposJusqua)}
                   </span>` : "";
-                return `<tr>
-                  <td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-dim)">${esc(i.numero || "—")}</td>
+                return `<tr ${enDouble ? 'style="background:rgba(230,80,80,.12)"' : ""}>
+                  <td style="font-family:ui-monospace,monospace;font-size:11px;color:${enDouble ? "var(--red)" : "var(--text-dim)"}">${esc(i.numero || "—")}${enDouble ? ` <span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}</td>
                   <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
                   <td>${i.heures} h</td><td>${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
                   <td style="white-space:nowrap">
