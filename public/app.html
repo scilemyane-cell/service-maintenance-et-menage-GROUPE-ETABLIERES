@@ -315,12 +315,28 @@
     render();
   });
 
+  // Tuiles gérées au cas par cas, par utilisateur, pour les rôles de
+  // terrain (technicien/menage/mi_temps) — via user.permissions, réglé
+  // dans Paramètres → Utilisateurs → "Gérer l'accès". Un utilisateur de
+  // l'un de ces rôles ne voit une de ces tuiles QUE si elle vaut "read" ou
+  // "write" dans son profil ; absente ou "none" ⇒ tuile masquée, même si
+  // le rôle y donnerait normalement accès plus bas. Volontairement sans
+  // "Administration" ni "Suivi des tâches" (Super Admin), jamais
+  // accessibles à ces rôles de toute façon. Les autres rôles (admin, n1,
+  // super_admin, direction) et les tuiles dispositif ménage ("disp-...",
+  // via extraOnglets) ne sont pas concernés par ce mécanisme.
+  const TUILES_GEREES_PAR_UTILISATEUR = ["statistiques", "astreinte", "sites", "compteurs", "masterlock", "previsionnel", "planning-individuel", "suivi-demandes", "stock-menage", "stock"];
+  const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
   function categorySubtabsFor(category, user) {
-    // Un utilisateur avec un accès bonus explicite sur cette catégorie
-    // (user.extraOnglets, attribué au cas par cas dans Utilisateurs) voit
-    // tous ses sous-onglets, même si son rôle habituel ne les couvre pas
-    // — permet à certains techniciens de voir davantage d'onglets que
-    // d'autres sans changer leur rôle de base.
+    if (ROLES_ACCES_CAS_PAR_CAS.includes(user.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id)) {
+      const niveau = (user.permissions || {})[category.id] || "none";
+      if (niveau === "none") return [];
+      return category.subtabs.filter(s => s.roles.includes(user.role));
+    }
+    // Dispositifs ménage ("disp-...") : mécanisme extraOnglets existant,
+    // inchangé — un utilisateur avec un accès bonus explicite voit tous
+    // les sous-onglets de ce dispositif même si son rôle habituel ne les
+    // couvre pas.
     if ((user.extraOnglets || []).includes(category.id)) return category.subtabs;
     return category.subtabs.filter(s => s.roles.includes(user.role));
   }

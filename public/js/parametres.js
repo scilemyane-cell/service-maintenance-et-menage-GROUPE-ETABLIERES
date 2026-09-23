@@ -44,7 +44,7 @@ async function createUserAccount(email, password, nom, role) {
 // =================================================================
 // ADMINISTRATION GLOBALE — Utilisateurs
 // =================================================================
-let usersState = { users: [] };
+let usersState = { users: [], accesOuvertPour: null };
 let newUserForm = { email: "", password: "", nom: "", role: "menage" };
 let currentUser = null;
 let dispositifsPourOnglets = []; // dispositifs MNA distincts, ajoutés dynamiquement à la liste des onglets bonus (ex. "Daoud Mahdi")
@@ -72,19 +72,30 @@ function peutModifierRoleDe(user, targetRole) {
   return targetRole !== "super_admin" && targetRole !== "admin";
 }
 
-// Catégories qu'un Super Admin/Admin peut accorder au cas par cas à un
-// utilisateur précis, en plus de ce que son rôle donne normalement —
+// Tuiles gérées au cas par cas, par utilisateur, pour les rôles de terrain
+// (technicien/menage/mi_temps) via le tableau de bord d'accès ci-dessous —
 // volontairement sans "Administration" ni "Suivi des tâches" (Super
-// Admin), trop sensibles pour ce mécanisme au cas par cas.
-const ONGLETS_BONUS_DISPONIBLES = [
+// Admin), trop sensibles pour ce mécanisme au cas par cas. Un utilisateur
+// sans "permissions" enregistrées (ou avec une tuile absente de l'objet)
+// est traité comme "aucun accès" à cette tuile — voir categorySubtabsFor()
+// dans app.html, qui est la source de vérité côté affichage.
+const TUILES_GEREES = [
+  { id: "statistiques", label: "Statistiques" },
+  { id: "astreinte", label: "Astreinte" },
   { id: "sites", label: "Dossiers de site" },
   { id: "compteurs", label: "Relevé compteur" },
   { id: "masterlock", label: "Codes Masterlock" },
   { id: "previsionnel", label: "Prévisionnel Travaux" },
+  { id: "planning-individuel", label: "Planning individuel" },
+  { id: "suivi-demandes", label: "Suivi des demandes" },
   { id: "stock-menage", label: "Stock Ménage" },
   { id: "stock", label: "Stock maintenance" },
-  { id: "astreinte", label: "Astreinte" },
-  { id: "statistiques", label: "Statistiques" },
+];
+const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
+const NIVEAUX_ACCES = [
+  { value: "none", label: "Aucun accès" },
+  { value: "read", label: "Lecture" },
+  { value: "write", label: "Modification" },
 ];
 
 function renderUtilisateurs(container) {
@@ -109,7 +120,7 @@ function renderUtilisateurs(container) {
       <p class="hint">Modifie le nom affiché, l'email ou le rôle de chaque compte existant. Si l'email est vide ci-dessous (comptes créés avant cette mise à jour), renseigne-le manuellement — nécessaire pour "Réinitialiser". "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Zones Stock Ménage</th><th>Onglets bonus</th><th>Mot de passe</th></tr></thead>
+          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Zones Stock Ménage</th><th>Accès aux tuiles</th><th>Mot de passe</th></tr></thead>
           <tbody>
             ${usersState.users.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun utilisateur.</td></tr>` :
               usersState.users.map(u => `
@@ -123,14 +134,37 @@ function renderUtilisateurs(container) {
                     <label style="margin-right:8px"><input type="checkbox" data-user-zone="${u.uid}:ecole" ${(u.stockMenageZones || []).includes("ecole") ? "checked" : ""}> École</label>
                     <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
                   </td>
-                  <td style="font-size:11px;min-width:160px">
-                    ${[...ONGLETS_BONUS_DISPONIBLES, ...dispositifsPourOnglets.map(d => ({ id: "disp-" + d, label: "🧽 " + d }))].map(o => `<label style="display:block;white-space:nowrap"><input type="checkbox" data-user-onglet="${u.uid}:${o.id}" ${(u.extraOnglets || []).includes(o.id) ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}
+                  <td>
+                    ${ROLES_ACCES_CAS_PAR_CAS.includes(u.role)
+                      ? `<button class="nav-btn" data-toggle-acces="${u.uid}" style="padding:4px 10px;font-size:11px">🔐 ${usersState.accesOuvertPour === u.uid ? "Fermer" : "Gérer l'accès"}</button>`
+                      : `<span class="hint" style="font-size:11px">Accès complet (rôle ${esc(roleLabel(u.role))})</span>`}
                   </td>
                   <td>
                     <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>
                     <div data-reset-status="${u.uid}" style="font-size:11px;margin-top:4px"></div>
                   </td>
                 </tr>
+                ${usersState.accesOuvertPour === u.uid ? `
+                <tr>
+                  <td colspan="6" style="background:var(--bg-2, rgba(255,255,255,0.03))">
+                    <p class="hint" style="margin:0 0 8px">Tuile absente ou sur "Aucun accès" ⇒ ${esc(u.nom || u.email)} ne la voit pas du tout dans l'appli. "Modification" ne débloque un vrai droit d'écrire que là où c'est déjà techniquement possible pour ce rôle — demande à Claude d'ouvrir une tuile précise en écriture si besoin.</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px">
+                      ${TUILES_GEREES.map(t => `
+                        <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px">
+                          <span>${esc(t.label)}</span>
+                          <select data-user-permission="${u.uid}:${t.id}" style="font-size:12px">
+                            ${NIVEAUX_ACCES.map(n => `<option value="${n.value}" ${((u.permissions || {})[t.id] || "none") === n.value ? "selected" : ""}>${esc(n.label)}</option>`).join("")}
+                          </select>
+                        </label>
+                      `).join("")}
+                    </div>
+                    ${MENAGE_ROLES.includes(u.role) && dispositifsPourOnglets.length > 0 ? `
+                    <p class="hint" style="margin:12px 0 6px">Dispositifs ménage (accès existant, inchangé) :</p>
+                    <div style="font-size:12px">
+                      ${dispositifsPourOnglets.map(d => `<label style="display:inline-block;margin-right:14px"><input type="checkbox" data-user-onglet="${u.uid}:disp-${d}" ${(u.extraOnglets || []).includes("disp-" + d) ? "checked" : ""}> 🧽 ${esc(d)}</label>`).join("")}
+                    </div>` : ""}
+                  </td>
+                </tr>` : ""}
               `).join("")}
           </tbody>
         </table>
@@ -195,6 +229,19 @@ function renderUtilisateurs(container) {
       const onglets = new Set(u?.extraOnglets || []);
       if (cb.checked) onglets.add(ongletId); else onglets.delete(ongletId);
       await updateUser(uid, { extraOnglets: [...onglets] });
+    });
+  });
+  container.querySelectorAll("[data-toggle-acces]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.toggleAcces;
+      usersState.accesOuvertPour = usersState.accesOuvertPour === uid ? null : uid;
+      renderUtilisateurs(container);
+    });
+  });
+  container.querySelectorAll("[data-user-permission]").forEach(sel => {
+    sel.addEventListener("change", async () => {
+      const [uid, tuileId] = sel.dataset.userPermission.split(":");
+      await updateUser(uid, { [`permissions.${tuileId}`]: sel.value });
     });
   });
   container.querySelectorAll("[data-reset-pwd]").forEach(btn => {
