@@ -42,15 +42,28 @@ function render() {
   const today = new Date();
   const inRange = today >= addDays(YEAR_START, -7) && today <= addDays(YEAR_END, 7);
   const refDate = inRange ? today : YEAR_START;
-  const hasPeople = people.n1.length > 0 && people.n2.length > 0;
+  // Une personne peut figurer dans les listes N1/N2 (note de frais,
+  // interventions, planning individuel...) sans jamais être tirée au sort
+  // dans le roulement d'astreinte (ex. gael, ajouté seulement pour ses
+  // congés, décoché "Astreinte" dans "Noms des personnes") : comme dans
+  // l'onglet Calendrier, on calcule le roulement sur une version filtrée
+  // des listes, jamais sur `people` brut — sinon la bulle d'accueil peut
+  // afficher quelqu'un de non-astreinte comme titulaire du jour.
+  const astreinteActive = people.astreinteActive || {};
+  const peopleAstreinte = {
+    ...people,
+    n1: people.n1.filter(nom => astreinteActive[nom] !== false),
+    n2: people.n2.filter(nom => astreinteActive[nom] !== false),
+  };
+  const hasPeople = peopleAstreinte.n1.length > 0 && peopleAstreinte.n2.length > 0;
 
   let n1 = null, n2 = null, holidayToday = null, next = null;
   if (hasPeople) {
-    const { titN1, titN2 } = computeWeeklyTitulaires(people, absences);
-    n1 = resolveDayN1(refDate, people, absences, titN1);
-    n2 = resolveDayN2(refDate, people, absences, titN2);
+    const { titN1, titN2 } = computeWeeklyTitulaires(peopleAstreinte, absences);
+    n1 = resolveDayN1(refDate, peopleAstreinte, absences, titN1);
+    n2 = resolveDayN2(refDate, peopleAstreinte, absences, titN2);
     holidayToday = HOLIDAYS.get(dateKey(refDate));
-    if (inRange) next = nextHandover(refDate, people, absences, titN1, resolveDayN1, 3);
+    if (inRange) next = nextHandover(refDate, peopleAstreinte, absences, titN1, resolveDayN1, 3);
   }
   const confirmedRecord = next ? transferts.find(t => t.id === dateKey(next.date)) : null;
 
