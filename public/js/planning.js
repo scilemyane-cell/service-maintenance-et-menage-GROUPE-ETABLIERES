@@ -1099,12 +1099,26 @@ function renderVueMultiPersonnes(container, allPeople) {
   if (!ui.planningMultiPersonnes) ui.planningMultiPersonnes = [...allPeople];
   else ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => allPeople.includes(p));
   if (ui.planningMultiMoisIdx === null) ui.planningMultiMoisIdx = moisScolaireIdxCourant();
-  const moisInfo = PLANNING_MOIS_SCOLAIRE[ui.planningMultiMoisIdx];
-  const anneeReelle = year + moisInfo.decalage;
-  const nbJours = new Date(anneeReelle, moisInfo.mois + 1, 0).getDate();
-  const jours = Array.from({ length: nbJours }, (_, i) => new Date(anneeReelle, moisInfo.mois, i + 1));
+  const vueAnnee = ui.planningMultiMoisIdx === -1;
+
+  // Liste des jours affichés, chacun rattaché à son mois (pour l'en-tête
+  // groupé) — soit les jours d'un seul mois, soit ceux des 12 mois de
+  // l'année scolaire complète (septembre → août) mis bout à bout.
+  const moisAffiches = vueAnnee ? PLANNING_MOIS_SCOLAIRE : [PLANNING_MOIS_SCOLAIRE[ui.planningMultiMoisIdx]];
+  const jours = [];
+  moisAffiches.forEach(m => {
+    const anneeReelle = year + m.decalage;
+    const nbJours = new Date(anneeReelle, m.mois + 1, 0).getDate();
+    for (let i = 0; i < nbJours; i++) jours.push({ date: new Date(anneeReelle, m.mois, i + 1), moisLabel: m.label, premierDuMois: i === 0 });
+  });
+  const groupesMois = [];
+  jours.forEach(j => {
+    const dernier = groupesMois[groupesMois.length - 1];
+    if (dernier && dernier.label === j.moisLabel) dernier.count++; else groupesMois.push({ label: j.moisLabel, count: 1 });
+  });
   const todayKey = dateKey(new Date());
   const personnes = ui.planningMultiPersonnes;
+  const largeurCol = vueAnnee ? 14 : 18;
 
   const interventionsParPersonneDate = {};
   state.interventions.forEach(i => {
@@ -1114,14 +1128,17 @@ function renderVueMultiPersonnes(container, allPeople) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Vue combinée de plusieurs agendas sur un même mois — pour voir en un coup d'œil qui est présent, absent ou déjà en intervention ce jour-là.</p>
+      <p class="hint">Vue combinée de plusieurs agendas ${vueAnnee ? "sur l'année scolaire complète" : "sur un même mois"} — pour voir en un coup d'œil qui est présent, absent ou déjà en intervention ce jour-là.</p>
       <div class="toolbar">
         <button type="button" class="nav-btn" id="pm-retour">← Planning d'une personne</button>
         <label>Année scolaire
           <select id="pm-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}-${y + 1}</option>`).join("")}</select>
         </label>
-        <label>Mois
-          <select id="pm-mois">${PLANNING_MOIS_SCOLAIRE.map((m, i) => `<option value="${i}" ${i === ui.planningMultiMoisIdx ? "selected" : ""}>${m.label}</option>`).join("")}</select>
+        <label>Période
+          <select id="pm-mois">
+            <option value="-1" ${vueAnnee ? "selected" : ""}>Année scolaire complète</option>
+            ${PLANNING_MOIS_SCOLAIRE.map((m, i) => `<option value="${i}" ${i === ui.planningMultiMoisIdx ? "selected" : ""}>${m.label}</option>`).join("")}
+          </select>
         </label>
       </div>
       <div class="stat-row" style="gap:6px">
@@ -1137,12 +1154,16 @@ function renderVueMultiPersonnes(container, allPeople) {
       </div>
       <div class="table-wrap">
         <table style="font-size:11px">
-          <thead><tr><th style="position:sticky;left:0;background:var(--panel)">Personne</th>${jours.map(d => `<th style="text-align:center;${d.getDay() === 0 || d.getDay() === 6 ? "color:var(--text-dim)" : ""}">${d.getDate()}</th>`).join("")}</tr></thead>
+          <thead>
+            <tr><th style="position:sticky;left:0;background:var(--panel)"></th>${groupesMois.map(g => `<th colspan="${g.count}" style="text-align:center;border-left:1px solid var(--border);white-space:nowrap">${g.label}</th>`).join("")}</tr>
+            <tr><th style="position:sticky;left:0;background:var(--panel)">Personne</th>${jours.map(j => `<th style="text-align:center;padding:0 1px;${j.date.getDay() === 0 || j.date.getDay() === 6 ? "color:var(--text-dim)" : ""}${j.premierDuMois ? "border-left:1px solid var(--border)" : ""}">${j.date.getDate()}</th>`).join("")}</tr>
+          </thead>
           <tbody>
             ${personnes.length === 0 ? `<tr><td colspan="${jours.length + 1}" class="empty-row">Sélectionne au moins une personne ci-dessus.</td></tr>` : personnes.map(p => `
               <tr>
                 <td style="font-weight:700;white-space:nowrap;position:sticky;left:0;background:var(--panel)">${esc(p)}</td>
-                ${jours.map(d => {
+                ${jours.map(j => {
+                  const d = j.date;
                   const k = dateKey(d);
                   const abs = absenceDuJour(p, k);
                   const interv = interventionsParPersonneDate[`${p}|${k}`];
@@ -1150,8 +1171,8 @@ function renderVueMultiPersonnes(container, allPeople) {
                   let bg = "transparent", titre = "Présent";
                   if (abs) { bg = abs.type === "arret" ? "var(--red)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
                   else if (weekend) { titre = "Week-end"; }
-                  return `<td style="text-align:center;padding:2px;${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
-                    <div title="${esc(titre)}" style="width:18px;height:18px;margin:0 auto;border-radius:5px;background:${bg};${weekend && !abs ? "opacity:.4" : ""};position:relative">
+                  return `<td style="text-align:center;padding:2px 1px;${j.premierDuMois ? "border-left:1px solid var(--border)" : ""}${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
+                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${weekend && !abs ? "opacity:.4" : ""};position:relative">
                       ${interv ? `<span style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 1px rgba(0,0,0,.3)" title="Intervention"></span>` : ""}
                     </div>
                   </td>`;
