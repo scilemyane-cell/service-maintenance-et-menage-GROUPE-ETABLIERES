@@ -791,7 +791,7 @@ function renderNomsEditor() {
   return `
     <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
       <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Noms des personnes</summary>
-      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre. Le régime de travail détermine juste le mot utilisé pour un jour à 0h (RTT pour un forfait jours, Jour à 0 pour une modulation horaire) — sans effet sur le calendrier. Décoche "Astreinte" pour une personne présente dans la liste (note de frais, planning individuel, interventions) mais qui ne doit jamais être tirée au sort dans le roulement — ex. un agent qui n'est pas d'astreinte.</p>
+      <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Ajouter ou retirer une personne du niveau 1 (réception d'appel) ou du niveau 2 (intervention, techniciens) — le calendrier se réajuste automatiquement. En N1, la 1ʳᵉ personne de la liste assure l'astreinte en continu ; les suivantes ne prennent le relais qu'en cas d'absence de la précédente, dans l'ordre. Le régime de travail détermine juste le mot utilisé pour un jour à 0h (RTT pour un forfait jours, Jour à 0 pour une modulation horaire) — sans effet sur le calendrier. Décoche "Astreinte" pour une personne présente dans la liste (note de frais, planning individuel, interventions) mais qui ne doit jamais être tirée au sort dans le roulement — ex. un agent qui n'est pas d'astreinte. Pour un technicien qui rejoint le roulement à une date précise (ex. un nouveau recruté à partir du 1ᵉʳ janvier), renseigne sa "Date de début" : il reste dans la liste mais n'est considéré disponible qu'à partir de cette date — inutile de lui créer une absence pour la période avant son arrivée, et le rattrapage se fait automatiquement au prorata de son temps de présence.</p>
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:4px 0 12px;max-width:340px">
         <span style="flex:1">Heure de prise de poste habituelle (repos 11h)<br><span style="font-size:10px;color:var(--text-dim);font-weight:400">Sert à calculer l'heure de reprise autorisée après une intervention d'astreinte.</span></span>
         <input type="time" id="heure-reprise-defaut" value="${esc(state.people.heureRepriseDefaut || "08:00")}" style="width:90px">
@@ -802,6 +802,7 @@ function renderNomsEditor() {
           <label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1">N1 — ${i === 0 ? "Principal" : "Remplaçant" + (state.people.n1.length > 2 ? " " + i : "")}<input data-name-group="n1" data-name-idx="${i}" value="${esc(name)}"></span>
             <span style="margin-top:18px"><select data-name-regime="${esc(name)}"><option value="horaire" ${(state.people.regimes || {})[name] !== "forfait" ? "selected" : ""}>Modulation horaire</option><option value="forfait" ${(state.people.regimes || {})[name] === "forfait" ? "selected" : ""}>Forfait jours</option></select></span>
+            <label style="display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:10px;white-space:nowrap">Date de début<input type="date" data-name-debut="${esc(name)}" value="${esc((state.people.datesDebut || {})[name] || "")}" style="width:130px"></label>
             <label style="display:flex;align-items:center;gap:3px;margin-top:18px;font-size:10px;white-space:nowrap"><input type="checkbox" data-name-astreinte="${esc(name)}" ${(state.people.astreinteActive || {})[name] !== false ? "checked" : ""} style="width:14px;height:14px">Astreinte</label>
             ${state.people.n1.length > 1 ? `<button type="button" class="del-btn" data-name-del="n1:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
           </label>
@@ -819,6 +820,7 @@ function renderNomsEditor() {
           <label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1">N2 — Technicien ${i + 1}<input data-name-group="n2" data-name-idx="${i}" value="${esc(name)}"></span>
             <span style="margin-top:18px"><select data-name-regime="${esc(name)}"><option value="horaire" ${(state.people.regimes || {})[name] !== "forfait" ? "selected" : ""}>Modulation horaire</option><option value="forfait" ${(state.people.regimes || {})[name] === "forfait" ? "selected" : ""}>Forfait jours</option></select></span>
+            <label style="display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:10px;white-space:nowrap">Date de début<input type="date" data-name-debut="${esc(name)}" value="${esc((state.people.datesDebut || {})[name] || "")}" style="width:130px"></label>
             <label style="display:flex;align-items:center;gap:3px;margin-top:18px;font-size:10px;white-space:nowrap"><input type="checkbox" data-name-astreinte="${esc(name)}" ${(state.people.astreinteActive || {})[name] !== false ? "checked" : ""} style="width:14px;height:14px">Astreinte</label>
             ${state.people.n2.length > 1 ? `<button type="button" class="del-btn" data-name-del="n2:${i}" title="Retirer" style="margin-top:18px">🗑️</button>` : ""}
           </label>
@@ -863,6 +865,12 @@ function attacherNomsEditorListeners(container, onSaved) {
     const nom = chk.dataset.nameAstreinte;
     const astreinteActive = { ...(state.people.astreinteActive || {}), [nom]: chk.checked };
     await savePeople({ ...state.people, astreinteActive });
+  }));
+  container.querySelectorAll("[data-name-debut]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.nameDebut;
+    const datesDebut = { ...(state.people.datesDebut || {}) };
+    if (inp.value) datesDebut[nom] = inp.value; else delete datesDebut[nom];
+    await savePeople({ ...state.people, datesDebut });
   }));
   document.getElementById("names-add-n1")?.addEventListener("click", () => {
     const form = document.getElementById("names-add-n1-form");

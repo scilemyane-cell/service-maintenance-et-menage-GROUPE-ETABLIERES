@@ -79,6 +79,22 @@ export function isAbsentOnDate(absences, person, date) {
   return absences.some(a => a.person === person && k >= a.start && k <= a.end);
 }
 
+// Une personne peut avoir une "date de début" d'astreinte dans le futur
+// (ex. un technicien recruté qui prend son tour à partir du 1er janvier) :
+// avant cette date, elle est traitée exactement comme si elle était
+// absente — sans avoir besoin de lui créer une fausse absence "Congé"/
+// "Arrêt de travail" qui ne correspondrait pas à la réalité. Le champ est
+// optionnel ; sans date renseignée, la personne est considérée disponible
+// depuis toujours (comportement identique à avant l'ajout de ce champ).
+export function pasEncoreDemarre(people, person, date) {
+  const debut = (people.datesDebut || {})[person];
+  if (!debut) return false;
+  return dateKey(date) < debut;
+}
+export function indisponible(people, absences, person, date) {
+  return isAbsentOnDate(absences, person, date) || pasEncoreDemarre(people, person, date);
+}
+
 // Désigne, pour chaque semaine, qui assure le niveau 1 et le niveau 2.
 // Dans les deux cas, l'astreinte d'une semaine (lundi-dimanche) n'est
 // jamais coupée en cours de route : on ne retient comme candidat que
@@ -120,7 +136,7 @@ export function computeWeeklyTitulaires(people, absences) {
     let weight = 0;
     const dayFlags = [];
     for (let i = 0; i < 7; i++) { const d = addDays(w.start, i); dayFlags.push(d); weight += dayWeight(d); }
-    const joursAbsents = (p) => dayFlags.filter(d => isAbsentOnDate(absences, p, d)).length;
+    const joursAbsents = (p) => dayFlags.filter(d => indisponible(people, absences, p, d)).length;
     const meilleurSiPersonneDispo = (liste) => [...liste].sort((a, b) => joursAbsents(a) - joursAbsents(b))[0];
 
     const availN1 = people.n1.filter(p => joursAbsents(p) === 0);
@@ -155,8 +171,8 @@ export function resolveDayN1(date, people, absences, titN1) {
   const wi = weekIndexForDate(date);
   const base = titN1[wi] ?? list[0];
   const other = list.find(p => p !== base) || list[0];
-  if (!isAbsentOnDate(absences, base, date)) return { assigned: base, swapped: false };
-  if (!isAbsentOnDate(absences, other, date)) return { assigned: other, swapped: true };
+  if (!indisponible(people, absences, base, date)) return { assigned: base, swapped: false };
+  if (!indisponible(people, absences, other, date)) return { assigned: other, swapped: true };
   return { assigned: "A DÉFINIR", swapped: true };
 }
 export function resolveDayN2(date, people, absences, titN2) {
@@ -166,7 +182,7 @@ export function resolveDayN2(date, people, absences, titN2) {
   const baseIdx = Math.max(0, list.indexOf(base));
   for (let offset = 0; offset < nb; offset++) {
     const idx = (baseIdx + offset) % nb, name = list[idx];
-    if (!isAbsentOnDate(absences, name, date)) return { assigned: name, swapped: offset > 0 };
+    if (!indisponible(people, absences, name, date)) return { assigned: name, swapped: offset > 0 };
   }
   return { assigned: "A DÉFINIR", swapped: true };
 }
