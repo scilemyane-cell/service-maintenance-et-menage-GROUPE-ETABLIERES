@@ -138,6 +138,7 @@ let ui = {
   planningVueMulti: false, planningMultiPersonnes: null, planningMultiMoisIdx: null,
   recurForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" },
   recurEditingId: null,
+  recurDetailsOpen: {}, // par personne : mémorise si le panneau "Planning récurrent" est déplié, pour ne pas le refermer à chaque saisie (voir renderRecurrencesPanel)
   planningQuickDate: null,
   planningQuickEditingId: null, // id de l'intervention en cours de modification depuis le planning individuel (null = ajout)
   planningQuickForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "" },
@@ -1022,8 +1023,16 @@ async function genererInterventionsRecurrence(rec, user) {
 function renderRecurrencesPanel(person) {
   const recs = state.recurrences.filter(r => r.person === person);
   const f = ui.recurForm;
+  // Une fois le panneau déplié une fois pour cette personne (manuellement, ou
+  // parce qu'il y a déjà des récurrences / une édition en cours), on se
+  // souvient de son état via `ui.recurDetailsOpen` : sans ça, chaque saisie
+  // dans le formulaire (ex. choix de l'association) déclenche un renderAll()
+  // qui recalculait "open" à partir de recs.length/recurEditingId et
+  // refermait le panneau en pleine saisie.
+  if (ui.recurDetailsOpen[person] === undefined) ui.recurDetailsOpen[person] = recs.length > 0 || !!ui.recurEditingId;
+  const isOpen = ui.recurDetailsOpen[person];
   return `
-    <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px" ${recs.length || ui.recurEditingId ? "open" : ""}>
+    <details id="rf-details" class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px" ${isOpen ? "open" : ""}>
       <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">🔁 Planning récurrent — entretiens réguliers de ${esc(person)}</summary>
       <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Définis une règle (ex. "toutes les 2 semaines, le mardi, tonte de la Résidence Le Mail") puis clique "Générer" pour créer les interventions à venir (~4 mois) — elles apparaissent ensuite normalement dans l'onglet Interventions et ici (pastille violette). Reclique "Générer" de temps en temps pour prolonger le planning. Pour un entretien ponctuel hors récurrence, clique directement une date du calendrier ci-dessous.</p>
       ${recs.length ? `
@@ -1369,6 +1378,7 @@ function renderPlanningIndividuel(container, perms) {
   document.getElementById("pi-vue-multi")?.addEventListener("click", () => { ui.planningVueMulti = true; renderAll(); });
 
   if (person && peutProgrammer) {
+    document.getElementById("rf-details")?.addEventListener("toggle", (e) => { ui.recurDetailsOpen[person] = e.target.open; });
     attacherSiteSelectorListeners("rf", ui.recurForm);
     document.getElementById("rf-freq")?.addEventListener("change", (e) => { ui.recurForm.frequenceSemaines = Number(e.target.value); });
     document.getElementById("rf-jour")?.addEventListener("change", (e) => { ui.recurForm.jourSemaine = Number(e.target.value); });
@@ -1408,6 +1418,7 @@ function renderPlanningIndividuel(container, perms) {
     container.querySelectorAll("[data-recur-edit]").forEach(btn => btn.addEventListener("click", () => {
       const rec = state.recurrences.find(r => r.id === btn.dataset.recurEdit); if (!rec) return;
       ui.recurEditingId = rec.id;
+      ui.recurDetailsOpen[person] = true;
       ui.recurForm = {
         association: rec.association || "", groupe: rec.groupe || "", site: rec.site || "", type: rec.type || "Espaces verts",
         heureDebut: rec.heureDebut || "", heureFin: rec.heureFin || "", description: rec.description || "",
@@ -2265,7 +2276,13 @@ function renderInterventions(container, perms) {
       // après une purge, etc.) — uniquement lors d'une modification, jamais
       // à la création (le numéro est toujours généré automatiquement).
       if (ui.editingId && mountedUser.role === "super_admin" && ui.form.numero && ui.form.numero.trim()) {
-        payload.numero = ui.form.numero.trim();
+        const numeroVoulu = ui.form.numero.trim();
+        const collision = state.interventions.find(i => i.id !== ui.editingId && i.numero === numeroVoulu);
+        if (collision) {
+          statusEl.innerHTML = `<span style="color:var(--red)">❌ Le numéro ${esc(numeroVoulu)} est déjà utilisé par une autre intervention (${esc(collision.date || "?")} — ${esc(collision.site || collision.association || "?")}). Choisis un autre numéro.</span>`;
+          return;
+        }
+        payload.numero = numeroVoulu;
       }
       try {
         if (ui.editingId) {
