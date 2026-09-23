@@ -1149,8 +1149,22 @@ function renderVueMultiPersonnes(container, allPeople) {
     if (dernier && dernier.label === j.moisLabel) dernier.count++; else groupesMois.push({ label: j.moisLabel, count: 1 });
   });
   const todayKey = dateKey(new Date());
-  const personnes = ui.planningMultiPersonnes;
   const largeurCol = vueAnnee ? 14 : 18;
+
+  // Binômes : deux personnes (ou plus) partageant le même libellé de
+  // binôme reçoivent la même couleur pastel et sont regroupées côte à
+  // côte dans le tableau, dans l'ordre d'apparition des binômes — les
+  // personnes sans binôme restent à la suite, dans leur ordre habituel.
+  const PASTELS = ["#FCE8D6", "#DCEEE4", "#E3E6FB", "#FBE3EC", "#FFF3C4", "#DDF0F5", "#EEE1F7", "#E9F0DA"];
+  const binomes = state.people.binomes || {};
+  const labelsVus = [];
+  allPeople.forEach(p => { const lbl = binomes[p]; if (lbl && !labelsVus.includes(lbl)) labelsVus.push(lbl); });
+  const couleurBinome = (p) => { const lbl = binomes[p]; if (!lbl) return null; return PASTELS[labelsVus.indexOf(lbl) % PASTELS.length]; };
+  const personnes = [...ui.planningMultiPersonnes].sort((a, b) => {
+    const ia = binomes[a] ? labelsVus.indexOf(binomes[a]) : Infinity, ib = binomes[b] ? labelsVus.indexOf(binomes[b]) : Infinity;
+    if (ia !== ib) return ia - ib;
+    return ui.planningMultiPersonnes.indexOf(a) - ui.planningMultiPersonnes.indexOf(b);
+  });
 
   const interventionsParPersonneDate = {};
   state.interventions.forEach(i => {
@@ -1178,6 +1192,16 @@ function renderVueMultiPersonnes(container, allPeople) {
           <input type="checkbox" data-multi-personne="${esc(p)}" ${personnes.includes(p) ? "checked" : ""} style="width:13px;height:13px">${esc(p)}
         </label>`).join("")}
       </div>
+      <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">🎨 Binômes</summary>
+        <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Donne le même libellé (ex. "1", "A", "Ronald/Yann") à deux personnes qui travaillent en binôme : elles reçoivent la même couleur pastel et sont regroupées côte à côte dans le tableau ci-dessous. Laisse vide pour une personne sans binôme.</p>
+        <div class="form-grid">
+          ${allPeople.map(p => `<label style="display:flex;align-items:center;gap:6px">
+            <span style="flex:1;display:flex;align-items:center;gap:6px">${couleurBinome(p) ? `<i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${couleurBinome(p)};border:1px solid var(--border)"></i>` : ""}${esc(p)}</span>
+            <input data-binome="${esc(p)}" value="${esc(binomes[p] || "")}" placeholder="Binôme (optionnel)" style="width:140px">
+          </label>`).join("")}
+        </div>
+      </details>
       <div class="year-cal-legend">
         <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
         <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> RTT</span>
@@ -1188,14 +1212,14 @@ function renderVueMultiPersonnes(container, allPeople) {
       <div class="table-wrap">
         <table style="font-size:11px">
           <thead>
-            <tr><th style="position:sticky;left:0;background:var(--panel)"></th>${groupesMois.map(g => `<th colspan="${g.count}" style="text-align:center;border-left:1px solid var(--border);white-space:nowrap">${g.label}</th>`).join("")}</tr>
-            <tr><th style="position:sticky;left:0;background:var(--panel)"></th>${jours.map(j => `<th style="text-align:center;padding:0 1px;font-weight:400;color:var(--text-dim);${j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : ""}">${j.lettreJour}</th>`).join("")}</tr>
-            <tr><th style="position:sticky;left:0;background:var(--panel)">Personne</th>${jours.map(j => `<th title="${j.ferie ? esc(j.ferie) : ""}" style="text-align:center;padding:0 1px;${j.ferie ? "color:var(--violet, #8F5FBF);font-weight:700" : (j.date.getDay() === 0 || j.date.getDay() === 6) ? "color:var(--text-dim)" : ""}${j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : ""}">${j.date.getDate()}</th>`).join("")}</tr>
+            <tr><th style="position:sticky;left:0;background:var(--panel);z-index:2"></th>${groupesMois.map(g => `<th colspan="${g.count}" style="text-align:center;border-left:1px solid var(--border);white-space:nowrap">${g.label}</th>`).join("")}</tr>
+            <tr><th style="position:sticky;left:0;background:var(--panel);z-index:2"></th>${jours.map(j => `<th style="text-align:center;padding:0 1px;font-weight:400;color:var(--text-dim);${j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : ""}">${j.lettreJour}</th>`).join("")}</tr>
+            <tr><th style="position:sticky;left:0;background:var(--panel);z-index:2">Personne</th>${jours.map(j => `<th title="${j.ferie ? esc(j.ferie) : ""}" style="text-align:center;padding:0 1px;${j.ferie ? "color:var(--violet, #8F5FBF);font-weight:700" : (j.date.getDay() === 0 || j.date.getDay() === 6) ? "color:var(--text-dim)" : ""}${j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : ""}">${j.date.getDate()}</th>`).join("")}</tr>
           </thead>
           <tbody>
             ${personnes.length === 0 ? `<tr><td colspan="${jours.length + 1}" class="empty-row">Sélectionne au moins une personne ci-dessus.</td></tr>` : personnes.map(p => `
               <tr>
-                <td style="font-weight:700;white-space:nowrap;position:sticky;left:0;background:var(--panel)">${esc(p)}</td>
+                <td style="font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:1;background:${couleurBinome(p) || "var(--panel)"};${couleurBinome(p) ? "color:#1A1305" : ""}">${esc(p)}</td>
                 ${jours.map(j => {
                   const d = j.date;
                   const k = dateKey(d);
@@ -1229,6 +1253,12 @@ function renderVueMultiPersonnes(container, allPeople) {
     if (chk.checked) { if (!ui.planningMultiPersonnes.includes(nom)) ui.planningMultiPersonnes.push(nom); }
     else { ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => p !== nom); }
     renderAll();
+  }));
+  container.querySelectorAll("[data-binome]").forEach(inp => inp.addEventListener("change", async () => {
+    const nom = inp.dataset.binome;
+    const binomesNext = { ...(state.people.binomes || {}) };
+    if (inp.value.trim()) binomesNext[nom] = inp.value.trim(); else delete binomesNext[nom];
+    await savePeople({ ...state.people, binomes: binomesNext });
   }));
 }
 
