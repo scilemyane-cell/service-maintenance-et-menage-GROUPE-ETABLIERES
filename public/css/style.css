@@ -167,16 +167,20 @@ body{
 .nav-btn{ background:var(--panel-alt); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:6px 12px; cursor:pointer; font-size:13px; font-weight:600; }
 .nav-btn:hover{ border-color:var(--gold); color:var(--gold); }
 .cal-month-label{ font-size:15px; font-weight:700; text-transform:capitalize; }
-.cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+.cal-grid{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
 .cal-dow{ text-align:center; font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; padding-bottom:4px; }
-.cal-day{ background:var(--panel-alt); border:1px solid var(--border); border-radius:10px; padding:9px 8px; min-height:76px; cursor:pointer; display:flex; flex-direction:column; gap:3px; position:relative; transition:border-color .15s; }
+/* min-width:0 est indispensable ici : par défaut une case de grid/flex ne
+   peut pas descendre sous la largeur de son contenu (ex. le mot
+   "Valentin" ou "définir" tout seul), ce qui pousse toute la grille des 7
+   colonnes à déborder sur le côté sur un écran de téléphone étroit. */
+.cal-day{ background:var(--panel-alt); border:1px solid var(--border); border-radius:10px; padding:9px 8px; min-height:76px; min-width:0; cursor:pointer; display:flex; flex-direction:column; gap:3px; position:relative; transition:border-color .15s; }
 .cal-day:hover{ border-color:var(--gold); }
 .cal-day.outside{ opacity:.28; }
 .cal-day.selected{ background:rgba(217,178,76,.1); border-color:var(--gold); }
 .cal-daynum{ font-size:18px; font-weight:300; font-family:Georgia,"Times New Roman",serif; color:var(--text); }
 .cal-day.today .cal-daynum{ font-weight:700; color:var(--gold); }
-.cal-chips{ display:flex; flex-direction:column; gap:4px; margin-top:6px; }
-.cal-chip{ display:flex; align-items:center; gap:5px; font-size:10px; font-weight:500; color:var(--text-dim); background:none !important; padding:0; width:auto; }
+.cal-chips{ display:flex; flex-direction:column; gap:4px; margin-top:6px; min-width:0; }
+.cal-chip{ display:flex; align-items:center; gap:5px; font-size:10px; font-weight:500; color:var(--text-dim); background:none !important; padding:0; width:auto; min-width:0; overflow-wrap:anywhere; }
 .cal-chip::before{ content:""; width:6px; height:6px; border-radius:50%; flex-shrink:0; background:var(--chip-color, var(--text-dim)); }
 .cal-chip.def{ color:var(--red) !important; font-weight:700; }
 .cal-chip.def::before{ background:var(--red); }
