@@ -1105,11 +1105,20 @@ function renderVueMultiPersonnes(container, allPeople) {
   // groupé) — soit les jours d'un seul mois, soit ceux des 12 mois de
   // l'année scolaire complète (septembre → août) mis bout à bout.
   const moisAffiches = vueAnnee ? PLANNING_MOIS_SCOLAIRE : [PLANNING_MOIS_SCOLAIRE[ui.planningMultiMoisIdx]];
+  const LETTRES_JOUR = ["L", "M", "M", "J", "V", "S", "D"];
   const jours = [];
   moisAffiches.forEach(m => {
     const anneeReelle = year + m.decalage;
     const nbJours = new Date(anneeReelle, m.mois + 1, 0).getDate();
-    for (let i = 0; i < nbJours; i++) jours.push({ date: new Date(anneeReelle, m.mois, i + 1), moisLabel: m.label, premierDuMois: i === 0 });
+    for (let i = 0; i < nbJours; i++) {
+      const date = new Date(anneeReelle, m.mois, i + 1);
+      jours.push({
+        date, moisLabel: m.label, premierDuMois: i === 0,
+        premierDeSemaine: date.getDay() === 1,
+        lettreJour: LETTRES_JOUR[(date.getDay() + 6) % 7],
+        ferie: HOLIDAYS.get(dateKey(date)) || null,
+      });
+    }
   });
   const groupesMois = [];
   jours.forEach(j => {
@@ -1151,12 +1160,14 @@ function renderVueMultiPersonnes(container, allPeople) {
         <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> RTT</span>
         <span><i class="year-cal-legend-dot" style="background:var(--red)"></i> Arrêt de travail</span>
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--violet, #8F5FBF)"></i> Jour férié</span>
       </div>
       <div class="table-wrap">
         <table style="font-size:11px">
           <thead>
             <tr><th style="position:sticky;left:0;background:var(--panel)"></th>${groupesMois.map(g => `<th colspan="${g.count}" style="text-align:center;border-left:1px solid var(--border);white-space:nowrap">${g.label}</th>`).join("")}</tr>
-            <tr><th style="position:sticky;left:0;background:var(--panel)">Personne</th>${jours.map(j => `<th style="text-align:center;padding:0 1px;${j.date.getDay() === 0 || j.date.getDay() === 6 ? "color:var(--text-dim)" : ""}${j.premierDuMois ? "border-left:1px solid var(--border)" : ""}">${j.date.getDate()}</th>`).join("")}</tr>
+            <tr><th style="position:sticky;left:0;background:var(--panel)"></th>${jours.map(j => `<th style="text-align:center;padding:0 1px;font-weight:400;color:var(--text-dim);${j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : ""}">${j.lettreJour}</th>`).join("")}</tr>
+            <tr><th style="position:sticky;left:0;background:var(--panel)">Personne</th>${jours.map(j => `<th title="${j.ferie ? esc(j.ferie) : ""}" style="text-align:center;padding:0 1px;${j.ferie ? "color:var(--violet, #8F5FBF);font-weight:700" : (j.date.getDay() === 0 || j.date.getDay() === 6) ? "color:var(--text-dim)" : ""}${j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : ""}">${j.date.getDate()}</th>`).join("")}</tr>
           </thead>
           <tbody>
             ${personnes.length === 0 ? `<tr><td colspan="${jours.length + 1}" class="empty-row">Sélectionne au moins une personne ci-dessus.</td></tr>` : personnes.map(p => `
@@ -1170,9 +1181,11 @@ function renderVueMultiPersonnes(container, allPeople) {
                   const weekend = d.getDay() === 0 || d.getDay() === 6;
                   let bg = "transparent", titre = "Présent";
                   if (abs) { bg = abs.type === "arret" ? "var(--red)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
+                  else if (j.ferie) { titre = j.ferie; }
                   else if (weekend) { titre = "Week-end"; }
-                  return `<td style="text-align:center;padding:2px 1px;${j.premierDuMois ? "border-left:1px solid var(--border)" : ""}${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
-                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${weekend && !abs ? "opacity:.4" : ""};position:relative">
+                  const bordureCol = j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : "";
+                  return `<td style="text-align:center;padding:2px 1px;${bordureCol}${j.ferie && !abs ? "background:rgba(143,95,191,.12)" : ""}${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
+                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${(weekend || j.ferie) && !abs ? "opacity:.4" : ""};position:relative">
                       ${interv ? `<span style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 1px rgba(0,0,0,.3)" title="Intervention"></span>` : ""}
                     </div>
                   </td>`;
