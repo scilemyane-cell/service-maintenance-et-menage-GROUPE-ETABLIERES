@@ -91,7 +91,7 @@ const TUILES_GEREES = [
   { id: "stock-menage", label: "Stock Ménage" },
   { id: "stock", label: "Stock maintenance" },
 ];
-const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
+const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps", "direction"];
 const NIVEAUX_ACCES = [
   { value: "none", label: "Aucun accès" },
   { value: "read", label: "Lecture" },

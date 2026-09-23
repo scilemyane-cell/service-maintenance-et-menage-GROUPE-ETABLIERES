@@ -323,10 +323,10 @@
   // le rôle y donnerait normalement accès plus bas. Volontairement sans
   // "Administration" ni "Suivi des tâches" (Super Admin), jamais
   // accessibles à ces rôles de toute façon. Les autres rôles (admin, n1,
-  // super_admin, direction) et les tuiles dispositif ménage ("disp-...",
+  // super_admin) et les tuiles dispositif ménage ("disp-...",
   // via extraOnglets) ne sont pas concernés par ce mécanisme.
   const TUILES_GEREES_PAR_UTILISATEUR = ["statistiques", "astreinte", "sites", "compteurs", "masterlock", "previsionnel", "planning-individuel", "suivi-demandes", "stock-menage", "stock"];
-  const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
+  const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps", "direction"];
   function categorySubtabsFor(category, user) {
     if (ROLES_ACCES_CAS_PAR_CAS.includes(user.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id)) {
       const niveau = (user.permissions || {})[category.id] || "none";
