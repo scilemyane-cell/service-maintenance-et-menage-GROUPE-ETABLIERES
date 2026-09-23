@@ -1098,7 +1098,7 @@ function renderVueMultiPersonnes(container, allPeople) {
   const year = ui.planningIndivYear;
   if (!ui.planningMultiPersonnes) ui.planningMultiPersonnes = [...allPeople];
   else ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => allPeople.includes(p));
-  if (ui.planningMultiMoisIdx === null) ui.planningMultiMoisIdx = moisScolaireIdxCourant();
+  if (ui.planningMultiMoisIdx === null) ui.planningMultiMoisIdx = -1;
   const vueAnnee = ui.planningMultiMoisIdx === -1;
 
   // Liste des jours affichés, chacun rattaché à son mois (pour l'en-tête
