@@ -1151,17 +1151,29 @@ function renderVueMultiPersonnes(container, allPeople) {
   const todayKey = dateKey(new Date());
   const largeurCol = vueAnnee ? 14 : 18;
 
-  // Binômes : deux personnes (ou plus) partageant le même libellé de
-  // binôme reçoivent la même couleur pastel et sont regroupées côte à
-  // côte dans le tableau, dans l'ordre d'apparition des binômes — les
-  // personnes sans binôme restent à la suite, dans leur ordre habituel.
+  // Binômes : chaque personne choisit son binôme dans une liste (plutôt
+  // qu'un libellé à taper des deux côtés, source d'erreur) — les deux
+  // membres reçoivent alors la même couleur pastel et sont regroupés côte
+  // à côte dans le tableau. state.people.binomes est un simple aller
+  // {nom: nomDuPartenaire}, mais un seul sens suffit à former le groupe :
+  // pas besoin que les deux se soient mutuellement choisis pour un rendu
+  // correct (setBinome, plus bas, garde quand même les deux sens à jour).
   const PASTELS = ["#FCE8D6", "#DCEEE4", "#E3E6FB", "#FBE3EC", "#FFF3C4", "#DDF0F5", "#EEE1F7", "#E9F0DA"];
   const binomes = state.people.binomes || {};
-  const labelsVus = [];
-  allPeople.forEach(p => { const lbl = binomes[p]; if (lbl && !labelsVus.includes(lbl)) labelsVus.push(lbl); });
-  const couleurBinome = (p) => { const lbl = binomes[p]; if (!lbl) return null; return PASTELS[labelsVus.indexOf(lbl) % PASTELS.length]; };
+  const groupeDe = {};
+  let groupIdx = 0;
+  allPeople.forEach(p => {
+    if (groupeDe[p] !== undefined) return;
+    const q = binomes[p];
+    if (q && allPeople.includes(q) && q !== p) {
+      const gid = groupIdx++;
+      groupeDe[p] = gid;
+      groupeDe[q] = gid;
+    }
+  });
+  const couleurBinome = (p) => groupeDe[p] === undefined ? null : PASTELS[groupeDe[p] % PASTELS.length];
   const personnes = [...ui.planningMultiPersonnes].sort((a, b) => {
-    const ia = binomes[a] ? labelsVus.indexOf(binomes[a]) : Infinity, ib = binomes[b] ? labelsVus.indexOf(binomes[b]) : Infinity;
+    const ia = groupeDe[a] ?? Infinity, ib = groupeDe[b] ?? Infinity;
     if (ia !== ib) return ia - ib;
     return ui.planningMultiPersonnes.indexOf(a) - ui.planningMultiPersonnes.indexOf(b);
   });
@@ -1194,11 +1206,14 @@ function renderVueMultiPersonnes(container, allPeople) {
       </div>
       <details class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px">
         <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">🎨 Binômes</summary>
-        <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Donne le même libellé (ex. "1", "A", "Ronald/Yann") à deux personnes qui travaillent en binôme : elles reçoivent la même couleur pastel et sont regroupées côte à côte dans le tableau ci-dessous. Laisse vide pour une personne sans binôme.</p>
+        <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Choisis le binôme de chaque personne : les deux reçoivent la même couleur pastel et sont regroupées côte à côte dans le tableau ci-dessous. "— Aucun —" retire la personne de son binôme.</p>
         <div class="form-grid">
           ${allPeople.map(p => `<label style="display:flex;align-items:center;gap:6px">
             <span style="flex:1;display:flex;align-items:center;gap:6px">${couleurBinome(p) ? `<i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${couleurBinome(p)};border:1px solid var(--border)"></i>` : ""}${esc(p)}</span>
-            <input data-binome="${esc(p)}" value="${esc(binomes[p] || "")}" placeholder="Binôme (optionnel)" style="width:140px">
+            <select data-binome="${esc(p)}" style="width:140px">
+              <option value="">— Aucun —</option>
+              ${allPeople.filter(q => q !== p).map(q => `<option value="${esc(q)}" ${binomes[p] === q ? "selected" : ""}>${esc(q)}</option>`).join("")}
+            </select>
           </label>`).join("")}
         </div>
       </details>
@@ -1254,10 +1269,23 @@ function renderVueMultiPersonnes(container, allPeople) {
     else { ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => p !== nom); }
     renderAll();
   }));
-  container.querySelectorAll("[data-binome]").forEach(inp => inp.addEventListener("change", async () => {
-    const nom = inp.dataset.binome;
+  container.querySelectorAll("[data-binome]").forEach(sel => sel.addEventListener("change", async () => {
+    const nom = sel.dataset.binome;
+    const choisi = sel.value || null;
     const binomesNext = { ...(state.people.binomes || {}) };
-    if (inp.value.trim()) binomesNext[nom] = inp.value.trim(); else delete binomesNext[nom];
+    // Détache l'ancien binôme de `nom` (des deux côtés) avant d'appliquer
+    // le nouveau, pour ne jamais laisser un lien à sens unique périmé.
+    const ancien = binomesNext[nom];
+    if (ancien && binomesNext[ancien] === nom) delete binomesNext[ancien];
+    delete binomesNext[nom];
+    if (choisi) {
+      // Si la personne choisie avait elle-même déjà un autre binôme,
+      // on le détache aussi : un binôme est toujours une paire exclusive.
+      const anciennePartenaireDeChoisi = binomesNext[choisi];
+      if (anciennePartenaireDeChoisi && binomesNext[anciennePartenaireDeChoisi] === choisi) delete binomesNext[anciennePartenaireDeChoisi];
+      binomesNext[nom] = choisi;
+      binomesNext[choisi] = nom;
+    }
     await savePeople({ ...state.people, binomes: binomesNext });
   }));
 }
