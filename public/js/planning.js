@@ -1586,8 +1586,9 @@ function renderCalendar(container, perms) {
       ${alertDays.length ? `<div class="alert-banner">⚠️ ${alertDays.length} jour${alertDays.length > 1 ? "s" : ""} à réaffecter manuellement sur l'année.</div>` : ""}
 
       <div class="stat-row">
-        ${Object.entries(compteurs).map(([name, c]) => `<div class="stat-chip">${esc(name)} — N1 <b>${c.n1}</b>j · N2 <b>${c.n2}</b>j · charge <b>${c.score.toFixed(1)}</b></div>`).join("")}
+        ${Object.entries(compteurs).map(([name, c]) => `<div class="stat-chip" title="Total pondéré : compte les jours de weekend 1,5x et les jours fériés 2x, pour répartir équitablement les astreintes plus difficiles (pas un simple compteur de jours)">${esc(name)} — N1 <b>${c.n1}</b>j · N2 <b>${c.n2}</b>j · total pondéré <b>${c.score.toFixed(1)} j</b></div>`).join("")}
       </div>
+      <p style="font-size:11px;color:var(--text-dim);margin:-6px 0 0">ℹ️ N1/N2 = nombre réel de jours d'astreinte assurés. Le "total pondéré" sert à équilibrer le roulement : un jour de weekend compte pour 1,5 jour et un jour férié pour 2 jours (plus contraignants), donc deux personnes avec le même nombre de jours N1+N2 peuvent avoir un total pondéré différent selon qu'elles sont tombées sur plus ou moins de weekends/fériés.</p>
 
       ${perms.canEditNames ? renderNomsEditor() : ""}
 
