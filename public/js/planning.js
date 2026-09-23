@@ -1629,9 +1629,16 @@ function renderCalendar(container, perms) {
 
       <div class="day-detail">
         <div class="day-detail-title">${fmtLong(selected)}</div>
-        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN1.assigned, state.people)}"></div> Niveau 1 : <b>${esc(selN1.assigned)}</b></div>
-        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN2.assigned, state.people)}"></div> Niveau 2 : <b>${esc(selN2.assigned)}</b></div>
+        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN1.assigned, state.people)}"></div> Niveau 1 : <b>${esc(selN1.assigned)}</b>${selN1.manuel ? ` <span class="tag" style="font-size:9px">✋ forcé manuellement</span>` : ""}</div>
+        <div class="day-detail-row"><div class="avatar" style="background:${colorForPerson(selN2.assigned, state.people)}"></div> Niveau 2 : <b>${esc(selN2.assigned)}</b>${selN2.manuel ? ` <span class="tag" style="font-size:9px">✋ forcé manuellement</span>` : ""}</div>
         ${selHoliday ? `<div style="color:var(--violet);font-size:12px;margin-top:6px">☀️ ${esc(selHoliday)}</div>` : ""}
+        ${perms.isEditor ? `
+        <div class="form-grid" style="margin-top:12px">
+          <label>Forcer le niveau 1 ce jour<select id="ov-n1"><option value="">— Automatique —</option>${peopleAstreinte.n1.map(p => `<option value="${esc(p)}" ${selN1.manuel && selN1.assigned === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+          <label>Forcer le niveau 2 ce jour<select id="ov-n2"><option value="">— Automatique —</option>${peopleAstreinte.n2.map(p => `<option value="${esc(p)}" ${selN2.manuel && selN2.assigned === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+        </div>
+        <p class="hint" style="margin-top:6px">Utile pour un jour "à définir" (personne dispo automatiquement) ou n'importe quel remplacement ponctuel. Remets sur "— Automatique —" pour revenir au roulement normal. Le reste du roulement (les autres jours) n'est pas affecté.</p>
+        ` : ""}
       </div>
     </div>
   `;
@@ -1648,6 +1655,19 @@ function renderCalendar(container, perms) {
   container.querySelectorAll(".cal-day[data-date]").forEach(cell => {
     cell.addEventListener("click", () => { ui.selectedDate = cell.dataset.date; renderAll(); });
   });
+
+  if (perms.isEditor) {
+    const appliquerOverride = async (niveau, valeur) => {
+      const dk = dateKey(selected);
+      const astreinteOverrides = { ...(state.people.astreinteOverrides || {}) };
+      const cur = { ...(astreinteOverrides[dk] || {}) };
+      if (valeur) cur[niveau] = valeur; else delete cur[niveau];
+      if (Object.keys(cur).length > 0) astreinteOverrides[dk] = cur; else delete astreinteOverrides[dk];
+      await savePeople({ ...state.people, astreinteOverrides });
+    };
+    document.getElementById("ov-n1")?.addEventListener("change", (e) => appliquerOverride("n1", e.target.value));
+    document.getElementById("ov-n2")?.addEventListener("change", (e) => appliquerOverride("n2", e.target.value));
+  }
 
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
   clearCountdown = attachTransfertListeners(container, next, mountedUser, () => renderAll());

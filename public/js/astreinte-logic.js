@@ -165,7 +165,20 @@ export function computeWeeklyTitulaires(people, absences) {
   return { titN1, titN2, scoresN1, scoresN2, chargeGlobale };
 }
 
+// Correction manuelle ponctuelle : quand personne n'est disponible un jour
+// donné (résultat "A DÉFINIR"), ou pour n'importe quelle autre raison, on
+// peut forcer qui assure le niveau 1 et/ou le niveau 2 CE jour précis, sans
+// toucher au roulement automatique des autres jours. Stocké par date dans
+// people.astreinteOverrides = { "2026-10-01": { n1: "Lionel", n2: "Ronald" } }
+// (voir "Noms des personnes" / le détail du jour cliqué dans le calendrier).
+export function overrideDuJour(people, date, niveau) {
+  const dk = dateKey(date);
+  const ov = (people.astreinteOverrides || {})[dk];
+  return ov && ov[niveau] ? ov[niveau] : null;
+}
 export function resolveDayN1(date, people, absences, titN1) {
+  const forced = overrideDuJour(people, date, "n1");
+  if (forced) return { assigned: forced, swapped: false, manuel: true };
   const list = people.n1;
   if (list.length < 2) return { assigned: list[0] || "—", swapped: false };
   const wi = weekIndexForDate(date);
@@ -176,6 +189,8 @@ export function resolveDayN1(date, people, absences, titN1) {
   return { assigned: "A DÉFINIR", swapped: true };
 }
 export function resolveDayN2(date, people, absences, titN2) {
+  const forced = overrideDuJour(people, date, "n2");
+  if (forced) return { assigned: forced, swapped: false, manuel: true };
   const list = people.n2, nb = list.length || 1;
   const wi = weekIndexForDate(date);
   const base = titN2[wi] ?? list[0];
