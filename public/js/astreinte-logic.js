@@ -101,8 +101,20 @@ export function computeWeeklyTitulaires(people, absences) {
   // porte déjà du N1 est proposé en dernier pour le N2, afin que son total
   // annuel rejoigne celui des techniciens qui ne font que du N2.
   const chargeGlobale = {};
+  // Semaines "éligibles" en N2 par personne : nombre de semaines où elle
+  // était réellement candidate (présente dans la liste N2 et disponible
+  // toute la semaine), qu'elle ait été choisie ou non. Sert à calculer un
+  // TAUX (charge / semaines éligibles) plutôt qu'un total brut pour
+  // départager le roulement N2 : quelqu'un qui rejoint l'astreinte en
+  // cours d'année (absent avant sa date d'arrivée, donc non éligible ces
+  // semaines-là) n'a pas à "rattraper" le total des autres en enchaînant
+  // les semaines dès son arrivée — il prend sa place au même rythme
+  // (même taux) que les autres dès le départ, ce qui lui donne
+  // naturellement un total proportionnel à son temps de présence réel
+  // (prorata des mois faits) plutôt qu'un total identique aux autres.
+  const semainesEligiblesN2 = {};
   people.n1.forEach(p => { scoresN1[p] = 0; chargeGlobale[p] = 0; });
-  people.n2.forEach(p => { scoresN2[p] = 0; if (chargeGlobale[p] === undefined) chargeGlobale[p] = 0; });
+  people.n2.forEach(p => { scoresN2[p] = 0; semainesEligiblesN2[p] = 0; if (chargeGlobale[p] === undefined) chargeGlobale[p] = 0; });
   const titN1 = [], titN2 = [];
   WEEKS.forEach((w, idx) => {
     let weight = 0;
@@ -120,9 +132,11 @@ export function computeWeeklyTitulaires(people, absences) {
     titN1[idx] = chosenN1;
 
     const availN2 = people.n2.filter(p => joursAbsents(p) === 0);
+    availN2.forEach(p => { semainesEligiblesN2[p] = (semainesEligiblesN2[p] || 0) + 1; });
     let chosenN2;
     if (availN2.length > 0) {
-      const sorted = [...availN2].sort((a, b) => (chargeGlobale[a] || 0) - (chargeGlobale[b] || 0));
+      const taux = (p) => (chargeGlobale[p] || 0) / (semainesEligiblesN2[p] || 1);
+      const sorted = [...availN2].sort((a, b) => taux(a) - taux(b));
       chosenN2 = sorted[0];
       scoresN2[chosenN2] += weight;
     } else { chosenN2 = meilleurSiPersonneDispo(people.n2); }
