@@ -49,6 +49,8 @@ function dateInputVersTimestamp(valeur) {
   return new Date(y, m - 1, d, 12, 0, 0).getTime();
 }
 
+function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
+
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], compteurs: [], associations: [] };
@@ -452,8 +454,9 @@ function renderCompteurRow(c) {
           <button class="add-btn" data-relever="${c.id}" data-retour-site="${c.dossierId}" style="padding:6px 12px;font-size:12px">📷 Relever</button>
           <button class="nav-btn" data-toggle-qr="${c.id}" style="padding:6px 10px;font-size:12px">🔳 QR</button>
           <button class="nav-btn" data-toggle-hist="${c.id}" style="padding:6px 10px;font-size:12px">🗂️ Historique</button>
+          ${isEditorUser(mountedUser) ? `
           <button class="nav-btn" data-edit-compteur="${c.id}" style="padding:6px 10px;font-size:12px">✏️</button>
-          <button class="del-btn" data-del-compteur="${c.id}" style="padding:6px 10px;font-size:12px">🗑️</button>
+          <button class="del-btn" data-del-compteur="${c.id}" style="padding:6px 10px;font-size:12px">🗑️</button>` : ""}
         </div>
       </div>
       ${ui.editingCompteurId === c.id ? renderEditForm(c) : ""}
