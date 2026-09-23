@@ -1366,7 +1366,7 @@ function renderCalendar(container, perms) {
     n2: state.people.n2.filter(nom => astreinteActive[nom] !== false),
   };
 
-  const { titN1, titN2, scoresN1, scoresN2 } = computeWeeklyTitulaires(peopleAstreinte, state.absences);
+  const { titN1, titN2, chargeGlobale } = computeWeeklyTitulaires(peopleAstreinte, state.absences);
   const today = new Date();
   const todayInRange = today >= addDays(YEAR_START, -7) && today <= addDays(YEAR_END, 7);
   const refDate = todayInRange ? today : YEAR_START;
@@ -1389,8 +1389,9 @@ function renderCalendar(container, perms) {
     if (compteurs[a.assigned]) compteurs[a.assigned].n1++;
     if (compteurs[b.assigned]) compteurs[b.assigned].n2++;
   }
-  Object.entries(scoresN1).forEach(([p, s]) => { if (compteurs[p]) compteurs[p].score = s; });
-  Object.entries(scoresN2).forEach(([p, s]) => { if (compteurs[p]) compteurs[p].score = s; });
+  // "charge" = charge globale équilibrée (N1 + N2, sans double-compter une
+  // semaine cumulée par la même personne) — voir computeWeeklyTitulaires.
+  Object.entries(chargeGlobale).forEach(([p, s]) => { if (compteurs[p]) compteurs[p].score = s; });
 
   const monthLabel = new Date(ui.calYear, ui.calMonth, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const days = monthGrid(ui.calYear, ui.calMonth);

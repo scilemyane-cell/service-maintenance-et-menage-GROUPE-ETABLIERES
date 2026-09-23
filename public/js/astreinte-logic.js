@@ -93,8 +93,16 @@ export function isAbsentOnDate(absences, person, date) {
 // semaine-là (au pire, l'interruption reste inévitable ce cas précis).
 export function computeWeeklyTitulaires(people, absences) {
   const scoresN1 = {}, scoresN2 = {};
-  people.n1.forEach(p => scoresN1[p] = 0);
-  people.n2.forEach(p => scoresN2[p] = 0);
+  // Charge globale par personne (union N1/N2) : cumule le poids des
+  // semaines assurées, en N1 comme en N2, SANS compter deux fois une même
+  // semaine où la même personne cumule les deux niveaux (ex. Lionel,
+  // cadre ET technicien) — cette semaine-là ne compte qu'une fois (7 jours
+  // au global, pas 14). Sert à équilibrer le roulement N2 : quelqu'un qui
+  // porte déjà du N1 est proposé en dernier pour le N2, afin que son total
+  // annuel rejoigne celui des techniciens qui ne font que du N2.
+  const chargeGlobale = {};
+  people.n1.forEach(p => { scoresN1[p] = 0; chargeGlobale[p] = 0; });
+  people.n2.forEach(p => { scoresN2[p] = 0; if (chargeGlobale[p] === undefined) chargeGlobale[p] = 0; });
   const titN1 = [], titN2 = [];
   WEEKS.forEach((w, idx) => {
     let weight = 0;
@@ -105,19 +113,26 @@ export function computeWeeklyTitulaires(people, absences) {
 
     const availN1 = people.n1.filter(p => joursAbsents(p) === 0);
     const chosenN1 = availN1.length > 0 ? availN1[0] : meilleurSiPersonneDispo(people.n1);
-    if (chosenN1 !== undefined) scoresN1[chosenN1] = (scoresN1[chosenN1] || 0) + weight;
+    if (chosenN1 !== undefined) {
+      scoresN1[chosenN1] = (scoresN1[chosenN1] || 0) + weight;
+      chargeGlobale[chosenN1] = (chargeGlobale[chosenN1] || 0) + weight;
+    }
     titN1[idx] = chosenN1;
 
     const availN2 = people.n2.filter(p => joursAbsents(p) === 0);
     let chosenN2;
     if (availN2.length > 0) {
-      const sorted = [...availN2].sort((a, b) => scoresN2[a] - scoresN2[b]);
+      const sorted = [...availN2].sort((a, b) => (chargeGlobale[a] || 0) - (chargeGlobale[b] || 0));
       chosenN2 = sorted[0];
       scoresN2[chosenN2] += weight;
     } else { chosenN2 = meilleurSiPersonneDispo(people.n2); }
     titN2[idx] = chosenN2;
+
+    if (chosenN2 !== undefined && chosenN2 !== chosenN1) {
+      chargeGlobale[chosenN2] = (chargeGlobale[chosenN2] || 0) + weight;
+    }
   });
-  return { titN1, titN2, scoresN1, scoresN2 };
+  return { titN1, titN2, scoresN1, scoresN2, chargeGlobale };
 }
 
 export function resolveDayN1(date, people, absences, titN1) {
