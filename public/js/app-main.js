@@ -355,11 +355,15 @@
       <header class="topbar">
         <div class="topbar-title">
           ${category ? `<button class="back-btn" id="back-home">← Accueil</button>` : ""}
-          <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:32px;vertical-align:middle;margin-right:8px">
-          <span class="topbar-eyebrow">Groupe Établières · Service Maintenance et Ménage</span>
-          ${category
-            ? `<h1>${escapeHtml(category.label)}${categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab) ? ` <span class="accent">› ${escapeHtml(categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab).label)}</span>` : ""}</h1>`
-            : `<h1>Établières</h1>`}
+          <div class="topbar-title-row">
+            <img src="img/logo-etablieres.png" alt="Groupe Établières" class="topbar-logo">
+            <div class="topbar-title-text">
+              <span class="topbar-eyebrow">Groupe Établières · Service Maintenance et Ménage</span>
+              ${category
+                ? `<h1>${escapeHtml(category.label)}${categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab) ? ` <span class="accent">› ${escapeHtml(categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab).label)}</span>` : ""}</h1>`
+                : `<h1>Établières</h1>`}
+            </div>
+          </div>
         </div>
         <div class="topbar-user">
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
