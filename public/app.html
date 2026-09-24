@@ -422,11 +422,12 @@
 
     if (!category) {
       const cats = visibleCategoriesFor(currentUser);
-      mountDashboard(content, currentUser, cats, (catId) => {
+      mountDashboard(content, currentUser, cats, (catId, dossierIdAOuvrir) => {
         currentCategory = catId;
         const cat = allCategories(currentUser).find(c => c.id === catId);
         const subs = categorySubtabsFor(cat, currentUser);
         currentSubtab = subs[0]?.id || null;
+        if (dossierIdAOuvrir) window.siteDossierDeepLinkId = dossierIdAOuvrir;
         render();
       }, (catId, sens) => {
         // Échange la position de cette catégorie avec sa voisine dans

@@ -2,8 +2,8 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
-  saveDossierGeo,
 } from "./site-dossier-data.js";
+import { initCarteSites } from "./site-map.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
@@ -26,10 +26,9 @@ let paramsWorking = null; // copie de travail de l'ordre standard, pendant l'éd
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
-let carteLeaflet = null; // instance Leaflet en cours (vue "Carte"), détruite à chaque quitte/re-render
-let geocodageEnCours = false;
+let carteInstance = null; // { detruire() } — instance de carte en cours (vue "Carte"), voir site-map.js
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; } }
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; if (carteInstance) { carteInstance.detruire(); carteInstance = null; } }
 function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 export function mountSitesDossiers(container, user) {
@@ -39,7 +38,20 @@ export function mountSitesDossiers(container, user) {
   ui.openId = null; ui.mode = "view"; ui.lightbox = null;
   paramsWorking = null;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; if (ui.mode !== "edit" && ui.mode !== "map") render(); }));
+  // Ouverture directe d'un dossier précis — demandée depuis l'accueil
+  // (carte des sites / "Mes sites favoris", voir home.js) ou un lien
+  // externe, plutôt que de repasser par la liste.
+  let deepLinkTraite = false;
+  unsubs.push(watchSitesDossiers((d) => {
+    state.dossiers = d;
+    if (!deepLinkTraite && window.siteDossierDeepLinkId) {
+      deepLinkTraite = true;
+      const id = window.siteDossierDeepLinkId;
+      window.siteDossierDeepLinkId = null;
+      if (d.some(x => x.id === id)) { ui.openId = id; ui.mode = "view"; }
+    }
+    if (ui.mode !== "edit" && ui.mode !== "map") render();
+  }));
   unsubs.push(watchAssociations((a) => { state.associations = a; render(); }));
   unsubs.push(watchSectionsOrder((s) => { state.sectionsOrder = s; render(); }));
 }
@@ -162,62 +174,10 @@ function render() {
 }
 
 // =================================================================
-// Carte — vue géographique de tous les sites (géocodage automatique de
-// l'adresse via Nominatim/OpenStreetMap, mis en cache dans le champ
-// "geo" du dossier pour ne pas re-géocoder à chaque ouverture).
+// Carte — vue géographique de tous les sites (voir site-map.js pour la
+// logique de géocodage/affichage, partagée avec le tableau de bord
+// d'accueil).
 // =================================================================
-function chargerLeaflet() {
-  if (window.L) return Promise.resolve();
-  if (window.__leafletLoading) return window.__leafletLoading;
-  window.__leafletLoading = new Promise((resolve, reject) => {
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(css);
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-  return window.__leafletLoading;
-}
-
-// Géocode une adresse via Nominatim (gratuit, sans clé). Respecte la
-// politique d'usage (max ~1 req/s) via l'appel séquentiel dans geocoderSitesManquants.
-async function geocoderAdresse(adresse) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adresse)}`;
-  const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data || !data.length) return null;
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-}
-
-// Géocode, un par un (throttle 1.1s), les dossiers ayant une adresse mais
-// pas encore de coordonnées enregistrées — puis enregistre le résultat
-// pour la prochaine fois et met à jour la carte au fur et à mesure.
-async function geocoderSitesManquants(dossiers, onNouvellesCoords) {
-  if (geocodageEnCours) return;
-  geocodageEnCours = true;
-  try {
-    for (const d of dossiers) {
-      if (ui.mode !== "map") break; // l'utilisateur a quitté la vue carte
-      if (!d.adresse || !d.adresse.trim() || d.geo) continue;
-      try {
-        const coords = await geocoderAdresse(d.adresse);
-        if (coords) {
-          await saveDossierGeo(d.id, coords);
-          onNouvellesCoords(d.id, coords);
-        }
-      } catch (e) { console.error("Géocodage échoué pour", d.nom, e); }
-      await new Promise(r => setTimeout(r, 1100));
-    }
-  } finally {
-    geocodageEnCours = false;
-  }
-}
-
 function renderMap() {
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -229,63 +189,20 @@ function renderMap() {
     </div>
   `;
   document.getElementById("sd-carte-retour").addEventListener("click", () => {
-    if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; }
+    if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
     ui.mode = "view"; render();
   });
 
-  const avecAdresse = state.dossiers.filter(d => d.adresse && d.adresse.trim());
-  const statutEl = document.getElementById("sd-carte-statut");
-  const majStatut = () => {
-    const localises = avecAdresse.filter(d => d.geo).length;
-    statutEl.textContent = `${localises}/${avecAdresse.length} site(s) localisé(s)${avecAdresse.length !== state.dossiers.length ? ` · ${state.dossiers.length - avecAdresse.length} sans adresse renseignée` : ""}`;
-  };
-  majStatut();
-
-  chargerLeaflet().then(() => {
-    if (ui.mode !== "map") return; // parti entre-temps
-    if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; }
-    const holder = document.getElementById("sd-carte-holder");
-    if (!holder) return;
-    const map = window.L.map(holder).setView([46.8, -1.4], 8); // centré Vendée par défaut
-    carteLeaflet = map;
-    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap",
-      maxZoom: 19,
-    }).addTo(map);
-
-    const markers = {};
-    const ajouterMarker = (d) => {
-      if (!d.geo) return;
-      const m = window.L.marker([d.geo.lat, d.geo.lng]).addTo(map);
-      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}<br><a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>`);
-      m.on("popupopen", () => {
-        document.querySelector(`[data-ouvrir-site="${d.id}"]`)?.addEventListener("click", (e) => {
-          e.preventDefault();
-          if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; }
-          ui.openId = d.id; ui.mode = "view"; render();
-        });
-      });
-      markers[d.id] = m;
-    };
-
-    avecAdresse.forEach(d => { if (d.geo) ajouterMarker(d); });
-    const dejaLocalises = avecAdresse.filter(d => d.geo);
-    if (dejaLocalises.length > 0) {
-      const groupe = window.L.featureGroup(Object.values(markers));
-      map.fitBounds(groupe.getBounds().pad(0.2));
-    }
-
-    geocoderSitesManquants(avecAdresse, (id, coords) => {
-      const d = state.dossiers.find(x => x.id === id);
-      if (d) d.geo = coords;
-      if (ui.mode === "map" && document.getElementById("sd-carte-holder")) {
-        if (d && !markers[id]) ajouterMarker(d);
-        majStatut();
-      }
-    });
-  }).catch(() => {
-    const holder = document.getElementById("sd-carte-holder");
-    if (holder) holder.innerHTML = `<p class="hint" style="padding:16px">❌ Impossible de charger la carte (connexion internet nécessaire).</p>`;
+  if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
+  carteInstance = initCarteSites(document.getElementById("sd-carte-holder"), state.dossiers, {
+    onOpenSite: (id) => {
+      if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
+      ui.openId = id; ui.mode = "view"; render();
+    },
+    onStatut: (texte) => {
+      const el = document.getElementById("sd-carte-statut");
+      if (el) el.textContent = texte;
+    },
   });
 }
 

@@ -370,8 +370,11 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .print-fiche{ overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:100%; }
 .print-fiche table{ min-width:480px; }
 
+.home-carte-grid{ grid-template-columns:minmax(0,2fr) minmax(220px,1fr); }
+
 @media (max-width:720px){
   .hero-blocks{ grid-template-columns:1fr; }
+  .home-carte-grid{ grid-template-columns:1fr; }
   .cal-day{ min-height:52px; padding:4px 3px; }
   .cal-chip{ font-size:8px; }
   .topbar{ padding:12px 14px; }
