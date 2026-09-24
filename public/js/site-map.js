@@ -25,13 +25,37 @@ function chargerLeaflet() {
 
 // Géocode une adresse via Nominatim (gratuit, sans clé). Respecte la
 // politique d'usage (max ~1 req/s) via l'appel séquentiel dans geocoderSitesManquants.
+// Bornes larges de la France métropolitaine + Corse. Une adresse mal
+// formulée peut faire répondre Nominatim avec un résultat hors de cette
+// zone (autre pays, DOM-TOM, résultat aberrant) : sans ce garde-fou, un
+// seul site mal géocodé suffit à faire dézoomer la carte sur l'Europe
+// entière pour englober ce point isolé, la rendant inutilisable pour les
+// sites (tous en métropole) qu'elle est censée montrer.
+const BORNES_FRANCE_METRO = { latMin: 41, latMax: 51.5, lngMin: -5.5, lngMax: 9.7 };
+function dansFranceMetro({ lat, lng }) {
+  return lat >= BORNES_FRANCE_METRO.latMin && lat <= BORNES_FRANCE_METRO.latMax
+    && lng >= BORNES_FRANCE_METRO.lngMin && lng <= BORNES_FRANCE_METRO.lngMax;
+}
+// Un dossier peut déjà porter en base un `geo` enregistré avant ce
+// garde-fou (potentiellement aberrant) : on ne le considère "localisé"
+// que s'il retombe dans la zone attendue, sinon il est traité comme non
+// géocodé (re-mis en file, exclu des marqueurs et du cadrage de la carte).
+function geoValide(d) {
+  return !!d.geo && dansFranceMetro(d.geo);
+}
+
 async function geocoderAdresse(adresse) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adresse)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${encodeURIComponent(adresse)}`;
   const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
   if (!res.ok) return null;
   const data = await res.json();
   if (!data || !data.length) return null;
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  if (!dansFranceMetro(coords)) {
+    console.warn("Géocodage hors zone attendue, ignoré :", adresse, coords);
+    return null;
+  }
+  return coords;
 }
 
 // File d'attente de géocodage GLOBALE au module (pas liée à une carte en
@@ -71,11 +95,11 @@ function demarrerBoucleGeocodage() {
 }
 
 // Ajoute à la file globale les dossiers de cette liste qui ont une
-// adresse mais pas encore de coordonnées, puis (re)lance la boucle si
-// besoin — sans effet si tout est déjà en file ou déjà géocodé.
+// adresse mais pas encore de coordonnées valides, puis (re)lance la
+// boucle si besoin — sans effet si tout est déjà en file ou déjà géocodé.
 function mettreEnFileSiBesoin(dossiers) {
   dossiers.forEach((d) => {
-    if (d.adresse && d.adresse.trim() && !d.geo && !enFile.has(d.id)) enFile.set(d.id, d.adresse);
+    if (d.adresse && d.adresse.trim() && !geoValide(d) && !enFile.has(d.id)) enFile.set(d.id, d.adresse);
   });
   demarrerBoucleGeocodage();
 }
@@ -99,7 +123,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
   const avecAdresse = dossiers.filter(d => d.adresse && d.adresse.trim());
   const majStatut = () => {
     if (!onStatut) return;
-    const localises = avecAdresse.filter(d => d.geo).length;
+    const localises = avecAdresse.filter(geoValide).length;
     onStatut(`${localises}/${avecAdresse.length} site(s) localisé(s)${avecAdresse.length !== dossiers.length ? ` · ${dossiers.length - avecAdresse.length} sans adresse renseignée` : ""}`);
   };
   majStatut();
@@ -114,7 +138,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
 
     const markers = {};
     const ajouterMarker = (d) => {
-      if (!d.geo) return;
+      if (!geoValide(d)) return;
       const m = window.L.marker([d.geo.lat, d.geo.lng]).addTo(map);
       m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}`);
       m.on("popupopen", () => {
@@ -126,7 +150,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
       markers[d.id] = m;
     };
 
-    avecAdresse.forEach(d => { if (d.geo) ajouterMarker(d); });
+    avecAdresse.forEach(d => { if (geoValide(d)) ajouterMarker(d); });
     if (Object.keys(markers).length > 0) {
       const groupe = window.L.featureGroup(Object.values(markers));
       map.fitBounds(groupe.getBounds().pad(0.2));
