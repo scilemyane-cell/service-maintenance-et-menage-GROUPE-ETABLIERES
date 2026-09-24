@@ -160,12 +160,18 @@ function cleanup() {
 export function permissions(user) {
   const isEditor = user.role === "super_admin" || user.role === "admin" || user.role === "n1";
   const isTech = user.role === "technicien";
+  // Niveau "Lecture" réglé au cas par cas (Paramètres > Utilisateurs >
+  // Gérer l'accès, sur la tuile Astreinte) pour technicien/menage/
+  // mi_temps/direction : voit la tuile mais ne peut rien y modifier —
+  // voir app.html (categorySubtabsFor) pour la pose de user.lectureSeule.
+  const lectureSeule = !!user.lectureSeule;
   return {
     isEditor,
     isTech,
+    lectureSeule,
     canEditNames: isEditor,
     canManageAbsences: isEditor,
-    canLogIntervention: isEditor || isTech,
+    canLogIntervention: (isEditor || isTech) && !lectureSeule,
     canSeeSynthese: isEditor || user.role === "direction",
     canSeeAbsencesTab: isEditor,
     canSeeInterventionsTab: isEditor || isTech,

@@ -440,7 +440,16 @@
     const activeSub = subs.find(s => s.id === currentSubtab);
 
     if (activeSub && activeSub.mount) {
-      activeSub.mount(content, currentUser);
+      // Niveau d'accès "cas par cas" (Paramètres > Utilisateurs > Gérer
+      // l'accès) pour cette tuile : "none" est déjà filtré par
+      // categorySubtabsFor (la tuile n'apparaîtrait pas), donc ici seul
+      // "read" (voir sans modifier) nous intéresse — transmis au module
+      // via user.lectureSeule plutôt que de changer la signature mount().
+      const niveauTuile = (ROLES_ACCES_CAS_PAR_CAS.includes(currentUser.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id))
+        ? ((currentUser.permissions || {})[category.id] || "none")
+        : null;
+      const userPourModule = niveauTuile === "read" ? { ...currentUser, lectureSeule: true } : currentUser;
+      activeSub.mount(content, userPourModule);
       return;
     }
 

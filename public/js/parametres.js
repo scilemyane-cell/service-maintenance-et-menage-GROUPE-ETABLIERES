@@ -147,7 +147,7 @@ function renderUtilisateurs(container) {
                 ${usersState.accesOuvertPour === u.uid ? `
                 <tr>
                   <td colspan="6" style="background:var(--bg-2, rgba(255,255,255,0.03))">
-                    <p class="hint" style="margin:0 0 8px">Tuile absente ou sur "Aucun accès" ⇒ ${esc(u.nom || u.email)} ne la voit pas du tout dans l'appli. "Modification" ne débloque un vrai droit d'écrire que là où c'est déjà techniquement possible pour ce rôle — demande à Claude d'ouvrir une tuile précise en écriture si besoin.</p>
+                    <p class="hint" style="margin:0 0 8px">Tuile absente ou sur "Aucun accès" ⇒ ${esc(u.nom || u.email)} ne la voit pas du tout dans l'appli. Sur "Lecture", la tuile "Astreinte" (enregistrer une intervention) est bloquée en écriture ; les autres tuiles ci-dessous ne font pas encore cette distinction Lecture/Modification (la personne peut agir normalement une fois la tuile visible) — demande à Claude d'activer le blocage en écriture sur une tuile précise si besoin.</p>
                     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px">
                       ${TUILES_GEREES.map(t => `
                         <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px">
