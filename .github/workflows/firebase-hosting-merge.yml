@@ -11,8 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Regrouper les fichiers JS (bundling) pour réduire les requêtes réseau
-        run: npx --yes esbuild@0.24.2 public/js/app-main.js --bundle --format=esm --minify --outfile=public/js/dist/app.bundle.js --external:https://www.gstatic.com/*
+      - run: echo "pas de build necessaire"
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
