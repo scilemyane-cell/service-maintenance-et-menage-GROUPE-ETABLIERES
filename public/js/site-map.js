@@ -34,32 +34,50 @@ async function geocoderAdresse(adresse) {
   return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
 }
 
-let geocodageEnCours = false;
+// File d'attente de géocodage GLOBALE au module (pas liée à une carte en
+// particulier) : chaque enregistrement réussi (saveDossierGeo) déclenche
+// une mise à jour Firestore, qui redessine l'écran qui affiche la carte
+// (comme tout le reste de l'appli) — ce qui détruit puis recrée
+// l'instance Leaflet en cours. Si la boucle de géocodage avait été liée à
+// CETTE instance, chaque nouveau site localisé la faisait s'arrêter
+// avant d'avoir eu la chance de traiter les suivants (observé : la
+// progression restait bloquée après 4-5 sites sur une grosse liste). En
+// la détachant complètement du cycle de vie d'une carte précise, elle
+// continue jusqu'au bout même si la carte est fermée/rouverte/filtrée
+// entre-temps ; les cartes actives se contentent de s'abonner aux
+// résultats pour ajouter leurs marqueurs au fur et à mesure.
+const enFile = new Map(); // id -> adresse, pas encore traité
+let boucleEnCours = false;
+const abonnes = new Map(); // symbole d'instance -> callback(id, coords)
 
-// Géocode, un par un (throttle 1.1s), les dossiers ayant une adresse mais
-// pas encore de coordonnées enregistrées — puis enregistre le résultat
-// pour la prochaine fois et met à jour la carte au fur et à mesure.
-// `estActif()` permet à l'appelant de stopper la boucle si l'écran a
-// changé entre-temps (carte fermée, filtre changé...).
-async function geocoderSitesManquants(dossiers, onNouvellesCoords, estActif) {
-  if (geocodageEnCours) return;
-  geocodageEnCours = true;
-  try {
-    for (const d of dossiers) {
-      if (!estActif()) break;
-      if (!d.adresse || !d.adresse.trim() || d.geo) continue;
+function demarrerBoucleGeocodage() {
+  if (boucleEnCours) return;
+  boucleEnCours = true;
+  (async () => {
+    while (enFile.size > 0) {
+      const [id, adresse] = enFile.entries().next().value;
+      enFile.delete(id);
       try {
-        const coords = await geocoderAdresse(d.adresse);
+        const coords = await geocoderAdresse(adresse);
         if (coords) {
-          await saveDossierGeo(d.id, coords);
-          onNouvellesCoords(d.id, coords);
+          await saveDossierGeo(id, coords);
+          abonnes.forEach(cb => cb(id, coords));
         }
-      } catch (e) { console.error("Géocodage échoué pour", d.nom, e); }
+      } catch (e) { console.error("Géocodage échoué pour", id, e); }
       await new Promise(r => setTimeout(r, 1100));
     }
-  } finally {
-    geocodageEnCours = false;
-  }
+    boucleEnCours = false;
+  })();
+}
+
+// Ajoute à la file globale les dossiers de cette liste qui ont une
+// adresse mais pas encore de coordonnées, puis (re)lance la boucle si
+// besoin — sans effet si tout est déjà en file ou déjà géocodé.
+function mettreEnFileSiBesoin(dossiers) {
+  dossiers.forEach((d) => {
+    if (d.adresse && d.adresse.trim() && !d.geo && !enFile.has(d.id)) enFile.set(d.id, d.adresse);
+  });
+  demarrerBoucleGeocodage();
 }
 
 // Initialise une carte Leaflet dans `holder` (déjà présent dans le DOM,
@@ -76,6 +94,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
   const { onOpenSite, onStatut } = options;
   let detruit = false;
   let map = null;
+  const idAbonne = Symbol("carte-sites");
 
   const avecAdresse = dossiers.filter(d => d.adresse && d.adresse.trim());
   const majStatut = () => {
@@ -113,16 +132,16 @@ export function initCarteSites(holder, dossiers, options = {}) {
       map.fitBounds(groupe.getBounds().pad(0.2));
     }
 
-    geocoderSitesManquants(
-      avecAdresse,
-      (id, coords) => {
-        const d = dossiers.find(x => x.id === id);
-        if (d) d.geo = coords;
-        if (!detruit && d && !markers[id]) ajouterMarker(d);
-        majStatut();
-      },
-      () => !detruit
-    );
+    // S'abonne aux résultats de la file de géocodage globale (voir plus
+    // haut) pour ajouter les marqueurs au fur et à mesure, sans jamais
+    // démarrer/arrêter la file elle-même.
+    abonnes.set(idAbonne, (id, coords) => {
+      if (detruit) return;
+      const d = dossiers.find(x => x.id === id);
+      if (d) { d.geo = coords; if (!markers[id]) ajouterMarker(d); }
+      majStatut();
+    });
+    mettreEnFileSiBesoin(avecAdresse);
   }).catch(() => {
     if (!detruit && holder) holder.innerHTML = `<p class="hint" style="padding:16px">❌ Impossible de charger la carte (connexion internet nécessaire).</p>`;
   });
@@ -130,6 +149,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
   return {
     detruire() {
       detruit = true;
+      abonnes.delete(idAbonne);
       if (map) { map.remove(); map = null; }
     },
   };
