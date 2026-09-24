@@ -67,3 +67,8 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Fichier JS regroupé (bundling) — généré par le workflow de déploiement
+# (voir .github/workflows/), jamais commité pour éviter qu'il se
+# désynchronise silencieusement des sources dans public/js/*.js.
+public/js/dist/
