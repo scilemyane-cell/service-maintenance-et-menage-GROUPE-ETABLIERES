@@ -232,8 +232,23 @@ export async function uploadToDrive(file, token, folderSegments = [], rootFolder
 
 // Les images ne peuvent pas utiliser un lien fixe comme les documents (une
 // balise <img> a besoin de l'URL directe des octets, qui expire côté
-// Microsoft) : on redemande une URL fraîche à chaque affichage.
+// Microsoft, généralement au bout d'environ 1h).
+//
+// Cache en mémoire (le temps de la session navigateur) par itemId : sans
+// lui, chaque affichage d'une photo — y compris un simple re-rendu suite à
+// une mise à jour Firestore, ou en revenant sur un écran déjà visité —
+// refaisait un aller-retour réseau complet vers Microsoft Graph avant même
+// de pouvoir commencer à charger l'image, ce qui donnait une sensation de
+// lenteur généralisée sur toutes les pages avec des photos (fiches site,
+// interventions, relevés compteur, stock, prévisionnel...). Avec le cache,
+// une photo déjà résolue pendant cette session s'affiche instantanément.
+const cacheImagesUrl = new Map(); // itemId -> { url, expireLe }
+const DUREE_CACHE_IMAGE_MS = 45 * 60 * 1000; // 45 min, sous la validité réelle (~1h) par sécurité
+
 export async function getImageDisplayUrl(itemId) {
+  const dejaEnCache = cacheImagesUrl.get(itemId);
+  if (dejaEnCache && dejaEnCache.expireLe > Date.now()) return dejaEnCache.url;
+
   const token = await getGraphToken();
   const driveId = await resolveDriveId(token);
   const res = await fetch(
@@ -242,7 +257,9 @@ export async function getImageDisplayUrl(itemId) {
   );
   if (!res.ok) throw new Error(`Photo introuvable (${res.status})`);
   const item = await res.json();
-  return item["@microsoft.graph.downloadUrl"];
+  const url = item["@microsoft.graph.downloadUrl"];
+  cacheImagesUrl.set(itemId, { url, expireLe: Date.now() + DUREE_CACHE_IMAGE_MS });
+  return url;
 }
 
 // Vérifie si un fichier à nom fixe (ex. le PDF récapitulatif d'un dossier,
