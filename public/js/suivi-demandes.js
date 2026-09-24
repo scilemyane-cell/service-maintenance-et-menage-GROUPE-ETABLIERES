@@ -169,7 +169,8 @@ function permsUtilisateur() {
   const role = mountedUser?.role;
   const isEditor = role === "super_admin" || role === "admin" || role === "n1";
   const isTech = role === "technicien";
-  return { isEditor, isTech, peutTraiter: isEditor || isTech };
+  const lectureSeule = !!mountedUser?.lectureSeule; // "Lecture" (cas par cas) : voit le tableau mais ne peut pas traiter
+  return { isEditor, isTech, lectureSeule, peutTraiter: (isEditor || isTech) && !lectureSeule };
 }
 
 function objATableau(obj, couleurs) {

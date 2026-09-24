@@ -143,12 +143,12 @@ function renderListe() {
                       <tr>
                         <td>${esc(it.nom)}</td>
                         <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
-                        <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}"> ${esc(it.unite || "")}</td>
-                        <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px"></td>
+                        <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}" ${mountedUser?.lectureSeule ? "disabled" : ""}> ${esc(it.unite || "")}</td>
+                        <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px" ${mountedUser?.lectureSeule ? "disabled" : ""}></td>
                         <td style="white-space:nowrap">
                           <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
-                          <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px">📤 Sortie/Ajuster</button>
-                          <button class="del-btn" data-del="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button>
+                          <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px${mountedUser?.lectureSeule ? ';opacity:.4' : ''}" ${mountedUser?.lectureSeule ? "disabled" : ""}>📤 Sortie/Ajuster</button>
+                          ${mountedUser?.lectureSeule ? "" : `<button class="del-btn" data-del="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button>`}
                         </td>
                       </tr>
                     `).join("")}
@@ -157,13 +157,13 @@ function renderListe() {
               </div>
             `}
             <div id="ssx-add-zone-${site.id}" style="margin-top:10px">
-              ${ui.addingSiteId === site.id ? renderAddForm(site) : `
+              ${mountedUser?.lectureSeule ? "" : (ui.addingSiteId === site.id ? renderAddForm(site) : `
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                   <button class="nav-btn" data-open-config="${site.id}">🗂️ Configurer depuis la liste type</button>
                   <button class="nav-btn" data-open-catalogue="${site.id}">➕ Depuis le catalogue central</button>
                   <button class="nav-btn" data-open-libre="${site.id}">➕ Article propre à ce site</button>
                 </div>
-              `}
+              `)}
             </div>
             <div id="ssx-status-${site.id}" style="font-size:12px;margin-top:8px"></div>
           </div>

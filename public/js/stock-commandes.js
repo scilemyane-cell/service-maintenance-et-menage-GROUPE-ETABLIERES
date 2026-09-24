@@ -82,7 +82,7 @@ function render() {
               ${g.email
                 ? `<a class="add-btn" href="${buildMailto(g)}" target="_blank" rel="noopener" style="text-decoration:none">📧 Ouvrir dans Outlook</a>`
                 : `<span class="hint" style="color:var(--red)">Email fournisseur manquant</span>`}
-              <button class="nav-btn" data-marquer="${gi}">✓ Marquer comme commandée</button>
+              ${mountedUser?.lectureSeule ? "" : `<button class="nav-btn" data-marquer="${gi}">✓ Marquer comme commandée</button>`}
             </div>
           </div>
           <div class="table-wrap" style="border:none">

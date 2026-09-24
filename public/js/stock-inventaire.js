@@ -62,7 +62,7 @@ function render() {
     <div class="stack">
       <p class="hint">Une fois par mois : scanne l'étiquette QR de chaque produit (ou choisis-le dans la liste) et indique la quantité comptée. Le mode rapide te fait défiler tous les produits dans l'ordre des étagères (réglable dans l'onglet Produits), sans avoir à revenir à la liste entre chaque.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="add-btn" id="sk-rapide" style="width:fit-content">🚀 Mode rapide</button>
+        <button class="add-btn" id="sk-rapide" style="width:fit-content" ${mountedUser?.lectureSeule ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide</button>
         <button class="nav-btn" id="sk-scan" style="width:fit-content">📷 Scanner un produit</button>
         <button class="nav-btn" id="sk-qr-rapide" style="width:fit-content">🔳 QR du mode rapide</button>
       </div>
@@ -81,7 +81,7 @@ function render() {
                   <td>${esc(p.nom)}</td>
                   <td>${p.stockActuel ?? 0} ${esc(p.unite || '')}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${p.dateDernierInventaire?.toDate ? p.dateDernierInventaire.toDate().toLocaleDateString('fr-FR') : "Jamais"}</td>
-                  <td><button class="nav-btn" data-ajuste="${p.id}" style="padding:4px 10px;font-size:11px">Ajuster</button></td>
+                  <td><button class="nav-btn" data-ajuste="${p.id}" style="padding:4px 10px;font-size:11px${mountedUser?.lectureSeule ? ';opacity:.4' : ''}" ${mountedUser?.lectureSeule ? 'disabled' : ''}>Ajuster</button></td>
                 </tr>
               `).join("")}
           </tbody>

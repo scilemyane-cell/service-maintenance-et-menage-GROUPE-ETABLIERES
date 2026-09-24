@@ -261,7 +261,7 @@ function renderSiteCard(site) {
       ${ouvert ? `
       <div style="padding:0 16px 16px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
+          <button class="nav-btn" data-rapide-site="${site.id}" ${compteurs.length === 0 || mountedUser?.lectureSeule ? 'disabled style="opacity:.4"' : ''}>🚀 Mode rapide (${compteurs.length})</button>
           <button class="nav-btn" data-export-pdf="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ Exporter en PDF</button>
           <button class="add-btn" data-voir-rapport="${site.id}" ${compteurs.length === 0 ? 'disabled style="opacity:.4"' : ''}>📊 Voir le rapport</button>
           <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
@@ -360,6 +360,7 @@ function renderListe() {
     render();
   }));
   mountedContainer.querySelectorAll("[data-rapide-site]").forEach(btn => btn.addEventListener("click", () => {
+    if (mountedUser?.lectureSeule) { window.toast("Accès en lecture seule : tu ne peux pas enregistrer de relevé."); return; }
     ui.rapideSiteId = btn.dataset.rapideSite; ui.rapideIndex = 0; render();
   }));
   mountedContainer.querySelectorAll("[data-export-pdf]").forEach(btn => btn.addEventListener("click", () => {
@@ -1187,6 +1188,11 @@ async function renderStats() {
 }
 
 async function ouvrirReleve(compteurId, retourSiteId) {
+  // Profil "Lecture" (Paramètres > Utilisateurs > Gérer l'accès, tuile
+  // Relevé compteur) : peut consulter les sites/compteurs mais pas
+  // enregistrer un relevé — on bloque dès l'ouverture du formulaire plutôt
+  // que de la laisser saisir pour échouer à l'enregistrement.
+  if (mountedUser?.lectureSeule) { window.toast("Accès en lecture seule : tu ne peux pas enregistrer de relevé."); return; }
   const compteur = state.compteurs.find(c => c.id === compteurId) || await getCompteurUnique(compteurId);
   if (!compteur) { window.toast("Compteur introuvable (peut-être supprimé)."); return; }
   ui.screen = "releve";

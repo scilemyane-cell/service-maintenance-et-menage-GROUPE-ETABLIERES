@@ -71,7 +71,7 @@ function renderListe() {
       <p class="hint">Prévisionnel travaux/investissement, saisi au fil de l'eau plutôt que reconstitué au moment du budget. Un montant total se calcule automatiquement selon les filtres choisis, et les exports ci-dessous suivent aussi ces mêmes filtres.</p>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="add-btn" id="pv-add">➕ Ajouter un besoin de travaux</button>
+        ${mountedUser?.lectureSeule ? "" : `<button class="add-btn" id="pv-add">➕ Ajouter un besoin de travaux</button>`}
         <button class="nav-btn" id="pv-export">🖨️ Exporter en PDF pour le CA</button>
         <button class="nav-btn" id="pv-export-excel">📊 Exporter en Excel (filtré)</button>
         <button class="nav-btn" id="pv-vue-ensemble" style="border-color:var(--teal);color:var(--teal)">📈 Vue d'ensemble (suivi des travaux validés)</button>
@@ -144,7 +144,7 @@ function renderListe() {
     </div>
   `;
 
-  document.getElementById("pv-add").addEventListener("click", () => { ui.addingOpen = !ui.addingOpen; ui.editingId = null; render(); });
+  document.getElementById("pv-add")?.addEventListener("click", () => { ui.addingOpen = !ui.addingOpen; ui.editingId = null; render(); });
   document.getElementById("pv-export").addEventListener("click", () => exporterPourCA(lignes));
   document.getElementById("pv-export-excel").addEventListener("click", () => exporterExcel(lignes));
   document.getElementById("pv-vue-ensemble").addEventListener("click", () => { ui.vueEnsemble = true; render(); });

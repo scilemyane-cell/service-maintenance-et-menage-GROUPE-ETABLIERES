@@ -447,7 +447,7 @@ function renderCarteProduit(p) {
           <p style="margin:2px 0 0;font-size:11px;color:var(--text-dim)">Min : ${p.stockMin || 0} · Max : ${p.stockMax || "—"}${(p.uniteParEmballage || p.uniteParPalette) ? ` · Conditionnement : ${p.uniteParEmballage ? p.uniteParEmballage + " " + esc(p.unite || "") + "/emballage" : ""}${p.uniteParEmballage && p.uniteParPalette ? " · " : ""}${p.uniteParPalette ? p.uniteParPalette + " emballages/palette" : ""}` : ""}</p>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="nav-btn" data-sortie="${p.id}" style="padding:6px 10px;font-size:12px">📤 Sortie</button>
+          ${mountedUser?.lectureSeule ? "" : `<button class="nav-btn" data-sortie="${p.id}" style="padding:6px 10px;font-size:12px">📤 Sortie</button>`}
           <button class="nav-btn" data-entree="${p.id}" style="padding:6px 10px;font-size:12px">📥 Entrée</button>
           <button class="nav-btn" data-qr-sm="${p.id}" style="padding:6px 10px;font-size:12px">🔲 QR</button>
           <button class="nav-btn" data-edit-sm="${p.id}" style="padding:6px 10px;font-size:12px">✏️</button>
