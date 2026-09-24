@@ -1116,7 +1116,7 @@ async function renderStats() {
         <div class="stat-chip" style="border-color:var(--gold);color:var(--gold)">🌫️ ${illisiblesRecents} illisible(s) (3 derniers mois)</div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="stats-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par type</h3><div style="position:relative;height:200px"><canvas id="cpt-stats-type"></canvas></div></div>
         <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par association</h3><div style="position:relative;height:200px"><canvas id="cpt-stats-assoc"></canvas></div></div>
       </div>

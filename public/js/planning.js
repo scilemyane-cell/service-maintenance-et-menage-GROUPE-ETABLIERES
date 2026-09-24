@@ -2594,7 +2594,7 @@ function renderSynthese(container) {
         <h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Évolution mensuelle — 12 derniers mois</h3>
         <div style="position:relative;height:220px"><canvas id="synth-evolution"></canvas></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="stats-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par type d'intervention</h3><div style="position:relative;height:220px"><canvas id="synth-types"></canvas></div></div>
         <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par site</h3><div style="position:relative;height:220px"><canvas id="synth-sites"></canvas></div></div>
         <div class="form-card" style="grid-column:1/-1"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Heures cumulées par technicien</h3><div style="position:relative;height:${Math.max(160, heuresArr.length * 34)}px"><canvas id="synth-heures"></canvas></div></div>

@@ -61,7 +61,7 @@ function render() {
         ${state.produits.length === 0 ? `<button class="nav-btn" id="sk-seed">📦 Charger la liste type (50 produits)</button>` : ""}
       </div>
       ${ui.analyseOuverte ? `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="stats-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par catégorie</h3><div style="position:relative;height:220px"><canvas id="sk-chart-cat"></canvas></div></div>
           <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">État du stock</h3><div style="position:relative;height:220px"><canvas id="sk-chart-etat"></canvas></div></div>
         </div>
