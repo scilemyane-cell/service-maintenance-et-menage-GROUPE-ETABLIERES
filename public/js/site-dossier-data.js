@@ -123,6 +123,12 @@ export async function saveDossier(id, data) {
   await setDoc(doc(db, "sites-dossiers", id), data);
 }
 
+// Mémorise les coordonnées géocodées à partir de l'adresse (voir la vue
+// "Carte" de site-dossier.js), pour ne pas re-géocoder à chaque affichage.
+export async function saveDossierGeo(id, geo) {
+  await updateDoc(doc(db, "sites-dossiers", id), { geo });
+}
+
 // Mise à la corbeille (récupérable) — la vraie suppression n'a lieu
 // qu'après le délai de rétention ou via purgerDossierDefinitivement
 // (réservé Super Admin, voir corbeille.js).

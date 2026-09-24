@@ -2,6 +2,7 @@ import { esc } from "./astreinte-logic.js";
 import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
+  saveDossierGeo,
 } from "./site-dossier-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
@@ -25,8 +26,10 @@ let paramsWorking = null; // copie de travail de l'ordre standard, pendant l'éd
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
+let carteLeaflet = null; // instance Leaflet en cours (vue "Carte"), détruite à chaque quitte/re-render
+let geocodageEnCours = false;
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; } }
 function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 export function mountSitesDossiers(container, user) {
@@ -36,7 +39,7 @@ export function mountSitesDossiers(container, user) {
   ui.openId = null; ui.mode = "view"; ui.lightbox = null;
   paramsWorking = null;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; if (ui.mode !== "edit") render(); }));
+  unsubs.push(watchSitesDossiers((d) => { state.dossiers = d; if (ui.mode !== "edit" && ui.mode !== "map") render(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; render(); }));
   unsubs.push(watchSectionsOrder((s) => { state.sectionsOrder = s; render(); }));
 }
@@ -82,17 +85,20 @@ function render() {
     return;
   }
   if (ui.mode === "params") { renderParams(); return; }
+  if (ui.mode === "map") { renderMap(); return; }
 
   const groups = groupedDossiers();
 
   mountedContainer.innerHTML = `
     <div class="stack">
       <p class="hint">Dossier technique et sécurité de chaque résidence — organes de coupure, accès clés, contacts d'urgence, photos. Structure uniforme reprise de la fiche index papier. Maintiens l'icône ☰ appuyée sur une carte puis fais glisser pour réordonner les sites (au sein d'une même catégorie).</p>
-      ${isEditorUser(mountedUser) ? `
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="nav-btn" id="sd-carte" style="width:fit-content">🗺️ Voir la carte des sites</button>
+        ${isEditorUser(mountedUser) ? `
           <button class="add-btn" id="sd-new" style="width:fit-content">➕ Créer un nouveau dossier</button>
           <button class="nav-btn" id="sd-params" style="width:fit-content">⚙️ Paramètres (ordre des équipements)</button>
-        </div>` : ""}
+        ` : ""}
+      </div>
       ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` :
         groups.map(g => `
           <div>
@@ -126,6 +132,7 @@ function render() {
     window.scrollTo(0, 0);
   });
   document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
+  document.getElementById("sd-carte")?.addEventListener("click", () => { ui.mode = "map"; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (btn.closest("[data-drag-index]")?.dataset.dragMoved) return; // clic déclenché juste après un glissement de réorganisation, à ignorer
@@ -151,6 +158,134 @@ function render() {
         console.error("Échec de l'enregistrement du nouvel ordre des sites :", e);
       }
     });
+  });
+}
+
+// =================================================================
+// Carte — vue géographique de tous les sites (géocodage automatique de
+// l'adresse via Nominatim/OpenStreetMap, mis en cache dans le champ
+// "geo" du dossier pour ne pas re-géocoder à chaque ouverture).
+// =================================================================
+function chargerLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (window.__leafletLoading) return window.__leafletLoading;
+  window.__leafletLoading = new Promise((resolve, reject) => {
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css);
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return window.__leafletLoading;
+}
+
+// Géocode une adresse via Nominatim (gratuit, sans clé). Respecte la
+// politique d'usage (max ~1 req/s) via l'appel séquentiel dans geocoderSitesManquants.
+async function geocoderAdresse(adresse) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(adresse)}`;
+  const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data || !data.length) return null;
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+
+// Géocode, un par un (throttle 1.1s), les dossiers ayant une adresse mais
+// pas encore de coordonnées enregistrées — puis enregistre le résultat
+// pour la prochaine fois et met à jour la carte au fur et à mesure.
+async function geocoderSitesManquants(dossiers, onNouvellesCoords) {
+  if (geocodageEnCours) return;
+  geocodageEnCours = true;
+  try {
+    for (const d of dossiers) {
+      if (ui.mode !== "map") break; // l'utilisateur a quitté la vue carte
+      if (!d.adresse || !d.adresse.trim() || d.geo) continue;
+      try {
+        const coords = await geocoderAdresse(d.adresse);
+        if (coords) {
+          await saveDossierGeo(d.id, coords);
+          onNouvellesCoords(d.id, coords);
+        }
+      } catch (e) { console.error("Géocodage échoué pour", d.nom, e); }
+      await new Promise(r => setTimeout(r, 1100));
+    }
+  } finally {
+    geocodageEnCours = false;
+  }
+}
+
+function renderMap() {
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <button class="nav-btn" id="sd-carte-retour">← Retour à la liste</button>
+        <p class="hint" id="sd-carte-statut" style="margin:0"></p>
+      </div>
+      <div id="sd-carte-holder" style="height:70vh;min-height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
+    </div>
+  `;
+  document.getElementById("sd-carte-retour").addEventListener("click", () => {
+    if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; }
+    ui.mode = "view"; render();
+  });
+
+  const avecAdresse = state.dossiers.filter(d => d.adresse && d.adresse.trim());
+  const statutEl = document.getElementById("sd-carte-statut");
+  const majStatut = () => {
+    const localises = avecAdresse.filter(d => d.geo).length;
+    statutEl.textContent = `${localises}/${avecAdresse.length} site(s) localisé(s)${avecAdresse.length !== state.dossiers.length ? ` · ${state.dossiers.length - avecAdresse.length} sans adresse renseignée` : ""}`;
+  };
+  majStatut();
+
+  chargerLeaflet().then(() => {
+    if (ui.mode !== "map") return; // parti entre-temps
+    if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; }
+    const holder = document.getElementById("sd-carte-holder");
+    if (!holder) return;
+    const map = window.L.map(holder).setView([46.8, -1.4], 8); // centré Vendée par défaut
+    carteLeaflet = map;
+    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap",
+      maxZoom: 19,
+    }).addTo(map);
+
+    const markers = {};
+    const ajouterMarker = (d) => {
+      if (!d.geo) return;
+      const m = window.L.marker([d.geo.lat, d.geo.lng]).addTo(map);
+      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}<br><a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>`);
+      m.on("popupopen", () => {
+        document.querySelector(`[data-ouvrir-site="${d.id}"]`)?.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (carteLeaflet) { carteLeaflet.remove(); carteLeaflet = null; }
+          ui.openId = d.id; ui.mode = "view"; render();
+        });
+      });
+      markers[d.id] = m;
+    };
+
+    avecAdresse.forEach(d => { if (d.geo) ajouterMarker(d); });
+    const dejaLocalises = avecAdresse.filter(d => d.geo);
+    if (dejaLocalises.length > 0) {
+      const groupe = window.L.featureGroup(Object.values(markers));
+      map.fitBounds(groupe.getBounds().pad(0.2));
+    }
+
+    geocoderSitesManquants(avecAdresse, (id, coords) => {
+      const d = state.dossiers.find(x => x.id === id);
+      if (d) d.geo = coords;
+      if (ui.mode === "map" && document.getElementById("sd-carte-holder")) {
+        if (d && !markers[id]) ajouterMarker(d);
+        majStatut();
+      }
+    });
+  }).catch(() => {
+    const holder = document.getElementById("sd-carte-holder");
+    if (holder) holder.innerHTML = `<p class="hint" style="padding:16px">❌ Impossible de charger la carte (connexion internet nécessaire).</p>`;
   });
 }
 
