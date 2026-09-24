@@ -155,6 +155,7 @@ function cleanup() {
   unsubs.forEach(u => u());
   unsubs = [];
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
+  if (renderAllTimer) { clearTimeout(renderAllTimer); renderAllTimer = null; }
 }
 
 export function permissions(user) {
@@ -194,15 +195,30 @@ function startListeners(container, user, tab) {
     state.people = p;
     if (!ui.form.technicien && user.role !== "technicien") ui.form.technicien = p.n2[0] || "";
     if (!ui.absForm.person) ui.absForm.person = p.n1[0] || "";
-    renderAll();
+    scheduleRenderAll();
   }));
-  unsubs.push(watchAbsences((a) => { state.absences = a; renderAll(); }));
-  unsubs.push(watchInterventions((i) => { state.interventions = i; renderAll(); }));
-  unsubs.push(watchTransferts((t) => { state.transferts = t; renderAll(); }));
-  unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; renderAll(); }));
-  unsubs.push(watchAssociations((a) => { state.associations = a; renderAll(); }));
-  unsubs.push(watchReleves((r) => { state.releves = r; renderAll(); }));
-  unsubs.push(watchRecurrences((r) => { state.recurrences = r; renderAll(); }));
+  unsubs.push(watchAbsences((a) => { state.absences = a; scheduleRenderAll(); }));
+  unsubs.push(watchInterventions((i) => { state.interventions = i; scheduleRenderAll(); }));
+  unsubs.push(watchTransferts((t) => { state.transferts = t; scheduleRenderAll(); }));
+  unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; scheduleRenderAll(); }));
+  unsubs.push(watchAssociations((a) => { state.associations = a; scheduleRenderAll(); }));
+  unsubs.push(watchReleves((r) => { state.releves = r; scheduleRenderAll(); }));
+  unsubs.push(watchRecurrences((r) => { state.recurrences = r; scheduleRenderAll(); }));
+}
+
+// Cet onglet écoute 8 flux Firestore indépendants (people, absences,
+// interventions, transferts, coordonnées, associations, relevés,
+// récurrences) — à l'ouverture, chacun arrive à un instant légèrement
+// différent et redessinait l'écran à chaque fois, ce qui donnait
+// l'impression que l'écran "sautait" plusieurs fois de suite avant de se
+// stabiliser. On regroupe les mises à jour rapprochées (arrivées à moins
+// de 60ms d'écart) en un seul rendu final, sans retarder les rendus
+// déclenchés par une action de l'utilisateur (ceux-là restent immédiats,
+// via renderAll() directement).
+let renderAllTimer = null;
+function scheduleRenderAll() {
+  if (renderAllTimer) clearTimeout(renderAllTimer);
+  renderAllTimer = setTimeout(() => { renderAllTimer = null; renderAll(); }, 60);
 }
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
