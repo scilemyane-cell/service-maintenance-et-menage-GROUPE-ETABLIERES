@@ -142,7 +142,7 @@ body{
   .bubble-icon{ width:48px; height:48px; font-size:22px; }
   .bubble-label{ font-size:13px; }
   .bubble-desc{ font-size:10px; }
-  .stats-2col{ grid-template-columns:1fr !important; }
+  .stats-2col{ grid-template-columns:minmax(0,1fr) !important; }
 }
 
 .back-btn{ background:none; border:none; color:var(--gold); font-size:12px; font-weight:700; cursor:pointer; padding:0 0 4px 0; display:block; }
@@ -374,10 +374,15 @@ td{ padding:9px 10px; border-top:1px solid var(--border); }
 .print-fiche table{ min-width:480px; }
 
 .home-carte-grid{ grid-template-columns:minmax(0,2fr) minmax(220px,1fr); }
+/* Une liste déroulante prend la largeur de sa plus longue option (nom de
+   site) : sans ces garde-fous, elle élargit sa colonne de grille et fait
+   déborder toute la page à droite sur smartphone. */
+select{ max-width:100%; }
+.home-carte-grid > *, .stats-2col > *{ min-width:0; }
 
 @media (max-width:720px){
   .hero-blocks{ grid-template-columns:1fr; }
-  .home-carte-grid{ grid-template-columns:1fr; }
+  .home-carte-grid{ grid-template-columns:minmax(0,1fr); }
   .cal-day{ min-height:52px; padding:4px 3px; }
   .cal-chip{ font-size:8px; }
   .topbar{ padding:12px 14px; }
