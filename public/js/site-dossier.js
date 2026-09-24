@@ -4,7 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
   saveDossierGeo,
 } from "./site-dossier-data.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
@@ -462,21 +462,21 @@ function attachLightboxListeners(container) {
 }
 
 // Contrairement à Google Drive, SharePoint ne fournit pas de lien image
-// permanent : on redemande une URL fraîche pour chaque photo au moment de
-// l'affichage (une seule requête par photo, même si elle apparaît deux
-// fois à l'écran — galerie + version imprimable).
+// permanent : on redemande une URL pour chaque photo au moment de
+// l'affichage (une fois par photo, même si elle apparaît deux fois à
+// l'écran — galerie + version imprimable). Toutes les photos d'une fiche
+// sont résolues en un seul aller-retour groupé (getImageDisplayUrls) au
+// lieu d'une requête réseau séparée par photo — sur une fiche avec de
+// nombreux équipements photographiés, ça évite une bonne dizaine
+// d'allers-retours qui ralentissaient nettement l'ouverture.
 async function resolveGalleryImages(container) {
   const nodes = [...container.querySelectorAll("[data-resolve-img]")];
   const itemIds = [...new Set(nodes.map(n => n.dataset.resolveImg).filter(Boolean))];
   if (itemIds.length === 0) return;
-  await Promise.all(itemIds.map(async (itemId) => {
-    let url;
-    try {
-      url = await getImageDisplayUrl(itemId);
-    } catch (e) {
-      container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => { img.style.opacity = 0.3; });
-      return;
-    }
+  const urls = await getImageDisplayUrls(itemIds);
+  itemIds.forEach((itemId) => {
+    const url = urls[itemId];
+    if (!url) { container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => { img.style.opacity = 0.3; }); return; }
     container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => {
       img.crossOrigin = "anonymous"; // nécessaire pour que html2canvas puisse capturer l'image lors de l'export PDF
       img.src = url;
@@ -484,7 +484,7 @@ async function resolveGalleryImages(container) {
         img.addEventListener("click", () => { ui.lightbox = url; render(); });
       }
     });
-  }));
+  });
 }
 
 // =================================================================

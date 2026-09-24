@@ -262,6 +262,59 @@ export async function getImageDisplayUrl(itemId) {
   return url;
 }
 
+// Résout plusieurs photos d'un coup via le point d'entrée "$batch" de
+// Microsoft Graph (jusqu'à 20 sous-requêtes en une seule requête HTTP),
+// au lieu d'une requête séparée par photo. À l'ouverture d'une fiche site
+// avec de nombreuses sections/photos, c'était jusqu'à une trentaine
+// d'allers-retours réseau distincts avant que tout s'affiche — avec le
+// batch, un seul aller-retour (ou deux/trois pour un très gros dossier)
+// suffit. Retourne un objet { itemId: url|null } — null pour une photo
+// introuvable/erreur, plutôt que de faire échouer tout le lot.
+export async function getImageDisplayUrls(itemIds) {
+  const resultat = {};
+  const restants = [];
+  itemIds.forEach((id) => {
+    const dejaEnCache = cacheImagesUrl.get(id);
+    if (dejaEnCache && dejaEnCache.expireLe > Date.now()) resultat[id] = dejaEnCache.url;
+    else restants.push(id);
+  });
+  if (restants.length === 0) return resultat;
+
+  const token = await getGraphToken();
+  const driveId = await resolveDriveId(token);
+
+  for (let i = 0; i < restants.length; i += 20) {
+    const lot = restants.slice(i, i + 20);
+    try {
+      const res = await fetchWithTimeout(`${GRAPH_ROOT}/$batch`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requests: lot.map((id) => ({
+            id,
+            method: "GET",
+            url: `/drives/${driveId}/items/${id}?select=id,@microsoft.graph.downloadUrl`,
+          })),
+        }),
+      }, 20000);
+      if (!res.ok) throw new Error(`Batch photos échoué (${res.status})`);
+      const { responses } = await res.json();
+      (responses || []).forEach((r) => {
+        const url = r.status === 200 ? r.body?.["@microsoft.graph.downloadUrl"] : null;
+        resultat[r.id] = url || null;
+        if (url) cacheImagesUrl.set(r.id, { url, expireLe: Date.now() + DUREE_CACHE_IMAGE_MS });
+      });
+    } catch (e) {
+      // Le lot entier échoue (ex. hors-ligne) : on retombe par photo,
+      // séquentiellement, plutôt que de tout laisser en échec.
+      for (const id of lot) {
+        try { resultat[id] = await getImageDisplayUrl(id); } catch { resultat[id] = null; }
+      }
+    }
+  }
+  return resultat;
+}
+
 // Vérifie si un fichier à nom fixe (ex. le PDF récapitulatif d'un dossier,
 // enregistré via conflictBehavior "replace") existe déjà sur SharePoint à
 // l'emplacement attendu, et renvoie directement son lien de consultation
