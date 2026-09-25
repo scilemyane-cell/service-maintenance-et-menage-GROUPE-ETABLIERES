@@ -720,3 +720,19 @@ body.accueil-gmao .content.content-accueil{ max-width:none; padding:0 8px 16px; 
   .accueil-gmao .gh-entete{ padding:12px 0; }
   .accueil-gmao .gh-logo{ height:56px; }
 }
+
+/* Mise en page verticale identique à Camileia : l'accueil occupe toute la
+   hauteur de l'écran, logo + blocs centrés verticalement (grand vide au
+   dessus), blocs de même hauteur (~la moitié de l'écran). */
+body.accueil-gmao #app{ min-height:100vh; display:flex; flex-direction:column; }
+body.accueil-gmao .content.content-accueil{ flex:1; display:flex; flex-direction:column; }
+.accueil-gmao .gh{ flex:1; justify-content:center; padding-bottom:6vh; }
+.accueil-gmao .gh-entete{ padding:0 0 22px; }
+.accueil-gmao .gh-logo{ height:64px; }
+@media (min-width:1401px){
+  .accueil-gmao .gh-grille{ height:clamp(470px, 49vh, 640px); }
+  .accueil-gmao .gh-grille > *{ min-height:0; }
+  .accueil-gmao .gh-tuiles{ overflow:auto; grid-auto-rows:calc((100% - 48px) / 5); }
+  .accueil-gmao .gh-tuile{ aspect-ratio:auto; height:100%; }
+  .accueil-gmao .gh-compteurs{ flex:0 0 32%; }
+}
