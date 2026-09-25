@@ -137,13 +137,31 @@ function totalEquipements() {
   return dossiers.reduce((s, d) => s + (d.sections || []).filter(sec => sec.concerne).length, 0);
 }
 
+// Options d'une liste de sites, rangées par association (dans l'ordre
+// des associations de l'Administration) puis par sous-groupe et par nom.
+function optionsSitesRangees(liste, selectionne = "") {
+  const ordreAssoc = new Map(associations.map((a, i) => [a.nom, i]));
+  const groupes = new Map();
+  [...liste].sort((a, b) =>
+    (ordreAssoc.get(a.association) ?? 999) - (ordreAssoc.get(b.association) ?? 999)
+    || (a.association || "").localeCompare(b.association || "", "fr")
+    || (a.groupe || "").localeCompare(b.groupe || "", "fr")
+    || (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true })
+  ).forEach(d => {
+    const cle = [d.association || "Sans association", d.groupe].filter(Boolean).join(" — ");
+    if (!groupes.has(cle)) groupes.set(cle, []);
+    groupes.get(cle).push(d);
+  });
+  return [...groupes].map(([cle, ds]) => `<optgroup label="${esc(cle)}">${ds.map(d => `<option value="${d.id}" ${selectionne === d.id ? "selected" : ""}>${esc(d.nom)}</option>`).join("")}</optgroup>`).join("");
+}
+
 function blocCarteHTML() {
   const dossiersPourAssoc = filtreAssociation ? dossiers.filter(d => d.association === filtreAssociation) : dossiers;
   return `
     <section class="gh-carte gh-rouge">
       <div class="gh-filtres">
         <label>UG :<select id="hm-filtre-assoc"><option value="">Toutes</option>${associations.map(a => `<option value="${esc(a.nom)}" ${filtreAssociation === a.nom ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}</select></label>
-        <label>Site :<select id="hm-filtre-site"><option value="">Tous</option>${dossiersPourAssoc.map(d => `<option value="${d.id}" ${filtreSite === d.id ? "selected" : ""}>${esc(d.nom)}</option>`).join("")}</select></label>
+        <label>Site :<select id="hm-filtre-site"><option value="">Tous</option>${optionsSitesRangees(dossiersPourAssoc, filtreSite)}</select></label>
       </div>
       <div id="hm-carte-holder" class="gh-carte-holder"></div>
       <p id="hm-carte-statut" class="gh-carte-statut"></p>
@@ -177,7 +195,7 @@ function blocCompteursEtFavorisHTML() {
         </div>
         ${dispoPourAjout.length > 0 ? `
           <div class="gh-favori-ajout">
-            <select id="hm-favori-select">${dispoPourAjout.map(d => `<option value="${d.id}">${esc(d.nom)}</option>`).join("")}</select>
+            <select id="hm-favori-select"><option value="">— Choisir un site à ajouter —</option>${optionsSitesRangees(dispoPourAjout)}</select>
             <button class="gh-bouton-rouge" id="hm-favori-ajouter">＋ Ajouter un site</button>
           </div>` : ""}
       </section>
