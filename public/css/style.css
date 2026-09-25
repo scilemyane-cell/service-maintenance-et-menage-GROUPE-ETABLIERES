@@ -1478,3 +1478,6 @@ html:not([data-theme="sombre"]) .sdw-outils-pop{background:#fff}
 .sdw-outils-pop .nav-btn{width:100%;text-align:left;color:var(--text)}
 html:not([data-theme="sombre"]) .sdw-outils-pop .nav-btn{color:#1B2330;background:#F7F8FA;border-color:#e3e6ec}
 @media (max-width:760px){.sdw-grille-cpt{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.sdw-outils-pop{min-width:260px}}
+/* Menu utilisateur de l'accueil (fond blanc) : texte toujours foncé, même en thème sombre */
+html[data-theme] .gh-user-pop select, html[data-theme] .gh-user-pop .apercu-select{ color:#1B2330; background:#F2F4F7; border-color:#D6D9DF; }
+html[data-theme] .gh-user-pop select option{ color:#1B2330; background:#fff; }
