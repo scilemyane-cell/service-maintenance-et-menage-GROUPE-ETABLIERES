@@ -836,7 +836,7 @@ function nuitIndicatorHTML() {
   if (!nuit && !dimanche && !decalageNecessaire) return "";
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     ${nuit > 0 ? `<span class="tag" style="background:#3A3160">🌙 ${nuit.toFixed(2)}h de nuit (21h-6h, indicatif)</span>` : ""}
-    ${dimanche ? `<span class="tag" style="background:#8F5FBF">🌞 Dimanche — prime +${PRIME_DIMANCHE}€</span>` : ""}
+    ${dimanche ? `<span class="tag" style="background:#8F5FBF">🌞 Dimanche — prime +${PRIME_DIMANCHE}€ si déplacement</span>` : ""}
     ${decalageNecessaire ? `<span class="tag" style="background:var(--gold);color:#1A1305" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">🛌 Repos 11h obligatoire : reprise possible seulement à partir du ${fmtHeureJour(reposJusqua)}</span>` : ""}
   </div>`;
 }
@@ -2129,7 +2129,7 @@ function renderDocPreview() {
           </tr>
         </tfoot>
       </table>
-      <p style="font-size:10px;color:#666;margin-bottom:12px">« Dont nuit » = la part des heures totales effectuée entre 21h et 6h (déjà comptée dans le total, pas en plus — sert juste à repérer la majoration nuit à appliquer). Calcul indicatif, à valider avec la convention collective. Prime dimanche : ${PRIME_DIMANCHE}€ par jour d'intervention un dimanche.</p>
+      <p style="font-size:10px;color:#666;margin-bottom:12px">« Dont nuit » = la part des heures totales effectuée entre 21h et 6h (déjà comptée dans le total, pas en plus — sert juste à repérer la majoration nuit à appliquer). Calcul indicatif, à valider avec la convention collective. Prime dimanche : ${PRIME_DIMANCHE}€ par jour d'intervention un dimanche avec déplacement (pas de prime pour une astreinte traitée par téléphone).</p>
 
       <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
         <span>Signature salarié</span>
@@ -2301,6 +2301,10 @@ function renderInterventions(container, perms) {
           <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:10px">
+          <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--gold)">
+          ☎️ Traité par téléphone / à distance, <b>sans déplacement</b> (pas de prime dimanche)
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:6px">
           <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--gold)">
           📞 Appel passé au N1 pendant cette intervention (escalade, décision, consigne)
         </label>
@@ -2357,6 +2361,7 @@ function renderInterventions(container, perms) {
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
+                    ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">☎️ Sans déplacement</span>` : ""}
                   </td>
                   ${perms.isEditor ? `<td>${i.transmis
                     ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
@@ -2375,6 +2380,7 @@ function renderInterventions(container, perms) {
   if (perms.canLogIntervention) {
     attacherPhotosInterventionListeners();
     attacherEcouteursAppelN1();
+    document.getElementById("f-sans-deplacement")?.addEventListener("change", (e) => { ui.form.sansDeplacement = e.target.checked; });
     document.getElementById("f-appel-n1")?.addEventListener("change", (e) => {
       ui.form.appelN1 = e.target.checked;
       document.getElementById("interv-n1-zone").innerHTML = appelN1HTML();
@@ -2448,11 +2454,16 @@ function renderInterventions(container, perms) {
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
       const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
       const dimanche = estDimanche(ui.form.date);
+      // Prime dimanche uniquement s'il y a eu déplacement : pas pour une
+      // astreinte traitée par téléphone / à distance, ni pour un simple
+      // appel au N1 sans intervenant envoyé sur place.
+      const sansDeplacement = !!ui.form.sansDeplacement || (!!ui.form.appelN1 && !ui.form.technicien);
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
         type: ui.form.type, heures: parseFloat(ui.form.heures) || 0, description: ui.form.description,
         heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin,
-        heuresNuit: nuit, primeDimanche: dimanche ? PRIME_DIMANCHE : 0,
+        heuresNuit: nuit, primeDimanche: dimanche && !sansDeplacement ? PRIME_DIMANCHE : 0,
+        sansDeplacement,
         photos: ui.form.photos || [],
         appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
         motifAppelN1: ui.form.appelN1 ? ui.form.motifAppelN1 : "", decisionN1: ui.form.appelN1 ? ui.form.decisionN1 : "",
@@ -2515,6 +2526,7 @@ function renderInterventions(container, perms) {
           site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
           photos: i.photos || [],
           appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
+          sansDeplacement: !!i.sansDeplacement,
           numero: i.numero || "",
         };
         renderAll();
