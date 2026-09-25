@@ -37,3 +37,17 @@ export function cycleTheme() {
   const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
   return applyTheme(next);
 }
+
+// Thème des modules (une fois sorti de l'accueil, qui reste toujours
+// sombre comme Camileia) : clair ou sombre, au choix de chaque
+// utilisateur, mémorisé dans son navigateur.
+const CLE_MODULES = "etablieres-theme-modules";
+export function getThemeModules() {
+  try { return localStorage.getItem(CLE_MODULES) === "sombre" ? "sombre" : "clair"; } catch (e) { return "clair"; }
+}
+export function basculerThemeModules() {
+  const suivant = getThemeModules() === "sombre" ? "clair" : "sombre";
+  try { localStorage.setItem(CLE_MODULES, suivant); } catch (e) { /* ignore */ }
+  document.documentElement.dataset.theme = suivant;
+  return suivant;
+}

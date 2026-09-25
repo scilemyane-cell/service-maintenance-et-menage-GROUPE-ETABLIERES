@@ -121,6 +121,10 @@ async function geocoderRequete(adresse) {
 const enFile = new Map(); // id -> adresse, pas encore traité
 let boucleEnCours = false;
 const abonnes = new Map(); // symbole d'instance -> callback(id, coords)
+// Sites placés à la main pendant cette session : la file de géocodage
+// automatique ne doit JAMAIS écraser ensuite leur position.
+const placesALaMain = new Set();
+function marquerPlaceALaMain(id) { placesALaMain.add(id); enFile.delete(id); }
 
 function demarrerBoucleGeocodage() {
   if (boucleEnCours) return;
@@ -132,7 +136,7 @@ function demarrerBoucleGeocodage() {
       try {
         const coords = await geocoderAdresse(adresse);
         if (!coords) echecsGeocodage.add(normAdresse(adresse));
-        if (coords) {
+        if (coords && !placesALaMain.has(id)) {
           const geo = { ...coords, adresse };
           await saveDossierGeo(id, geo);
           abonnes.forEach(cb => cb(id, geo));
@@ -149,7 +153,7 @@ function demarrerBoucleGeocodage() {
 // boucle si besoin — sans effet si tout est déjà en file ou déjà géocodé.
 function mettreEnFileSiBesoin(dossiers) {
   dossiers.forEach((d) => {
-    if (d.adresse && d.adresse.trim() && !geoValide(d) && !enFile.has(d.id) && !echecsGeocodage.has(normAdresse(d.adresse))) enFile.set(d.id, d.adresse);
+    if (d.adresse && d.adresse.trim() && !geoValide(d) && !placesALaMain.has(d.id) && !enFile.has(d.id) && !echecsGeocodage.has(normAdresse(d.adresse))) enFile.set(d.id, d.adresse);
   });
   demarrerBoucleGeocodage();
 }
@@ -244,6 +248,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
         m.on("dragend", async () => {
           const { lat, lng } = m.getLatLng();
           const geo = { lat, lng, adresse: d.adresse || "", manuel: true };
+          marquerPlaceALaMain(d.id);
           try { await saveDossierGeo(d.id, geo); d.geo = geo; window.toast?.(`📍 Position de « ${d.nom} » enregistrée`); }
           catch (e) { console.error("saveDossierGeo:", e); alert("Position non enregistrée : " + (e.message || e)); m.setLatLng([d.geo.lat, d.geo.lng]); }
         });
@@ -266,10 +271,14 @@ export function initCarteSites(holder, dossiers, options = {}) {
     };
 
     avecAdresse.forEach(d => { if (geoValide(d)) ajouterMarker(d); });
-    if (Object.keys(markers).length > 0) {
-      const groupe = window.L.featureGroup(Object.values(markers));
-      map.fitBounds(groupe.getBounds().pad(0.2));
-    }
+    const cadrer = () => {
+      if (!map || Object.keys(markers).length === 0) return;
+      map.fitBounds(window.L.featureGroup(Object.values(markers)).getBounds().pad(0.2), { maxZoom: 14 });
+    };
+    cadrer();
+    // Si la carte a été créée avant que sa zone ait sa taille définitive
+    // (mise en page en colonnes), on recalcule puis on recadre sur tous les sites.
+    setTimeout(() => { if (!detruit && map) { map.invalidateSize(); cadrer(); } }, 250);
 
     // S'abonne aux résultats de la file de géocodage globale (voir plus
     // haut) pour ajouter les marqueurs au fur et à mesure, sans jamais
@@ -300,6 +309,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
       const d = modePlacement; modePlacement = null;
       holder.classList.remove("carte-placement");
       const geo = { lat: e.latlng.lat, lng: e.latlng.lng, adresse: d.adresse || "", manuel: true };
+      marquerPlaceALaMain(d.id);
       try {
         await saveDossierGeo(d.id, geo);
         d.geo = geo;

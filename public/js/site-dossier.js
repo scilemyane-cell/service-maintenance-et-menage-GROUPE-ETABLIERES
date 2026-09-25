@@ -116,28 +116,34 @@ function filtrerDossiers(liste) {
     && (!q || sansAcc(`${d.nom} ${d.adresse} ${d.association} ${d.groupe}`).includes(q)));
 }
 
+// Nom sans l'adresse e-mail éventuelle ("La Yole (resfjt…@etablieres.fr)")
+function nomPropre(nom) { return String(nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim(); }
+// Ville à partir de l'adresse : ce qui suit le code postal, sinon la dernière partie.
+function villeDe(adresse) {
+  const a = String(adresse || "").trim();
+  if (!a) return "";
+  const m = a.match(/\b\d{5}\s+(.+)$/);
+  const v = (m ? m[1] : a.split(",").pop()).trim();
+  return v.toLowerCase().replace(/(^|[\s'-])([a-zà-ÿ])/g, (x, p, c) => p + c.toUpperCase()).replace(/\bSur\b/g, "sur").replace(/\bDe\b/g, "de").replace(/\bDu\b/g, "du");
+}
+const DESSINS = {
+  maison: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 30 32 10l24 20"/><path d="M14 26v28h36V26"/><path d="M27 54V40h10v14"/><path d="M42 16v-6h6v11"/></svg>',
+  residence: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 56V14h26v42"/><path d="M36 26h18v30"/><path d="M6 56h52"/><path d="M16 22h4M26 22h4M16 32h4M26 32h4M16 42h4M26 42h4M42 34h4M42 44h4"/></svg>',
+  ecole: '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M6 56h52"/><path d="M12 56V28h40v28"/><path d="M8 30 32 12l24 18"/><circle cx="32" cy="28" r="5"/><path d="M26 56V44h12v12"/><path d="M18 36h4M42 36h4"/></svg>',
+};
 function carteDossierHTML(d, i, glisser) {
   const cat = categorieSite(d);
-  const concernes = (d.sections || []).filter(x => x.concerne && sectionRemplie(x));
   const nbPhotos = (d.sections || []).reduce((n, sec) => n + photosSection(sec).length, 0);
-  // Une icône par type d'équipement présent sur le site (sans doublon).
-  const vus = new Set();
-  const equipements = concernes.map(x => ({ ic: iconeSection(x.titre), titre: x.titre }))
-    .filter(x => x.ic !== "🔧" && !vus.has(x.ic) && vus.add(x.ic));
+  const dessin = cat.cle === "ecole" ? DESSINS.ecole : cat.cle === "mna" ? DESSINS.maison : DESSINS.residence;
+  const ville = villeDe(d.adresse);
   return `
   <div class="sdl-item" ${glisser ? `data-drag-index="${i}"` : ""}>
-    <button class="sdl-carte" data-open="${d.id}" style="--cat:${cat.couleur}">
-      <span class="sdl-tete">
-        <span class="sdl-pastille">${cat.cle === "ecole" ? "🏫" : cat.cle === "mna" ? "🏠" : "🏢"}</span>
-        <span class="sdl-titres">
-          <span class="sdl-nom">${esc(d.nom)}</span>
-          <span class="sdl-adr">${esc(d.adresse || "Adresse non renseignée")}</span>
-        </span>
-      </span>
-      <span class="sdl-pied">
-        <span class="sdl-icos">${equipements.map(x => `<span title="${esc(x.titre)}">${x.ic}</span>`).join("") || `<small>Aucun équipement renseigné</small>`}</span>
-        ${nbPhotos ? `<span class="sdl-nbphotos" title="Photos">📷 ${nbPhotos}</span>` : ""}
-      </span>
+    <button class="sdw-tuile" data-open="${d.id}" style="--c:${cat.couleur}">
+      ${dessin}
+      <span class="sdw-tag"><i></i>${esc(cat.cle === "autre" ? (d.association || "Autre") : cat.label)}</span>
+      <b class="sdw-nom">${esc(nomPropre(d.nom))}</b>
+      <small class="sdw-ville">${esc(ville || "Adresse non renseignée")}</small>
+      <span class="sdw-bas">${nbPhotos ? `<span>📷 ${nbPhotos}</span>` : `<span class="vide">Aucune photo</span>`}</span>
     </button>
     ${glisser ? `<span data-drag-handle title="Glisser pour réordonner" class="sdl-poignee">☰</span>` : ""}
   </div>`;
@@ -146,7 +152,7 @@ function ligneDossierHTML(d) {
   const cat = categorieSite(d);
   return `<button class="sdl-ligne" data-open="${d.id}">
     <i style="background:${cat.couleur}"></i>
-    <span class="sdl-ligne-txt"><b>${esc(d.nom)}</b><small>${esc(d.adresse || "Adresse non renseignée")}</small></span>
+    <span class="sdl-ligne-txt"><b>${esc(nomPropre(d.nom))}</b><small>${esc(villeDe(d.adresse) || "Adresse non renseignée")}</small></span>
   </button>`;
 }
 function barreListeHTML() {
@@ -200,13 +206,18 @@ function render() {
   const nbVisibles = filtrerDossiers(state.dossiers).length;
 
   mountedContainer.innerHTML = `
-    <div class="stack">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <p class="hint" style="margin:0;flex:1;min-width:220px">Dossier technique et sécurité de chaque résidence : organes de coupure, accès clés, contacts d'urgence, photos.${glisser ? " ☰ : maintenir et glisser pour réordonner." : ""}</p>
-        ${isEditorUser(mountedUser) ? `
-          <button class="add-btn" id="sd-new" style="width:fit-content">➕ Nouveau dossier</button>
-          <button class="nav-btn" id="sd-params" style="width:fit-content" title="Ordre des équipements">⚙️</button>
-        ` : ""}
+    <div class="stack sdw">
+      <div class="sdw-hero">
+        <div>
+          <h2>Dossiers de <span>site</span></h2>
+          <p>Organes de coupure, accès, urgences — tout le patrimoine en un coup d'œil${glisser ? " · ☰ maintenir et glisser pour réordonner" : ""}</p>
+        </div>
+        <div class="sdw-kpis">
+          <div><b>${state.dossiers.length}</b><small>sites</small></div>
+          <div><b>${new Set(state.dossiers.map(d => d.association).filter(Boolean)).size}</b><small>associations</small></div>
+          <div><b>${state.dossiers.reduce((n, d) => n + (d.sections || []).reduce((m, sec) => m + photosSection(sec).length, 0), 0)}</b><small>photos</small></div>
+          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button></div>` : ""}
+        </div>
       </div>
       ${barreListeHTML()}
       ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` : nbVisibles === 0 ? `<p class="hint">Aucun site ne correspond à la recherche.</p>` :
@@ -215,9 +226,9 @@ function render() {
           if (!sous.length) return "";
           return `
           <div>
-            <h3 class="sdl-assoc">${esc(g.assocLabel)} <span>${sous.reduce((n, x) => n + x.dossiers.length, 0)}</span></h3>
+            <h3 class="sdw-assoc" style="--c:${categorieSite(sous[0].dossiers[0]).couleur}">${esc(g.assocLabel)} <em>${sous.reduce((n, x) => n + x.dossiers.length, 0)} site(s)</em></h3>
             ${sous.map(sub => `
-              ${sub.groupeLabel ? `<div class="sdl-groupe">${esc(sub.groupeLabel)}</div>` : ""}
+              ${sub.groupeLabel ? `<div class="sdw-groupe" style="--c:${categorieSite(sub.dossiers[0]).couleur}">${esc(sub.groupeLabel)}</div>` : ""}
               ${ui.affichage === "liste"
                 ? `<div class="sdl-lignes">${sub.dossiers.map(d => ligneDossierHTML(d)).join("")}</div>`
                 : `<div class="sdl-grille bubble-grid" data-sous="${esc(g.assocLabel)}|${esc(sub.groupeLabel || "")}">${sub.dossiers.map((d, i) => carteDossierHTML(d, i, glisser)).join("")}</div>`}

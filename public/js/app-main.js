@@ -34,7 +34,7 @@
   import { mountCorbeille } from "./corbeille.js";
   import { watchSites } from "./sites-data.js";
   import { watchAccess, hasAccess } from "./access-data.js";
-  import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS } from "./theme.js";
+  import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS, getThemeModules, basculerThemeModules } from "./theme.js";
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
   import { watchUsers } from "./users-data.js";
   import { mountConnexions } from "./connexions.js";
@@ -396,6 +396,10 @@
           </div>
         </div>`;
       document.getElementById("logout-btn").addEventListener("click", () => logout());
+    document.getElementById("theme-modules-btn")?.addEventListener("click", (e) => {
+      const t = basculerThemeModules(); // appliqué tout de suite, sans redessiner (aucune saisie perdue)
+      e.currentTarget.textContent = t === "sombre" ? "☀️ Clair" : "🌙 Sombre";
+    });
       return;
     }
 
@@ -412,8 +416,9 @@
     // gauche, menu utilisateur en haut à droite, fond marine) pour une
     // continuité visuelle entre les deux outils.
     document.body.classList.toggle("accueil-gmao", !category);
-    // Accueil toujours sombre (comme Camileia), modules toujours en clair.
-    document.documentElement.dataset.theme = category ? "clair" : "sombre";
+    // Accueil toujours sombre (comme Camileia) ; modules en clair ou en
+    // sombre selon le choix de l'utilisateur (bouton ☀️/🌙 en haut).
+    document.documentElement.dataset.theme = category ? getThemeModules() : "sombre";
     const maintenant = new Date();
     const enteteAccueil = `
       <header class="topbar-gmao">
@@ -457,6 +462,7 @@
         <div class="topbar-user">
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
           ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
+          <button class="nav-btn theme-modules-btn" id="theme-modules-btn" title="Affichage clair ou sombre">${getThemeModules() === "sombre" ? "☀️ Clair" : "🌙 Sombre"}</button>
           ${voitAdministration ? `<button class="nav-btn gear-btn ${currentCategory === "administration" ? "active" : ""}" id="admin-btn" title="Administration">⚙️</button>` : ""}
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
@@ -472,6 +478,10 @@
     `;
 
     document.getElementById("logout-btn").addEventListener("click", () => logout());
+    document.getElementById("theme-modules-btn")?.addEventListener("click", (e) => {
+      const t = basculerThemeModules(); // appliqué tout de suite, sans redessiner (aucune saisie perdue)
+      e.currentTarget.textContent = t === "sombre" ? "☀️ Clair" : "🌙 Sombre";
+    });
     document.getElementById("theme-btn")?.addEventListener("click", (e) => {
       cycleTheme();
       e.currentTarget.textContent = THEME_LABELS[getStoredTheme()]; // mise à jour du libellé seule, sans re-render de l'écran en cours (évite de perdre une saisie non enregistrée)
