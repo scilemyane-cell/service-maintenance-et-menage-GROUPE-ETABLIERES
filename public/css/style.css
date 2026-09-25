@@ -1616,3 +1616,11 @@ html[data-theme="sombre"] .iv-statut{color:#f0b429;background:rgba(240,180,41,.1
 .iv-cr-voir{margin-top:4px;font-size:12px}
 .iv-cr-voir summary{cursor:pointer;color:var(--gold);font-weight:700}
 .iv-cr-voir div{margin-top:4px;color:var(--text);line-height:1.45;white-space:normal}
+.iv-n1{display:grid;grid-template-columns:minmax(180px,240px) 1fr;gap:12px;margin-top:10px;padding:14px;border:1.5px solid var(--gold);border-radius:12px;background:color-mix(in srgb,var(--gold) 6%,var(--panel))}
+.iv-n1 label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-dim)}
+.iv-n1 input,.iv-n1 select{min-height:42px;border-radius:10px;width:100%}
+.iv-n1-plein{grid-column:1 / -1}
+@media (max-width:640px){.iv-n1{grid-template-columns:1fr}}
+.iv-n1 input,.iv-n1 select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);padding:9px 12px;font-size:14px;font-family:inherit;outline:none}
+.iv-n1 input:focus,.iv-n1 select:focus,.iv-cr textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 20%,transparent);outline:none}
+.iv-cr textarea{font-family:inherit;font-size:14px;line-height:1.45}

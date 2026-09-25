@@ -2148,15 +2148,15 @@ function renderDocPreview() {
 function appelN1HTML() {
   if (!ui.form.appelN1) return "";
   return `
-    <div class="form-grid" style="margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--panel-alt)">
+    <div class="iv-n1">
       <label>N1 contacté
         <select id="f-n1-contacte">
           <option value="">— Choisir —</option>
           ${state.people.n1.map(nom => `<option value="${esc(nom)}" ${ui.form.n1Contacte === nom ? "selected" : ""}>${esc(nom)}</option>`).join("")}
         </select>
       </label>
-      <label>Motif de l'appel<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. besoin d'un accord pour commander une pièce"></label>
-      <label class="desc-field">Décision / consigne donnée<input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"></label>
+      <label class="iv-n1-large">Motif de l'appel<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. besoin d'un accord pour commander une pièce"></label>
+      <label class="iv-n1-plein">Décision / consigne donnée<input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"></label>
     </div>
   `;
 }
@@ -2278,11 +2278,27 @@ function renderInterventions(container, perms) {
           <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
           <span class="iv-sous">Astreinte · dépannage</span>
         </div>
-        <div class="iv-section">Qui, où, quoi</div>
-        <div class="form-grid iv-grille">
+        <div class="iv-section">📞 L'appel</div>
+        <div class="form-grid iv-grille iv-grille-h">
           <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
           ${ui.editingId && mountedUser.role === "super_admin" ? `
           <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
+        </div>
+        <div class="iv-options" style="margin-top:10px">
+          <label class="iv-option">
+            <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""}>
+            <span class="iv-option-ico">☎️</span>
+            <span><b>Sans déplacement</b><small>Traité par téléphone / à distance — pas de prime dimanche</small></span>
+          </label>
+          <label class="iv-option">
+            <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""}>
+            <span class="iv-option-ico">📞</span>
+            <span><b>Appel au N1</b><small>Escalade, décision ou consigne pendant l'intervention</small></span>
+          </label>
+        </div>
+        <div id="interv-n1-zone">${appelN1HTML()}</div>
+        <div class="iv-section">Qui, où, quoi</div>
+        <div class="form-grid iv-grille">
           <label>Intervenant
             ${isLockedTech
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
@@ -2325,19 +2341,6 @@ function renderInterventions(container, perms) {
           <textarea id="f-cr" rows="4" placeholder="Rédigé automatiquement à partir des notes et des champs ci-dessus — modifiable avant d'enregistrer.">${esc(ui.form.compteRendu || "")}</textarea>
           <div id="f-ia-statut" class="iv-ia-statut"></div>
         </div>
-        <div class="iv-options">
-          <label class="iv-option">
-            <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""}>
-            <span class="iv-option-ico">☎️</span>
-            <span><b>Sans déplacement</b><small>Traité par téléphone / à distance — pas de prime dimanche</small></span>
-          </label>
-          <label class="iv-option">
-            <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""}>
-            <span class="iv-option-ico">📞</span>
-            <span><b>Appel au N1</b><small>Escalade, décision ou consigne pendant l'intervention</small></span>
-          </label>
-        </div>
-        <div id="interv-n1-zone">${appelN1HTML()}</div>
         <div class="iv-section">Photos du dépannage <small>(optionnel)</small></div>
         <div id="interv-photo-zone">${interventionPhotosHTML()}</div>
         <div class="iv-pied">
