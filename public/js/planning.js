@@ -2297,7 +2297,7 @@ function renderInterventions(container, perms) {
           <label class="iv-option">
             <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""}>
             <span class="iv-option-ico">📞</span>
-            <span><b>Appel au N1</b><small>Escalade, décision ou consigne pendant l'intervention</small></span>
+            <span><b>Appel au N1</b><small>Décision ou consigne demandée au N1</small></span>
           </label>
         </div>
         <div id="interv-n1-zone">${appelN1HTML()}</div>
