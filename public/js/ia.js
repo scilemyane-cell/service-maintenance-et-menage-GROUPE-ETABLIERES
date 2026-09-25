@@ -35,10 +35,13 @@ export async function genererTexte(prompt) {
     }
   }
   const msg = String(derniereErreur?.message || derniereErreur || "Réponse vide");
-  if (/api.*not.*enabled|has not been used|PERMISSION_DENIED|403|firebasevertexai|firebaseml|AI Logic/i.test(msg)) {
-    throw new Error("L'assistant IA n'est pas encore activé : console Firebase → AI Logic → « Commencer » → choisir « Gemini Developer API ».");
-  }
-  throw new Error(msg);
+  let conseil = "";
+  if (/API_KEY_SERVICE_BLOCKED|blocked|are blocked/i.test(msg)) conseil = "La clé API de l'appli bloque ce service : Google Cloud → API et services → Identifiants → ta clé « Browser key » → Restrictions d'API → ajouter « Firebase AI Logic API » (et « Generative Language API »).";
+  else if (/has not been used|not.*enabled|SERVICE_DISABLED/i.test(msg)) conseil = "Service pas encore actif (l'activation peut prendre quelques minutes) — réessaie dans 5 min.";
+  else if (/PERMISSION_DENIED|403/i.test(msg)) conseil = "Accès refusé par Google — vérifie AI Logic → Paramètres (fournisseur « Gemini Developer API »).";
+  else if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg)) conseil = "Le module IA n'a pas pu être chargé (réseau ou version).";
+  const e = new Error((conseil ? conseil + " " : "") + "Détail : " + msg.slice(0, 400));
+  throw e;
 }
 
 // Compte rendu d'intervention rédigé à partir des champs du formulaire.
