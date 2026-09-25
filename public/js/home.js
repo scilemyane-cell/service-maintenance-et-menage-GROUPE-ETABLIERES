@@ -369,6 +369,7 @@ function attacherEcouteursBlocSites() {
   if (holder) {
     carteInstance = initCarteSites(holder, sitesFiltresPourCarte(), {
       onOpenSite: (id) => onSelectRef("sites", id),
+      editable: ["super_admin", "admin", "n1"].includes(mountedUser?.role),
       onStatut: (texte) => { const el = document.getElementById("hm-carte-statut"); if (el) el.textContent = texte; },
     });
   }
