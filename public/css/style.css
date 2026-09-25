@@ -798,3 +798,9 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
   .cpt-detail{ position:static; max-height:none; overflow:visible; }
   .cpt-mos-grille{ grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+/* Textes longs (noms de site avec email, emplacements) : retour à la ligne dans le cadre */
+.cpt-vignette{ min-width:0; overflow:hidden; }
+.cpt-vignette b, .cpt-vignette span{ overflow-wrap:anywhere; word-break:break-word; }
+.cpt-detail .form-card{ overflow:hidden !important; }
+.cpt-detail, .cpt-detail *{ overflow-wrap:anywhere; }
+.cpt-detail .nav-btn, .cpt-detail .add-btn{ white-space:normal; }

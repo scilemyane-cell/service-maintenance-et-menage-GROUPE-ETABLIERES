@@ -349,7 +349,7 @@ function renderListe() {
                   const r = retardDe(site.id);
                   const etat = nb === 0 ? "vide" : r > 0 ? "retard" : "ok";
                   return `<button class="cpt-vignette cpt-${etat} ${site.id === ui.siteSelectionne ? "cpt-sel" : ""}" data-select-site="${site.id}">
-                    <b>${esc(site.nom)}</b>
+                    <b title="${esc(site.nom)}">${esc(String(site.nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").trim())}</b>
                     <span>${nb} compteur${nb > 1 ? "s" : ""}${r > 0 ? ` · <em>${r} en retard</em>` : nb ? " · à jour" : ""}</span>
                   </button>`;
                 }).join("")}
