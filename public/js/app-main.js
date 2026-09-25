@@ -471,6 +471,8 @@
         if (dossierIdAOuvrir) window.siteDossierDeepLinkId = dossierIdAOuvrir;
         render();
       }, (catId, sens) => {
+        // Glisser-déposer : reçoit directement le nouvel ordre complet.
+        if (Array.isArray(catId)) { saveHomeOrder(catId).catch(err => { console.error("saveHomeOrder:", err); alert("Ordre des tuiles non enregistré : " + (err?.message || err)); }); return; }
         // Échange la position de cette catégorie avec sa voisine dans
         // l'ordre courant, puis sauvegarde le nouvel ordre complet.
         const ids = cats.map(c => c.id);

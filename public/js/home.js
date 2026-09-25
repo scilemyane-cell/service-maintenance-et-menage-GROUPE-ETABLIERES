@@ -64,7 +64,6 @@ function cleanup() {
   if (horlogeTimer) { clearInterval(horlogeTimer); horlogeTimer = null; }
   if (interventionsUnsub) { interventionsUnsub(); interventionsUnsub = null; }
   interventions = null;
-  modeReorganisation = false;
 }
 
 export function mountDashboard(container, user, categories, onSelect, onReorder, onToggleConstruction = null) {
@@ -202,6 +201,61 @@ function blocMonPlanningHTML(personne) {
           <span>${esc(i.site || "—")}${i.type ? ` · ${esc(i.type)}` : ""}${i.recurrenceId ? " 🔁" : ""}</span>
         </div>`).join("")}
     </div>`;
+}
+
+// Glisser-déposer des tuiles (souris et tactile, Pointer Events) dans la
+// mosaïque en grille : la tuile suit le pointeur, un emplacement en
+// pointillés montre où elle sera déposée, et le nouvel ordre complet est
+// enregistré au lâcher — sans quitter le mode réorganisation.
+function activerGlisserTuiles(grille) {
+  if (!grille) return;
+  const tuiles = () => [...grille.querySelectorAll(".gh-deplacable")];
+  tuiles().forEach(item => {
+    item.style.touchAction = "none";
+    item.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("[data-construction]")) return;
+      e.preventDefault();
+      const rect = item.getBoundingClientRect();
+      const dx = e.clientX - rect.left, dy = e.clientY - rect.top;
+      let bouge = false;
+      const fantome = item.cloneNode(true);
+      Object.assign(fantome.style, { position: "fixed", left: rect.left + "px", top: rect.top + "px", width: rect.width + "px", height: rect.height + "px", zIndex: 1000, pointerEvents: "none", opacity: ".9", transform: "scale(1.05)", boxShadow: "0 12px 28px rgba(0,0,0,.5)" });
+      const place = document.createElement("div");
+      place.className = "gh-tuile-place";
+      place.style.height = rect.height + "px";
+      const demarrer = () => {
+        bouge = true;
+        document.body.appendChild(fantome);
+        item.after(place); item.style.display = "none";
+        document.body.style.userSelect = "none";
+      };
+      const move = (ev) => {
+        if (!bouge) { if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 6) return; demarrer(); }
+        fantome.style.left = (ev.clientX - dx) + "px"; fantome.style.top = (ev.clientY - dy) + "px";
+        for (const el of tuiles()) {
+          if (el === item) continue;
+          const r = el.getBoundingClientRect();
+          if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) {
+            if (ev.clientX < r.left + r.width / 2) el.before(place); else el.after(place);
+            break;
+          }
+        }
+      };
+      const up = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        document.removeEventListener("pointercancel", up);
+        if (!bouge) return;
+        place.replaceWith(item); item.style.display = ""; fantome.remove();
+        document.body.style.userSelect = "";
+        const ordre = tuiles().map(el => el.dataset.tuileId);
+        if (ordre.join() !== catsRef.map(c => c.id).join()) onReorderRef?.(ordre);
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+      document.addEventListener("pointercancel", up);
+    });
+  });
 }
 
 function blocCarteHTML() {
@@ -378,7 +432,7 @@ function render() {
           ${catsRef.map((c, idx) => {
             const peutReorganiser = modeReorganisation && estAdmin;
             return `
-            <div class="gh-tuile-wrap">
+            <div class="gh-tuile-wrap ${peutReorganiser ? "gh-deplacable" : ""}" data-tuile-id="${c.id}">
               <button class="gh-tuile ${c.enConstruction ? "gh-tuile-construction" : ""}" data-cat="${c.id}" title="${esc(c.desc || c.label)}${c.enConstruction ? " — 🚧 en construction, visible uniquement par le Super Admin" : ""}" style="background:${degradePour(c.id)}">
                 ${c.enConstruction ? `<span class="gh-ruban">🚧 En construction</span>` : ""}
                 ${c.badgeAtelier || c.badgeSites ? `
@@ -391,8 +445,6 @@ function render() {
               </button>
               ${peutReorganiser ? `
                 <div class="gh-reorg">
-                  <button class="nav-btn" data-reorder-left="${c.id}" ${idx === 0 ? "disabled" : ""}>◀</button>
-                  <button class="nav-btn" data-reorder-right="${c.id}" ${idx === catsRef.length - 1 ? "disabled" : ""}>▶</button>
                   ${onToggleConstructionRef && c.id !== "statistiques" ? `<button class="nav-btn ${c.enConstruction ? "active" : ""}" data-construction="${c.id}" title="${c.enConstruction ? "Remettre en service (visible par tous)" : "Passer en construction (masqué pour les autres)"}">🚧</button>` : ""}
                 </div>` : ""}
             </div>`;
@@ -430,6 +482,7 @@ function render() {
 
       ${estAdmin ? `
       <div class="gh-outils">
+        ${modeReorganisation ? `<span class="gh-reorg-aide">✋ Glisse les tuiles pour les déplacer — l'ordre est enregistré à chaque dépôt.</span>` : ""}
         <button class="nav-btn" id="toggle-reorg">${modeReorganisation ? "✓ Terminé" : (onToggleConstructionRef ? "🔧 Réorganiser / 🚧 construction" : "🔧 Réorganiser les tuiles")}</button>
         <button class="nav-btn" id="debug-toggle">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester le bandeau de transfert"}</button>
       </div>` : ""}
@@ -450,17 +503,13 @@ function render() {
   }, 30000);
 
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
-    btn.addEventListener("click", () => onSelectRef(btn.dataset.cat));
-  });
-  if (afficherSites) attacherEcouteursBlocSites();
-  mountedContainer.querySelectorAll("[data-reorder-left], [data-reorder-right]").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.reorderLeft || btn.dataset.reorderRight;
-      const sens = btn.dataset.reorderLeft ? -1 : 1;
-      onReorderRef?.(id, sens);
+    btn.addEventListener("click", () => {
+      if (modeReorganisation) return; // en mode réorganisation, un clic ne doit pas ouvrir le module
+      onSelectRef(btn.dataset.cat);
     });
   });
+  if (modeReorganisation && estAdmin) activerGlisserTuiles(mountedContainer.querySelector(".gh-tuiles"));
+  if (afficherSites) attacherEcouteursBlocSites();
   document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
   document.getElementById("toggle-reorg")?.addEventListener("click", () => { modeReorganisation = !modeReorganisation; render(); });
 

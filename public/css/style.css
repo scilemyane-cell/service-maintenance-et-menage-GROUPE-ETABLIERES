@@ -659,3 +659,9 @@ button.gh-notif:hover{ background:#FFF2F5; }
 .gh-planning-ligne span{ color:#5A6070; }
 .gh-planning-auj{ border-left-color:var(--gh-rouge); background:#FFF2F5; border-radius:0 6px 6px 0; }
 .gh-planning-abs{ border-left-color:#D9B24C; }
+.gh-deplacable{ cursor:grab; animation:gh-tremble .35s ease-in-out infinite alternate; }
+.gh-deplacable .gh-tuile{ pointer-events:none; }
+.gh-deplacable .gh-reorg{ pointer-events:auto; }
+@keyframes gh-tremble{ from{ transform:rotate(-.6deg); } to{ transform:rotate(.6deg); } }
+.gh-tuile-place{ border:2px dashed var(--gh-rouge,#E4104B); border-radius:6px; background:rgba(228,16,75,.08); }
+.gh-reorg-aide{ font-size:12px; color:var(--text); align-self:center; }
