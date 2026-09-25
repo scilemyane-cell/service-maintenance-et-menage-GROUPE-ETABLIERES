@@ -2246,7 +2246,7 @@ function attacherPhotosInterventionListeners() {
 // intervention à la mauvaise personne) — sauf pour un technicien, qui ne
 // saisit que pour lui-même.
 function reinitialiserFormIntervention() {
-  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: false });
+  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "" });
   ui.form.technicien = mountedUser?.role === "technicien" ? (mountedUser.nom || mountedUser.email) : "";
 }
 
@@ -2284,12 +2284,16 @@ function renderInterventions(container, perms) {
           ${ui.editingId && mountedUser.role === "super_admin" ? `
           <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
         </div>
+        ${ui.form.appelOrigineNumero ? `<div class="iv-suite">↪ Déplacement faisant suite à l'appel <b>${esc(ui.form.appelOrigineNumero)}</b> <button type="button" class="nav-btn" id="f-suite-annuler" style="padding:2px 8px;font-size:11px">✕</button></div>` : ""}
+        <div class="iv-mode">
+          <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === true ? "actif" : ""}" data-iv-mode="appel">
+            <span class="iv-mode-ico">📞</span><span><b>Appel seul</b><small>Traité par téléphone / à distance · pas de prime dimanche</small></span>
+          </button>
+          <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === false ? "actif" : ""}" data-iv-mode="deplacement">
+            <span class="iv-mode-ico">🚗</span><span><b>Déplacement sur site</b><small>Intervention sur place</small></span>
+          </button>
+        </div>
         <div class="iv-options" style="margin-top:10px">
-          <label class="iv-option">
-            <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""}>
-            <span class="iv-option-ico">☎️</span>
-            <span><b>Sans déplacement</b><small>Traité par téléphone / à distance — pas de prime dimanche</small></span>
-          </label>
           <label class="iv-option">
             <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""}>
             <span class="iv-option-ico">📞</span>
@@ -2403,12 +2407,13 @@ function renderInterventions(container, perms) {
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
-                    ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">☎️ Sans déplacement</span>` : ""}
+                    ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">📞 Appel seul</span>` : ""}
+                    ${i.appelOrigineNumero ? `<span class="tag" style="background:#2a78d6;font-size:9px" title="Déplacement faisant suite à un appel">↪ suite ${esc(i.appelOrigineNumero)}</span>` : ""}
                   </td>
                   ${perms.isEditor ? `<td>${i.transmis
                     ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
                     : `<span class="iv-statut">En attente</span>`}</td>` : ''}
-                  <td><div class="iv-actions">${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div></td>
+                  <td><div class="iv-actions">${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div></td>
                 </tr>
                 ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? `<tr><td colspan="10" style="padding:0;border:none">${renderApercuNoteFrais()}</td></tr>` : ""}
                 `;
@@ -2422,7 +2427,11 @@ function renderInterventions(container, perms) {
   if (perms.canLogIntervention) {
     attacherPhotosInterventionListeners();
     attacherEcouteursAppelN1();
-    document.getElementById("f-sans-deplacement")?.addEventListener("change", (e) => { ui.form.sansDeplacement = e.target.checked; });
+    container.querySelectorAll("[data-iv-mode]").forEach(b => b.addEventListener("click", () => {
+      ui.form.sansDeplacement = b.dataset.ivMode === "appel";
+      container.querySelectorAll("[data-iv-mode]").forEach(x => x.classList.toggle("actif", x === b));
+    }));
+    document.getElementById("f-suite-annuler")?.addEventListener("click", () => { ui.form.appelOrigineId = ""; ui.form.appelOrigineNumero = ""; renderAll(); });
     document.getElementById("f-cr")?.addEventListener("input", (e) => { ui.form.compteRendu = e.target.value; });
     document.getElementById("f-ia")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget, statut = document.getElementById("f-ia-statut");
@@ -2495,6 +2504,11 @@ function renderInterventions(container, perms) {
     document.getElementById("add-interv").addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
       if (!isPlausibleDate(ui.form.date)) { statusEl.innerHTML = `<span style="color:var(--red)">La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement.</span>`; return; }
+      if (ui.form.sansDeplacement !== true && ui.form.sansDeplacement !== false) {
+        statusEl.innerHTML = `<span style="color:var(--red)">Choisis en haut : 📞 Appel seul ou 🚗 Déplacement sur site.</span>`;
+        document.querySelector(".iv-mode")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       if (ui.form.appelN1) {
         // Un appel au N1 peut se suffire à lui-même (ex. alerte à distance,
         // sans déplacement sur site) — pas besoin d'intervenant N2,
@@ -2507,7 +2521,7 @@ function renderInterventions(container, perms) {
         if (!ui.form.association) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association.</span>`; return; }
         if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un site.</span>`; return; }
         if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
-        if (!ui.form.heures) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
+        if (!ui.form.heures && !ui.form.sansDeplacement) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
       }
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
       const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
@@ -2515,7 +2529,7 @@ function renderInterventions(container, perms) {
       // Prime dimanche uniquement s'il y a eu déplacement : pas pour une
       // astreinte traitée par téléphone / à distance, ni pour un simple
       // appel au N1 sans intervenant envoyé sur place.
-      const sansDeplacement = !!ui.form.sansDeplacement || (!!ui.form.appelN1 && !ui.form.technicien);
+      const sansDeplacement = ui.form.sansDeplacement === true || (!!ui.form.appelN1 && !ui.form.technicien);
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
         type: ui.form.type, heures: parseFloat(ui.form.heures) || 0, description: ui.form.description,
@@ -2523,6 +2537,7 @@ function renderInterventions(container, perms) {
         heuresNuit: nuit, primeDimanche: dimanche && !sansDeplacement ? PRIME_DIMANCHE : 0,
         sansDeplacement,
         compteRendu: (ui.form.compteRendu || "").trim(),
+        appelOrigineId: ui.form.appelOrigineId || "", appelOrigineNumero: ui.form.appelOrigineNumero || "",
         photos: ui.form.photos || [],
         appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
         motifAppelN1: ui.form.appelN1 ? ui.form.motifAppelN1 : "", decisionN1: ui.form.appelN1 ? ui.form.decisionN1 : "",
@@ -2587,6 +2602,7 @@ function renderInterventions(container, perms) {
           appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
           sansDeplacement: !!i.sansDeplacement,
           compteRendu: i.compteRendu || "",
+          appelOrigineId: i.appelOrigineId || "", appelOrigineNumero: i.appelOrigineNumero || "",
           numero: i.numero || "",
         };
         renderAll();
@@ -2610,6 +2626,20 @@ function renderInterventions(container, perms) {
         }
       });
     });
+    container.querySelectorAll("[data-creer-deplacement]").forEach(btn => btn.addEventListener("click", () => {
+      const a = state.interventions.find(x => x.id === btn.dataset.creerDeplacement);
+      if (!a) return;
+      ui.editingId = null;
+      reinitialiserFormIntervention();
+      Object.assign(ui.form, {
+        date: a.date, technicien: a.technicien || ui.form.technicien, association: a.association || "", groupe: a.groupe || "", site: a.site || "",
+        type: a.type || "", description: a.description ? `Suite appel ${a.numero || ""} : ${a.description}` : `Suite appel ${a.numero || ""}`,
+        sansDeplacement: false, appelOrigineId: a.id, appelOrigineNumero: a.numero || "",
+      });
+      renderAll();
+      mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.toast?.("🚗 Formulaire pré-rempli : complète l'intervenant, les horaires et les heures.");
+    }));
     container.querySelectorAll("[data-remettre-attente]").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (!confirm("Remettre cette intervention en attente ? Elle ne sera plus comptée comme transmise (le relevé déjà validé n'est pas modifié).")) return;
