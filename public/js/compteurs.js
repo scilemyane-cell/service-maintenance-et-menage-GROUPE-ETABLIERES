@@ -307,6 +307,17 @@ function renderListe() {
     return (a.nom || "").localeCompare(b.nom || "");
   });
   const groupes = groupedSites(state.sites);
+  // Présentation "mosaïque + détail" : une vignette par site (verte à
+  // jour / rouge en retard), le site choisi s'affiche à droite (en
+  // dessous sur téléphone) sans dérouler toute la liste.
+  const retardDe = id => state.compteurs.filter(c => c.dossierId === id && estEnRetard(c)).length;
+  if (ui.focusSiteId) ui.siteSelectionne = ui.focusSiteId;
+  if (!state.sites.some(x => x.id === ui.siteSelectionne)) {
+    const ordre = groupes.flatMap(g => g.groups.flatMap(sub => trierParRetard(sub.sites)));
+    ui.siteSelectionne = (ordre.find(x => retardDe(x.id) > 0) || ordre[0])?.id || null;
+  }
+  const siteDetail = state.sites.find(x => x.id === ui.siteSelectionne) || null;
+  if (siteDetail) ui.ouverts.add(siteDetail.id);
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -325,18 +336,42 @@ function renderListe() {
       <button class="nav-btn" id="cpt-voir-stats" style="width:fit-content;border-color:var(--gold);color:var(--gold)">📊 Tableau de bord</button>
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
-      ` : groupes.map(g => `
-        <div>
-          <h3 style="margin:12px 0 8px;font-size:15px;color:var(--gold)">${esc(g.assocLabel)}</h3>
-          ${g.groups.map(sub => `
-            ${sub.groupeLabel ? `<div style="font-size:12px;color:var(--text-dim);margin:6px 0 6px 4px">${esc(sub.groupeLabel)}</div>` : ""}
-            ${trierParRetard(sub.sites).map(site => renderSiteCard(site)).join("")}
+      ` : `
+      <div class="cpt-split">
+        <div class="cpt-mosaique">
+          ${groupes.map(g => `
+            <h3 class="cpt-mos-assoc">${esc(g.assocLabel)}</h3>
+            ${g.groups.map(sub => `
+              ${sub.groupeLabel ? `<div class="cpt-mos-groupe">${esc(sub.groupeLabel)}</div>` : ""}
+              <div class="cpt-mos-grille">
+                ${trierParRetard(sub.sites).map(site => {
+                  const nb = state.compteurs.filter(c => c.dossierId === site.id).length;
+                  const r = retardDe(site.id);
+                  const etat = nb === 0 ? "vide" : r > 0 ? "retard" : "ok";
+                  return `<button class="cpt-vignette cpt-${etat} ${site.id === ui.siteSelectionne ? "cpt-sel" : ""}" data-select-site="${site.id}">
+                    <b>${esc(site.nom)}</b>
+                    <span>${nb} compteur${nb > 1 ? "s" : ""}${r > 0 ? ` · <em>${r} en retard</em>` : nb ? " · à jour" : ""}</span>
+                  </button>`;
+                }).join("")}
+              </div>
+            `).join("")}
           `).join("")}
         </div>
-      `).join("")}
+        <div class="cpt-detail" id="cpt-detail">
+          ${siteDetail ? renderSiteCard(siteDetail) : `<p class="hint">Choisis un site à gauche.</p>`}
+        </div>
+      </div>`}
     </div>
   `;
 
+  mountedContainer.querySelectorAll("[data-select-site]").forEach(btn => btn.addEventListener("click", () => {
+    ui.siteSelectionne = btn.dataset.selectSite;
+    ui.addingSiteId = null;
+    render();
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      requestAnimationFrame(() => document.getElementById("cpt-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }));
   if (ui.focusSiteId) {
     const cible = document.getElementById("cpt-site-" + ui.focusSiteId);
     ui.focusSiteId = null;
