@@ -1242,3 +1242,16 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .fj-derniere{display:block;font-size:11px;color:var(--text-dim);margin-top:2px}
 .fj-tache.periodique .fj-rond{border-style:dashed}
 .fj-tache.periodique.faite .fj-rond{border-style:solid}
+
+/* Administration > Connexions */
+.cx-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.cx-kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.cx-kpi b{display:block;font-size:26px;color:#128077}.cx-kpi span{font-size:12px;color:var(--text-dim)}
+.cx-kpi.alerte b{color:#C23B27}
+.cx-filtres{display:flex;gap:8px;flex-wrap:wrap}
+.cx-filtres input{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border);border-radius:9px}
+.cx-filtres select{padding:9px 10px;border:1px solid var(--border);border-radius:9px}
+.cx-table td small{color:var(--text-dim)}
+.cx-jamais td{opacity:.6}
+.cx-pastille{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.cx-pastille.vert{background:#1baf7a}.cx-pastille.orange{background:#e6a100}.cx-pastille.gris{background:#b8bdc7}

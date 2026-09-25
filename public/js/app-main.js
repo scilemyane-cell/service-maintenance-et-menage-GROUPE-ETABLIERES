@@ -37,6 +37,7 @@
   import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS } from "./theme.js";
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
   import { watchUsers } from "./users-data.js";
+  import { mountConnexions } from "./connexions.js";
 
   initTheme();
 
@@ -136,6 +137,7 @@
         id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès remplaçants",
         subtabs: [
           { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ADMIN_ONLY, mount: mountUtilisateurs },
+          { id: "connexions",   label: "Connexions",         icon: "🟢", roles: SUPER_ADMIN_ONLY, mount: mountConnexions },
           { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ADMIN_ONLY, mount: mountAccesRemplacants },
           { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ADMIN_ONLY, mount: mountAssociationsSites },
           { id: "corbeille", label: "Corbeille", icon: "🗑️", roles: ADMIN_ONLY, mount: mountCorbeille },

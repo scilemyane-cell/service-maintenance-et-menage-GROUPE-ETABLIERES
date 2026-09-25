@@ -3,6 +3,7 @@ import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { journaliserConnexion } from "./connexions-data.js";
 
 // Rôles possibles : "super_admin" | "admin" | "n1" | "technicien" | "menage" | "mi_temps" | "direction"
 
@@ -48,6 +49,7 @@ export function watchAuth(callback) {
     if (!user) { callback(null); return; }
     let profile = await getCurrentUserProfile(user.uid);
     if (!profile) profile = await rattacherCompteEnAttente(user);
+    journaliserConnexion(user, profile); // en arrière-plan, jamais bloquant
     if (!profile) {
       callback({ uid: user.uid, email: user.email, role: null, nom: user.email });
       return;
