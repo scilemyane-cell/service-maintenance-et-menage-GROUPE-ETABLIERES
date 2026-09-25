@@ -7,7 +7,7 @@ import { initCarteSites, categorieSite, CATEGORIES_CARTE } from "./site-map.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
-import { watchAssociations } from "./associations-data.js";
+import { watchAssociations, trierGroupes } from "./associations-data.js";
 import { synchroniserEmplacementsCompteurs } from "./compteurs-data.js";
 import {
   watchCodesForSite, listerCodesPourSite, creerCode as creerCodeMasterlock,
@@ -78,7 +78,7 @@ function groupedDossiers() {
     const groups = [];
     const sansGroupe = triParOrdre(dossiersForAssoc.filter(d => !d.groupe));
     if (sansGroupe.length) groups.push({ groupeLabel: null, dossiers: sansGroupe });
-    groupeNames.forEach(g => groups.push({ groupeLabel: g, dossiers: triParOrdre(dossiersForAssoc.filter(d => d.groupe === g)) }));
+    trierGroupes(groupeNames).forEach(g => groups.push({ groupeLabel: g, dossiers: triParOrdre(dossiersForAssoc.filter(d => d.groupe === g)) }));
     result.push({ assocLabel: assoc.nom, groups });
     dossiersForAssoc.forEach(d => usedIds.add(d.id));
   });

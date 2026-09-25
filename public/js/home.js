@@ -4,7 +4,7 @@ import { genererOccurrencesRecurrence } from "./planning.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
-import { watchAssociations } from "./associations-data.js";
+import { watchAssociations, rangGroupe } from "./associations-data.js";
 import { initCarteSites } from "./site-map.js";
 import { watchCompteursTotal } from "./compteurs-data.js";
 import { watchFavoris, saveFavoris } from "./favoris-data.js";
@@ -163,6 +163,7 @@ function optionsSitesRangees(liste, selectionne = "") {
   [...liste].sort((a, b) =>
     (ordreAssoc.get(a.association) ?? 999) - (ordreAssoc.get(b.association) ?? 999)
     || (a.association || "").localeCompare(b.association || "", "fr")
+    || rangGroupe(a.groupe) - rangGroupe(b.groupe)
     || (a.groupe || "").localeCompare(b.groupe || "", "fr")
     || (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true })
   ).forEach(d => {

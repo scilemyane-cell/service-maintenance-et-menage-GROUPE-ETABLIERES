@@ -11,7 +11,7 @@ import {
   supprimerCode, nouveauCode, listerHistoriquePourSite, importerCodesDepuisDossiers,
   CATEGORIES_BOITE,
 } from "./masterlock-data.js";
-import { watchAssociations } from "./associations-data.js";
+import { watchAssociations, trierGroupes } from "./associations-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
@@ -51,7 +51,7 @@ function groupedSites(sites) {
     const groups = [];
     const sansGroupe = sitesForAssoc.filter(s => !s.groupe);
     if (sansGroupe.length) groups.push({ groupeLabel: null, sites: sansGroupe });
-    groupeNames.forEach(g => groups.push({ groupeLabel: g, sites: sitesForAssoc.filter(s => s.groupe === g) }));
+    trierGroupes(groupeNames).forEach(g => groups.push({ groupeLabel: g, sites: sitesForAssoc.filter(s => s.groupe === g) }));
     result.push({ assocLabel: assoc.nom, groups });
     sitesForAssoc.forEach(s => usedIds.add(s.id));
   });

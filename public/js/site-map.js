@@ -47,17 +47,18 @@ function dansFranceMetro({ lat, lng }) {
 // Couleur des repères par association, et une couleur à part pour les
 // dispositifs MNA (sous-groupe « MNA » ou nom contenant « MNA »).
 export const CATEGORIES_CARTE = [
-  { cle: "mna", label: "MNA", couleur: "#eb6834" },
-  { cle: "agropolis", label: "Agropolis", couleur: "#1baf7a" },
   { cle: "ecole", label: "École", couleur: "#2a78d6" },
+  { cle: "agropolis", label: "Agropolis", couleur: "#1baf7a" },
+  { cle: "mna", label: "MNA", couleur: "#eb6834" },
   { cle: "armonia", label: "Armonia", couleur: "#4a3aa7" },
   { cle: "autre", label: "Autres", couleur: "#8A8D93" },
 ];
+const CAT = cle => CATEGORIES_CARTE.find(c => c.cle === cle);
 const sansAccent = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 export function categorieSite(d) {
-  if (/\bmna\b/.test(sansAccent(d.groupe)) || /\bmna\b/.test(sansAccent(d.nom))) return CATEGORIES_CARTE[0];
+  if (/\bmna\b/.test(sansAccent(d.groupe)) || /\bmna\b/.test(sansAccent(d.nom))) return CAT("mna");
   const a = sansAccent(d.association);
-  return CATEGORIES_CARTE.find(c => c.cle !== "autre" && c.cle !== "mna" && a.includes(c.cle)) || CATEGORIES_CARTE[4];
+  return CATEGORIES_CARTE.find(c => c.cle !== "autre" && c.cle !== "mna" && a.includes(c.cle)) || CAT("autre");
 }
 function iconeRepere(couleur) {
   return window.L.divIcon({

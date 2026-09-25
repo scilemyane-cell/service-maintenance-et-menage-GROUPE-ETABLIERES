@@ -24,7 +24,7 @@ import {
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
-import { watchAssociations } from "./associations-data.js";
+import { watchAssociations, trierGroupes } from "./associations-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { renderPilotage } from "./compteurs-dashboard.js";
 import {
@@ -237,7 +237,7 @@ function groupedSites(sites) {
     const groups = [];
     const sansGroupe = sitesForAssoc.filter(s => !s.groupe);
     if (sansGroupe.length) groups.push({ groupeLabel: null, sites: sansGroupe });
-    groupeNames.forEach(g => groups.push({ groupeLabel: g, sites: sitesForAssoc.filter(s => s.groupe === g) }));
+    trierGroupes(groupeNames).forEach(g => groups.push({ groupeLabel: g, sites: sitesForAssoc.filter(s => s.groupe === g) }));
     result.push({ assocLabel: assoc.nom, groups });
     sitesForAssoc.forEach(s => usedIds.add(s.id));
   });
