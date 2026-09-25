@@ -9,6 +9,9 @@ import { initCarteSites } from "./site-map.js";
 import { watchCompteursTotal } from "./compteurs-data.js";
 import { watchFavoris, saveFavoris } from "./favoris-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
+import { watchSites as watchSitesMenage } from "./sites-data.js";
+import { watchFiches } from "./fiches-data.js";
+import { retardsPeriodiques } from "./fiches.js";
 
 let unsubs = [];
 let people = { n1: [], n2: [] };
@@ -28,6 +31,7 @@ let carteInstance = null;
 let filtreAssociation = "";
 let filtreSite = "";
 let horlogeTimer = null;
+let sitesMenage = null, fichesMenage = null;
 let nbCompteurs = null;
 let coordonnees = {};
 let interventions = null;      // chargées seulement pour un utilisateur hors astreinte
@@ -86,6 +90,12 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
+  // Tâches ménage du mois en retard (agents ménage + encadrement)
+  sitesMenage = null; fichesMenage = null;
+  if (["menage", "mi_temps", "super_admin", "admin", "n1"].includes(user.role)) {
+    unsubs.push(watchSitesMenage((s) => { sitesMenage = s; scheduleRender(); }));
+    unsubs.push(watchFiches((f) => { fichesMenage = f; scheduleRender(); }));
+  }
   favoris = []; favorisErreur = null;
   if (user.uid) unsubs.push(watchFavoris(user.uid, (ids) => {
     if (ids === null) {
@@ -423,6 +433,19 @@ function render() {
     if (!c.badgeAtelier && !c.badgeSites && c.badge) notifs.push({ cat: c.id, icone: c.icon, texte: `${c.badge} élément(s) à traiter — ${c.label}`, niveau: "rouge" });
   });
   if (next && !debugForce) notifs.push({ cat: "astreinte", icone: "📞", texte: `Transfert d'astreinte ${next.daysUntil === 0 ? "aujourd'hui" : next.daysUntil === 1 ? "demain" : `dans ${next.daysUntil} j`} : ${next.from} → ${next.to}`, niveau: confirmedRecord ? "vert" : "orange" });
+  if (sitesMenage && fichesMenage) {
+    const agent = ["menage", "mi_temps"].includes(mountedUser.role);
+    const limite = dateKey(addDays(new Date(), -70));
+    // Un agent ne voit que les sites sur lesquels il a rempli une fiche récemment.
+    const sitesVises = agent
+      ? sitesMenage.filter(s => fichesMenage.some(f => f.siteId === s.id && f.agentUid === mountedUser.uid && (f.weekStart || "") >= limite))
+      : sitesMenage;
+    try {
+      retardsPeriodiques(sitesVises, fichesMenage).forEach(({ site, retards }) => {
+        notifs.push({ cat: "disp-" + (site.dispositif || "Dispositif MNA"), icone: "🧽", texte: `${site.name} : ${retards.length} tâche(s) du mois en retard (${retards.slice(0, 2).map(r => r.task.label).join(", ")}${retards.length > 2 ? "…" : ""})`, niveau: "rouge" });
+      });
+    } catch (e) { console.error("retardsPeriodiques:", e); }
+  }
   if (holidayToday) notifs.push({ icone: "☀️", texte: `Jour férié : ${holidayToday}`, niveau: "violet" });
 
   const jour = today.toLocaleDateString("fr-FR", { weekday: "short" });

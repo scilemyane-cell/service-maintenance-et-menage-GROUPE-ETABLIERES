@@ -111,7 +111,7 @@ function currentFiche() {
       siteId: site?.id, siteName: site?.name,
       weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart), 4)),
       agentUid: agent.uid, agentNom: agent.nom,
-      cells: {}, obs: {}, chambres: [], observationsGenerales: "",
+      cells: {}, obs: {}, periodiques: {}, chambres: [], observationsGenerales: "",
       submitted: false,
     },
   };
@@ -140,7 +140,7 @@ function setSaveStatus(status, errorMsg) {
 }
 
 function vueSemaineHTML(site, data) {
-  return `<div class="fj-semaine">${site.rooms.map((room, ri) => `
+  return `<div class="fj-semaine">${blocPeriodiquesHTML(site, data)}${site.rooms.map((room, ri) => room.tasks.every(t => periodeTache(t)) ? "" : `
         <div class="form-card">
           <h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">${esc(room.name)}</h3>
           <div class="table-wrap" style="border:none">
@@ -151,7 +151,7 @@ function vueSemaineHTML(site, data) {
                 <th>Observation</th>
               </tr></thead>
               <tbody>
-                ${room.tasks.map((task, ti) => `
+                ${room.tasks.map((task, ti) => periodeTache(task) ? "" : `
                   <tr>
                     <td>${esc(task.label)}${task.freq ? ` <span style="color:var(--text-dim);font-size:11px">(${esc(task.freq)})</span>` : ""}</td>
                     ${room.days.map(d => {
@@ -169,11 +169,113 @@ function vueSemaineHTML(site, data) {
       `).join("")}</div>`;
 }
 
+// ---- Tâches périodiques (1X/mois, 2X/mois, 1X/3 mois…) ----
+// Elles ne sont pas à faire chaque jour : on les coche une fois quand
+// elles sont faites (date enregistrée dans data.periodiques de la fiche
+// de la semaine), et une alerte apparaît si le délai est dépassé.
+// Le suivi est commun au site (peu importe quel agent l'a faite).
+function periodeTache(task) {
+  const m = String(task?.freq || "").replace(/\s+/g, "").match(/^(\d+)x\/(\d*)mois$/i);
+  if (!m) return null;
+  return { fois: +m[1] || 1, mois: +(m[2] || 1) || 1 };
+}
+function clePeriodique(room, task) { return `${room.name}|${task.label}`; }
+function datesFaitesSite(siteId, cle) {
+  const out = [];
+  state.fiches.filter(f => f.siteId === siteId && f.periodiques && Array.isArray(f.periodiques[cle]))
+    .forEach(f => out.push(...f.periodiques[cle]));
+  return [...new Set(out)].sort();
+}
+function ajouterMois(date, n) { const d = new Date(date); d.setMonth(d.getMonth() + n); return d; }
+function finDuMois(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+function fmtJM(iso) { const d = new Date(iso); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`; }
+
+// Statut : { etat: "fait"|"afaire"|"retard", faitsPeriode, fois, derniere, echeance }
+function statutPeriodique(siteId, room, task) {
+  const p = periodeTache(task);
+  const dates = datesFaitesSite(siteId, clePeriodique(room, task));
+  const auj = new Date(); auj.setHours(0, 0, 0, 0);
+  const derniere = dates[dates.length - 1] || null;
+  if (p.mois === 1) {
+    // Mensuel : on compte ce qui a été fait ce mois-ci.
+    const debut = dateKey(new Date(auj.getFullYear(), auj.getMonth(), 1));
+    const faitsPeriode = dates.filter(d => d >= debut).length;
+    const echeance = finDuMois(auj);
+    if (faitsPeriode >= p.fois) return { etat: "fait", faitsPeriode, fois: p.fois, derniere, echeance };
+    // Alerte rouge si pas fait depuis 3 mois (ou jamais fait alors que
+    // le site a des fiches depuis plus de 3 mois).
+    const limite = dateKey(ajouterMois(auj, -3));
+    const premiereFiche = state.fiches.filter(f => f.siteId === siteId).map(f => f.weekStart).sort()[0];
+    const retard = derniere ? derniere < limite : !!(premiereFiche && premiereFiche < limite);
+    return { etat: retard ? "retard" : "afaire", faitsPeriode, fois: p.fois, derniere, echeance };
+  }
+  // Tous les N mois : échéance = dernière fois + N mois.
+  if (!derniere) {
+    const premiereFiche = state.fiches.filter(f => f.siteId === siteId).map(f => f.weekStart).sort()[0];
+    const retard = !!(premiereFiche && premiereFiche < dateKey(ajouterMois(auj, -p.mois)));
+    return { etat: retard ? "retard" : "afaire", faitsPeriode: 0, fois: 1, derniere: null, echeance: finDuMois(auj) };
+  }
+  const echeance = ajouterMois(new Date(derniere), p.mois);
+  if (auj < ajouterMois(echeance, -1)) return { etat: "fait", faitsPeriode: 1, fois: 1, derniere, echeance };
+  return { etat: auj > echeance ? "retard" : "afaire", faitsPeriode: 0, fois: 1, derniere, echeance };
+}
+
+// Pour l'accueil : nombre de tâches du mois en retard par site.
+export function retardsPeriodiques(sites, fiches) {
+  const sauv = state.fiches;
+  state.fiches = fiches;
+  try {
+    return sites.map(site => ({ site, retards: tachesPeriodiques(site).filter(x => x.st.etat === "retard") }))
+      .filter(x => x.retards.length);
+  } finally { state.fiches = sauv; }
+}
+
+function tachesPeriodiques(site) {
+  const out = [];
+  (site.rooms || []).forEach((room, ri) => (room.tasks || []).forEach((task, ti) => {
+    if (periodeTache(task)) out.push({ room, task, ri, ti, st: statutPeriodique(site.id, room, task) });
+  }));
+  return out;
+}
+
+function blocPeriodiquesHTML(site, data) {
+  const liste = tachesPeriodiques(site);
+  if (!liste.length) return "";
+  const ordre = { retard: 0, afaire: 1, fait: 2 };
+  liste.sort((a, b) => ordre[a.st.etat] - ordre[b.st.etat]);
+  const nbRetard = liste.filter(x => x.st.etat === "retard").length;
+  const nbAFaire = liste.filter(x => x.st.etat === "afaire").length;
+  const cetteSemaine = (x) => (data.periodiques?.[clePeriodique(x.room, x.task)] || []).length > 0;
+  return `
+  <div class="fj-mois ${nbRetard ? "a-retard" : ""}">
+    <div class="fj-mois-tete">
+      <div><b>📅 Tâches du mois</b><small>À faire une fois dans la période, pas tous les jours</small></div>
+      <span class="fj-mois-resume">${nbRetard ? `<span class="fj-pastille rouge">🔴 ${nbRetard} en retard</span>` : ""}${nbAFaire ? `<span class="fj-pastille orange">${nbAFaire} à faire</span>` : ""}${!nbRetard && !nbAFaire ? `<span class="fj-pastille vert">✓ Tout est à jour</span>` : ""}</span>
+    </div>
+    ${liste.map(x => {
+      const cle = clePeriodique(x.room, x.task);
+      const st = x.st;
+      const info = st.etat === "fait"
+        ? (x.task.freq.match(/3/) ? `Fait le ${fmtJM(st.derniere)} · prochaine fois vers le ${fmtJM(st.echeance)}` : `Fait ce mois-ci${st.derniere ? ` (le ${fmtJM(st.derniere)})` : ""}`)
+        : st.etat === "retard"
+          ? `En retard — ${st.derniere ? `pas fait depuis le ${fmtJM(st.derniere)}` : "jamais fait"}`
+          : `À faire avant le ${fmtJM(st.echeance)}${st.fois > 1 ? ` · ${st.faitsPeriode}/${st.fois} ce mois-ci` : ""}`;
+      return `
+      <div class="fj-per fj-per-${st.etat}">
+        <button class="fj-per-coche ${cetteSemaine(x) ? "faite" : ""}" data-fj-per="${esc(cle)}">
+          <span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+          <span class="fj-label">${esc(x.task.label)}<em>${esc(x.task.freq)}</em><br><small>${esc(x.room.name)} · ${info}</small></span>
+        </button>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
 function tachesDuJour(site, jour) {
   const out = [];
   (site.rooms || []).forEach((room, ri) => {
     if (!(room.days || []).includes(jour)) return;
-    (room.tasks || []).forEach((task, ti) => out.push({ ri, ti, key: `${ri}-${ti}-${jour}` }));
+    (room.tasks || []).forEach((task, ti) => { if (!periodeTache(task)) out.push({ ri, ti, key: `${ri}-${ti}-${jour}` }); });
   });
   return out;
 }
@@ -198,7 +300,7 @@ function vueJourHTML(site, data) {
   const pctSem = semaine.t ? Math.round(semaine.f / semaine.t * 100) : 0;
   const prenom = String(data.agentNom || "").split(/[\s@]/)[0];
   const dateJour = addDays(new Date(ui.weekStart), JOURS_KEYS.indexOf(jour));
-  const piecesDuJour = (site.rooms || []).map((room, ri) => ({ room, ri })).filter(({ room }) => (room.days || []).includes(jour));
+  const piecesDuJour = (site.rooms || []).map((room, ri) => ({ room, ri })).filter(({ room }) => (room.days || []).includes(jour) && room.tasks.some(t => !periodeTache(t)));
 
   return `
   <div class="fj">
@@ -232,10 +334,12 @@ function vueJourHTML(site, data) {
       <div><b>Bravo ! Journée terminée</b><br><small>Toutes les tâches du ${JOURS_LONGS[jour].toLowerCase()} sont faites. Merci ✨</small></div>
     </div>
 
+    ${blocPeriodiquesHTML(site, data)}
+
     ${piecesDuJour.length === 0 ? `<div class="fj-vide">☕ Aucune tâche prévue ce jour-là sur ce site.</div>` : ""}
 
     ${piecesDuJour.map(({ room, ri }) => {
-      const cles = room.tasks.map((_, ti) => `${ri}-${ti}-${jour}`);
+      const cles = room.tasks.map((t, ti) => periodeTache(t) ? null : `${ri}-${ti}-${jour}`).filter(Boolean);
       const f = cles.filter(k => data.cells[k]).length;
       const fini = f === cles.length && cles.length > 0;
       return `
@@ -247,6 +351,7 @@ function vueJourHTML(site, data) {
         </div>
         <div class="fj-piece-barre"><span data-fj-piece-barre="${ri}" style="width:${cles.length ? f / cles.length * 100 : 0}%"></span></div>
         ${room.tasks.map((task, ti) => {
+          if (periodeTache(task)) return "";
           const key = `${ri}-${ti}-${jour}`;
           const fait = !!data.cells[key];
           const obs = data.obs[`${ri}-${ti}`] || "";
@@ -302,7 +407,7 @@ function majProgressionJour(site, data) {
   c.querySelectorAll("[data-fj-piece]").forEach(el => {
     const ri = +el.dataset.fjPiece;
     const room = site.rooms[ri];
-    const cles = room.tasks.map((_, ti) => `${ri}-${ti}-${jour}`);
+    const cles = room.tasks.map((t, ti) => periodeTache(t) ? null : `${ri}-${ti}-${jour}`).filter(Boolean);
     const f = cles.filter(k => data.cells[k]).length;
     const fini = f === cles.length && cles.length > 0;
     el.classList.toggle("finie", fini);
@@ -446,9 +551,30 @@ function render() {
     majProgressionJour(site, data);
     scheduleSave(id, data);
   }));
+  mountedContainer.querySelectorAll("[data-fj-per]").forEach(b => b.addEventListener("click", async () => {
+    const cle = b.dataset.fjPer;
+    if (!data.periodiques) data.periodiques = {};
+    const deja = (data.periodiques[cle] || []).length > 0;
+    if (deja) delete data.periodiques[cle];
+    else {
+      // Date du jour si on est sur la semaine en cours, sinon le jour affiché.
+      const dansSemaine = ui.weekStart === dateKey(mondayOf(new Date()));
+      const quand = dansSemaine ? dateKey(new Date()) : dateKey(addDays(new Date(ui.weekStart), JOURS_KEYS.indexOf(ui.jour || "LUN")));
+      data.periodiques[cle] = [quand];
+      if (navigator.vibrate) navigator.vibrate(15);
+    }
+    b.classList.toggle("faite", !deja);
+    // Mise à jour locale immédiate (sans attendre le retour de Firestore).
+    const i = state.fiches.findIndex(f => f.id === id);
+    if (i >= 0) state.fiches[i] = { ...state.fiches[i], periodiques: { ...data.periodiques } };
+    else state.fiches.push({ id, ...data });
+    setSaveStatus("saving");
+    try { await saveFiche(id, data); setSaveStatus("ok"); render(); }
+    catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
+  }));
   mountedContainer.querySelectorAll("[data-fj-tout]").forEach(b => b.addEventListener("click", () => {
     const ri = +b.dataset.fjTout;
-    const cles = site.rooms[ri].tasks.map((_, ti) => `${ri}-${ti}-${ui.jour}`);
+    const cles = site.rooms[ri].tasks.map((t, ti) => periodeTache(t) ? null : `${ri}-${ti}-${ui.jour}`).filter(Boolean);
     const toutFait = cles.every(k => data.cells[k]);
     cles.forEach(k => {
       data.cells[k] = !toutFait;
