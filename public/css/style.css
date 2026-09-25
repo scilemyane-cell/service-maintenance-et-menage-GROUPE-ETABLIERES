@@ -653,3 +653,4 @@ button.gh-notif:hover{ background:#FFF2F5; }
 .gh-favori-actions{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
 .gh-raccourci{ border:1px solid #C9CBD1; background:#fff; border-radius:6px; padding:3px 6px; font-size:14px; line-height:1; cursor:pointer; }
 .gh-raccourci:hover{ border-color:var(--gh-rouge); background:#FFF2F5; }
+.gh-favori-suppr-arme{ background:#C23B27 !important; color:#fff !important; border-radius:6px; padding:3px 8px !important; font-size:11px !important; font-weight:700; }

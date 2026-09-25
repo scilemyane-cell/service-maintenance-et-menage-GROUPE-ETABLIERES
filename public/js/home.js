@@ -214,9 +214,24 @@ function attacherEcouteursBlocSites() {
       onSelectRef("compteurs");
     });
   });
+  // Suppression d'un favori en deux temps : 1er clic = le bouton passe en
+  // "Retirer ?" (4 s pour se raviser), 2e clic = fenêtre de confirmation.
   mountedContainer.querySelectorAll("[data-retirer-favori]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      sauvegarderFavoris(chargerFavoris().filter(id => id !== btn.dataset.retirerFavori));
+    let arme = null;
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.retirerFavori;
+      if (!arme) {
+        btn.textContent = "Retirer ?"; btn.classList.add("gh-favori-suppr-arme");
+        arme = setTimeout(() => { arme = null; btn.textContent = "✕"; btn.classList.remove("gh-favori-suppr-arme"); }, 4000);
+        return;
+      }
+      clearTimeout(arme); arme = null;
+      const nom = dossiers.find(d => d.id === id)?.nom || "ce site";
+      const ok = window.confirmDialog
+        ? await window.confirmDialog(`Retirer « ${nom} » des sites favoris${mountedUser.apercu ? ` de ${mountedUser.nom || mountedUser.email}` : ""} ?`, { texteValider: "Retirer" })
+        : confirm(`Retirer « ${nom} » des sites favoris ?`);
+      if (!ok) { btn.textContent = "✕"; btn.classList.remove("gh-favori-suppr-arme"); return; }
+      sauvegarderFavoris(chargerFavoris().filter(x => x !== id));
     });
   });
   document.getElementById("hm-favori-ajouter")?.addEventListener("click", () => {
