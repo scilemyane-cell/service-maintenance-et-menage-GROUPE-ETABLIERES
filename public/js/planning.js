@@ -2278,35 +2278,35 @@ function renderInterventions(container, perms) {
           <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
           <span class="iv-sous">Astreinte · dépannage</span>
         </div>
-        <div class="iv-section">📞 L'appel</div>
+        <div class="iv-section">📞 La demande</div>
         <div class="form-grid iv-grille iv-grille-h">
           <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
           ${ui.editingId && mountedUser.role === "super_admin" ? `
           <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
         </div>
         ${ui.form.appelOrigineNumero ? `<div class="iv-suite">↪ Déplacement faisant suite à l'appel <b>${esc(ui.form.appelOrigineNumero)}</b> <button type="button" class="nav-btn" id="f-suite-annuler" style="padding:2px 8px;font-size:11px">✕</button></div>` : ""}
+        <div class="iv-question">1. Comment la demande a-t-elle été traitée ?</div>
         <div class="iv-mode">
           <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === true ? "actif" : ""}" data-iv-mode="appel">
-            <span class="iv-mode-ico">📞</span><span><b>Appel seul</b><small>Traité par téléphone / à distance · pas de prime dimanche</small></span>
+            <span class="iv-mode-ico">📞</span><span><b>Réglé par téléphone</b><small>Sans déplacement · pas de prime dimanche</small></span>
           </button>
           <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === false ? "actif" : ""}" data-iv-mode="deplacement">
-            <span class="iv-mode-ico">🚗</span><span><b>Déplacement sur site</b><small>Intervention sur place</small></span>
+            <span class="iv-mode-ico">🚗</span><span><b>Déplacement sur place</b><small>Le technicien s'est rendu sur le site</small></span>
           </button>
         </div>
-        <div class="iv-options" style="margin-top:10px">
-          <label class="iv-option">
-            <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""}>
-            <span class="iv-option-ico">📞</span>
-            <span><b>Appel au N1</b><small>Décision ou consigne demandée au N1</small></span>
-          </label>
+        <div class="iv-question">2. As-tu appelé le cadre d'astreinte (N1) pour une décision ou une consigne ?</div>
+        <div class="iv-ouinon">
+          <button type="button" class="${!ui.form.appelN1 ? "actif" : ""}" data-n1-ouinon="non">Non</button>
+          <button type="button" class="${ui.form.appelN1 ? "actif" : ""}" data-n1-ouinon="oui">Oui, j'ai appelé le N1</button>
+          <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""} hidden>
         </div>
         <div id="interv-n1-zone">${appelN1HTML()}</div>
         <div class="iv-section">Qui, où, quoi</div>
         <div class="form-grid iv-grille">
-          <label>Intervenant
+          <label>Technicien
             ${isLockedTech
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
-              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.appelN1 ? "— Aucun (appel N1 seul) —" : "— Choisir —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
+              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.appelN1 ? "— Aucun technicien (N1 seul) —" : "— Choisir le technicien —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
           <label>Association
             <select id="f-association">
@@ -2407,7 +2407,7 @@ function renderInterventions(container, perms) {
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
-                    ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">📞 Appel seul</span>` : ""}
+                    ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">📞 Par téléphone</span>` : ""}
                     ${i.appelOrigineNumero ? `<span class="tag" style="background:#2a78d6;font-size:9px" title="Déplacement faisant suite à un appel">↪ suite ${esc(i.appelOrigineNumero)}</span>` : ""}
                   </td>
                   ${perms.isEditor ? `<td>${i.transmis
@@ -2427,6 +2427,12 @@ function renderInterventions(container, perms) {
   if (perms.canLogIntervention) {
     attacherPhotosInterventionListeners();
     attacherEcouteursAppelN1();
+    container.querySelectorAll("[data-n1-ouinon]").forEach(b => b.addEventListener("click", () => {
+      const cb = document.getElementById("f-appel-n1");
+      const oui = b.dataset.n1Ouinon === "oui";
+      if (cb.checked !== oui) { cb.checked = oui; cb.dispatchEvent(new Event("change")); }
+      container.querySelectorAll("[data-n1-ouinon]").forEach(x => x.classList.toggle("actif", x === b));
+    }));
     container.querySelectorAll("[data-iv-mode]").forEach(b => b.addEventListener("click", () => {
       ui.form.sansDeplacement = b.dataset.ivMode === "appel";
       container.querySelectorAll("[data-iv-mode]").forEach(x => x.classList.toggle("actif", x === b));

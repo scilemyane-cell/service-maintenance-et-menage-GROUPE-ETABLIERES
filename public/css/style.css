@@ -1643,3 +1643,10 @@ html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
 .iv-table tbody tr:hover td:last-child{background:var(--panel)}
 .iv-descr{min-width:180px;max-width:260px}
 .iv-table td,.iv-table th{padding-left:8px;padding-right:8px}
+.iv-question{margin:14px 0 6px;font-size:13px;font-weight:700;color:var(--text)}
+.iv-mode{margin-top:0}
+.iv-ouinon{display:inline-flex;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--panel)}
+.iv-ouinon button{border:none;background:none;padding:10px 18px;font-weight:700;font-size:13px;color:var(--text-dim);cursor:pointer}
+.iv-ouinon button + button{border-left:1.5px solid var(--border)}
+.iv-ouinon button.actif{background:var(--gold);color:#1A1305}
+.iv-ouinon button[data-n1-ouinon="non"].actif{background:var(--panel-alt);color:var(--text)}
