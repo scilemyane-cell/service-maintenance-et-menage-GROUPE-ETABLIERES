@@ -1316,3 +1316,16 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .sdv-tuile.ko{border-left:4px solid #C23B27;background:#FFF8F7}.sdv-tuile.ko small{color:#C23B27;font-weight:700}
 .sdv-flash{animation:sdv-flash 1.4s ease}
 @keyframes sdv-flash{0%{box-shadow:0 0 0 0 rgba(168,122,18,.0)}20%{box-shadow:0 0 0 4px rgba(168,122,18,.55)}100%{box-shadow:0 0 0 0 rgba(168,122,18,0)}}
+/* Cartes de site v2 : sans photo ni pourcentage */
+.sdl-grille{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.sdl-carte{border-top:4px solid var(--cat);padding:14px 14px 12px;gap:12px;justify-content:space-between}
+.sdl-tete{display:flex;gap:12px;align-items:flex-start;min-width:0;padding-right:26px}
+.sdl-pastille{flex:none;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:color-mix(in srgb,var(--cat) 16%,#fff)}
+.sdl-titres{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sdl-titres .sdl-adr{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sdl-pied{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #f0f1f4;padding-top:10px}
+.sdl-pied .sdl-icos{margin:0;gap:4px}
+.sdl-pied .sdl-icos span{font-size:14px;background:none;padding:0 2px}
+.sdl-pied .sdl-icos small{font-size:11px;color:var(--text-dim)}
+.sdl-nbphotos{font-size:12px;color:var(--text-dim);white-space:nowrap}
+.sdl-poignee{background:#F2F4F7}

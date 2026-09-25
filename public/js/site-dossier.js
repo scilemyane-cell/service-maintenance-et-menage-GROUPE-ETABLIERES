@@ -4,8 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
 } from "./site-dossier-data.js";
 import { initCarteSites, categorieSite, CATEGORIES_CARTE } from "./site-map.js";
-import { getGraphTokenSilentOnly } from "./graph-auth.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrls, getImageThumbUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
@@ -19,7 +18,6 @@ import { activerGlisserDeposer } from "./drag-reorder.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
 let ui = { openId: null, mode: "view", lightbox: null, recherche: "", filtreCat: "", affichage: "cartes" };
-let miniatures = {}; // itemId -> url de la miniature (vignettes de la liste)
 // Cache local des boîtes à clés en cours d'édition (voir renderEdit) —
 // chargé une fois par dossier ouvert en modification, puis mutable
 // localement comme le reste du formulaire.
@@ -112,44 +110,6 @@ function sectionRemplie(sec) {
   if (sec.multiLignes) return (sec.lignes || []).some(l => (l.valeur || l.notes || "").trim() || (l.photos || []).length);
   return !!((sec.emplacement || "").trim() || (sec.procedure || "").trim() || (sec.photos || []).length);
 }
-// Niveau de remplissage du dossier : adresse + pour chaque équipement
-// concerné, un emplacement/une procédure ET au moins une photo.
-function completude(d) {
-  const concernes = (d.sections || []).filter(x => x.concerne);
-  let total = 1, ok = d.adresse ? 1 : 0;
-  const manque = [];
-  if (!d.adresse) manque.push("adresse");
-  concernes.forEach(sec => {
-    total += 2;
-    if (sectionRemplie(sec)) ok++; else manque.push(sec.titre);
-    if (photosSection(sec).length) ok++; else if (sectionRemplie(sec)) manque.push(`photo ${sec.titre}`);
-  });
-  if (!concernes.length) { total += 2; manque.push("aucun équipement renseigné"); }
-  return { pct: Math.round(ok / total * 100), manque };
-}
-function couleurPct(p) { return p >= 80 ? "#1baf7a" : p >= 50 ? "#e6a100" : "#C23B27"; }
-function premierePhoto(d) {
-  for (const sec of (d.sections || []).filter(x => x.concerne)) {
-    const ph = photosSection(sec).find(p => p.isImage && p.itemId);
-    if (ph) return ph.itemId;
-  }
-  return null;
-}
-async function chargerMiniatures() {
-  const ids = state.dossiers.map(premierePhoto).filter(id => id && !miniatures[id]);
-  if (!ids.length) return;
-  try {
-    const token = await getGraphTokenSilentOnly(); // jamais de fenêtre de connexion pour de simples vignettes
-    if (!token) return;
-    const res = await getImageThumbUrls(ids);
-    if (!Object.keys(res).length) return;
-    Object.assign(miniatures, res);
-    mountedContainer?.querySelectorAll("[data-mini]").forEach(el => {
-      const url = miniatures[el.dataset.mini];
-      if (url) { el.style.backgroundImage = `url("${url}")`; el.classList.add("a-photo"); }
-    });
-  } catch (e) { console.warn("Vignettes dossiers :", e); }
-}
 function filtrerDossiers(liste) {
   const q = sansAcc(ui.recherche).trim();
   return liste.filter(d => (!ui.filtreCat || categorieSite(d).cle === ui.filtreCat)
@@ -158,28 +118,25 @@ function filtrerDossiers(liste) {
 
 function carteDossierHTML(d, i, glisser) {
   const cat = categorieSite(d);
-  const concernes = (d.sections || []).filter(x => x.concerne);
+  const concernes = (d.sections || []).filter(x => x.concerne && sectionRemplie(x));
   const nbPhotos = (d.sections || []).reduce((n, sec) => n + photosSection(sec).length, 0);
-  const { pct, manque } = completude(d);
-  const icones = [...new Set(concernes.filter(sectionRemplie).map(x => iconeSection(x.titre)))].slice(0, 6);
-  const mini = premierePhoto(d);
-  const url = mini && miniatures[mini];
+  // Une icône par type d'équipement présent sur le site (sans doublon).
+  const vus = new Set();
+  const equipements = concernes.map(x => ({ ic: iconeSection(x.titre), titre: x.titre }))
+    .filter(x => x.ic !== "🔧" && !vus.has(x.ic) && vus.add(x.ic));
   return `
   <div class="sdl-item" ${glisser ? `data-drag-index="${i}"` : ""}>
-    <button class="sdl-carte" data-open="${d.id}">
-      <span class="sdl-photo ${url ? "a-photo" : ""}" ${mini ? `data-mini="${mini}"` : ""} style="${url ? `background-image:url('${url}');` : ""}--cat:${cat.couleur}">
-        <span class="sdl-ico">${cat.cle === "ecole" ? "🏫" : cat.cle === "mna" ? "🏠" : "🏢"}</span>
-        <span class="sdl-tag"><i style="background:${cat.couleur}"></i>${esc(cat.cle === "autre" ? (d.association || "Autre") : cat.label)}</span>
-      </span>
-      <span class="sdl-corps">
-        <span class="sdl-nom">${esc(d.nom)}</span>
-        <span class="sdl-adr">${esc(d.adresse || "Adresse non renseignée")}</span>
-        <span class="sdl-icos">${icones.map(ic => `<span>${ic}</span>`).join("")}<span>📷 ${nbPhotos}</span></span>
-        <span class="sdl-comp" title="${esc(manque.length ? "À compléter : " + manque.join(", ") : "Dossier complet")}">
-          <span class="sdl-comp-b"><i style="width:${pct}%;background:${couleurPct(pct)}"></i></span>
-          <b style="color:${couleurPct(pct)}">${pct} %</b>
+    <button class="sdl-carte" data-open="${d.id}" style="--cat:${cat.couleur}">
+      <span class="sdl-tete">
+        <span class="sdl-pastille">${cat.cle === "ecole" ? "🏫" : cat.cle === "mna" ? "🏠" : "🏢"}</span>
+        <span class="sdl-titres">
+          <span class="sdl-nom">${esc(d.nom)}</span>
+          <span class="sdl-adr">${esc(d.adresse || "Adresse non renseignée")}</span>
         </span>
-        ${manque.length && pct < 100 ? `<span class="sdl-manque">À compléter : ${esc(manque.slice(0, 2).join(", "))}${manque.length > 2 ? "…" : ""}</span>` : `<span class="sdl-manque ok">✓ Dossier complet</span>`}
+      </span>
+      <span class="sdl-pied">
+        <span class="sdl-icos">${equipements.map(x => `<span title="${esc(x.titre)}">${x.ic}</span>`).join("") || `<small>Aucun équipement renseigné</small>`}</span>
+        ${nbPhotos ? `<span class="sdl-nbphotos" title="Photos">📷 ${nbPhotos}</span>` : ""}
       </span>
     </button>
     ${glisser ? `<span data-drag-handle title="Glisser pour réordonner" class="sdl-poignee">☰</span>` : ""}
@@ -187,11 +144,9 @@ function carteDossierHTML(d, i, glisser) {
 }
 function ligneDossierHTML(d) {
   const cat = categorieSite(d);
-  const { pct } = completude(d);
   return `<button class="sdl-ligne" data-open="${d.id}">
     <i style="background:${cat.couleur}"></i>
     <span class="sdl-ligne-txt"><b>${esc(d.nom)}</b><small>${esc(d.adresse || "Adresse non renseignée")}</small></span>
-    <span class="sdl-ligne-pct" style="color:${couleurPct(pct)}">${pct} %</span>
   </button>`;
 }
 function barreListeHTML() {
@@ -272,7 +227,6 @@ function render() {
     </div>
   `;
   brancherBarreListe(render);
-  chargerMiniatures();
 
   document.getElementById("sd-new")?.addEventListener("click", async () => {
     const id = await createDossier(nouveauDossier(state.sectionsOrder));
@@ -877,12 +831,10 @@ function renderView(d) {
       ${(() => {
         const secs = (d.sections || []).map((sec, si) => ({ sec, si })).filter(x => x.sec.concerne);
         const nonConcernes = (d.sections || []).filter(x => !x.concerne).length;
-        const { pct, manque } = completude(d);
         if (!secs.length) return "";
         return `
         <div class="sdv-recap">
-          <div class="sdv-recap-tete"><b>🔧 L'essentiel en un coup d'œil</b>
-            <span class="sdv-recap-pct" style="color:${couleurPct(pct)}">Dossier complet à ${pct} %</span></div>
+          <div class="sdv-recap-tete"><b>🔧 L'essentiel en un coup d'œil</b></div>
           <div class="sdv-tuiles">
             ${secs.map(({ sec, si }) => {
               const ok = sectionRemplie(sec);
