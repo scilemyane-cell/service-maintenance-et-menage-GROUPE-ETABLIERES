@@ -412,6 +412,11 @@ function render() {
 
   // ---- Notifications (panneau de droite) ----
   const notifs = [];
+  // Alertes stock (notifications + pastilles des tuiles) : réservées à la
+  // gestion (Super Admin, Admin, Superviseur) — inutiles pour un
+  // technicien ou un agent, qui ne passe pas les commandes.
+  const voitAlertesStock = ["super_admin", "admin", "n1"].includes(mountedUser.role);
+  if (!voitAlertesStock) catsRef = catsRef.map(c => (c.badgeAtelier || c.badgeSites) ? { ...c, badgeAtelier: null, badgeSites: null } : c);
   catsRef.forEach(c => {
     if (c.badgeAtelier) notifs.push({ cat: c.id, icone: "🔧", texte: `${c.badgeAtelier} alerte(s) stock atelier`, niveau: "rouge" });
     if (c.badgeSites) notifs.push({ cat: c.id, icone: "🏢", texte: `${c.badgeSites} alerte(s) stock déporté (sites)`, niveau: "orange" });
