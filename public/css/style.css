@@ -1234,3 +1234,6 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .fj-per-coche.faite .fj-rond{animation:fj-pop .35s ease}
 .fj-semaine{display:flex;flex-direction:column;gap:14px}
 .fj-deja{border-top:1px solid #f0f1f4;padding:10px 4px}.fj-deja summary{cursor:pointer;color:#128077;font-weight:700;font-size:13px}
+.carte-verrou{background:#fff;border:2px solid rgba(0,0,0,.25);border-radius:8px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer;color:#1B2330;box-shadow:0 1px 5px rgba(0,0,0,.2)}
+.carte-verrou.ouvert{background:#fff4dc;border-color:#A87A12;color:#6b4e00}
+.carte-deverrouillee{outline:3px solid #A87A12;outline-offset:-3px}

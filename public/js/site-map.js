@@ -171,6 +171,9 @@ export function initCarteSites(holder, dossiers, options = {}) {
   const { onOpenSite, onStatut, editable = false, onNonPlaces } = options;
   let modePlacement = null;
   let activerPlacement = () => {};
+  // Verrou : par défaut les repères ne bougent pas (évite un déplacement
+  // par erreur). Bouton 🔒/🔓 sur la carte pour autoriser les modifications.
+  let deverrouille = false;
   let detruit = false;
   let map = null;
   const idAbonne = Symbol("carte-sites");
@@ -204,11 +207,36 @@ export function initCarteSites(holder, dossiers, options = {}) {
       };
       legende.addTo(map);
     }
+    if (editable) {
+      const verrou = window.L.control({ position: "topright" });
+      verrou.onAdd = () => {
+        const b = window.L.DomUtil.create("button", "carte-verrou");
+        b.type = "button";
+        const maj = () => {
+          b.textContent = deverrouille ? "🔓 Modification activée" : "🔒 Carte verrouillée";
+          b.classList.toggle("ouvert", deverrouille);
+          b.title = deverrouille ? "Cliquer pour reverrouiller" : "Cliquer pour pouvoir déplacer les repères";
+        };
+        maj();
+        window.L.DomEvent.disableClickPropagation(b);
+        b.addEventListener("click", () => {
+          deverrouille = !deverrouille;
+          maj();
+          Object.values(markers).forEach(m => deverrouille ? m.dragging?.enable() : m.dragging?.disable());
+          holder.classList.toggle("carte-deverrouillee", deverrouille);
+          map.closePopup();
+          if (!deverrouille) { modePlacement = null; holder.classList.remove("carte-placement"); }
+          window.toast?.(deverrouille ? "🔓 Tu peux déplacer les repères. Pense à reverrouiller après." : "🔒 Carte verrouillée");
+        });
+        return b;
+      };
+      verrou.addTo(map);
+    }
     const ajouterMarker = (d) => {
       if (!geoValide(d)) return;
       const cat = categorieSite(d);
-      const m = window.L.marker([d.geo.lat, d.geo.lng], { draggable: editable, title: `${d.nom} — ${cat.label}`, icon: iconeRepere(cat.couleur) }).addTo(map);
-      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}${d.geo.approx ? `<br><i style="color:#9a6700">Position approximative (commune)${editable ? " — fais glisser le repère au bon endroit" : ""}</i>` : ""}${d.geo.manuel ? `<br><i style="color:#1a7f37">Position ajustée à la main</i>` : ""}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}${editable ? `<br><button type="button" data-deplacer-site="${d.id}" style="margin-top:8px;padding:6px 10px;border-radius:7px;border:1px solid #A87A12;background:#fff8e6;color:#6b4e00;font-weight:700;cursor:pointer">📍 Déplacer ce repère</button>` : ""}`);
+      const m = window.L.marker([d.geo.lat, d.geo.lng], { draggable: false, title: `${d.nom} — ${cat.label}`, icon: iconeRepere(cat.couleur) }).addTo(map);
+      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}${d.geo.approx ? `<br><i style="color:#9a6700">Position approximative (commune)${editable ? " — fais glisser le repère au bon endroit" : ""}</i>` : ""}${d.geo.manuel ? `<br><i style="color:#1a7f37">Position ajustée à la main</i>` : ""}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}${editable ? `<br><button type="button" class="carte-btn-deplacer" data-deplacer-site="${d.id}" style="margin-top:8px;padding:6px 10px;border-radius:7px;border:1px solid #A87A12;background:#fff8e6;color:#6b4e00;font-weight:700;cursor:pointer">📍 Déplacer ce repère</button>` : ""}`);
       if (editable) {
         m.on("dragend", async () => {
           const { lat, lng } = m.getLatLng();
@@ -218,6 +246,8 @@ export function initCarteSites(holder, dossiers, options = {}) {
         });
       }
       m.on("popupopen", () => {
+        const btn = document.querySelector(`[data-deplacer-site="${d.id}"]`);
+        if (btn) btn.style.display = deverrouille ? "" : "none";
         document.querySelector(`[data-ouvrir-site="${d.id}"]`)?.addEventListener("click", (e) => {
           e.preventDefault();
           onOpenSite?.(d.id);
@@ -228,6 +258,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
           activerPlacement(d);
         });
       });
+      if (editable && deverrouille) m.dragging?.enable();
       markers[d.id] = m;
     };
 
