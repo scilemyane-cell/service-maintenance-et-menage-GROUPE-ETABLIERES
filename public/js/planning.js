@@ -17,6 +17,7 @@ import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js";
 import { imprimerFicheIsolee } from "./print-fiche.js";
+import { redigerCompteRendu } from "./ia.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 
@@ -194,7 +195,6 @@ function startListeners(container, user, tab) {
 
   unsubs.push(watchPeople((p) => {
     state.people = p;
-    if (!ui.form.technicien && user.role !== "technicien") ui.form.technicien = p.n2[0] || "";
     if (!ui.absForm.person) ui.absForm.person = p.n1[0] || "";
     scheduleRenderAll();
   }));
@@ -2241,9 +2241,17 @@ function attacherPhotosInterventionListeners() {
   });
 }
 
+// Après un ajout / une annulation : formulaire vide, intervenant compris
+// (il doit être choisi à chaque fois, pour éviter d'attribuer une
+// intervention à la mauvaise personne) — sauf pour un technicien, qui ne
+// saisit que pour lui-même.
+function reinitialiserFormIntervention() {
+  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: false });
+  ui.form.technicien = mountedUser?.role === "technicien" ? (mountedUser.nom || mountedUser.email) : "";
+}
+
 function renderInterventions(container, perms) {
   const intervenants = [...state.people.n1, ...state.people.n2];
-  if (!ui.form.technicien && intervenants.length > 0 && !ui.form.appelN1) ui.form.technicien = intervenants[0];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   // Détection des N° d'intervention en double (ex. INT-00013 attribué deux
   // fois) : ça n'arrive plus tout seul depuis le contrôle d'unicité ajouté
@@ -2308,7 +2316,15 @@ function renderInterventions(container, perms) {
           <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calcul auto"></label>
         </div>
         <div class="iv-section">Détails</div>
-        <label class="iv-desc"><input id="f-desc" value="${esc(ui.form.description)}" placeholder="Ce qui a été fait, en quelques mots…"></label>
+        <label class="iv-desc"><input id="f-desc" value="${esc(ui.form.description)}" placeholder="Notes rapides : ce qui a été constaté et fait…"></label>
+        <div class="iv-cr">
+          <div class="iv-cr-tete">
+            <span>📝 Compte rendu <small>(optionnel)</small></span>
+            <button type="button" class="iv-ia" id="f-ia">✨ Rédiger avec l'IA</button>
+          </div>
+          <textarea id="f-cr" rows="4" placeholder="Rédigé automatiquement à partir des notes et des champs ci-dessus — modifiable avant d'enregistrer.">${esc(ui.form.compteRendu || "")}</textarea>
+          <div id="f-ia-statut" class="iv-ia-statut"></div>
+        </div>
         <div class="iv-options">
           <label class="iv-option">
             <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""}>
@@ -2380,7 +2396,7 @@ function renderInterventions(container, perms) {
                   <td>${i.technicien ? `<span class="iv-qui"><i style="background:${colorForPerson(i.technicien, state.people)}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">—</span>`}</td>
                   <td class="iv-site"><b>${esc(i.site || "—")}</b>${i.association ? `<small>${esc([i.association, i.groupe].filter(Boolean).join(" · "))}</small>` : ""}</td>
                   <td>${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</td>
-                  <td class="iv-heures">${i.heures} h</td><td class="iv-descr">${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
+                  <td class="iv-heures">${i.heures} h</td><td class="iv-descr">${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${i.compteRendu ? `<details class="iv-cr-voir"><summary>📝 Compte rendu</summary><div>${esc(i.compteRendu).replace(/\n/g, "<br>")}</div></details>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
@@ -2404,6 +2420,22 @@ function renderInterventions(container, perms) {
     attacherPhotosInterventionListeners();
     attacherEcouteursAppelN1();
     document.getElementById("f-sans-deplacement")?.addEventListener("change", (e) => { ui.form.sansDeplacement = e.target.checked; });
+    document.getElementById("f-cr")?.addEventListener("input", (e) => { ui.form.compteRendu = e.target.value; });
+    document.getElementById("f-ia")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget, statut = document.getElementById("f-ia-statut");
+      ui.form.description = document.getElementById("f-desc")?.value ?? ui.form.description;
+      if (!ui.form.description && !ui.form.type && !ui.form.compteRendu) { statut.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques notes (ou le type d'intervention).</span>`; return; }
+      btn.disabled = true; btn.textContent = "⏳ Rédaction…"; statut.textContent = "";
+      try {
+        const texte = await redigerCompteRendu(ui.form);
+        ui.form.compteRendu = texte.replace(/\*\*/g, "");
+        document.getElementById("f-cr").value = ui.form.compteRendu;
+        statut.innerHTML = `<span style="color:var(--teal)">✓ Relis et corrige si besoin avant d'enregistrer.</span>`;
+      } catch (err) {
+        console.error("IA :", err);
+        statut.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+      } finally { btn.disabled = false; btn.textContent = "✨ Rédiger avec l'IA"; }
+    });
     document.getElementById("f-appel-n1")?.addEventListener("change", (e) => {
       ui.form.appelN1 = e.target.checked;
       document.getElementById("interv-n1-zone").innerHTML = appelN1HTML();
@@ -2487,6 +2519,7 @@ function renderInterventions(container, perms) {
         heureDebut: ui.form.heureDebut, heureFin: ui.form.heureFin,
         heuresNuit: nuit, primeDimanche: dimanche && !sansDeplacement ? PRIME_DIMANCHE : 0,
         sansDeplacement,
+        compteRendu: (ui.form.compteRendu || "").trim(),
         photos: ui.form.photos || [],
         appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
         motifAppelN1: ui.form.appelN1 ? ui.form.motifAppelN1 : "", decisionN1: ui.form.appelN1 ? ui.form.decisionN1 : "",
@@ -2511,7 +2544,7 @@ function renderInterventions(container, perms) {
         } else {
           await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
         }
-        ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = []; ui.form.appelN1 = false; ui.form.n1Contacte = ""; ui.form.motifAppelN1 = ""; ui.form.decisionN1 = "";
+        reinitialiserFormIntervention();
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
@@ -2519,7 +2552,7 @@ function renderInterventions(container, perms) {
     });
     document.getElementById("cancel-edit")?.addEventListener("click", () => {
       ui.editingId = null;
-      ui.form.association = ""; ui.form.groupe = ""; ui.form.site = ""; ui.form.type = ""; ui.form.heures = ""; ui.form.heureDebut = ""; ui.form.heureFin = ""; ui.form.description = ""; ui.form.photos = []; ui.form.appelN1 = false; ui.form.n1Contacte = ""; ui.form.motifAppelN1 = ""; ui.form.decisionN1 = "";
+      reinitialiserFormIntervention();
       renderAll();
     });
     container.querySelectorAll("[data-voir-photos-interv]").forEach(btn => btn.addEventListener("click", async () => {
@@ -2550,6 +2583,7 @@ function renderInterventions(container, perms) {
           photos: i.photos || [],
           appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
           sansDeplacement: !!i.sansDeplacement,
+          compteRendu: i.compteRendu || "",
           numero: i.numero || "",
         };
         renderAll();
@@ -2562,9 +2596,15 @@ function renderInterventions(container, perms) {
         const interv = state.interventions.find(i => i.id === id);
         const libelle = interv ? `l'intervention du ${new Date(interv.date).toLocaleDateString("fr-FR")} chez ${interv.site} (${interv.technicien})` : "cette intervention";
         if (!(await window.confirmDialog(`Mettre ${libelle} à la corbeille ? Récupérable pendant 60 jours dans Administration > Corbeille.`, { danger: true, texteValider: "Mettre à la corbeille" }))) return;
+        const avant = state.interventions;
         state.interventions = state.interventions.filter(i => i.id !== id);
         renderAll();
-        await envoyerInterventionCorbeille(id);
+        try { await envoyerInterventionCorbeille(id); window.toast?.("🗑️ Intervention mise à la corbeille"); }
+        catch (e) {
+          console.error("Suppression intervention :", e);
+          state.interventions = avant; renderAll();
+          alert("Suppression impossible : " + (e.message || e) + (String(e.code || e.message).includes("not-found") ? "\n(Cette ligne n'existe pas en base : c'est sans doute une occurrence générée par une récurrence du planning — supprime-la depuis la récurrence.)" : ""));
+        }
       });
     });
     container.querySelectorAll("[data-remettre-attente]").forEach(btn => {

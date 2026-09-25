@@ -1605,3 +1605,14 @@ html:not([data-theme="sombre"]) .sdw-cpt.sdw-vide:not(.sdw-sel){background:linea
 .iv-table td .tag{font-size:11px !important;padding:4px 9px;border-radius:99px;display:inline-block;margin:2px 2px 2px 0;white-space:nowrap}
 .iv-table td .nav-btn[data-remettre-attente]{font-size:11px !important;padding:3px 8px !important;border-radius:99px}
 html[data-theme="sombre"] .iv-statut{color:#f0b429;background:rgba(240,180,41,.14)}
+/* Compte rendu d'intervention + assistant IA */
+.iv-cr{margin-top:10px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--panel)}
+.iv-cr-tete{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-weight:700;font-size:13px}
+.iv-cr-tete small{font-weight:500;color:var(--text-dim)}
+.iv-cr textarea{width:100%;min-height:90px;resize:vertical;background:var(--panel-alt);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font:14px/1.45 inherit}
+.iv-ia{border:none;border-radius:99px;padding:8px 14px;font-weight:800;font-size:12.5px;cursor:pointer;color:#fff;background:linear-gradient(90deg,#6a5cff,#b04dd8,#eb6834);box-shadow:0 4px 14px rgba(120,80,220,.35)}
+.iv-ia:disabled{opacity:.7;cursor:wait}
+.iv-ia-statut{font-size:12px;margin-top:6px}
+.iv-cr-voir{margin-top:4px;font-size:12px}
+.iv-cr-voir summary{cursor:pointer;color:var(--gold);font-weight:700}
+.iv-cr-voir div{margin-top:4px;color:var(--text);line-height:1.45;white-space:normal}
