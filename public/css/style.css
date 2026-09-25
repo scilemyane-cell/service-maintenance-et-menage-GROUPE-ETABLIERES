@@ -1637,3 +1637,9 @@ html[data-theme="sombre"] .iv-statut{color:#f0b429;background:rgba(240,180,41,.1
 html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
 @media (max-width:640px){.iv-mode{grid-template-columns:1fr}}
 .iv-descr{min-width:220px}.iv-actions{flex-wrap:nowrap}
+/* Interventions : la colonne d'actions reste toujours visible et accessible */
+.iv-table-wrap{overflow-x:auto !important}
+.iv-table td:last-child,.iv-table th:last-child{position:sticky;right:0;z-index:1;background:var(--panel);box-shadow:-8px 0 12px -8px rgba(0,0,0,.18)}
+.iv-table tbody tr:hover td:last-child{background:var(--panel)}
+.iv-descr{min-width:180px;max-width:260px}
+.iv-table td,.iv-table th{padding-left:8px;padding-right:8px}
