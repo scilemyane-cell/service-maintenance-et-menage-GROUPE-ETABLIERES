@@ -220,8 +220,25 @@ function startListeners(container, user, tab) {
 let renderAllTimer = null;
 function scheduleRenderAll() {
   if (renderAllTimer) clearTimeout(renderAllTimer);
-  renderAllTimer = setTimeout(() => { renderAllTimer = null; renderAll(); }, 60);
+  renderAllTimer = setTimeout(() => { renderAllTimer = null; renderSiLibre(); }, 60);
 }
+// Pas de ré-affichage pendant une saisie (sur téléphone il fermait le
+// clavier et faisait perdre la frappe) ni pendant une rédaction IA : on
+// attend que l'utilisateur quitte le champ.
+let renderEnAttente = false;
+function saisieEnCoursPlanning() {
+  if (window.__iaEnCours) return true;
+  const a = document.activeElement;
+  return !!(a && mountedContainer && mountedContainer.contains(a) && ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName) && a.type !== "checkbox");
+}
+function renderSiLibre() {
+  if (saisieEnCoursPlanning()) { renderEnAttente = true; return; }
+  renderEnAttente = false;
+  renderAll();
+}
+document.addEventListener("focusout", () => {
+  setTimeout(() => { if (renderEnAttente && !saisieEnCoursPlanning()) renderSiLibre(); }, 120);
+});
 
 export function mountCalendrier(container, user) { startListeners(container, user, "calendrier"); }
 export function mountAbsencesTab(container, user) { startListeners(container, user, "absences"); }
@@ -2171,19 +2188,20 @@ function attacherEcouteursAppelN1() {
   document.getElementById("f-n1-contacte")?.addEventListener("change", (e) => { ui.form.n1Contacte = e.target.value; });
   document.getElementById("f-motif-n1")?.addEventListener("input", (e) => { ui.form.motifAppelN1 = e.target.value; });
   document.getElementById("f-decision-n1")?.addEventListener("input", (e) => { ui.form.decisionN1 = e.target.value; });
-  document.getElementById("f-heure-appel")?.addEventListener("input", (e) => { ui.form.heureAppel = e.target.value; });
+  ["input", "change"].forEach(ev => document.getElementById("f-heure-appel")?.addEventListener(ev, (e) => { ui.form.heureAppel = e.target.value; }));
   document.getElementById("f-duree-appel")?.addEventListener("input", (e) => { ui.form.dureeAppelMin = e.target.value; });
   document.getElementById("f-ia-decision")?.addEventListener("click", async (e) => {
     e.preventDefault();
     const btn = e.currentTarget, statut = document.getElementById("f-ia-decision-statut");
     if (!(ui.form.decisionN1 || "").trim()) { statut.innerHTML = `<span style="color:var(--red)">Tape d'abord la décision en quelques mots.</span>`; return; }
     btn.disabled = true; btn.textContent = "⏳"; statut.textContent = "";
+    window.__iaEnCours = true;
     try {
       ui.form.decisionN1 = (await reformulerDecision(ui.form)).replace(/\*\*/g, "");
       document.getElementById("f-decision-n1").value = ui.form.decisionN1;
       statut.innerHTML = `<span style="color:var(--teal)">✓ Reformulé — modifiable.</span>`;
     } catch (err) { statut.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`; }
-    finally { btn.disabled = false; btn.textContent = "✨"; }
+    finally { window.__iaEnCours = false; if (renderEnAttente) setTimeout(renderSiLibre, 80); const b2 = document.getElementById("f-ia-decision"); if (b2) { b2.disabled = false; b2.textContent = "✨"; } }
   });
 }
 
@@ -2495,6 +2513,7 @@ function renderInterventions(container, perms) {
       ui.form.description = document.getElementById("f-desc")?.value ?? ui.form.description;
       if (!ui.form.description && !ui.form.type && !ui.form.compteRendu) { statut.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques notes (ou le type d'intervention).</span>`; return; }
       btn.disabled = true; btn.textContent = "⏳ Rédaction…"; statut.textContent = "";
+      window.__iaEnCours = true;
       try {
         const texte = await redigerCompteRendu(ui.form);
         ui.form.compteRendu = texte.replace(/\*\*/g, "");
@@ -2503,7 +2522,12 @@ function renderInterventions(container, perms) {
       } catch (err) {
         console.error("IA :", err);
         statut.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
-      } finally { btn.disabled = false; btn.textContent = "✨ Rédiger avec l'IA"; }
+      } finally {
+        window.__iaEnCours = false;
+        if (renderEnAttente) setTimeout(renderSiLibre, 80);
+        const b2 = document.getElementById("f-ia"); if (b2) { b2.disabled = false; b2.textContent = "✨ Rédiger avec l'IA"; }
+        const st2 = document.getElementById("f-ia-statut"); if (st2 && st2 !== statut) st2.innerHTML = statut.innerHTML;
+      }
     });
 
     ["type", "heures", "desc"].forEach(field => {
@@ -2536,8 +2560,10 @@ function renderInterventions(container, perms) {
         if (heuresInput) heuresInput.value = duree;
       }
     }
-    document.getElementById("f-heure-debut").addEventListener("input", onHeureChange);
-    document.getElementById("f-heure-fin").addEventListener("input", onHeureChange);
+    ["input", "change"].forEach(ev => {
+      document.getElementById("f-heure-debut").addEventListener(ev, onHeureChange);
+      document.getElementById("f-heure-fin").addEventListener(ev, onHeureChange);
+    });
     document.getElementById("f-association").addEventListener("change", (e) => {
       ui.form.association = e.target.value;
       ui.form.groupe = "";
@@ -2552,7 +2578,7 @@ function renderInterventions(container, perms) {
     document.getElementById("f-site").addEventListener("change", (e) => { ui.form.site = e.target.value; });
     if (!isLockedTech) {
       const techEl = document.getElementById("f-tech");
-      if (techEl) techEl.addEventListener("input", () => { ui.form.technicien = techEl.value; });
+      if (techEl) ["input", "change"].forEach(ev => techEl.addEventListener(ev, () => { ui.form.technicien = techEl.value; }));
     }
     document.getElementById("add-interv").addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
