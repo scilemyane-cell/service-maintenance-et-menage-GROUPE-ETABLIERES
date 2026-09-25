@@ -830,6 +830,11 @@ function renderFichesEditor(container, dispositif) {
     inp.addEventListener("change", () => {
       const [ri, ti] = inp.dataset.taskFreq.split("-").map(Number);
       site.rooms[ri].tasks[ti].freq = inp.value;
+      // Enregistrement immédiat (sinon la tâche reste "chaque jour" tant
+      // qu'on n'a pas cliqué sur Enregistrer).
+      saveSites(dpState.sites)
+        .then(() => window.toast?.(`✓ Fréquence enregistrée : ${site.rooms[ri].tasks[ti].label}`))
+        .catch(e => alert("Fréquence non enregistrée : " + (e.message || e)));
     });
   });
   container.querySelectorAll("[data-del-task]").forEach(btn => {
@@ -849,7 +854,13 @@ function renderFichesEditor(container, dispositif) {
     site.rooms.push({ name: "Nouvelle pièce", days: [...ALL_DAYS], tasks: [] });
     renderFichesEditor(container, dispositif);
   });
-  document.getElementById("pf-save").addEventListener("click", async () => { await saveSites(dpState.sites); });
+  document.getElementById("pf-save").addEventListener("click", async (e) => {
+    const b = e.currentTarget; const txt = b.textContent;
+    b.disabled = true; b.textContent = "⏳ Enregistrement…";
+    try { await saveSites(dpState.sites); b.textContent = "✓ Enregistré"; window.toast?.("✓ Modifications enregistrées"); }
+    catch (err) { b.textContent = txt; alert("Échec de l'enregistrement : " + (err.message || err)); }
+    finally { setTimeout(() => { b.disabled = false; b.textContent = txt; }, 1500); }
+  });
 }
 
 function renderAccesEditor(container, dispositif) {

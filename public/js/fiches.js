@@ -264,7 +264,9 @@ function basculerPeriodique(site, data, id, key, fait) {
   if (!data.periodiques) data.periodiques = {};
   const liste = new Set(data.periodiques[cle] || []);
   if (fait) liste.add(iso); else liste.delete(iso);
-  if (liste.size) data.periodiques[cle] = [...liste].sort(); else delete data.periodiques[cle];
+  // Liste vide plutôt que suppression : l'enregistrement fusionne les
+  // champs, une clé supprimée resterait en base (décoche perdue).
+  data.periodiques[cle] = [...liste].sort();
   // Mise à jour locale immédiate (sans attendre le retour de Firestore).
   const i = state.fiches.findIndex(f => f.id === id);
   if (i >= 0) state.fiches[i] = { ...state.fiches[i], periodiques: { ...data.periodiques } };
