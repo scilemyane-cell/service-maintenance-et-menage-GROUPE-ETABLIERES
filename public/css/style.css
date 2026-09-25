@@ -945,3 +945,79 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
   .cc-entete{ gap:10px; }
   .cc-horloge{ text-align:left; }
 }
+
+/* ================================================================
+   PILOTAGE ÉNERGIE (tableau de bord Relevé compteur) — style rapport
+   ================================================================ */
+.content:has(.pe){ max-width:1360px; }
+.pe{ --pe-bleu:#2a78d6; --pe-ligne:#E4E6EA; --pe-grille:#EEF0F3; --pe-txt:#0b0b0b; --pe-txt2:#52514e; --pe-muet:#8A8D93;
+  --pe-vert:#1a7f37; --pe-vert-bg:#E8F5EC; --pe-rouge:#c62828; --pe-rouge-bg:#FDECEC; --pe-ambre:#9a6700; --pe-ambre-bg:#FFF6DC;
+  color:var(--pe-txt); font-family:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif; font-size:14px; }
+.pe-entete{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.pe-entete h1{ margin:6px 0 0; font-size:20px; font-weight:650; letter-spacing:-.01em; color:var(--pe-txt); }
+.pe-entete p{ margin:2px 0 0; color:var(--pe-txt2); font-size:13px; }
+.pe-retour{ font-size:12px; }
+.pe-filtres{ display:flex; gap:8px; flex-wrap:wrap; }
+.pe-filtres > button, .pe-filtres select{ font:inherit; font-size:13px; background:#fff; border:1px solid var(--pe-ligne); border-radius:8px; padding:7px 12px; color:var(--pe-txt); cursor:pointer; max-width:220px; }
+.pe-seg{ display:inline-flex; border:1px solid var(--pe-ligne); border-radius:8px; overflow:hidden; background:#fff; }
+.pe-seg button{ font:inherit; font-size:13px; border:none; border-right:1px solid var(--pe-ligne); background:#fff; padding:7px 12px; cursor:pointer; color:var(--pe-txt); }
+.pe-seg button:last-child{ border-right:none; }
+.pe-seg .pe-on, .pe-chips .pe-on{ background:#EEF4FC; color:var(--pe-bleu); font-weight:600; }
+.pe-carte{ background:#fff; border:1px solid var(--pe-ligne); border-radius:12px; padding:16px; min-width:0; }
+.pe-kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:12px; }
+.pe-lab{ font-size:12px; color:var(--pe-txt2); display:flex; align-items:center; gap:6px; }
+.pe-lab i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+.pe-val{ font-size:28px; font-weight:650; margin:6px 0 4px; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.pe-val small{ font-size:13px; font-weight:500; color:var(--pe-txt2); margin-left:4px; }
+.pe-delta{ font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; display:inline-flex; gap:4px; white-space:nowrap; }
+.pe-hausse{ background:var(--pe-rouge-bg); color:var(--pe-rouge); }
+.pe-baisse{ background:var(--pe-vert-bg); color:var(--pe-vert); }
+.pe-sous{ font-size:12px; color:var(--pe-muet); margin-left:6px; }
+.pe-muet{ color:var(--pe-muet); }
+.pe-deux{ display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:12px; margin-bottom:12px; }
+.pe h2{ font-size:14px; font-weight:650; margin:0 0 2px; color:var(--pe-txt); }
+.pe-st{ font-size:12px; color:var(--pe-txt2); margin:0 0 12px; }
+.pe-titre-graphe{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.pe-chips{ display:flex; gap:6px; flex-wrap:wrap; align-items:flex-start; }
+.pe-chips button{ font:inherit; font-size:12px; border:1px solid var(--pe-ligne); background:#fff; border-radius:999px; padding:4px 10px; cursor:pointer; color:var(--pe-txt); display:inline-flex; align-items:center; gap:6px; }
+.pe-chips i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+.pe-legende{ display:flex; gap:14px; font-size:12px; color:var(--pe-txt2); margin:4px 0 6px; }
+.pe-legende i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+.pe-graphe{ width:100%; height:auto; display:block; }
+.pe-graphe text{ font-family:inherit; }
+.pe-table-vue{ margin-top:8px; font-size:12px; color:var(--pe-txt2); }
+.pe-table-vue summary{ cursor:pointer; }
+.pe-table-vue table{ width:100%; border-collapse:collapse; margin-top:6px; }
+.pe-table-vue td, .pe-table-vue th{ padding:4px 6px; border-bottom:1px solid var(--pe-grille); background:none; }
+.pe-anom{ display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--pe-grille); }
+.pe-anom:last-child{ border-bottom:none; }
+.pe-anom b{ font-size:13px; } .pe-anom p{ margin:1px 0 0; font-size:12px; color:var(--pe-txt2); }
+.pe-ic{ width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; font-weight:700; }
+.pe-ic-crit{ background:var(--pe-rouge-bg); color:var(--pe-rouge); } .pe-ic-warn{ background:var(--pe-ambre-bg); color:var(--pe-ambre); } .pe-ic-good{ background:var(--pe-vert-bg); color:var(--pe-vert); }
+.pe-clic{ cursor:pointer; } .pe-anom.pe-clic:hover b{ color:var(--pe-bleu); }
+.pe-scroll{ overflow-x:auto; }
+.pe-table{ width:100%; border-collapse:collapse; font-size:13px; min-width:760px; }
+.pe-table th{ text-align:left; font-size:11px; font-weight:600; color:var(--pe-txt2); text-transform:uppercase; letter-spacing:.04em; padding:8px; border:none; border-bottom:1px solid var(--pe-ligne); background:none; cursor:pointer; white-space:nowrap; user-select:none; }
+.pe-table th:hover{ color:var(--pe-bleu); }
+.pe-table td{ padding:9px 8px; border:none; border-bottom:1px solid var(--pe-grille); background:none; }
+.pe-table .n, .pe-table-vue .n{ text-align:right; font-variant-numeric:tabular-nums; }
+.pe-table tbody tr:hover td{ background:#F7F9FC; }
+.pe-couv{ height:8px; border-radius:4px; background:var(--pe-grille); overflow:hidden; width:80px; display:inline-block; vertical-align:middle; margin-right:6px; }
+.pe-couv span{ display:block; height:100%; background:var(--pe-bleu); border-radius:4px; }
+.pe-badge{ font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+.pe-b-ok{ background:var(--pe-vert-bg); color:var(--pe-vert); } .pe-b-ko{ background:var(--pe-rouge-bg); color:var(--pe-rouge); } .pe-b-w{ background:var(--pe-ambre-bg); color:var(--pe-ambre); }
+.pe-retards > div{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--pe-grille); font-size:13px; }
+.pe-tip{ position:fixed; pointer-events:none; background:#fff; border:1px solid var(--pe-ligne); border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 6px 18px rgba(0,0,0,.12); display:none; z-index:50; }
+.pe-tip b{ display:block; margin-bottom:2px; }
+.pe-tip .pe-hausse, .pe-tip .pe-baisse{ background:none; font-weight:600; }
+@media (max-width:900px){ .pe-deux{ grid-template-columns:minmax(0,1fr); } .pe-val{ font-size:24px; } }
+@media print{
+  .topbar, .tabs, .pe-filtres, .pe-retour, [data-pe-relever], .pe-table-vue{ display:none !important; }
+  .pe-carte{ break-inside:avoid; border-color:#ccc; }
+  body{ background:#fff !important; }
+}
+/* Accueil : contour rouge de survol entièrement visible (la mosaïque défile
+   et rognait le bord extérieur des tuiles en périphérie) */
+.accueil-gmao .gh-tuiles{ padding:4px; margin:-4px; }
+.gh-tuile:hover{ outline:2px solid var(--gh-rouge); outline-offset:-2px; }
+.pe-table td:nth-last-child(2), .pe-table td:last-child{ white-space:nowrap; }

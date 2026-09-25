@@ -26,7 +26,7 @@ import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
-import { renderCentreControle } from "./compteurs-dashboard.js";
+import { renderPilotage } from "./compteurs-dashboard.js";
 import {
   enqueuePendingReleve, estErreurReseau, demarrerSyncAuto, countPendingReleves, onQueueChange,
 } from "./offline-queue.js";
@@ -1140,15 +1140,12 @@ async function renderStats() {
   }
   if (ui.screen !== "stats") return; // l'utilisateur a changé d'écran pendant le chargement
 
-  // Centre de contrôle énergie (voir compteurs-dashboard.js).
-  if (!state.compteurs.some(c => c.type === statsTypeTop)) statsTypeTop = state.compteurs[0]?.type || "eau";
-  renderCentreControle(mountedContainer, {
+  // Pilotage énergie (voir compteurs-dashboard.js).
+  renderPilotage(mountedContainer, {
     compteurs: state.compteurs, sites: state.sites, associations: state.associations || [], releves: statsReleves,
-    typeTop: statsTypeTop,
     onRetour: () => { ui.screen = "liste"; render(); },
     onRelever: (id) => ouvrirReleve(id, null),
     onOuvrirSite: (id) => { ui.screen = "liste"; ui.siteSelectionne = id; ui.focusSiteId = id; render(); },
-    onTypeTop: (t) => { statsTypeTop = t; render(); },
   });
 }
 
