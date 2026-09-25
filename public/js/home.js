@@ -433,12 +433,7 @@ function render() {
       ${transfertBannerHTML(next, confirmedRecord)}
 
       <div class="gh-entete">
-        <div class="gh-date">
-          <span class="gh-horloge" id="gh-heure">🕘 ${heure}</span>
-          <span class="gh-jour"><span>${esc(jour)}</span> <b>${today.getDate()}</b><br>${today.toLocaleDateString("fr-FR", { month: "long" })}</span>
-        </div>
-        <img src="img/logo-etablieres.png" alt="Groupe Établières" class="gh-logo">
-        <div class="gh-bonjour">Bonjour <b>${esc(mountedUser.nom || mountedUser.email)}</b></div>
+        <img src="img/logo-etablieres-transparent.png" alt="Groupe Établières" class="gh-logo">
       </div>
 
       <div class="gh-grille ${afficherSites ? "" : "gh-sans-sites"}">

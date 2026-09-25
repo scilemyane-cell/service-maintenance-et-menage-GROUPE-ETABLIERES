@@ -394,7 +394,37 @@
     const adminCat = cats.find(c => c.id === "administration");
     const voitAdministration = adminCat && categorySubtabsFor(adminCat, eff).length > 0;
 
-    app.innerHTML = `
+    // Accueil : en-tête au format de la GMAO Camileia (date/heure en haut à
+    // gauche, menu utilisateur en haut à droite, fond marine) pour une
+    // continuité visuelle entre les deux outils.
+    document.body.classList.toggle("accueil-gmao", !category);
+    // Accueil toujours sombre (comme Camileia), modules toujours en clair.
+    document.documentElement.dataset.theme = category ? "clair" : "sombre";
+    const maintenant = new Date();
+    const enteteAccueil = `
+      <header class="topbar-gmao">
+        <div class="gh-date">
+          <span class="gh-horloge" id="gh-heure">🕘 ${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+          <span class="gh-cal">📅</span>
+          <span class="gh-jour"><span>${maintenant.toLocaleDateString("fr-FR", { weekday: "short" })}</span> <b>${maintenant.getDate()}</b><br>${maintenant.toLocaleDateString("fr-FR", { month: "long" })}</span>
+        </div>
+        <div class="gh-user">
+          <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><span class="gh-user-ico">👤</span> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <span class="gh-user-chev">⌄</span></button>
+          <div class="gh-user-pop" id="gh-user-pop" hidden>
+            <p class="gh-user-role">${escapeHtml(roleLabel(currentUser.role))}</p>
+            ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
+            ${voitAdministration ? `<button class="nav-btn" id="admin-btn">⚙️ Administration</button>` : ""}
+            <button class="logout-btn" id="logout-btn">Se déconnecter</button>
+          </div>
+        </div>
+      </header>`;
+
+    app.innerHTML = !category ? `
+      ${enteteAccueil}
+      ${eff.apercu ? `
+      <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
+      <main class="content" id="content"></main>
+    ` : `
       <header class="topbar">
         <div class="topbar-title">
           ${category ? `<button class="back-btn" id="back-home">← Accueil</button>` : ""}
@@ -412,7 +442,6 @@
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
           ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
           ${voitAdministration ? `<button class="nav-btn gear-btn ${currentCategory === "administration" ? "active" : ""}" id="admin-btn" title="Administration">⚙️</button>` : ""}
-          <button class="nav-btn" id="theme-btn" title="Changer l'apparence (propre à cet appareil)">${THEME_LABELS[getStoredTheme()]}</button>
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
       </header>
@@ -427,10 +456,14 @@
     `;
 
     document.getElementById("logout-btn").addEventListener("click", () => logout());
-    document.getElementById("theme-btn").addEventListener("click", (e) => {
+    document.getElementById("theme-btn")?.addEventListener("click", (e) => {
       cycleTheme();
       e.currentTarget.textContent = THEME_LABELS[getStoredTheme()]; // mise à jour du libellé seule, sans re-render de l'écran en cours (évite de perdre une saisie non enregistrée)
     });
+    const userBtn = document.getElementById("gh-user-btn"), userPop = document.getElementById("gh-user-pop");
+    userBtn?.addEventListener("click", (e) => { e.stopPropagation(); userPop.hidden = !userPop.hidden; });
+    userPop?.addEventListener("click", (e) => e.stopPropagation());
+    document.addEventListener("click", () => { if (userPop) userPop.hidden = true; }, { once: true });
     document.getElementById("admin-btn")?.addEventListener("click", () => {
       if (currentCategory === "administration") { currentCategory = null; currentSubtab = null; }
       else { currentCategory = "administration"; currentSubtab = null; }

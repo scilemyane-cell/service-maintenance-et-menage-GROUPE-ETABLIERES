@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@500&family=Montserrat:wght@400;500;600;700;800&display=swap');
 :root{
   --bg:#0B111C; --bg-grad:#0E1626; --panel:#131C2B; --panel-alt:#1A2537; --border:#243247;
   --text:#EAEFF7; --text-dim:#7C8BA3; --gold:#D9B24C; --teal:#3FB6AC;
@@ -665,3 +665,58 @@ button.gh-notif:hover{ background:#FFF2F5; }
 @keyframes gh-tremble{ from{ transform:rotate(-.6deg); } to{ transform:rotate(.6deg); } }
 .gh-tuile-place{ border:2px dashed var(--gh-rouge,#E4104B); border-radius:6px; background:rgba(228,16,75,.08); }
 .gh-reorg-aide{ font-size:12px; color:var(--text); align-self:center; }
+
+/* ================================================================
+   Continuité visuelle avec Camileia (accueil) — couleurs relevées sur
+   l'écran d'accueil Camileia : fond marine #05172B, rouge #EC0440,
+   panneaux gris clair #DFDFDF, police Montserrat.
+   ================================================================ */
+body.accueil-gmao{ background:#05172B !important; }
+body.accueil-gmao #app{ background:#05172B; }
+body.accueil-gmao .content.content-accueil{ max-width:none; padding:0 8px 16px; }
+.accueil-gmao .gh, .topbar-gmao{ font-family:"Montserrat", system-ui, sans-serif; }
+.gh{ --gh-rouge:#EC0440; --gh-rouge-fonce:#860D38; --gh-marine:#05172B; }
+
+.topbar-gmao{ display:flex; justify-content:space-between; align-items:flex-start; background:transparent; position:relative; z-index:20; }
+.topbar-gmao .gh-date{ margin:0; border-radius:0; background:#EC0440; color:#fff; display:flex; align-items:center; gap:14px; padding:12px 18px; font-family:"Montserrat", system-ui, sans-serif; }
+.topbar-gmao .gh-horloge{ font-size:16px; font-weight:700; }
+.topbar-gmao .gh-cal{ font-size:30px; line-height:1; }
+.topbar-gmao .gh-jour{ font-size:12px; font-weight:600; line-height:1.2; }
+.topbar-gmao .gh-jour b{ font-size:20px; }
+.gh-user{ position:relative; padding:22px 18px 0 0; }
+.gh-user-btn{ background:none; border:none; color:#fff; font-family:inherit; font-size:17px; cursor:pointer; display:flex; align-items:center; gap:8px; }
+.gh-user-btn b{ font-weight:700; text-transform:capitalize; }
+.gh-user-ico{ font-size:20px; }
+.gh-user-chev{ font-size:16px; opacity:.8; }
+.gh-user-pop{ position:absolute; right:14px; top:58px; background:#fff; color:#1B2330; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.45); padding:12px; display:flex; flex-direction:column; gap:8px; min-width:240px; }
+.gh-user-pop[hidden]{ display:none; }
+.gh-user-role{ margin:0; font-size:11px; color:#5A6070; text-transform:uppercase; letter-spacing:.05em; }
+.gh-user-pop .nav-btn, .gh-user-pop .logout-btn, .gh-user-pop select{ width:100%; text-align:left; background:#F2F3F5; color:#1B2330; border:1px solid #D6D9DF; border-radius:7px; padding:8px 10px; font-size:13px; font-family:inherit; max-width:none; }
+.gh-user-pop .logout-btn{ background:#EC0440; color:#fff; border-color:#EC0440; text-align:center; }
+
+.accueil-gmao .gh-entete{ display:flex; justify-content:center; padding:24px 0 18px; }
+.accueil-gmao .gh-logo{ height:78px; background:none; }
+
+.accueil-gmao .gh-rouge{ background:linear-gradient(180deg,#ED0541 0%,#BE083B 12%,#860D38 28%,#4B1232 42%,#11162C 58%,#05172B 72%); border:1px solid #EC0440; border-radius:22px; }
+.accueil-gmao .gh-panneau-clair, .accueil-gmao .gh-notifs-corps{ background:#DFDFDF; border-radius:22px; }
+.accueil-gmao .gh-compteurs b{ color:#EC0440; font-size:26px; }
+.accueil-gmao .gh-compteurs span{ font-size:17px; }
+.accueil-gmao .gh-favoris h3{ font-size:18px; font-weight:600; }
+.accueil-gmao .gh-favori button:first-child{ color:#EC0440; font-size:17px; font-weight:600; }
+.accueil-gmao .gh-notifs h3{ font-size:20px; font-weight:700; }
+.accueil-gmao .gh-tuile{ border-radius:3px; }
+.accueil-gmao .gh-tuile-label{ font-size:13px; font-weight:700; }
+
+@media (min-width:1401px){
+  .accueil-gmao .gh-grille{ grid-template-columns:minmax(300px,1.9fr) minmax(220px,1fr) minmax(0,2.4fr) minmax(260px,1.1fr); }
+  .accueil-gmao .gh-tuiles{ grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .accueil-gmao .gh-tuile{ aspect-ratio:122/98; }
+}
+@media (max-width:720px){
+  .topbar-gmao .gh-date{ padding:8px 12px; gap:8px; }
+  .topbar-gmao .gh-cal{ font-size:22px; }
+  .gh-user{ padding-top:12px; }
+  .gh-user-btn{ font-size:14px; }
+  .accueil-gmao .gh-entete{ padding:12px 0; }
+  .accueil-gmao .gh-logo{ height:56px; }
+}
