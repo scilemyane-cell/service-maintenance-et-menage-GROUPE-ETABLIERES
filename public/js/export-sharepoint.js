@@ -25,6 +25,11 @@ const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 function todayStr() {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
+// Archives : une seule copie par mois (la dernière du mois remplace les
+// précédentes du même mois).
+function moisStr() {
+  return new Date().toISOString().slice(0, 7); // YYYY-MM
+}
 
 // Empreinte compacte du contenu des lignes — sert à détecter si les
 // données ont changé depuis le dernier export, pour ne créer une archive
@@ -145,12 +150,12 @@ async function genererEtEnvoyerPdf(token, dossierSegments, nomFichier, titre, li
 
   const emp = empreinte(lignes);
   if (dernieresEmpreintes[cleEmpreinte] !== emp) {
-    const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
+    const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${moisStr()}.pdf`;
     const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
     await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
     try {
       const blobExcel = genererExcel(titre, lignes);
-      const nomArchiveExcel = `${nomFichierExcel.replace(/\.xlsx$/, "")}_${todayStr()}.xlsx`;
+      const nomArchiveExcel = `${nomFichierExcel.replace(/\.xlsx$/, "")}_${moisStr()}.xlsx`;
       const fileArchiveExcel = new File([blobExcel], nomArchiveExcel, { type: blobExcel.type });
       await uploadToDrive(fileArchiveExcel, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchiveExcel });
     } catch (e) {
@@ -536,7 +541,7 @@ async function exporterPdfParCompteur(token, dernieresEmpreintes) {
     const cleEmpreinte = `Compteur/${compteur.id}`;
     const emp = empreinte(releves.map(r => ({ v: r.valeurs, d: r.createdAt })));
     if (dernieresEmpreintes[cleEmpreinte] !== emp) {
-      const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${todayStr()}.pdf`;
+      const nomArchive = `${nomFichier.replace(/\.pdf$/, "")}_${moisStr()}.pdf`;
       const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
       await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
       dernieresEmpreintes[cleEmpreinte] = emp;
@@ -638,7 +643,7 @@ async function exporterCodesMasterlock(token, dernieresEmpreintes) {
   const cleEmpreinte = "CodesMasterlock";
   const emp = empreinte(codes.map(c => ({ nom: c.nom, code: c.code, notes: c.notes, site: c.dossierNom })));
   if (dernieresEmpreintes[cleEmpreinte] !== emp) {
-    const nomArchive = `Codes_masterlock_${todayStr()}.pdf`;
+    const nomArchive = `Codes_masterlock_${moisStr()}.pdf`;
     const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
     await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
     dernieresEmpreintes[cleEmpreinte] = emp;
@@ -655,7 +660,6 @@ const MODULES = [
   { dossier: ["Stock Ménage"], fichier: "Sorties_stock_menage.pdf", titre: "Sorties de stock ménage (École/Agropolis, par site)", extraire: extraireSortiesStockMenage },
   { dossier: ["Interventions"], fichier: "Interventions.pdf", titre: "Interventions", extraire: extraireInterventions },
   { dossier: ["Menage"], fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
-  { dossier: ["Relevé de compteur"], fichier: "Releves_compteurs.pdf", titre: "Relevés de compteurs (tous sites)", extraire: extraireRelevesCompteurs },
 ];
 
 // Déclenchée automatiquement à chaque connexion à l'appli (voir
@@ -677,7 +681,6 @@ export async function runDailyExportIfNeeded() {
       const lignes = await mod.extraire();
       await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
     }
-    await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
     await exporterPdfParCompteur(token, dernieresEmpreintes);
     await exporterCodesMasterlock(token, dernieresEmpreintes);
 
@@ -700,8 +703,6 @@ export async function exporterMaintenant(getTokenInteractif, onProgress) {
     const lignes = await mod.extraire();
     await genererEtEnvoyerPdf(token, mod.dossier, mod.fichier, mod.titre, lignes, dernieresEmpreintes);
   }
-  onProgress?.("Relevés de compteurs (détail par site)");
-  await exporterRelevesCompteursParSite(token, dernieresEmpreintes);
   onProgress?.("Relevés de compteurs (un PDF par compteur, avec courbe)");
   await exporterPdfParCompteur(token, dernieresEmpreintes);
   onProgress?.("Codes Masterlock");

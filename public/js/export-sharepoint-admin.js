@@ -7,7 +7,7 @@
 import { esc } from "./astreinte-logic.js";
 import { getStatutExport, exporterMaintenant } from "./export-sharepoint.js";
 import { getGraphToken } from "./graph-auth.js";
-import { listerDossierDrive, nomSegmentDrive, deleteDriveItem } from "./sharepoint-storage.js";
+import { listerDossierDrive, nomSegmentDrive, deleteDriveItem, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 
 let mountedContainer = null;
@@ -34,7 +34,7 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Un rapport PDF des données (stock central, stock par site, historique des inventaires, sorties de stock par site, sorties de stock ménage École/Agropolis, interventions, fiches de traçabilité ménage, relevés de compteurs, codes Masterlock) est envoyé automatiquement vers SharePoint à chaque connexion à l'appli — en plus du stockage principal dans l'appli, pas à la place. Chaque module a son propre sous-dossier dans "ExportsDonnees" (Stock, Stock Ménage, Interventions, Menage, Relevé de compteur, Codes Masterlock). Pour les compteurs : un récapitulatif global, un détail par site, et un PDF individuel par compteur (avec courbe d'évolution et historique découpé par année scolaire) rangé par type. Un sous-dossier "Archives" est créé à chaque niveau pour les copies datées, uniquement si les données ont changé depuis le dernier export. Nécessite qu'une session Microsoft soit déjà active dans le navigateur pour se déclencher tout seul.</p>
+      <p class="hint">Un rapport PDF des données (stock central, stock par site, historique des inventaires, sorties de stock par site, sorties de stock ménage École/Agropolis, interventions, fiches de traçabilité ménage, relevés de compteurs, codes Masterlock) est envoyé automatiquement vers SharePoint à chaque connexion à l'appli — en plus du stockage principal dans l'appli, pas à la place. Chaque module a son propre sous-dossier dans "ExportsDonnees" (Stock, Stock Ménage, Interventions, Menage, Compteurs, Codes Masterlock). Compteurs : un seul endroit, « Compteurs / [Site] / [Type] », avec un PDF par compteur (courbe + historique par année scolaire). Un sous-dossier "Archives" garde une seule copie par mois (la plus récente), uniquement si les données ont changé. Nécessite qu'une session Microsoft soit déjà active dans le navigateur pour se déclencher tout seul.</p>
 
       <div class="stat-chip ok" style="width:fit-content">
         ${state.statut?.lastExportAt ? `✓ Dernier export : ${new Date(state.statut.lastExportAt).toLocaleString('fr-FR')}` : "Aucun export effectué pour l'instant"}
@@ -45,8 +45,8 @@ function render() {
       <div id="exa-status" style="font-size:12px"></div>
 
       <div class="form-card">
-        <h3 style="margin:0 0 6px;font-size:15px">🧹 Doublons dans les dossiers de site</h3>
-        <p class="hint" style="margin:0 0 10px">Recherche dans SharePoint (DossiersDeSite) les anciennes copies du PDF « Dossier technique » : il ne doit en rester qu'une par site. Les copies supprimées vont dans la corbeille SharePoint (récupérables 93 jours). Les photos et documents ne sont jamais touchés.</p>
+        <h3 style="margin:0 0 6px;font-size:15px">🧹 Doublons SharePoint</h3>
+        <p class="hint" style="margin:0 0 10px">Recherche les anciennes copies du PDF « Dossier technique » (une seule par site), les archives en trop (une seule par mois) et l'ancien dossier « Relevé de compteur » (les relevés sont désormais uniquement dans « Compteurs / [Site] »). Les copies supprimées vont dans la corbeille SharePoint (récupérables 93 jours). Les photos et documents ne sont jamais touchés.</p>
         <button class="nav-btn" id="exa-doublons" ${doublons.etat === "scan" || doublons.etat === "suppr" ? "disabled" : ""}>${doublons.etat === "scan" ? "⏳ Recherche…" : "🔍 Rechercher les doublons"}</button>
         ${doublonsHTML()}
       </div>
@@ -87,7 +87,7 @@ function listesDoublonsHTML() {
       <div style="margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
         ${l.map((d, i) => `<label style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-top:${i ? "1px solid var(--border)" : "none"};font-size:13px">
           <input type="checkbox" data-doublon="${i}" checked style="width:18px;height:18px">
-          <span style="flex:1;min-width:0"><b>${esc(d.site)}</b> — <a href="${esc(d.webUrl)}" target="_blank" rel="noopener">${esc(d.name)}</a><br><small style="color:var(--text-dim)">modifié le ${new Date(d.lastModifiedDateTime).toLocaleDateString("fr-FR")}</small></span>
+          <span style="flex:1;min-width:0"><b>${esc(d.site)}</b>${d.folder ? " 📁" : ""} — <a href="${esc(d.webUrl)}" target="_blank" rel="noopener">${esc(d.name)}</a><br><small style="color:var(--text-dim)">modifié le ${new Date(d.lastModifiedDateTime).toLocaleDateString("fr-FR")}</small></span>
         </label>`).join("")}
       </div>
       <button class="add-btn" id="exa-doublons-suppr" style="margin-top:10px" ${doublons.etat === "suppr" ? "disabled" : ""}>🗑️ Supprimer les ${l.length} copie(s) cochée(s)</button>` : ""}
@@ -130,6 +130,7 @@ async function rechercherDoublons() {
       pdfs.sort((a, b) => (b.name.toLowerCase() === attendu) - (a.name.toLowerCase() === attendu) || new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
       pdfs.slice(1).forEach(p => doublons.liste.push({ ...p, site: d.nom }));
     }
+    await chercherDoublonsExports();
     doublons.etat = "fini";
     doublons.msg = doublons.liste.length || doublons.orphelins.length
       ? `${doublons.liste.length} ancienne(s) copie(s) de PDF trouvée(s)${doublons.orphelins.length ? ` · ${doublons.orphelins.length} dossier(s) sans site` : ""}.`
@@ -139,4 +140,41 @@ async function rechercherDoublons() {
     doublons.msg = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
   }
   render();
+}
+
+
+// ExportsDonnees : (1) l'ancien dossier "Relevé de compteur" (relevés en
+// double avec "Compteurs") ; (2) dans chaque "Archives", on ne garde que
+// la copie la plus récente de chaque mois.
+async function chercherDoublonsExports() {
+  const racine = (await listerDossierDrive([], EXPORTS_ROOT_FOLDER)) || [];
+  const ancien = racine.find(x => x.folder && x.name.toLowerCase() === "relevé de compteur");
+  if (ancien) doublons.liste.push({ ...ancien, site: "Ancien dossier des relevés (en double avec « Compteurs »)" });
+
+  const parcourir = async (segments, profondeur) => {
+    const items = (await listerDossierDrive(segments, EXPORTS_ROOT_FOLDER)) || [];
+    if (segments[segments.length - 1] === "Archives") {
+      const groupes = new Map();
+      for (const it of items) {
+        if (it.folder) continue;
+        const m = it.name.match(/^(.*)_(\d{4}-\d{2})(?:-\d{2})?\.(pdf|xlsx)$/i);
+        if (!m) continue;
+        const cle = `${m[1]}|${m[2]}|${m[3].toLowerCase()}`;
+        if (!groupes.has(cle)) groupes.set(cle, []);
+        groupes.get(cle).push(it);
+      }
+      for (const liste of groupes.values()) {
+        if (liste.length < 2) continue;
+        liste.sort((a, b) => b.name.localeCompare(a.name) || new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
+        liste.slice(1).forEach(it => doublons.liste.push({ ...it, site: `Archives ${segments.slice(0, -1).join(" / ")}` }));
+      }
+      return;
+    }
+    if (profondeur >= 4) return;
+    for (const f of items.filter(x => x.folder)) {
+      if (ancien && segments.length === 0 && f.id === ancien.id) continue;
+      await parcourir([...segments, f.name], profondeur + 1);
+    }
+  };
+  await parcourir([], 0);
 }
