@@ -765,3 +765,15 @@ body.accueil-gmao .gh-pied{ display:block; position:relative; height:64px; margi
 body.accueil-gmao .gh-pied{ height:46px; background-size:auto 44px; }
 .accueil-gmao .gh-outils{ margin-top:-4px; }
 body.accueil-gmao .content.content-accueil{ padding:0 18px 12px; }
+
+/* Longue liste de favoris (ex. technicien avec tous ses sites) : la liste
+   défile à l'intérieur du cadre, qui garde la même hauteur que les autres
+   blocs — au lieu de déborder sous la silhouette du bas. */
+.accueil-gmao .gh-milieu{ min-height:0; }
+.accueil-gmao .gh-favoris{ min-height:0; overflow:hidden; }
+.accueil-gmao .gh-favoris-liste{ min-height:0; overflow-y:auto; scrollbar-width:thin; padding-right:4px; }
+.accueil-gmao .gh-favori{ padding:5px 0; }
+.accueil-gmao .gh-favori button:first-child{ font-size:15px; line-height:1.2; }
+.accueil-gmao .gh-notifs-corps{ min-height:0; overflow-y:auto; }
+body.accueil-gmao .gh-pied{ flex-shrink:0; }
+@media (max-width:1400px){ .accueil-gmao .gh-favoris-liste{ max-height:320px; } }
