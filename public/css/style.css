@@ -1730,3 +1730,46 @@ html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
 .sy-table{width:100%;border-collapse:collapse;font-size:13px}
 .sy-table th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);text-align:left;padding:6px 6px;border-bottom:1px solid var(--border)}
 .sy-table td{padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text)}
+
+/* ===== Interventions : réglages téléphone ===== */
+@media (max-width:700px){
+  .iv-carte{padding:14px 12px;border-radius:14px}
+  .iv-tete h3{font-size:16px}
+  .iv-section{margin:14px 0 6px}
+  /* 16px mini dans les champs : évite le zoom automatique de l'iPhone */
+  .iv-carte input,.iv-carte select,.iv-carte textarea,.iv-completer input,.iv-completer textarea,.sy-filtres select{font-size:16px !important}
+  .iv-grille,.iv-grille-h{grid-template-columns:1fr 1fr !important;gap:8px}
+  .iv-grille > label:first-child:nth-last-child(odd){grid-column:1 / -1}
+  .iv-n1{padding:10px;gap:8px}
+  .iv-n1 > label:first-child{grid-column:1 / -1}
+  .iv-mode{gap:8px}
+  .iv-mode-btn{padding:10px 12px;gap:10px}
+  .iv-mode-ico{font-size:22px}
+  .iv-cr{padding:10px}
+  .iv-cr-tete{flex-wrap:nowrap}
+  .iv-ia{padding:8px 12px;font-size:12px}
+  .iv-pied{flex-direction:column;align-items:stretch}
+  .iv-boutons{width:100%}
+  .iv-boutons .add-btn{flex:1;padding:14px;font-size:15px}
+  .iv-rappel{flex-wrap:wrap;padding:12px}
+  .iv-rappel .iv-completer-btn{width:100%;height:40px;margin:0}
+  .iv-chips{width:100%}
+  /* Liste des interventions : une carte par intervention au lieu du tableau */
+  .iv-table-wrap{overflow:visible !important;border:none;background:none}
+  .iv-table thead{display:none}
+  .iv-table,.iv-table tbody{display:block;width:100%}
+  .iv-table tbody tr{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px}
+  .iv-table tbody td{display:block;padding:0 !important;border:none !important;min-width:0 !important;max-width:none !important}
+  .iv-table tbody td:empty{display:none}
+  .iv-table tbody td:first-child{grid-column:1 / -1}
+  .iv-table tbody td.iv-descr,.iv-table tbody td:nth-last-child(2),.iv-table tbody td:nth-last-child(3){grid-column:1 / -1}
+  .iv-table td:last-child{position:static !important;box-shadow:none !important;background:none !important;grid-column:1 / -1;border-top:1px solid var(--border) !important;padding-top:8px !important;margin-top:4px}
+  .iv-actions{justify-content:flex-start;flex-wrap:wrap}
+  .iv-ico{width:40px;height:40px}
+  .iv-completer-btn,.iv-suite-btn{height:40px}
+  .iv-completer-ligne{display:block !important;padding:0 !important;border:none !important;background:none !important}
+  .iv-completer-ligne td{grid-column:1 / -1}
+  .iv-completer{padding:12px}
+  .iv-completer-grille{grid-template-columns:1fr 1fr}
+  .iv-completer-pied .add-btn,.iv-completer-pied .nav-btn{flex:1}
+}
