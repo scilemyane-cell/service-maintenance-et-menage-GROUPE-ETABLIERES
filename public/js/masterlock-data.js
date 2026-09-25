@@ -116,7 +116,7 @@ export async function listerSitesPourMasterlock() {
   const snap = await getDocs(collection(db, "sites-dossiers"));
   const list = [];
   snap.forEach((d) => {
-    if (!d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom, association: d.data().association || "", groupe: d.data().groupe || "" });
+    if (!d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom, association: d.data().association || "", groupe: d.data().groupe || "", ordre: d.data().ordre, ordreMasterlock: d.data().ordreMasterlock });
   });
   return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
 }
@@ -199,4 +199,10 @@ export function watchCodesForSite(dossierId, callback) {
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
     callback(list.sort((a, b) => (a.nom || "").localeCompare(b.nom || "")));
   }, (err) => { console.error("watchCodesForSite:", err); callback([]); });
+}
+
+// Ordre d'affichage des boîtes d'un site (glisser-déposer dans l'onglet
+// Codes Masterlock) — simple champ "ordre", sans toucher à l'historique.
+export async function definirOrdreCodes(paires) {
+  await Promise.all(paires.map(({ id, ordre }) => updateDoc(doc(db, CODES, id), { ordre })));
 }

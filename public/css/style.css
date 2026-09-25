@@ -1544,3 +1544,7 @@ html:not([data-theme="sombre"]) .sdw-tuile:not(.sdw-sel){background:linear-gradi
 html:not([data-theme="sombre"]) .sdw-tuile:not(.sdw-sel) .sdw-ville{color:#3a4252}
 html:not([data-theme="sombre"]) .sdw-tuile:not(.sdw-sel) .sdw-tag{text-shadow:0 1px 0 rgba(255,255,255,.6)}
 html:not([data-theme="sombre"]) .sdw-cpt.sdw-vide:not(.sdw-sel){background:linear-gradient(155deg,#eef0f3,#d6dae1) !important}
+/* Masterlock : poignées de réorganisation */
+.mlk-poignee{cursor:grab;user-select:none;font-size:15px;color:var(--text-dim);background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:2px 7px;margin-right:8px;flex:none}
+.mlk-poignee.petite{font-size:13px;padding:0 5px;margin-right:6px;display:inline-block}
+.mlk-site header{align-items:center}

@@ -9,8 +9,28 @@ import { esc } from "./astreinte-logic.js";
 import {
   listerSitesPourMasterlock, listerTousLesCodes, creerCode, modifierCode,
   supprimerCode, nouveauCode, listerHistoriquePourSite, importerCodesDepuisDossiers,
-  CATEGORIES_BOITE,
+  CATEGORIES_BOITE, definirOrdreCodes,
 } from "./masterlock-data.js";
+import { activerGlisserDeposer } from "./drag-reorder.js";
+import { db } from "./firebase-init.js";
+import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const peutOrdonner = () => ["super_admin", "admin", "n1"].includes(mountedUser?.role) && !mountedUser?.apercu;
+// Ordre propre à l'onglet Masterlock (sinon celui des Dossiers de site, puis alphabétique).
+const rangSite = s => s.ordreMasterlock ?? s.ordre ?? null;
+function trierSites(liste) {
+  return [...liste].sort((a, b) => {
+    const ra = rangSite(a), rb = rangSite(b);
+    if (ra != null && rb != null && ra !== rb) return ra - rb;
+    if (ra != null && rb == null) return -1;
+    if (rb != null && ra == null) return 1;
+    return (a.nom || "").localeCompare(b.nom || "", "fr");
+  });
+}
+function codesDuSite(siteId) {
+  return state.codes.filter(c => c.dossierId === siteId).sort((a, b) =>
+    (a.ordre ?? 9999) - (b.ordre ?? 9999) || (a.nom || "").localeCompare(b.nom || "", "fr"));
+}
 import { watchAssociations, trierGroupes } from "./associations-data.js";
 
 let mountedContainer = null;
@@ -50,8 +70,8 @@ function groupedSites(sites) {
     const groupeNames = [...new Set(sitesForAssoc.map(s => s.groupe).filter(Boolean))];
     const groups = [];
     const sansGroupe = sitesForAssoc.filter(s => !s.groupe);
-    if (sansGroupe.length) groups.push({ groupeLabel: null, sites: sansGroupe });
-    trierGroupes(groupeNames).forEach(g => groups.push({ groupeLabel: g, sites: sitesForAssoc.filter(s => s.groupe === g) }));
+    if (sansGroupe.length) groups.push({ groupeLabel: null, sites: trierSites(sansGroupe) });
+    trierGroupes(groupeNames).forEach(g => groups.push({ groupeLabel: g, sites: trierSites(sitesForAssoc.filter(s => s.groupe === g)) }));
     result.push({ assocLabel: assoc.nom, groups });
     sitesForAssoc.forEach(s => usedIds.add(s.id));
   });
@@ -82,6 +102,7 @@ function renderListe() {
   const sitesVisibles = sitesAvecCodes.filter(correspond);
   const focusRecherche = document.activeElement?.id === "mlk-recherche" ? document.activeElement.selectionStart : null;
   const groupes = groupedSites(sitesVisibles);
+  const glisser = peutOrdonner() && !q;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -108,7 +129,7 @@ function renderListe() {
         <h3 class="mlk-assoc">${esc(g.assocLabel)}</h3>
         ${g.groups.map(sub => `
           ${sub.groupeLabel ? `<div class="mlk-groupe">${esc(sub.groupeLabel)}</div>` : ""}
-          <div class="mlk-sites">${sub.sites.map(site => renderSiteBloc(site)).join("")}</div>
+          <div class="mlk-sites" data-sous-sites="${esc(sub.sites.map(x => x.id).join(","))}">${sub.sites.map((site, i) => renderSiteBloc(site, i, glisser)).join("")}</div>
         `).join("")}
       `).join("")}
     </div>
@@ -187,6 +208,33 @@ function renderListe() {
 
   attachAddFormListeners();
   attachEditFormListeners();
+
+  if (!glisser) return;
+  // Glisser-déposer : sites au sein d'un même groupe, et boîtes au sein d'un site.
+  mountedContainer.querySelectorAll("[data-sous-sites]").forEach(conteneur => {
+    const ids = conteneur.dataset.sousSites.split(",");
+    activerGlisserDeposer(conteneur, ":scope > .mlk-site", async (nouvelOrdre) => {
+      const ordonnes = nouvelOrdre.map(i => ids[i]);
+      ordonnes.forEach((id, i) => { const st = state.sites.find(x => x.id === id); if (st) st.ordreMasterlock = i; });
+      try { await Promise.all(ordonnes.map((id, i) => updateDoc(doc(db, "sites-dossiers", id), { ordreMasterlock: i }))); window.toast?.("✓ Ordre des sites enregistré"); }
+      catch (e) { console.error(e); alert("Ordre non enregistré : " + (e.message || e)); }
+      render();
+    });
+  });
+  mountedContainer.querySelectorAll(".mlk-site").forEach(bloc => {
+    const grille = bloc.querySelector(".mlk-boites");
+    if (!grille) return;
+    const siteId = bloc.querySelector("[data-open-add]")?.dataset.openAdd;
+    const codes = codesDuSite(siteId);
+    if (codes.length < 2) return;
+    activerGlisserDeposer(grille, ":scope > .mlk-boite", async (nouvelOrdre) => {
+      const ordonnes = nouvelOrdre.map(i => codes[i]);
+      ordonnes.forEach((c, i) => { c.ordre = i; });
+      try { await definirOrdreCodes(ordonnes.map((c, i) => ({ id: c.id, ordre: i }))); window.toast?.("✓ Ordre des boîtes enregistré"); }
+      catch (e) { console.error(e); alert("Ordre non enregistré : " + (e.message || e)); }
+      render();
+    });
+  });
 }
 
 // Mode "modification en masse" : tous les codes de tous les sites dans
@@ -259,11 +307,12 @@ function renderModeMasse() {
 
 // Bloc d'un site : en-tête (nom + actions) puis une « carte boîte à clés »
 // par code, code masqué par défaut (👁️ pour l'afficher, 📋 pour copier).
-function renderSiteBloc(site) {
-  const codes = state.codes.filter(c => c.dossierId === site.id);
+function renderSiteBloc(site, idx, glisser) {
+  const codes = codesDuSite(site.id);
   return `
-    <section class="mlk-site">
+    <section class="mlk-site" ${glisser ? `data-drag-index="${idx}"` : ""}>
       <header>
+        ${glisser ? `<span class="mlk-poignee" data-drag-handle title="Glisser pour déplacer ce site">☰</span>` : ""}
         <div class="mlk-titre"><h4 title="${esc(site.nom)}">🔐 ${esc(String(site.nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\S+@\S+/g, "").trim())}</h4><small>${codes.length} boîte${codes.length > 1 ? "s" : ""}</small></div>
         <div class="mlk-site-actions">
           <button class="nav-btn" data-open-add="${site.id}" title="Ajouter une boîte à clés">➕</button>
@@ -272,11 +321,11 @@ function renderSiteBloc(site) {
         </div>
       </header>
       <div class="mlk-boites">
-        ${codes.map(c => {
+        ${codes.map((c, ci) => {
           const visible = ui.toutReveler || ui.reveles.has(c.id);
           return `
-          <div class="mlk-boite">
-            <p class="mlk-nom">${esc(c.nom || "Boîte à clés")}</p>
+          <div class="mlk-boite" ${glisser && codes.length > 1 ? `data-drag-index="${ci}"` : ""}>
+            <p class="mlk-nom">${glisser && codes.length > 1 ? `<span class="mlk-poignee petite" data-drag-handle title="Glisser pour déplacer cette boîte">⠿</span>` : ""}${esc(c.nom || "Boîte à clés")}</p>
             <div class="mlk-code ${visible ? "" : "mlk-masque"}">${visible ? esc(c.code || "—") : "••••"}</div>
             ${c.notes ? `<p class="mlk-notes">${esc(c.notes)}</p>` : ""}
             <p class="mlk-maj">Mis à jour le ${formatDate(c.derniereMajAt)} · ${esc(c.derniereMajParNom || "—")}</p>
