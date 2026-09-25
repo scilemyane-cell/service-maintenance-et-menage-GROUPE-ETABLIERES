@@ -1455,3 +1455,26 @@ html:not([data-theme="sombre"]) .sdw-assoc:before{box-shadow:none}
 html:not([data-theme="sombre"]) .sdw .sdl-chip{background:#fff;border-color:#e3e6ec;box-shadow:0 1px 2px rgba(20,30,50,.05)}
 html:not([data-theme="sombre"]) .sdw .sdl-chip.on{background:#0b2140;color:#fff;border-color:#0b2140}
 html:not([data-theme="sombre"]) .sdw .sdl-recherche{background:#fff;border-color:#e3e6ec;box-shadow:0 1px 2px rgba(20,30,50,.05)}
+
+/* Relevé compteur — même style que Dossier de site */
+.sdw-grille-cpt{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:8px}
+.sdw-cpt{min-height:118px;padding:14px 16px 12px}
+.sdw-cpt .sdw-nom{font-size:15px}
+.sdw-cpt svg{width:48px;height:48px}
+.sdw-etat{font-weight:800}
+.sdw-etat.ok{color:#128077 !important;background:rgba(27,175,122,.14) !important}
+.sdw-etat.retard{color:#C23B27 !important;background:rgba(229,83,61,.14) !important}
+html[data-theme="sombre"] .sdw-etat.ok{color:#4cc38a !important}
+html[data-theme="sombre"] .sdw-etat.retard{color:#ff7b6b !important}
+.sdw-cpt.sdw-retard{border-color:color-mix(in srgb,#C23B27 45%,transparent)}
+.sdw-cpt.sdw-vide{opacity:.7}
+.sdw-tuile.sdw-sel{outline:3px solid var(--c);outline-offset:2px;transform:translateY(-2px)}
+.sdw-kpi-alerte b{color:#ff7b6b !important}
+.sdw-outils{position:relative}
+.sdw-outils summary{list-style:none;cursor:pointer}
+.sdw-outils summary::-webkit-details-marker{display:none}
+.sdw-outils-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:30;display:flex;flex-direction:column;gap:6px;background:var(--panel,#fff);border:1px solid var(--border);border-radius:12px;padding:10px;min-width:320px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+html:not([data-theme="sombre"]) .sdw-outils-pop{background:#fff}
+.sdw-outils-pop .nav-btn{width:100%;text-align:left;color:var(--text)}
+html:not([data-theme="sombre"]) .sdw-outils-pop .nav-btn{color:#1B2330;background:#F7F8FA;border-color:#e3e6ec}
+@media (max-width:760px){.sdw-grille-cpt{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.sdw-outils-pop{min-width:260px}}

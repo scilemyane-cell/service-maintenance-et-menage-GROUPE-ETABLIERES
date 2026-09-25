@@ -1,3 +1,5 @@
+import { nomPropre, villeDe, dessinPourSite } from "./sites-visuel.js";
+import { categorieSite } from "./site-map.js";
 // compteurs.js
 // Nouvel onglet indépendant "🎛️ Relevé compteur" : relevés eau/gaz/
 // électricité par site, avec photo obligatoire à chaque relevé et QR
@@ -321,38 +323,62 @@ function renderListe() {
   const siteDetail = state.sites.find(x => x.id === ui.siteSelectionne) || null;
   if (siteDetail) ui.ouverts.add(siteDetail.id);
 
+  const nbRetardTotal = state.compteurs.filter(c => state.sites.some(x => x.id === c.dossierId) && estEnRetard(c)).length;
+  const nbCompteursTotal = state.compteurs.filter(c => state.sites.some(x => x.id === c.dossierId)).length;
   mountedContainer.innerHTML = `
-    <div class="stack">
-      <p class="hint">Relevés eau, gaz, électricité par site, avec photo obligatoire à chaque relevé — activable depuis la fiche d'un dossier de site ("🎛️ Ce site a des compteurs à relever").</p>
+    <div class="stack sdw">
+      <div class="sdw-hero">
+        <div>
+          <h2>Relevé de <span>compteurs</span></h2>
+          <p>Eau, gaz, électricité par site — photo obligatoire à chaque relevé</p>
+        </div>
+        <div class="sdw-kpis">
+          <div><b>${state.sites.length}</b><small>sites</small></div>
+          <div><b>${nbCompteursTotal}</b><small>compteurs</small></div>
+          <div class="${nbRetardTotal ? "sdw-kpi-alerte" : ""}"><b>${nbRetardTotal}</b><small>en retard</small></div>
+          <div class="sdw-actions">
+            <button class="add-btn" id="cpt-voir-stats">📊 Tableau de bord</button>
+            ${peutAntidater(mountedUser) ? `
+            <details class="sdw-outils"><summary class="nav-btn" title="Outils">⚙️</summary>
+              <div class="sdw-outils-pop">
+                <button class="nav-btn" id="cpt-activer-tous">🔧 Activer les compteurs sur tous les dossiers de site</button>
+                <div id="cpt-activer-tous-status" style="font-size:12px"></div>
+                <button class="nav-btn" id="cpt-sync-dossiers">🔁 Ajouter les compteurs existants dans les dossiers de site</button>
+                <div id="cpt-sync-dossiers-status" style="font-size:12px"></div>
+              </div>
+            </details>` : ""}
+          </div>
+        </div>
+      </div>
       ${pendingCount > 0 ? `
         <div class="stat-chip" style="width:fit-content;border-color:var(--gold);color:var(--gold)">
           📡 ${pendingCount} relevé(s) enregistré(s) sur cet appareil, en attente d'envoi (pas de réseau au moment de la saisie) — envoi automatique dès le retour de connexion.
         </div>
       ` : ""}
-      ${peutAntidater(mountedUser) ? `
-        <button class="nav-btn" id="cpt-activer-tous" style="width:fit-content">🔧 Activer les compteurs sur tous les dossiers de site existants</button>
-        <div id="cpt-activer-tous-status" style="font-size:12px"></div>
-        <button class="nav-btn" id="cpt-sync-dossiers" style="width:fit-content">🔁 Ajouter les compteurs existants dans les dossiers de site</button>
-        <div id="cpt-sync-dossiers-status" style="font-size:12px"></div>
-      ` : ""}
-      <button class="nav-btn" id="cpt-voir-stats" style="width:fit-content;border-color:var(--gold);color:var(--gold)">📊 Tableau de bord</button>
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : `
       <div class="cpt-split">
         <div class="cpt-mosaique">
           ${groupes.map(g => `
-            <h3 class="cpt-mos-assoc">${esc(g.assocLabel)}</h3>
+            <h3 class="sdw-assoc" style="--c:${categorieSite(g.groups[0]?.sites[0] || {}).couleur}">${esc(g.assocLabel)} <em>${g.groups.reduce((n, x) => n + x.sites.length, 0)} site(s)</em></h3>
             ${g.groups.map(sub => `
-              ${sub.groupeLabel ? `<div class="cpt-mos-groupe">${esc(sub.groupeLabel)}</div>` : ""}
-              <div class="cpt-mos-grille">
+              ${sub.groupeLabel ? `<div class="sdw-groupe" style="--c:${categorieSite(sub.sites[0] || {}).couleur}">${esc(sub.groupeLabel)}</div>` : ""}
+              <div class="sdw-grille-cpt">
                 ${trierParRetard(sub.sites).map(site => {
                   const nb = state.compteurs.filter(c => c.dossierId === site.id).length;
                   const r = retardDe(site.id);
                   const etat = nb === 0 ? "vide" : r > 0 ? "retard" : "ok";
-                  return `<button class="cpt-vignette cpt-${etat} ${site.id === ui.siteSelectionne ? "cpt-sel" : ""}" data-select-site="${site.id}">
-                    <b title="${esc(site.nom)}">${esc(String(site.nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\S+@\S+/g, "").replace(/\s{2,}/g, " ").trim())}</b>
-                    <span>${nb} compteur${nb > 1 ? "s" : ""}${r > 0 ? ` · <em>${r} en retard</em>` : nb ? " · à jour" : ""}</span>
+                  const cat = categorieSite(site);
+                  return `<button class="sdw-tuile sdw-cpt sdw-${etat} ${site.id === ui.siteSelectionne ? "sdw-sel" : ""}" data-select-site="${site.id}" style="--c:${cat.couleur}">
+                    ${dessinPourSite(site)}
+                    <span class="sdw-tag"><i></i>${esc(cat.cle === "autre" ? (site.association || "Autre") : cat.label)}</span>
+                    <b class="sdw-nom" title="${esc(site.nom)}">${esc(nomPropre(site.nom))}</b>
+                    <small class="sdw-ville">${esc(villeDe(site.adresse) || "")}</small>
+                    <span class="sdw-bas">
+                      <span>🎛️ ${nb}</span>
+                      ${nb === 0 ? `<span class="vide">Aucun compteur</span>` : r > 0 ? `<span class="sdw-etat retard">⚠ ${r} en retard</span>` : `<span class="sdw-etat ok">✓ À jour</span>`}
+                    </span>
                   </button>`;
                 }).join("")}
               </div>
