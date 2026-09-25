@@ -34,7 +34,7 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Un rapport PDF des données (stock central, stock par site, historique des inventaires, sorties de stock par site, sorties de stock ménage École/Agropolis, interventions, fiches de traçabilité ménage, relevés de compteurs, codes Masterlock) est envoyé automatiquement vers SharePoint à chaque connexion à l'appli — en plus du stockage principal dans l'appli, pas à la place. Chaque module a son propre sous-dossier dans "ExportsDonnees" (Stock, Stock Ménage, Interventions, Menage, Compteurs, Codes Masterlock). Compteurs : un seul endroit, « Compteurs / [Site] / [Type] », avec un PDF par compteur (courbe + historique par année scolaire). Un sous-dossier "Archives" garde une seule copie par mois (la plus récente), uniquement si les données ont changé. Nécessite qu'une session Microsoft soit déjà active dans le navigateur pour se déclencher tout seul.</p>
+      <p class="hint">Un rapport PDF des données (stock central, stock par site, historique des inventaires, sorties de stock par site, sorties de stock ménage École/Agropolis, interventions, fiches de traçabilité ménage, relevés de compteurs, codes Masterlock) est envoyé automatiquement vers SharePoint à chaque connexion à l'appli — en plus du stockage principal dans l'appli, pas à la place. Chaque module a son propre sous-dossier dans "ExportsDonnees" (Stock, Stock Ménage, Interventions, Menage, Relevé de compteur, Codes Masterlock). Relevés : un seul endroit, « Relevé de compteur / [Site] / [Type] », avec un PDF par compteur (courbe + historique par année scolaire). Un sous-dossier "Archives" garde une seule copie par mois (la plus récente), uniquement si les données ont changé. Nécessite qu'une session Microsoft soit déjà active dans le navigateur pour se déclencher tout seul.</p>
 
       <div class="stat-chip ok" style="width:fit-content">
         ${state.statut?.lastExportAt ? `✓ Dernier export : ${new Date(state.statut.lastExportAt).toLocaleString('fr-FR')}` : "Aucun export effectué pour l'instant"}
@@ -46,7 +46,7 @@ function render() {
 
       <div class="form-card">
         <h3 style="margin:0 0 6px;font-size:15px">🧹 Doublons SharePoint</h3>
-        <p class="hint" style="margin:0 0 10px">Recherche les anciennes copies du PDF « Dossier technique » (une seule par site), les archives en trop (une seule par mois) et l'ancien dossier « Relevé de compteur » (les relevés sont désormais uniquement dans « Compteurs / [Site] »). Les copies supprimées vont dans la corbeille SharePoint (récupérables 93 jours). Les photos et documents ne sont jamais touchés.</p>
+        <p class="hint" style="margin:0 0 10px">Recherche les anciennes copies du PDF « Dossier technique » (une seule par site), les archives en trop (une seule par mois) et les anciens récapitulatifs de relevés (les relevés sont désormais uniquement dans un PDF par compteur, rangé par site). Les copies supprimées vont dans la corbeille SharePoint (récupérables 93 jours). Les photos et documents ne sont jamais touchés.</p>
         <button class="nav-btn" id="exa-doublons" ${doublons.etat === "scan" || doublons.etat === "suppr" ? "disabled" : ""}>${doublons.etat === "scan" ? "⏳ Recherche…" : "🔍 Rechercher les doublons"}</button>
         ${doublonsHTML()}
       </div>
@@ -143,20 +143,32 @@ async function rechercherDoublons() {
 }
 
 
-// ExportsDonnees : (1) l'ancien dossier "Relevé de compteur" (relevés en
-// double avec "Compteurs") ; (2) dans chaque "Archives", on ne garde que
-// la copie la plus récente de chaque mois.
+// ExportsDonnees : (1) dans "Relevé de compteur", les récapitulatifs
+// devenus inutiles (Releves_compteurs.* à la racine, Releves.* par site,
+// et leurs archives) — les PDF par compteur, rangés dans
+// [Site]/[Type]/, sont conservés ; (2) dans chaque "Archives", on ne
+// garde que la copie la plus récente de chaque mois.
 async function chercherDoublonsExports() {
-  const racine = (await listerDossierDrive([], EXPORTS_ROOT_FOLDER)) || [];
-  const ancien = racine.find(x => x.folder && x.name.toLowerCase() === "relevé de compteur");
-  if (ancien) doublons.liste.push({ ...ancien, site: "Ancien dossier des relevés (en double avec « Compteurs »)" });
+  const RC = "Relevé de compteur";
+  const estRecap = (n) => /^(releves_compteurs|releves)(_\d{4}-\d{2}(-\d{2})?)?\.(pdf|xlsx)$/i.test(n);
+  const aSupprimer = new Set();
+  const racineRC = (await listerDossierDrive([RC], EXPORTS_ROOT_FOLDER)) || [];
+  const recolter = (items, lib) => items.filter(x => !x.folder && estRecap(x.name)).forEach(x => { aSupprimer.add(x.id); doublons.liste.push({ ...x, site: lib }); });
+  recolter(racineRC, "Récapitulatif relevés (en double avec les PDF par compteur)");
+  const archRC = racineRC.find(x => x.folder && x.name === "Archives");
+  if (archRC) recolter((await listerDossierDrive([RC, "Archives"], EXPORTS_ROOT_FOLDER)) || [], "Archives récapitulatif relevés");
+  for (const site of racineRC.filter(x => x.folder && x.name !== "Archives")) {
+    const items = (await listerDossierDrive([RC, site.name], EXPORTS_ROOT_FOLDER)) || [];
+    recolter(items, `Relevés ${site.name} (en double avec les PDF par compteur)`);
+    if (items.some(x => x.folder && x.name === "Archives")) recolter((await listerDossierDrive([RC, site.name, "Archives"], EXPORTS_ROOT_FOLDER)) || [], `Archives relevés ${site.name}`);
+  }
 
   const parcourir = async (segments, profondeur) => {
     const items = (await listerDossierDrive(segments, EXPORTS_ROOT_FOLDER)) || [];
     if (segments[segments.length - 1] === "Archives") {
       const groupes = new Map();
       for (const it of items) {
-        if (it.folder) continue;
+        if (it.folder || aSupprimer.has(it.id)) continue;
         const m = it.name.match(/^(.*)_(\d{4}-\d{2})(?:-\d{2})?\.(pdf|xlsx)$/i);
         if (!m) continue;
         const cle = `${m[1]}|${m[2]}|${m[3].toLowerCase()}`;
@@ -172,7 +184,6 @@ async function chercherDoublonsExports() {
     }
     if (profondeur >= 4) return;
     for (const f of items.filter(x => x.folder)) {
-      if (ancien && segments.length === 0 && f.id === ancien.id) continue;
       await parcourir([...segments, f.name], profondeur + 1);
     }
   };
