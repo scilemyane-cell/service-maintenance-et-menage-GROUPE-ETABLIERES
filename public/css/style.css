@@ -754,3 +754,14 @@ body.accueil-gmao .gh-pied{ display:block; position:relative; height:64px; margi
   body.accueil-gmao .gh-pied{ height:44px; background-size:auto 40px; }
   .gh-pied-texte{ display:none; }
 }
+
+/* Ajustement fin sur Camileia (mesuré sur capture 1920×1080) : blocs
+   ancrés plus bas (haut ≈ 31 % de l'écran, hauteur ≈ 51 %), ~150 px entre
+   les blocs et la silhouette, silhouette plus basse. */
+.accueil-gmao .gh{ justify-content:flex-end; padding-bottom:9vh; }
+@media (min-width:1401px){
+  .accueil-gmao .gh-grille{ height:clamp(470px, 51vh, 660px); }
+}
+body.accueil-gmao .gh-pied{ height:46px; background-size:auto 44px; }
+.accueil-gmao .gh-outils{ margin-top:-4px; }
+body.accueil-gmao .content.content-accueil{ padding:0 18px 12px; }
