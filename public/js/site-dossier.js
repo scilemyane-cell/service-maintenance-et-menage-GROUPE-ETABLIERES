@@ -185,7 +185,7 @@ function renderMap() {
         <button class="nav-btn" id="sd-carte-retour">← Retour à la liste</button>
         <p class="hint" id="sd-carte-statut" style="margin:0"></p>
       </div>
-      ${isEditorUser(mountedUser) ? `<p class="hint" style="margin:0">✋ Fais glisser un repère pour corriger la position d'un site ; les sites absents de la carte sont listés dessous : « 📍 Placer » puis clic sur la carte.</p>` : ""}
+      ${isEditorUser(mountedUser) ? `<p class="hint" style="margin:0">✋ Repère mal placé : clique dessus → « 📍 Déplacer ce repère » → clique au bon endroit (ou fais-le glisser) ; les sites absents de la carte sont listés dessous : « 📍 Placer » puis clic sur la carte.</p>` : ""}
       <div id="sd-carte-holder" style="height:70vh;min-height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
       <div id="sd-non-places"></div>
     </div>

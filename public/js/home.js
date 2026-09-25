@@ -511,8 +511,12 @@ function render() {
   horlogeTimer = setInterval(() => {
     const el = document.getElementById("gh-heure");
     if (!el) { clearInterval(horlogeTimer); horlogeTimer = null; return; }
-    el.textContent = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  }, 30000);
+    const n = new Date();
+    el.textContent = n.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    // Aiguilles de l'icône : elles suivent l'heure réelle
+    document.getElementById("gh-aiguille-h")?.setAttribute("transform", `rotate(${(n.getHours() % 12) * 30 + n.getMinutes() / 2} 24 24)`);
+    document.getElementById("gh-aiguille-m")?.setAttribute("transform", `rotate(${n.getMinutes() * 6} 24 24)`);
+  }, 5000);
 
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => {

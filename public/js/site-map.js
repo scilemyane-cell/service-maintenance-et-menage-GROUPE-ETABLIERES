@@ -170,6 +170,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
   // appelé avec les dossiers encore absents de la carte.
   const { onOpenSite, onStatut, editable = false, onNonPlaces } = options;
   let modePlacement = null;
+  let activerPlacement = () => {};
   let detruit = false;
   let map = null;
   const idAbonne = Symbol("carte-sites");
@@ -207,7 +208,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
       if (!geoValide(d)) return;
       const cat = categorieSite(d);
       const m = window.L.marker([d.geo.lat, d.geo.lng], { draggable: editable, title: `${d.nom} — ${cat.label}`, icon: iconeRepere(cat.couleur) }).addTo(map);
-      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}${d.geo.approx ? `<br><i style="color:#9a6700">Position approximative (commune)${editable ? " — fais glisser le repère au bon endroit" : ""}</i>` : ""}${d.geo.manuel ? `<br><i style="color:#1a7f37">Position ajustée à la main</i>` : ""}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}`);
+      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}${d.geo.approx ? `<br><i style="color:#9a6700">Position approximative (commune)${editable ? " — fais glisser le repère au bon endroit" : ""}</i>` : ""}${d.geo.manuel ? `<br><i style="color:#1a7f37">Position ajustée à la main</i>` : ""}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}${editable ? `<br><button type="button" data-deplacer-site="${d.id}" style="margin-top:8px;padding:6px 10px;border-radius:7px;border:1px solid #A87A12;background:#fff8e6;color:#6b4e00;font-weight:700;cursor:pointer">📍 Déplacer ce repère</button>` : ""}`);
       if (editable) {
         m.on("dragend", async () => {
           const { lat, lng } = m.getLatLng();
@@ -220,6 +221,11 @@ export function initCarteSites(holder, dossiers, options = {}) {
         document.querySelector(`[data-ouvrir-site="${d.id}"]`)?.addEventListener("click", (e) => {
           e.preventDefault();
           onOpenSite?.(d.id);
+        });
+        document.querySelector(`[data-deplacer-site="${d.id}"]`)?.addEventListener("click", (e) => {
+          e.preventDefault();
+          m.closePopup();
+          activerPlacement(d);
         });
       });
       markers[d.id] = m;
@@ -246,6 +252,14 @@ export function initCarteSites(holder, dossiers, options = {}) {
     });
     mettreEnFileSiBesoin(avecAdresse);
 
+    activerPlacement = (d) => {
+      modePlacement = d;
+      holder.classList.add("carte-placement");
+      window.toast?.(`👆 Touche la carte à l'emplacement exact de « ${d.nom} » (Échap pour annuler)`);
+      const echap = (e) => { if (e.key === "Escape") { modePlacement = null; holder.classList.remove("carte-placement"); document.removeEventListener("keydown", echap); } };
+      document.addEventListener("keydown", echap);
+    };
+
     // Placement manuel : clic sur la carte pour poser le repère du site choisi.
     map.on("click", async (e) => {
       if (!modePlacement) return;
@@ -270,11 +284,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
     placer(id) {
       const d = dossiers.find(x => x.id === id);
       if (!d || !map) return;
-      modePlacement = d;
-      holder.classList.add("carte-placement");
-      window.toast?.(`Clique sur la carte à l'emplacement de « ${d.nom} »`);
-      const echap = (e) => { if (e.key === "Escape") { modePlacement = null; holder.classList.remove("carte-placement"); document.removeEventListener("keydown", echap); } };
-      document.addEventListener("keydown", echap);
+      activerPlacement(d);
     },
     detruire() {
       detruit = true;

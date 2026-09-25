@@ -416,7 +416,7 @@
     const enteteAccueil = `
       <header class="topbar-gmao">
         <div class="gh-date">
-          <svg class="gh-ico-horloge" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M24 11v13l-6 9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <svg class="gh-ico-horloge" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="none" stroke="#fff" stroke-width="2.5"/><line id="gh-aiguille-h" x1="24" y1="24" x2="24" y2="14" stroke="#fff" stroke-width="3" stroke-linecap="round" transform="rotate(${(maintenant.getHours()%12)*30+maintenant.getMinutes()/2} 24 24)"/><line id="gh-aiguille-m" x1="24" y1="24" x2="24" y2="8" stroke="#fff" stroke-width="2.2" stroke-linecap="round" transform="rotate(${maintenant.getMinutes()*6} 24 24)"/><circle cx="24" cy="24" r="1.8" fill="#fff"/></svg>
           <span class="gh-horloge" id="gh-heure">${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
           <svg class="gh-ico-cal" viewBox="0 0 48 44" aria-hidden="true"><rect x="2" y="6" width="44" height="36" rx="4" fill="none" stroke="#fff" stroke-width="3"/><path d="M2 16h44" stroke="#fff" stroke-width="3"/><path d="M12 2v8M36 2v8" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
           <span class="gh-jour"><span>${maintenant.toLocaleDateString("fr-FR", { weekday: "short" })}</span> <b>${maintenant.getDate()}</b><br>${maintenant.toLocaleDateString("fr-FR", { month: "long" })}</span>
