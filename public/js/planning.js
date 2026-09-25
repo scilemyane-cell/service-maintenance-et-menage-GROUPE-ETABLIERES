@@ -1030,7 +1030,7 @@ function jourSemaineVersGetDay(j) { return (j + 1) % 7; }
 // date de début si future) et un horizon donné, en respectant sa
 // fréquence en semaines, son jour de semaine et sa date de fin
 // éventuelle — sans jamais dériver du rythme fixé par sa date de début.
-function genererOccurrencesRecurrence(rec, horizon) {
+export function genererOccurrencesRecurrence(rec, horizon) {
   if (!rec.dateDebut) return [];
   const freq = Math.max(1, parseInt(rec.frequenceSemaines, 10) || 1);
   const cibleDow = jourSemaineVersGetDay(parseInt(rec.jourSemaine, 10) || 0);

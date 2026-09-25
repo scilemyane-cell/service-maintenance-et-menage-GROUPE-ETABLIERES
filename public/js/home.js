@@ -1,5 +1,6 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
-import { watchPeople, watchAbsences, watchInterventions } from "./firestore-data.js";
+import { watchPeople, watchAbsences, watchInterventions, watchRecurrences } from "./firestore-data.js";
+import { genererOccurrencesRecurrence } from "./planning.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -31,6 +32,7 @@ let nbCompteurs = null;
 let coordonnees = {};
 let interventions = null;      // chargées seulement pour un utilisateur hors astreinte
 let interventionsUnsub = null;
+let recurrences = [];
 let onToggleConstructionRef = null;
 
 // "Mes sites favoris" — accès rapide personnel à quelques fiches (voir la
@@ -183,12 +185,20 @@ function blocMonPlanningHTML(personne) {
   const fin = dateKey(addDays(new Date(), 14));
   const joursFR = iso => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
   if (interventions === null) return `<div class="gh-astreinte"><p class="gh-astreinte-titre">Mon planning</p><p class="gh-vide">Chargement…</p></div>`;
-  const aVenir = interventions
-    .filter(i => i.technicien === personne && i.date >= auj && i.date <= fin)
+  const estMoi = n => normNom(n) === normNom(personne);
+  const reelles = interventions.filter(i => estMoi(i.technicien) && i.date >= auj && i.date <= fin);
+  // Passages récurrents (ex. espaces verts) pas encore générés en
+  // interventions : calculés à la volée depuis la règle de récurrence.
+  const dejaLa = new Set(reelles.filter(i => i.recurrenceId).map(i => i.recurrenceId + "|" + i.date));
+  const prevues = recurrences.filter(r => estMoi(r.person) && !r.supprimeLe && r.actif !== false).flatMap(r =>
+    genererOccurrencesRecurrence(r, addDays(new Date(), 14))
+      .filter(d => d >= auj && d <= fin && !dejaLa.has(r.id + "|" + d))
+      .map(d => ({ date: d, heureDebut: r.heureDebut, heureFin: r.heureFin, site: r.site, type: r.type, recurrenceId: r.id })));
+  const aVenir = [...reelles, ...prevues]
     .sort((a, b) => (a.date + (a.heureDebut || "")).localeCompare(b.date + (b.heureDebut || "")))
     .slice(0, 8);
   const abs = absences
-    .filter(a => a.person === personne && (a.end || a.start) >= auj && a.start <= fin)
+    .filter(a => estMoi(a.person) && (a.end || a.start) >= auj && a.start <= fin)
     .sort((a, b) => a.start.localeCompare(b.start));
   const LIB_ABS = { conge: "Congé", rtt: "RTT", arret: "Arrêt" };
   return `
@@ -394,7 +404,9 @@ function render() {
   const maPersonne = personnePlanning(mountedUser, toutesPersonnes);
   const horsAstreinte = !!maPersonne && !peopleAstreinte.n1.includes(maPersonne) && !peopleAstreinte.n2.includes(maPersonne);
   if (horsAstreinte && !interventionsUnsub) {
-    interventionsUnsub = watchInterventions((l) => { interventions = l; scheduleRender(); });
+    const u1 = watchInterventions((l) => { interventions = l; scheduleRender(); });
+    const u2 = watchRecurrences((l) => { recurrences = l; scheduleRender(); });
+    interventionsUnsub = () => { u1(); u2(); };
   }
   const afficherSites = catsRef.some(c => c.id === "sites") && dossiers.length > 0;
 
