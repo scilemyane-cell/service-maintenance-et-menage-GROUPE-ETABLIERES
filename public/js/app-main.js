@@ -404,12 +404,13 @@
     const enteteAccueil = `
       <header class="topbar-gmao">
         <div class="gh-date">
-          <span class="gh-horloge" id="gh-heure">🕘 ${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
-          <span class="gh-cal">📅</span>
+          <svg class="gh-ico-horloge" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M24 11v13l-6 9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <span class="gh-horloge" id="gh-heure">${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+          <svg class="gh-ico-cal" viewBox="0 0 48 44" aria-hidden="true"><rect x="2" y="6" width="44" height="36" rx="4" fill="none" stroke="#fff" stroke-width="3"/><path d="M2 16h44" stroke="#fff" stroke-width="3"/><path d="M12 2v8M36 2v8" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
           <span class="gh-jour"><span>${maintenant.toLocaleDateString("fr-FR", { weekday: "short" })}</span> <b>${maintenant.getDate()}</b><br>${maintenant.toLocaleDateString("fr-FR", { month: "long" })}</span>
         </div>
         <div class="gh-user">
-          <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><span class="gh-user-ico">👤</span> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <span class="gh-user-chev">⌄</span></button>
+          <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><svg class="gh-user-ico" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16" cy="12.5" r="5" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 26c2-5 5.5-7 9-7s7 2 9 7" fill="none" stroke="#fff" stroke-width="2"/></svg> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <svg class="gh-user-chev" viewBox="0 0 16 10" aria-hidden="true"><path d="M1 1l7 7 7-7" fill="none" stroke="#fff" stroke-width="1.8"/></svg></button>
           <div class="gh-user-pop" id="gh-user-pop" hidden>
             <p class="gh-user-role">${escapeHtml(roleLabel(currentUser.role))}</p>
             ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
@@ -424,6 +425,7 @@
       ${eff.apercu ? `
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
       <main class="content" id="content"></main>
+      <footer class="gh-pied"><span class="gh-pied-texte">Service Maintenance et Ménage · Groupe Établières</span></footer>
     ` : `
       <header class="topbar">
         <div class="topbar-title">

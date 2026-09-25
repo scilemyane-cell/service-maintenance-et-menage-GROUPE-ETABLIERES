@@ -736,3 +736,21 @@ body.accueil-gmao .content.content-accueil{ flex:1; display:flex; flex-direction
   .accueil-gmao .gh-tuile{ aspect-ratio:auto; height:100%; }
   .accueil-gmao .gh-compteurs{ flex:0 0 32%; }
 }
+
+/* Icônes blanches au trait (heure, calendrier, utilisateur) et pied de
+   page : silhouette de village vendéen (dessin original — moulins,
+   clochers, lycée, château d'eau, éoliennes) en bas de l'écran. */
+.topbar-gmao .gh-ico-horloge{ width:38px; height:38px; }
+.topbar-gmao .gh-ico-cal{ width:40px; height:36px; }
+.topbar-gmao .gh-cal{ display:none; }
+.gh-user-btn svg.gh-user-ico{ width:26px; height:26px; }
+.gh-user-btn svg.gh-user-chev{ width:14px; height:9px; }
+.gh-pied{ display:none; }
+body.accueil-gmao .gh-pied{ display:block; position:relative; height:64px; margin-top:auto; background:url("../img/skyline-vendee.svg") repeat-x left bottom / auto 60px; }
+.gh-pied-texte{ position:absolute; right:14px; top:-6px; font:600 11px "Montserrat", system-ui, sans-serif; color:#fff; opacity:.85; }
+@media (max-width:720px){
+  .topbar-gmao .gh-ico-horloge{ width:28px; height:28px; }
+  .topbar-gmao .gh-ico-cal{ width:28px; height:26px; }
+  body.accueil-gmao .gh-pied{ height:44px; background-size:auto 40px; }
+  .gh-pied-texte{ display:none; }
+}

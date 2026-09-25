@@ -511,7 +511,7 @@ function render() {
   horlogeTimer = setInterval(() => {
     const el = document.getElementById("gh-heure");
     if (!el) { clearInterval(horlogeTimer); horlogeTimer = null; return; }
-    el.textContent = "🕘 " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    el.textContent = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   }, 30000);
 
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
