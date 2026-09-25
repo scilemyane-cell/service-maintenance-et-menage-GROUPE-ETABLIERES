@@ -458,11 +458,10 @@ function render() {
       });
     } catch (e) { console.error("retardsPeriodiques:", e); }
   }
-  if (suitAstreinte && interventionsACompleter.length) {
-    const nrm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    const miennes = interventionsACompleter.filter(i => (i.technicienUid && i.technicienUid === mountedUser.uid) || (maPersonne && nrm(i.technicien) === nrm(maPersonne)));
-    if (miennes.length) notifs.push({ cat: "astreinte", sub: "interventions", icone: "🕒", texte: `${miennes.length} intervention${miennes.length > 1 ? "s" : ""} : saisis ton heure de départ et de retour (${miennes.slice(0, 2).map(i => i.site).filter(Boolean).join(", ")})`, niveau: "rouge" });
-    else if (mountedUser.role !== "technicien") notifs.push({ cat: "astreinte", sub: "interventions", icone: "🕒", texte: `${interventionsACompleter.length} intervention${interventionsACompleter.length > 1 ? "s" : ""} en attente des horaires du technicien`, niveau: "orange" });
+  const nrmIv = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const mesACompleter = suitAstreinte ? interventionsACompleter.filter(i => (i.technicienUid && i.technicienUid === mountedUser.uid) || (maPersonne && nrmIv(i.technicien) === nrmIv(maPersonne))).sort((a, b) => (a.date || "").localeCompare(b.date || "")) : [];
+  if (suitAstreinte && interventionsACompleter.length && !mesACompleter.length && mountedUser.role !== "technicien") {
+    notifs.push({ cat: "astreinte", sub: "interventions", icone: "🕒", texte: `${interventionsACompleter.length} intervention${interventionsACompleter.length > 1 ? "s" : ""} en attente des horaires du technicien`, niveau: "orange" });
   }
   if (holidayToday) notifs.push({ icone: "☀️", texte: `Jour férié : ${holidayToday}`, niveau: "violet" });
 
@@ -471,6 +470,13 @@ function render() {
 
   mountedContainer.innerHTML = `
     <div class="gh">
+      ${mesACompleter.length ? `
+      <button class="gh-bandeau-completer" data-completer-accueil="${mesACompleter[0].id}">
+        <span class="gh-bc-ico">🕒</span>
+        <span class="gh-bc-txt"><b>${mesACompleter.length > 1 ? `${mesACompleter.length} interventions à compléter` : "Intervention à compléter"}</b>
+          <small>${esc(mesACompleter[0].site || "")}${mesACompleter[0].date ? ` · ${new Date(mesACompleter[0].date).toLocaleDateString("fr-FR")}` : ""} — saisis ton heure de départ et de retour</small></span>
+        <span class="gh-bc-go">Compléter →</span>
+      </button>` : ""}
       ${transfertBannerHTML(next, confirmedRecord)}
 
       <div class="gh-entete">
@@ -544,6 +550,11 @@ function render() {
 
   mountedContainer.querySelectorAll("[data-construction]").forEach(btn => {
     btn.addEventListener("click", (e) => { e.stopPropagation(); onToggleConstructionRef?.(btn.dataset.construction); });
+  });
+  mountedContainer.querySelector("[data-completer-accueil]")?.addEventListener("click", (e) => {
+    window.ouvrirSousOnglet = "interventions";
+    window.ouvrirCompleterId = e.currentTarget.dataset.completerAccueil;
+    onSelectRef("astreinte");
   });
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
     btn.addEventListener("click", () => { if (btn.dataset.notifSub) window.ouvrirSousOnglet = btn.dataset.notifSub; onSelectRef(btn.dataset.notifCat); });

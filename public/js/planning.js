@@ -2290,6 +2290,12 @@ function completerHorairesHTML(i) {
 }
 
 function renderInterventions(container, perms) {
+  // Arrivée depuis le bandeau jaune de l'accueil : ouvre directement le
+  // formulaire « Compléter mes horaires » de cette intervention.
+  let defilerVersCompleter = false;
+  if (window.ouvrirCompleterId && state.interventions.some(x => x.id === window.ouvrirCompleterId)) {
+    ui.completerId = window.ouvrirCompleterId; window.ouvrirCompleterId = null; defilerVersCompleter = true;
+  }
   const intervenants = [...state.people.n1, ...state.people.n2];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   // Détection des N° d'intervention en double (ex. INT-00013 attribué deux
@@ -2675,6 +2681,7 @@ function renderInterventions(container, perms) {
       document.getElementById("c-debut")?.focus();
     }));
     if (ui.completerId) {
+      if (defilerVersCompleter) requestAnimationFrame(() => { document.querySelector(".iv-completer")?.scrollIntoView({ behavior: "smooth", block: "center" }); document.getElementById("c-debut")?.focus({ preventScroll: true }); });
       const i = state.interventions.find(x => x.id === ui.completerId);
       const calc = () => {
         const d = dureeHeures(document.getElementById("c-debut").value, document.getElementById("c-fin").value);
