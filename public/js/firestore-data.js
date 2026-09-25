@@ -1,4 +1,4 @@
-import { db } from "./firebase-init.js";
+import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
   collection, addDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, deleteField,
@@ -49,7 +49,7 @@ export function watchRecurrences(callback) {
   }, (err) => { console.error("watchRecurrences:", err); callback([]); });
 }
 export async function addRecurrence(record) {
-  const ref = await addDoc(collection(db, "recurrences"), record);
+  const ref = await addDoc(collection(db, "recurrences"), { ...record, createdBy: auth.currentUser?.uid || record.createdBy });
   return ref.id;
 }
 export async function updateRecurrence(id, fields) {
@@ -80,7 +80,9 @@ export async function addIntervention(record) {
     tx.set(compteurRef, { dernier: suivant }, { merge: true });
     return suivant;
   });
-  await addDoc(collection(db, "interventions"), { ...record, numero: `INT-${String(numero).padStart(5, "0")}` });
+  // createdBy = toujours le compte réellement connecté (règle Firestore),
+  // y compris quand un responsable saisit depuis « Aperçu en tant que… ».
+  await addDoc(collection(db, "interventions"), { ...record, createdBy: auth.currentUser?.uid || record.createdBy, numero: `INT-${String(numero).padStart(5, "0")}` });
 }
 export async function updateIntervention(id, fields) {
   await updateDoc(doc(db, "interventions", id), fields);
