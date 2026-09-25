@@ -6,6 +6,8 @@ import { watchAccess, setDispositifAccess } from "./access-data.js";
 import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate } from "./dispositif-settings-data.js";
 import { watchAssociations, saveAssociations } from "./associations-data.js";
 import { roleLabel } from "./auth.js";
+import { watchPeople } from "./firestore-data.js";
+import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { auth, db } from "./firebase-init.js";
 import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
@@ -76,7 +78,7 @@ async function createUserAccount(email, password, nom, role, avecAccesDefaut = t
 // =================================================================
 // ADMINISTRATION GLOBALE — Utilisateurs
 // =================================================================
-let usersState = { users: [], accesOuvertPour: null, dernierResultat: "" };
+let usersState = { users: [], accesOuvertPour: null, dernierResultat: "", personnes: [], astreinteActive: {}, coordonnees: {} };
 // Le message de résultat de "Créer le compte" (identifiants à transmettre)
 // est conservé dans l'état : sinon le rafraîchissement automatique de la
 // liste des comptes, déclenché par la création elle-même, l'effaçait aussitôt.
@@ -94,6 +96,12 @@ export function mountUtilisateurs(container, user) {
   currentUser = user;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchUsers((u) => { usersState.users = u; renderUtilisateurs(container); }));
+  unsubs.push(watchPeople((p) => {
+    usersState.personnes = [...new Set([...(p.n1 || []), ...(p.n2 || [])])].sort((a, b) => a.localeCompare(b, "fr"));
+    usersState.astreinteActive = p.astreinteActive || {};
+    renderUtilisateurs(container);
+  }));
+  unsubs.push(watchCoordonnees((c) => { usersState.coordonnees = c || {}; renderUtilisateurs(container); }));
   unsubs.push(watchSites((sites) => {
     dispositifsPourOnglets = [...new Set(sites.map(siteDispositif))].sort();
     renderUtilisateurs(container);
@@ -160,9 +168,9 @@ function renderUtilisateurs(container) {
       <p class="hint">Modifie le nom affiché, l'email ou le rôle de chaque compte existant. Si l'email est vide ci-dessous (comptes créés avant cette mise à jour), renseigne-le manuellement — nécessaire pour "Réinitialiser". "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th>Zones Stock Ménage</th><th>Accès aux tuiles</th><th>Mot de passe</th></tr></thead>
+          <thead><tr><th>Email</th><th>Nom affiché</th><th>Rôle</th><th title="Personne correspondante dans le planning d'astreinte (Astreinte → Coordonnées)">Dans le planning</th><th>Zones Stock Ménage</th><th>Accès aux tuiles</th><th>Mot de passe</th></tr></thead>
           <tbody>
-            ${usersState.users.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucun utilisateur.</td></tr>` :
+            ${usersState.users.length === 0 ? `<tr><td colspan="7" class="empty-row">Aucun utilisateur.</td></tr>` :
               usersState.users.map(u => `
                 <tr>
                   <td><input data-user-email="${u.uid}" value="${esc(u.email || '')}" placeholder="email manquant — à renseigner" style="min-width:200px${!u.email ? ';border-color:var(--red)' : ''}"></td>
@@ -170,6 +178,13 @@ function renderUtilisateurs(container) {
                   <td>${peutModifierRoleDe(currentUser, u.role)
                     ? `<select data-user-role="${u.uid}">${rolesAssignablesPar(currentUser).map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleLabel(r))}</option>`).join("")}</select>`
                     : `<span title="Seul un Super Admin peut modifier ce rôle">🔒 ${esc(roleLabel(u.role))}</span>`}</td>
+                  <td>${(() => {
+                    const lie = Object.entries(usersState.coordonnees).find(([, c]) => c && c.uid === u.uid)?.[0] || "";
+                    return `<select data-user-personne="${u.uid}" style="max-width:170px">
+                      <option value="">— non lié —</option>
+                      ${usersState.personnes.map(n => `<option value="${esc(n)}" ${n === lie ? "selected" : ""}>${esc(n)}${usersState.astreinteActive[n] === false ? " (hors astreinte)" : ""}</option>`).join("")}
+                    </select>`;
+                  })()}</td>
                   <td style="white-space:nowrap;font-size:12px">
                     <label style="margin-right:8px"><input type="checkbox" data-user-zone="${u.uid}:ecole" ${(u.stockMenageZones || []).includes("ecole") ? "checked" : ""}> École</label>
                     <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
@@ -186,7 +201,7 @@ function renderUtilisateurs(container) {
                 </tr>
                 ${usersState.accesOuvertPour === u.uid ? `
                 <tr>
-                  <td colspan="6" style="background:var(--bg-2, rgba(255,255,255,0.03))">
+                  <td colspan="7" style="background:var(--bg-2, rgba(255,255,255,0.03))">
                     <p class="hint" style="margin:0 0 8px">Tuile absente ou sur "Aucun accès" ⇒ ${esc(u.nom || u.email)} ne la voit pas du tout dans l'appli. Sur "Lecture", la tuile "Astreinte" (enregistrer une intervention) est bloquée en écriture ; les autres tuiles ci-dessous ne font pas encore cette distinction Lecture/Modification (la personne peut agir normalement une fois la tuile visible) — demande à Claude d'activer le blocage en écriture sur une tuile précise si besoin.</p>
                     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px">
                       ${TUILES_GEREES.map(t => `
@@ -270,6 +285,24 @@ function renderUtilisateurs(container) {
     inp.addEventListener("change", async () => {
       await enregistrerChamp(inp, inp.dataset.userEmail, { email: inp.value.trim() });
       inp.style.borderColor = "";
+    });
+  });
+  // Lien compte ↔ personne du planning (même donnée que la rubrique
+  // « Compte de l'appli » de la fiche technicien, dans Coordonnées).
+  container.querySelectorAll("[data-user-personne]").forEach(sel => {
+    sel.addEventListener("change", async () => {
+      const uid = sel.dataset.userPersonne, nom = sel.value;
+      try {
+        for (const [autre, co] of Object.entries(usersState.coordonnees)) {
+          if (co?.uid === uid && autre !== nom) await saveCoordonnee(autre, { ...co, uid: "" });
+        }
+        if (nom) await saveCoordonnee(nom, { ...(usersState.coordonnees[nom] || {}), uid });
+        sel.style.outline = "2px solid var(--teal)"; setTimeout(() => { sel.style.outline = ""; }, 1200);
+      } catch (e) {
+        console.error("lien planning:", e);
+        sel.style.outline = "2px solid var(--red)";
+        window.toast ? window.toast("❌ Lien non enregistré : " + (e.message || e)) : alert("Lien non enregistré : " + (e.message || e));
+      }
     });
   });
   container.querySelectorAll("[data-user-role]").forEach(sel => {
