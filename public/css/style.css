@@ -1061,3 +1061,8 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .chantier-module{ font-size:13px !important; }
 .carte-placement, .carte-placement .leaflet-container{ cursor:crosshair !important; }
 .carte-placement{ outline:3px dashed var(--gold); outline-offset:-3px; }
+/* Repères de la carte colorés par association / MNA + légende */
+.repere-site{ background:none; border:none; }
+.repere-site svg{ filter:drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.legende-carte{ background:rgba(255,255,255,.94); border-radius:8px; padding:6px 10px; font:600 12px system-ui, sans-serif; color:#1B2330; display:flex; flex-wrap:wrap; gap:10px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+.legende-carte i{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; border:1px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.15); }

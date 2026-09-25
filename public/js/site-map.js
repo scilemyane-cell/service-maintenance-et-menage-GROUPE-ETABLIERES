@@ -44,6 +44,29 @@ function dansFranceMetro({ lat, lng }) {
 // l'adresse du dossier a été modifiée depuis (ou si le géocodage date
 // d'avant l'enregistrement de l'adresse géocodée), le site est
 // re-géocodé et son marqueur déplacé automatiquement.
+// Couleur des repères par association, et une couleur à part pour les
+// dispositifs MNA (sous-groupe « MNA » ou nom contenant « MNA »).
+const CATEGORIES_CARTE = [
+  { cle: "mna", label: "MNA", couleur: "#eb6834" },
+  { cle: "agropolis", label: "Agropolis", couleur: "#1baf7a" },
+  { cle: "ecole", label: "École", couleur: "#2a78d6" },
+  { cle: "armonia", label: "Armonia", couleur: "#4a3aa7" },
+  { cle: "autre", label: "Autres", couleur: "#8A8D93" },
+];
+const sansAccent = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function categorieSite(d) {
+  if (/\bmna\b/.test(sansAccent(d.groupe)) || /\bmna\b/.test(sansAccent(d.nom))) return CATEGORIES_CARTE[0];
+  const a = sansAccent(d.association);
+  return CATEGORIES_CARTE.find(c => c.cle !== "autre" && c.cle !== "mna" && a.includes(c.cle)) || CATEGORIES_CARTE[4];
+}
+function iconeRepere(couleur) {
+  return window.L.divIcon({
+    className: "repere-site",
+    html: `<svg width="28" height="38" viewBox="0 0 28 38"><path d="M14 1C7 1 1.5 6.5 1.5 13.5 1.5 23 14 37 14 37s12.5-14 12.5-23.5C26.5 6.5 21 1 14 1z" fill="${couleur}" stroke="#fff" stroke-width="2"/><circle cx="14" cy="13.5" r="5" fill="#fff"/></svg>`,
+    iconSize: [28, 38], iconAnchor: [14, 37], popupAnchor: [0, -32],
+  });
+}
+
 const normAdresse = a => String(a || "").trim().replace(/\s+/g, " ").toLowerCase();
 function geoValide(d) {
   if (!d.geo || !dansFranceMetro(d.geo)) return false;
@@ -169,9 +192,21 @@ export function initCarteSites(holder, dossiers, options = {}) {
     }).addTo(map);
 
     const markers = {};
+    // Légende des couleurs (uniquement les catégories présentes)
+    const presentes = CATEGORIES_CARTE.filter(c => dossiers.some(d => categorieSite(d).cle === c.cle));
+    if (presentes.length > 1) {
+      const legende = window.L.control({ position: "bottomleft" });
+      legende.onAdd = () => {
+        const div = window.L.DomUtil.create("div", "legende-carte");
+        div.innerHTML = presentes.map(c => `<span><i style="background:${c.couleur}"></i>${c.label}</span>`).join("");
+        return div;
+      };
+      legende.addTo(map);
+    }
     const ajouterMarker = (d) => {
       if (!geoValide(d)) return;
-      const m = window.L.marker([d.geo.lat, d.geo.lng], { draggable: editable, title: d.nom }).addTo(map);
+      const cat = categorieSite(d);
+      const m = window.L.marker([d.geo.lat, d.geo.lng], { draggable: editable, title: `${d.nom} — ${cat.label}`, icon: iconeRepere(cat.couleur) }).addTo(map);
       m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}${d.geo.approx ? `<br><i style="color:#9a6700">Position approximative (commune)${editable ? " — fais glisser le repère au bon endroit" : ""}</i>` : ""}${d.geo.manuel ? `<br><i style="color:#1a7f37">Position ajustée à la main</i>` : ""}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}`);
       if (editable) {
         m.on("dragend", async () => {
