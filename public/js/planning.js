@@ -277,7 +277,9 @@ function renderMonPlanning(container) {
   }
   ui.planningIndivPerson = personne;
   ui.planningVueMulti = false;
-  return renderPlanningIndividuel(container, { canManageAbsences: false });
+  // Le technicien consulte seulement ; un responsable qui regarde sa vue
+  // (« Aperçu en tant que… ») peut modifier son planning en cliquant sur un jour.
+  return renderPlanningIndividuel(container, { canManageAbsences: !!mountedUser.apercu });
 }
 export function mountPlanningIndividuelTab(container, user) { startListeners(container, user, "planning-individuel"); }
 
