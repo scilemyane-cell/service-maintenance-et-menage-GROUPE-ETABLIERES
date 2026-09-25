@@ -773,12 +773,12 @@ function renderFichesEditor(container, dispositif) {
           </div>
           <div class="table-wrap" style="border:none">
             <table>
-              <thead><tr><th>Tâche</th><th style="width:110px">Fréquence</th><th></th></tr></thead>
+              <thead><tr><th>Tâche</th><th style="width:210px">Fréquence</th><th></th></tr></thead>
               <tbody>
                 ${room.tasks.map((task, ti) => `
                   <tr>
                     <td><input data-task-label="${ri}-${ti}" value="${esc(task.label)}" style="width:100%"></td>
-                    <td><input data-task-freq="${ri}-${ti}" value="${esc(task.freq || '')}" placeholder="ex. 1X/mois" style="width:100%"></td>
+                    <td><select data-task-freq="${ri}-${ti}" style="width:100%">${optionsFrequence(task.freq)}</select></td>
                     <td><button class="del-btn" data-del-task="${ri}-${ti}">🗑️</button></td>
                   </tr>
                 `).join("")}
@@ -827,7 +827,7 @@ function renderFichesEditor(container, dispositif) {
     });
   });
   container.querySelectorAll("[data-task-freq]").forEach(inp => {
-    inp.addEventListener("input", () => {
+    inp.addEventListener("change", () => {
       const [ri, ti] = inp.dataset.taskFreq.split("-").map(Number);
       site.rooms[ri].tasks[ti].freq = inp.value;
     });
@@ -889,4 +889,27 @@ function renderAccesEditor(container, dispositif) {
   document.getElementById("acc-open").addEventListener("click", async () => {
     await setDispositifAccess(dispositif, []);
   });
+}
+
+
+// Menu déroulant des fréquences de tâches ménage. Les fréquences "par
+// mois" (1X/mois, 2X/mois, 1X/3 mois…) passent dans le bloc « Tâches du
+// mois » de la fiche (cochées une fois par période, alerte si retard).
+const FREQUENCES_TACHE = [
+  ["", "Chaque jour actif"],
+  ["2X/semaine", "2 fois par semaine"],
+  ["1X/semaine", "1 fois par semaine"],
+  ["2X/mois", "2 fois par mois 📅"],
+  ["1X/mois", "1 fois par mois 📅"],
+  ["1X/3 mois", "1 fois tous les 3 mois 📅"],
+  ["1X/6 mois", "1 fois tous les 6 mois 📅"],
+  ["1X/12 mois", "1 fois par an 📅"],
+  ["selon besoin", "Selon besoin"],
+  ["selon saison", "Selon saison"],
+];
+function optionsFrequence(valeur) {
+  const v = String(valeur || "").trim();
+  const connue = FREQUENCES_TACHE.some(([val]) => val.toLowerCase() === v.toLowerCase());
+  return (connue || !v ? "" : `<option value="${esc(v)}" selected>${esc(v)}</option>`) +
+    FREQUENCES_TACHE.map(([val, lib]) => `<option value="${esc(val)}" ${val.toLowerCase() === v.toLowerCase() ? "selected" : ""}>${esc(lib)}</option>`).join("");
 }
