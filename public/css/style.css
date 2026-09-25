@@ -650,3 +650,6 @@ button.gh-notif:hover{ background:#FFF2F5; }
 .gear-btn.active{ border-color:var(--gold); }
 .apercu-select{ background:var(--panel-alt); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-size:12px; max-width:220px; }
 @media (max-width:720px){ .apercu-select{ max-width:100%; flex:1; } }
+.gh-favori-actions{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
+.gh-raccourci{ border:1px solid #C9CBD1; background:#fff; border-radius:6px; padding:3px 6px; font-size:14px; line-height:1; cursor:pointer; }
+.gh-raccourci:hover{ border-color:var(--gh-rouge); background:#FFF2F5; }

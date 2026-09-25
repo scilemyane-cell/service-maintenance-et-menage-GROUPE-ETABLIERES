@@ -115,6 +115,18 @@ export async function mountCompteurs(container, user) {
     }
     return;
   }
+  // Raccourci "Relever les compteurs" d'un site favori (écran d'accueil) :
+  // ouvre directement le mode relevé rapide de ce site.
+  if (window.compteursRapideSiteDeepLinkId) {
+    const siteId = window.compteursRapideSiteDeepLinkId;
+    window.compteursRapideSiteDeepLinkId = null;
+    if (state.sites.some(s => s.id === siteId) && state.compteurs.some(c => c.dossierId === siteId)) {
+      ui.rapideSiteId = siteId; ui.rapideIndex = 0;
+    } else {
+      ui.ouverts.add(siteId);
+      window.toast?.("Aucun compteur actif sur ce site pour l'instant.");
+    }
+  }
   render();
 }
 

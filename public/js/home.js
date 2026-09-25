@@ -132,6 +132,7 @@ function blocCompteursEtFavorisHTML() {
   const favorisIds = chargerFavoris();
   const favorisDossiers = favorisIds.map(id => dossiers.find(d => d.id === id)).filter(Boolean);
   const dispoPourAjout = dossiers.filter(d => !favorisIds.includes(d.id)).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+  const peutRelever = catsRef.some(c => c.id === "compteurs");
   return `
     <div class="gh-milieu">
       <section class="gh-panneau-clair gh-compteurs">
@@ -145,7 +146,10 @@ function blocCompteursEtFavorisHTML() {
           ${favorisDossiers.length === 0 ? `<p class="gh-vide">Aucun site épinglé.</p>` : favorisDossiers.map(d => `
             <div class="gh-favori">
               <button data-ouvrir-favori="${d.id}">${esc(d.nom)}</button>
-              <button class="gh-favori-suppr" data-retirer-favori="${d.id}" title="Retirer">✕</button>
+              <span class="gh-favori-actions">
+                ${peutRelever && d.compteursActifs ? `<button class="gh-raccourci" data-relever-site="${d.id}" title="Relever les compteurs de ce site">🎛️</button>` : ""}
+                <button class="gh-favori-suppr" data-retirer-favori="${d.id}" title="Retirer">✕</button>
+              </span>
             </div>`).join("")}
         </div>
         ${dispoPourAjout.length > 0 ? `
@@ -162,6 +166,12 @@ function attacherEcouteursBlocSites() {
   document.getElementById("hm-filtre-site")?.addEventListener("change", (e) => { filtreSite = e.target.value; render(); });
   mountedContainer.querySelectorAll("[data-ouvrir-favori]").forEach(btn => {
     btn.addEventListener("click", () => onSelectRef("sites", btn.dataset.ouvrirFavori));
+  });
+  mountedContainer.querySelectorAll("[data-relever-site]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      window.compteursRapideSiteDeepLinkId = btn.dataset.releverSite;
+      onSelectRef("compteurs");
+    });
   });
   mountedContainer.querySelectorAll("[data-retirer-favori]").forEach(btn => {
     btn.addEventListener("click", () => {
