@@ -532,7 +532,8 @@
         currentCategory = catId;
         const cat = allCategories(currentUser).find(c => c.id === catId);
         const subs = categorySubtabsFor(cat, currentUser);
-        currentSubtab = subs[0]?.id || null;
+        const voulu = window.ouvrirSousOnglet; window.ouvrirSousOnglet = null;
+        currentSubtab = (voulu && subs.some(s => s.id === voulu) ? voulu : subs[0]?.id) || null;
         if (dossierIdAOuvrir) window.siteDossierDeepLinkId = dossierIdAOuvrir;
         render();
       }, (catId, sens) => {

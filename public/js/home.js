@@ -36,6 +36,7 @@ let nbCompteurs = null;
 let coordonnees = {};
 let interventions = null;      // chargées seulement pour un utilisateur hors astreinte
 let interventionsUnsub = null;
+let aCompleterUnsub = null, interventionsACompleter = [];
 let recurrences = [];
 let onToggleConstructionRef = null;
 
@@ -69,6 +70,7 @@ function cleanup() {
   if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
   if (horlogeTimer) { clearInterval(horlogeTimer); horlogeTimer = null; }
   if (interventionsUnsub) { interventionsUnsub(); interventionsUnsub = null; }
+  if (aCompleterUnsub) { aCompleterUnsub(); aCompleterUnsub = null; }
   interventions = null;
 }
 
@@ -420,6 +422,14 @@ function render() {
     const u2 = watchRecurrences((l) => { recurrences = l; scheduleRender(); });
     interventionsUnsub = () => { u1(); u2(); };
   }
+  // Interventions dont le technicien doit saisir ses horaires au retour.
+  const suitAstreinte = ["technicien", "super_admin", "admin", "n1"].includes(mountedUser.role);
+  if (suitAstreinte && !aCompleterUnsub) {
+    aCompleterUnsub = watchInterventions((l) => {
+      interventionsACompleter = l.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe);
+      scheduleRender();
+    });
+  }
   const afficherSites = catsRef.some(c => c.id === "sites") && dossiers.length > 0;
 
   // ---- Notifications (panneau de droite) ----
@@ -447,6 +457,12 @@ function render() {
         notifs.push({ cat: "disp-" + (site.dispositif || "Dispositif MNA"), icone: "🧽", texte: `${site.name} : ${retards.length} tâche(s) du mois en retard (${retards.slice(0, 2).map(r => r.task.label).join(", ")}${retards.length > 2 ? "…" : ""})`, niveau: "rouge" });
       });
     } catch (e) { console.error("retardsPeriodiques:", e); }
+  }
+  if (suitAstreinte && interventionsACompleter.length) {
+    const nrm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const miennes = interventionsACompleter.filter(i => (i.technicienUid && i.technicienUid === mountedUser.uid) || (maPersonne && nrm(i.technicien) === nrm(maPersonne)));
+    if (miennes.length) notifs.push({ cat: "astreinte", sub: "interventions", icone: "🕒", texte: `${miennes.length} intervention${miennes.length > 1 ? "s" : ""} : saisis ton heure de départ et de retour (${miennes.slice(0, 2).map(i => i.site).filter(Boolean).join(", ")})`, niveau: "rouge" });
+    else if (mountedUser.role !== "technicien") notifs.push({ cat: "astreinte", sub: "interventions", icone: "🕒", texte: `${interventionsACompleter.length} intervention${interventionsACompleter.length > 1 ? "s" : ""} en attente des horaires du technicien`, niveau: "orange" });
   }
   if (holidayToday) notifs.push({ icone: "☀️", texte: `Jour férié : ${holidayToday}`, niveau: "violet" });
 
@@ -510,7 +526,7 @@ function render() {
                 <div class="gh-astreinte-ligne"><span class="avatar" style="background:${colorForPerson(n2.assigned, people)}"></span><span>N2</span><b>${esc(n2.assigned)}</b></div>
               </div>` : `<p class="gh-vide">Astreinte pas encore configurée.</p>`}
             ${notifs.length === 0 ? `<p class="gh-aucune">Aucune notification</p>` : notifs.map(n => `
-              <${n.cat ? `button data-notif-cat="${n.cat}"` : "div"} class="gh-notif gh-notif-${n.niveau}">
+              <${n.cat ? `button data-notif-cat="${n.cat}"${n.sub ? ` data-notif-sub="${n.sub}"` : ""}` : "div"} class="gh-notif gh-notif-${n.niveau}">
                 <span>${n.icone}</span><span>${esc(n.texte)}</span>
               </${n.cat ? "button" : "div"}>`).join("")}
           </div>
@@ -530,7 +546,7 @@ function render() {
     btn.addEventListener("click", (e) => { e.stopPropagation(); onToggleConstructionRef?.(btn.dataset.construction); });
   });
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
-    btn.addEventListener("click", () => onSelectRef(btn.dataset.notifCat));
+    btn.addEventListener("click", () => { if (btn.dataset.notifSub) window.ouvrirSousOnglet = btn.dataset.notifSub; onSelectRef(btn.dataset.notifCat); });
   });
   if (horlogeTimer) clearInterval(horlogeTimer);
   horlogeTimer = setInterval(() => {
