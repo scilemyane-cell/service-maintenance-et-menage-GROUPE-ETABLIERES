@@ -127,7 +127,7 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "" },
+  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "" },
   editingId: null,
   ficheOuverte: null, // nom de la personne dont la fiche technicien est dépliée
   noteFraisMois: new Date().toISOString().slice(0, 7),
@@ -2146,16 +2146,15 @@ function renderDocPreview() {
 // les escalades du technicien vers le cadre d'astreinte (qui, pourquoi,
 // quelle décision/consigne a été donnée).
 function appelN1HTML() {
-  if (!ui.form.appelN1) return "";
   return `
     <div class="iv-n1">
-      <label>N1 contacté
+      <label>Appel reçu par (cadre d'astreinte N1)
         <select id="f-n1-contacte">
           <option value="">— Choisir —</option>
           ${state.people.n1.map(nom => `<option value="${esc(nom)}" ${ui.form.n1Contacte === nom ? "selected" : ""}>${esc(nom)}</option>`).join("")}
         </select>
       </label>
-      <label class="iv-n1-large">Motif de l'appel<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. besoin d'un accord pour commander une pièce"></label>
+      <label class="iv-n1-large">Demande de l'appelant<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. fuite d'eau signalée au 2e étage"></label>
       <label class="iv-n1-plein">Décision / consigne donnée
         <span class="iv-n1-ia"><input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"><button type="button" class="iv-ia petit" id="f-ia-decision" title="Reformuler proprement avec l'IA">✨</button></span>
         <span id="f-ia-decision-statut" class="iv-ia-statut"></span>
@@ -2261,7 +2260,7 @@ function attacherPhotosInterventionListeners() {
 // intervention à la mauvaise personne) — sauf pour un technicien, qui ne
 // saisit que pour lui-même.
 function reinitialiserFormIntervention() {
-  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "" });
+  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "" });
   ui.form.technicien = mountedUser?.role === "technicien" ? (mountedUser.nom || mountedUser.email) : "";
 }
 
@@ -2293,14 +2292,15 @@ function renderInterventions(container, perms) {
           <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
           <span class="iv-sous">Astreinte · dépannage</span>
         </div>
-        <div class="iv-section">📞 La demande</div>
+        <div class="iv-section">📞 L'appel reçu par le cadre d'astreinte</div>
         <div class="form-grid iv-grille iv-grille-h">
           <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
           ${ui.editingId && mountedUser.role === "super_admin" ? `
           <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
         </div>
         ${ui.form.appelOrigineNumero ? `<div class="iv-suite">↪ Déplacement faisant suite à l'appel <b>${esc(ui.form.appelOrigineNumero)}</b> <button type="button" class="nav-btn" id="f-suite-annuler" style="padding:2px 8px;font-size:11px">✕</button></div>` : ""}
-        <div class="iv-question">1. Comment la demande a-t-elle été traitée ?</div>
+        <div id="interv-n1-zone">${appelN1HTML()}</div>
+        <div class="iv-question">Comment la demande a-t-elle été traitée ?</div>
         <div class="iv-mode">
           <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === true ? "actif" : ""}" data-iv-mode="appel">
             <span class="iv-mode-ico">📞</span><span><b>Réglé par téléphone</b><small>Sans déplacement · pas de prime dimanche</small></span>
@@ -2309,19 +2309,12 @@ function renderInterventions(container, perms) {
             <span class="iv-mode-ico">🚗</span><span><b>Déplacement sur place</b><small>Le technicien s'est rendu sur le site</small></span>
           </button>
         </div>
-        <div class="iv-question">2. As-tu appelé le cadre d'astreinte (N1) pour une décision ou une consigne ?</div>
-        <div class="iv-ouinon">
-          <button type="button" class="${!ui.form.appelN1 ? "actif" : ""}" data-n1-ouinon="non">Non</button>
-          <button type="button" class="${ui.form.appelN1 ? "actif" : ""}" data-n1-ouinon="oui">Oui, j'ai appelé le N1</button>
-          <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""} hidden>
-        </div>
-        <div id="interv-n1-zone">${appelN1HTML()}</div>
         <div class="iv-section">Qui, où, quoi</div>
         <div class="form-grid iv-grille">
           <label>Technicien
             ${isLockedTech
               ? `<input value="${esc(ui.form.technicien)}" disabled>`
-              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.appelN1 ? "— Aucun technicien (N1 seul) —" : "— Choisir le technicien —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
+              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.sansDeplacement === true ? "— Aucun (réglé par le N1) —" : "— Choisir le technicien —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
           <label>Association
             <select id="f-association">
@@ -2442,12 +2435,6 @@ function renderInterventions(container, perms) {
   if (perms.canLogIntervention) {
     attacherPhotosInterventionListeners();
     attacherEcouteursAppelN1();
-    container.querySelectorAll("[data-n1-ouinon]").forEach(b => b.addEventListener("click", () => {
-      const cb = document.getElementById("f-appel-n1");
-      const oui = b.dataset.n1Ouinon === "oui";
-      if (cb.checked !== oui) { cb.checked = oui; cb.dispatchEvent(new Event("change")); }
-      container.querySelectorAll("[data-n1-ouinon]").forEach(x => x.classList.toggle("actif", x === b));
-    }));
     container.querySelectorAll("[data-iv-mode]").forEach(b => b.addEventListener("click", () => {
       ui.form.sansDeplacement = b.dataset.ivMode === "appel";
       container.querySelectorAll("[data-iv-mode]").forEach(x => x.classList.toggle("actif", x === b));
@@ -2469,11 +2456,7 @@ function renderInterventions(container, perms) {
         statut.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
       } finally { btn.disabled = false; btn.textContent = "✨ Rédiger avec l'IA"; }
     });
-    document.getElementById("f-appel-n1")?.addEventListener("change", (e) => {
-      ui.form.appelN1 = e.target.checked;
-      document.getElementById("interv-n1-zone").innerHTML = appelN1HTML();
-      attacherEcouteursAppelN1();
-    });
+
     ["type", "heures", "desc"].forEach(field => {
       const el = document.getElementById("f-" + field); if (!el) return;
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
@@ -2530,27 +2513,26 @@ function renderInterventions(container, perms) {
         document.querySelector(".iv-mode")?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
-      if (ui.form.appelN1) {
-        // Un appel au N1 peut se suffire à lui-même (ex. alerte à distance,
-        // sans déplacement sur site) — pas besoin d'intervenant N2,
-        // association/site/type/heures dans ce cas, contrairement à une
-        // intervention classique.
-        if (!ui.form.n1Contacte) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis le N1 contacté.</span>`; return; }
-        if (!ui.form.motifAppelN1) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le motif de l'appel.</span>`; return; }
-      } else {
-        if (!ui.form.technicien) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un intervenant.</span>`; return; }
-        if (!ui.form.association) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis une association.</span>`; return; }
-        if (!ui.form.site) { statusEl.innerHTML = `<span style="color:var(--red)">Choisis un site.</span>`; return; }
-        if (!ui.form.type) { statusEl.innerHTML = `<span style="color:var(--red)">Indique un type d'intervention.</span>`; return; }
-        if (!ui.form.heures && !ui.form.sansDeplacement) { statusEl.innerHTML = `<span style="color:var(--red)">Indique le nombre d'heures.</span>`; return; }
+      // Tout appel passe par le cadre d'astreinte (N1) : qui l'a reçu et la
+      // demande sont obligatoires ; le reste dépend du mode de traitement.
+      const err = (m) => { statusEl.innerHTML = `<span style="color:var(--red)">${m}</span>`; };
+      if (!ui.form.n1Contacte) { err("Indique le cadre d'astreinte (N1) qui a reçu l'appel."); document.getElementById("f-n1-contacte")?.focus(); return; }
+      if (!ui.form.motifAppelN1) { err("Indique la demande de l'appelant."); document.getElementById("f-motif-n1")?.focus(); return; }
+      if (ui.form.sansDeplacement === false) {
+        if (!ui.form.technicien) return err("Choisis le technicien qui s'est déplacé.");
+        if (!ui.form.association) return err("Choisis une association.");
+        if (!ui.form.site) return err("Choisis un site.");
+        if (!ui.form.type) return err("Indique un type d'intervention.");
+        if (!ui.form.heures) return err("Indique le nombre d'heures.");
       }
+      ui.form.appelN1 = true;
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
       const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
       const dimanche = estDimanche(ui.form.date);
       // Prime dimanche uniquement s'il y a eu déplacement : pas pour une
       // astreinte traitée par téléphone / à distance, ni pour un simple
       // appel au N1 sans intervenant envoyé sur place.
-      const sansDeplacement = ui.form.sansDeplacement === true || (!!ui.form.appelN1 && !ui.form.technicien);
+      const sansDeplacement = ui.form.sansDeplacement === true;
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
         type: ui.form.type, heures: parseFloat(ui.form.heures) || 0, description: ui.form.description,
