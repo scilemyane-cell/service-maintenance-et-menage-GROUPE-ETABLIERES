@@ -569,7 +569,25 @@
         : null;
       const userPourModule = (niveauTuile === "read" || currentUser.role === "direction") ? { ...currentUser, lectureSeule: true } : currentUser;
       if (estFermeConstruction(category.id, currentUser)) { content.innerHTML = ecranChantier(category); return; }
-      activeSub.mount(content, userPourModule);
+      // Même présentation pour toutes les tuiles : bandeau marine commun
+      // (les modules qui ont déjà leur propre bandeau en sont exclus).
+      const AVEC_BANDEAU_PROPRE = ["sites", "compteurs", "astreinte", "planning-individuel", "mon-planning"];
+      let cible = content;
+      if (!AVEC_BANDEAU_PROPRE.includes(category.id)) {
+        const mots = String(category.label || "").split(" ");
+        const accent = mots.pop();
+        content.innerHTML = `
+          <div class="mod sdw">
+            <div class="sdw-hero mod-hero">
+              <div><h2>${escapeHtml(mots.join(" "))}${mots.length ? " " : ""}<span>${escapeHtml(accent)}</span></h2>
+                <p>${escapeHtml(category.desc || "")}</p></div>
+              ${subs.length > 1 && activeSub ? `<div class="mod-onglet">${activeSub.icon || ""} ${escapeHtml(activeSub.label)}</div>` : ""}
+            </div>
+            <div id="mod-corps"></div>
+          </div>`;
+        cible = document.getElementById("mod-corps");
+      }
+      activeSub.mount(cible, userPourModule);
       return;
     }
 

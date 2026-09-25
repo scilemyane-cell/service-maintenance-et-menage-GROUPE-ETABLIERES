@@ -2335,16 +2335,23 @@ function estMonIntervention(i) {
 
 // Petit formulaire « Compléter mes horaires » (technicien, au retour).
 function completerHorairesHTML(i) {
+  // Brouillon gardé en mémoire : un ré-affichage (mise à jour de la base)
+  // ne doit jamais effacer ce que le technicien vient de saisir.
+  if (!ui.completerDraft || ui.completerDraft.id !== i.id) ui.completerDraft = { id: i.id, debut: i.heureDebut || "", fin: i.heureFin || "", heures: i.heures ? String(i.heures) : "", cr: i.compteRendu || i.description || "" };
+  const dr = ui.completerDraft;
   return `
   <div class="iv-completer">
-    <div class="iv-completer-tete"><b>🕒 Horaires de ${esc(i.technicien || "l'intervention")}</b><span>${esc(i.site || "")} · ${new Date(i.date).toLocaleDateString("fr-FR")}${i.motifAppelN1 ? ` · ${esc(i.motifAppelN1)}` : ""}</span></div>
+    <div class="iv-completer-tete"><b>🕒 Horaires de ${esc(i.technicien || "l'intervention")}</b><span>${esc(nomPropre(i.site || ""))} · ${new Date(i.date).toLocaleDateString("fr-FR")}${i.motifAppelN1 ? ` · ${esc(i.motifAppelN1)}` : ""}</span></div>
     <div class="iv-completer-grille">
-      <label>Heure de départ<input type="time" id="c-debut" value="${esc(i.heureDebut || "")}"></label>
-      <label>Heure de retour<input type="time" id="c-fin" value="${esc(i.heureFin || "")}"></label>
-      <label>Heures<input type="number" step="0.25" min="0" id="c-heures" value="${i.heures || ""}" placeholder="calcul auto"></label>
+      <label>Heure de départ<input type="time" id="c-debut" value="${esc(dr.debut)}"></label>
+      <label>Heure de retour<input type="time" id="c-fin" value="${esc(dr.fin)}"></label>
+      <label>Heures<input type="number" step="0.25" min="0" inputmode="decimal" id="c-heures" value="${esc(dr.heures)}" placeholder="calcul auto"></label>
+    </div>
+    <div class="iv-total" id="c-total">${parseFloat(dr.heures) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(dr.heures))}</b>` : ""}</div>
+    <div>
     </div>
     <label class="iv-completer-cr">Ce que tu as fait (optionnel)
-      <span class="iv-n1-ia"><textarea id="c-cr" rows="3" placeholder="ex. joint de siphon changé, fuite stoppée">${esc(i.compteRendu || i.description || "")}</textarea><button type="button" class="iv-ia petit" id="c-ia" title="Mettre au propre avec l'IA">✨</button></span>
+      <span class="iv-n1-ia"><textarea id="c-cr" rows="3" placeholder="ex. joint de siphon changé, fuite stoppée">${esc(dr.cr)}</textarea><button type="button" class="iv-ia petit" id="c-ia" title="Mettre au propre avec l'IA">✨</button></span>
     </label>
     <div class="iv-completer-pied"><span id="c-statut" class="iv-ia-statut"></span>
       <button class="nav-btn" id="c-annuler">Annuler</button><button class="add-btn" id="c-valider">✓ Enregistrer mes horaires</button></div>
@@ -2513,7 +2520,7 @@ function renderInterventions(container, perms) {
                   <td><span class="iv-numero ${enDouble ? "double" : ""}">${esc(i.numero || "—")}</span>${enDouble ? ` <span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}</td>
                   <td class="iv-date"><b>${new Date(i.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</b><small>${new Date(i.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${new Date(i.date).getFullYear()}</small></td>
                   <td>${i.technicien ? `<span class="iv-qui"><i style="background:${colorForPerson(i.technicien, state.people)}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">—</span>`}</td>
-                  <td class="iv-site"><b>${esc(i.site || "—")}</b>${i.association ? `<small>${esc([i.association, i.groupe].filter(Boolean).join(" · "))}</small>` : ""}</td>
+                  <td class="iv-site"><b>${esc(nomPropre(i.site) || "—")}</b>${i.association ? `<small>${esc([i.association, i.groupe].filter(Boolean).join(" · "))}</small>` : ""}</td>
                   <td>${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</td>
                   <td class="iv-heures">${i.heures} h</td><td class="iv-descr">${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${i.compteRendu ? `<details class="iv-cr-voir"><summary>📝 Compte rendu</summary><div>${esc(i.compteRendu).replace(/\n/g, "<br>")}</div></details>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
                   <td style="white-space:nowrap">
@@ -2762,9 +2769,16 @@ function renderInterventions(container, perms) {
       if (defilerVersCompleter) requestAnimationFrame(() => { document.querySelector(".iv-completer")?.scrollIntoView({ behavior: "smooth", block: "center" }); document.getElementById("c-debut")?.focus({ preventScroll: true }); });
       const i = state.interventions.find(x => x.id === ui.completerId);
       const calc = () => {
-        const d = dureeHeures(document.getElementById("c-debut").value, document.getElementById("c-fin").value);
-        if (d !== null) document.getElementById("c-heures").value = d;
+        const dr = ui.completerDraft || (ui.completerDraft = { id: i.id });
+        dr.debut = document.getElementById("c-debut").value;
+        dr.fin = document.getElementById("c-fin").value;
+        const d = dureeHeures(dr.debut, dr.fin);
+        if (d !== null) { dr.heures = String(d); document.getElementById("c-heures").value = d; }
+        const tot = document.getElementById("c-total");
+        if (tot) tot.innerHTML = parseFloat(dr.heures) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(dr.heures))}</b>` : "";
       };
+      document.getElementById("c-heures")?.addEventListener("input", (e) => { if (ui.completerDraft) ui.completerDraft.heures = e.target.value; });
+      document.getElementById("c-cr")?.addEventListener("input", (e) => { if (ui.completerDraft) ui.completerDraft.cr = e.target.value; });
       ["input", "change", "blur"].forEach(ev => { document.getElementById("c-debut")?.addEventListener(ev, calc); document.getElementById("c-fin")?.addEventListener(ev, calc); });
       document.getElementById("c-annuler")?.addEventListener("click", () => { ui.completerId = null; renderAll(); });
       document.getElementById("c-ia")?.addEventListener("click", async (e) => {
@@ -2780,7 +2794,8 @@ function renderInterventions(container, perms) {
       document.getElementById("c-valider")?.addEventListener("click", async () => {
         const st = document.getElementById("c-statut");
         const debut = document.getElementById("c-debut").value, fin = document.getElementById("c-fin").value;
-        const heures = parseFloat(document.getElementById("c-heures").value) || 0;
+        let heures = parseFloat(document.getElementById("c-heures").value) || 0;
+        if (!heures) heures = dureeHeures(debut, fin) || 0;
         if (!debut || !fin) { st.innerHTML = `<span style="color:var(--red)">Indique l'heure de départ et l'heure de retour.</span>`; return; }
         st.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
         try {
@@ -2789,7 +2804,7 @@ function renderInterventions(container, perms) {
             compteRendu: document.getElementById("c-cr").value.trim(),
             horairesACompleter: false, horairesCompletesPar: mountedUser.nom || mountedUser.email || "", horairesCompletesLe: Date.now(),
           });
-          ui.completerId = null;
+          ui.completerId = null; ui.completerDraft = null;
           window.toast?.("✓ Horaires enregistrés");
           renderAll();
         } catch (err) {
