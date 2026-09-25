@@ -1,5 +1,5 @@
   import { watchAuth, logout, roleLabel } from "./auth.js";
-  import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab, mountPlanningIndividuelTab } from "./planning.js";
+  import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab, mountPlanningIndividuelTab, mountMonPlanningTab } from "./planning.js";
   import { mountSitesDossiers } from "./site-dossier.js";
   import "./ui-feedback.js";
   import { mountCompteurs } from "./compteurs.js";
@@ -179,6 +179,12 @@
         ],
       },
       {
+        id: "mon-planning", label: "Mon planning", icon: "🗓️", desc: "Mes interventions, congés, RTT et arrêts sur l'année",
+        subtabs: [
+          { id: "liste", label: "Mon planning", icon: "🗓️", roles: ["technicien", "menage", "mi_temps"], mount: mountMonPlanningTab },
+        ],
+      },
+      {
         id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
           { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien"], mount: mountSuiviDemandesTab },
@@ -207,8 +213,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, suiviDemandes, stockMenage, stock] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, suiviDemandes, stockMenage, stock];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, stockMenage, stock] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, stockMenage, stock];
   }
 
   watchAuth((user) => {

@@ -230,6 +230,55 @@ export function mountSyntheseTab(container, user) { startListeners(container, us
 export function mountTransfertsTab(container, user) { startListeners(container, user, "transferts"); }
 export function mountCoordonneesTab(container, user) { startListeners(container, user, "coordonnees"); }
 export function mountArchiveRelevesTab(container, user) { startListeners(container, user, "archive-releves"); }
+// "Mon planning" : le planning individuel de la personne connectée
+// uniquement (lecture seule), pour les agents hors gestion — ex. le
+// technicien espaces verts qui n'est pas dans le roulement d'astreinte.
+export function mountMonPlanningTab(container, user) { startListeners(container, user, "mon-planning"); }
+
+const normNomPlanning = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+// Personne du planning reliée au compte : lien explicite (Coordonnées /
+// Utilisateurs), sinon rapprochement par le nom.
+function personneDuCompte(user) {
+  const toutes = [...new Set([...state.people.n1, ...state.people.n2])];
+  const lie = Object.entries(state.coordonnees || {}).find(([, c]) => c && c.uid && c.uid === user.uid);
+  if (lie) return lie[0];
+  const cibles = [user.nom, (user.email || "").split("@")[0]].filter(Boolean).map(normNomPlanning);
+  const prenom = normNomPlanning(user.nom).split(/\s+/)[0];
+  return toutes.find(p => cibles.includes(normNomPlanning(p)))
+    || toutes.find(p => prenom && normNomPlanning(p).split(/\s+/)[0] === prenom) || null;
+}
+
+function prochainesInterventionsHTML(person) {
+  const auj = dateKey(new Date());
+  const fin = dateKey(addDays(new Date(), 30));
+  const estMoi = n => normNomPlanning(n) === normNomPlanning(person);
+  const reelles = state.interventions.filter(i => estMoi(i.technicien) && i.date >= auj && i.date <= fin);
+  const dejaLa = new Set(reelles.filter(i => i.recurrenceId).map(i => i.recurrenceId + "|" + i.date));
+  const prevues = (state.recurrences || []).filter(r => estMoi(r.person)).flatMap(r =>
+    genererOccurrencesRecurrence(r, addDays(new Date(), 30)).filter(d => d >= auj && d <= fin && !dejaLa.has(r.id + "|" + d))
+      .map(d => ({ date: d, heureDebut: r.heureDebut, heureFin: r.heureFin, site: r.site, type: r.type, recurrenceId: r.id })));
+  const liste = [...reelles, ...prevues].sort((a, b) => (a.date + (a.heureDebut || "")).localeCompare(b.date + (b.heureDebut || "")));
+  return `
+    <div class="form-card">
+      <p style="margin:0 0 8px;font-weight:700;font-size:13px">Mes interventions — 30 prochains jours</p>
+      ${liste.length === 0 ? `<p class="hint" style="margin:0">Aucune intervention prévue sur les 30 prochains jours.</p>` : liste.map(i => `
+        <div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+          <b style="min-width:120px">${new Date(i.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}${i.heureDebut ? ` · ${esc(i.heureDebut)}${i.heureFin ? "–" + esc(i.heureFin) : ""}` : ""}</b>
+          <span>${esc(i.site || "—")}${i.type ? ` · ${esc(i.type)}` : ""}${i.recurrenceId ? " 🔁" : ""}</span>
+        </div>`).join("")}
+    </div>`;
+}
+
+function renderMonPlanning(container) {
+  const personne = personneDuCompte(mountedUser);
+  if (!personne) {
+    container.innerHTML = `<div class="placeholder-card"><b>Ton compte n'est relié à aucune personne du planning.</b><br><br>Demande à ton responsable de faire le lien (Administration → Utilisateurs → colonne « Dans le planning »).</div>`;
+    return;
+  }
+  ui.planningIndivPerson = personne;
+  ui.planningVueMulti = false;
+  return renderPlanningIndividuel(container, { canManageAbsences: false });
+}
 export function mountPlanningIndividuelTab(container, user) { startListeners(container, user, "planning-individuel"); }
 
 function renderAll() {
@@ -250,6 +299,7 @@ function renderAll() {
   if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
   if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer, mountedUser);
   if (ui.subtab === "planning-individuel") return renderPlanningIndividuel(mountedContainer, perms);
+  if (ui.subtab === "mon-planning") return renderMonPlanning(mountedContainer);
 }
 
 // =================================================================
@@ -1364,6 +1414,7 @@ function renderPlanningIndividuel(container, perms) {
   const year = ui.planningIndivYear; // année scolaire de départ (year → year+1)
   const todayKey = dateKey(new Date());
   const peutProgrammer = perms.canManageAbsences; // même niveau que la gestion des absences
+  const vuePerso = ui.subtab === "mon-planning";
 
   const debutAnneeScolaire = `${year}-09-01`, finAnneeScolaire = `${year + 1}-08-31`;
   const interventionsParDate = {};
@@ -1403,15 +1454,15 @@ function renderPlanningIndividuel(container, perms) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Planning sur une année scolaire (septembre → août), comme l'astreinte : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention — y compris pour un agent qui n'est pas dans le roulement d'astreinte (ex. l'agent des espaces verts). Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>
+      ${vuePerso ? `<h3 style="margin:0;font-size:16px;color:var(--gold)">🗓️ Planning de ${esc(person)}</h3>${prochainesInterventionsHTML(person)}` : `<p class="hint">Planning sur une année scolaire (septembre → août), comme l'astreinte : congés, ${libelleRtt(person || "")}, arrêts de travail et jours d'intervention — y compris pour un agent qui n'est pas dans le roulement d'astreinte (ex. l'agent des espaces verts). Les congés/RTT importés depuis un fichier PRTT apparaissent automatiquement ici.</p>`}
       <div class="toolbar">
-        <label>Personne
+        ${vuePerso ? "" : `<label>Personne
           <select id="pi-personne">${allPeople.length === 0 ? `<option value="">Aucune personne configurée</option>` : allPeople.map(p => `<option value="${esc(p)}" ${p === person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
-        </label>
+        </label>`}
         <label>Année scolaire
           <select id="pi-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}-${y + 1}</option>`).join("")}</select>
         </label>
-        <button type="button" class="nav-btn" id="pi-vue-multi" style="align-self:flex-end">👥 Voir plusieurs agendas</button>
+        ${vuePerso ? "" : `<button type="button" class="nav-btn" id="pi-vue-multi" style="align-self:flex-end">👥 Voir plusieurs agendas</button>`}
       </div>
       <div class="year-cal-legend">
         <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
