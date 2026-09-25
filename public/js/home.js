@@ -6,6 +6,7 @@ import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { initCarteSites } from "./site-map.js";
 import { watchCompteursTotal } from "./compteurs-data.js";
+import { watchFavoris, saveFavoris } from "./favoris-data.js";
 
 let unsubs = [];
 let people = { n1: [], n2: [] };
@@ -33,12 +34,21 @@ let onToggleConstructionRef = null;
 // pas une donnée métier partagée : stockée dans ce navigateur (comme le
 // thème sombre/clair) plutôt que dans Firestore, pour rester disponible
 // tout de suite sans avoir à ouvrir de nouveaux droits d'écriture.
-const CLE_FAVORIS = "etablieres-sites-favoris";
-function chargerFavoris() {
-  try { return JSON.parse(localStorage.getItem(CLE_FAVORIS) || "[]"); } catch { return []; }
-}
-function sauvegarderFavoris(liste) {
-  try { localStorage.setItem(CLE_FAVORIS, JSON.stringify(liste)); } catch { /* stockage indisponible, tant pis */ }
+// Ancienne version : favoris stockés dans le navigateur. Repris une seule
+// fois vers Firestore (favoris-sites/{uid}) au premier chargement.
+const CLE_FAVORIS_LOCAL = "etablieres-sites-favoris";
+let favoris = [];
+let favorisErreur = null;
+function chargerFavoris() { return favoris; }
+async function sauvegarderFavoris(liste) {
+  const avant = favoris;
+  favoris = liste; render();
+  try { await saveFavoris(mountedUser.uid, liste); }
+  catch (err) {
+    console.error("saveFavoris:", err);
+    favoris = avant; render();
+    alert("Favoris non enregistrés : " + (err?.code === "permission-denied" ? "les règles Firestore doivent être republiées (collection favoris-sites)." : (err?.message || err)));
+  }
 }
 
 function cleanup() {
@@ -68,6 +78,18 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchSitesDossiers((d) => { dossiers = d; scheduleRender(); }));
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
+  favoris = []; favorisErreur = null;
+  if (user.uid) unsubs.push(watchFavoris(user.uid, (ids) => {
+    if (ids === null) {
+      // Jamais enregistré : reprise des favoris de l'ancienne version
+      // (navigateur), uniquement pour son propre compte.
+      let locaux = [];
+      if (!user.apercu) { try { locaux = JSON.parse(localStorage.getItem(CLE_FAVORIS_LOCAL) || "[]"); } catch { locaux = []; } }
+      favoris = locaux;
+      if (locaux.length) saveFavoris(user.uid, locaux).then(() => { try { localStorage.removeItem(CLE_FAVORIS_LOCAL); } catch {} }).catch(() => {});
+    } else favoris = ids;
+    favorisErreur = null; scheduleRender();
+  }, (err) => { favorisErreur = err; scheduleRender(); }));
 }
 
 // L'accueil écoute 5 flux Firestore indépendants — sans regroupement, la
@@ -141,7 +163,8 @@ function blocCompteursEtFavorisHTML() {
         <div><b>${nbCompteurs === null ? "—" : nbCompteurs}</b><span>Compteurs</span></div>
       </section>
       <section class="gh-panneau-clair gh-favoris">
-        <h3>Mes sites favoris</h3>
+        <h3>${mountedUser.apercu ? `Favoris de ${esc(mountedUser.nom || mountedUser.email)}` : "Mes sites favoris"}</h3>
+        ${favorisErreur ? `<p class="gh-vide" style="color:#C23B27">⚠️ Favoris indisponibles${favorisErreur.code === "permission-denied" ? " — règles Firestore à republier (favoris-sites)" : ""}.</p>` : ""}
         <div class="gh-favoris-liste">
           ${favorisDossiers.length === 0 ? `<p class="gh-vide">Aucun site épinglé.</p>` : favorisDossiers.map(d => `
             <div class="gh-favori">
@@ -176,15 +199,13 @@ function attacherEcouteursBlocSites() {
   mountedContainer.querySelectorAll("[data-retirer-favori]").forEach(btn => {
     btn.addEventListener("click", () => {
       sauvegarderFavoris(chargerFavoris().filter(id => id !== btn.dataset.retirerFavori));
-      render();
     });
   });
   document.getElementById("hm-favori-ajouter")?.addEventListener("click", () => {
     const id = document.getElementById("hm-favori-select")?.value;
     if (!id) return;
     const liste = chargerFavoris();
-    if (!liste.includes(id)) { liste.push(id); sauvegarderFavoris(liste); }
-    render();
+    if (!liste.includes(id)) sauvegarderFavoris([...liste, id]);
   });
 
   if (carteInstance) { carteInstance.detruire(); carteInstance = null; }

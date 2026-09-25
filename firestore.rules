@@ -55,6 +55,13 @@ service cloud.firestore {
             && request.resource.data.role != 'admin' && request.resource.data.role != 'super_admin');
     }
 
+    // ---- Sites favoris de l'accueil, par utilisateur ----
+    // Chacun gère sa propre liste ; un Admin / Super Admin peut préparer
+    // celle d'un technicien (mode "Aperçu en tant que…").
+    match /favoris-sites/{userId} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdminLevel());
+    }
+
     // ---- Configuration (noms N1/N2, paramètres) ----
     match /config/{docId} {
       allow read: if isSignedIn();
