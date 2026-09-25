@@ -313,7 +313,8 @@ function renderListe() {
   // dessous sur téléphone) sans dérouler toute la liste.
   const retardDe = id => state.compteurs.filter(c => c.dossierId === id && estEnRetard(c)).length;
   if (ui.focusSiteId) ui.siteSelectionne = ui.focusSiteId;
-  if (!state.sites.some(x => x.id === ui.siteSelectionne)) {
+  if (ui.focusSiteId) ui.detailFerme = false;
+  if (!ui.detailFerme && !state.sites.some(x => x.id === ui.siteSelectionne)) {
     const ordre = groupes.flatMap(g => g.groups.flatMap(sub => trierParRetard(sub.sites)));
     ui.siteSelectionne = (ordre.find(x => retardDe(x.id) > 0) || ordre[0])?.id || null;
   }
@@ -359,14 +360,17 @@ function renderListe() {
           `).join("")}
         </div>
         <div class="cpt-detail" id="cpt-detail">
-          ${siteDetail ? renderSiteCard(siteDetail) : `<p class="hint">Choisis un site à gauche.</p>`}
+          ${siteDetail ? renderSiteCard(siteDetail) : `<p class="hint">Choisis un site pour voir ses compteurs.</p>`}
         </div>
       </div>`}
     </div>
   `;
 
   mountedContainer.querySelectorAll("[data-select-site]").forEach(btn => btn.addEventListener("click", () => {
-    ui.siteSelectionne = btn.dataset.selectSite;
+    const id = btn.dataset.selectSite;
+    if (ui.siteSelectionne === id) { ui.siteSelectionne = null; ui.detailFerme = true; ui.ouverts.delete(id); render(); return; } // 2e clic = refermer
+    ui.siteSelectionne = id;
+    ui.detailFerme = false;
     ui.addingSiteId = null;
     render();
     if (window.matchMedia("(max-width: 900px)").matches) {
@@ -410,6 +414,9 @@ function renderListe() {
   document.getElementById("cpt-voir-stats")?.addEventListener("click", () => { ui.screen = "stats"; render(); });
   mountedContainer.querySelectorAll("[data-toggle-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.toggleSite;
+    // Présentation mosaïque : ▲ / clic sur le titre referme le détail
+    // (et désélectionne la vignette) ; un clic sur une vignette le rouvre.
+    if (ui.siteSelectionne === id) { ui.ouverts.delete(id); ui.siteSelectionne = null; ui.detailFerme = true; render(); return; }
     if (ui.ouverts.has(id)) ui.ouverts.delete(id); else ui.ouverts.add(id);
     render();
   }));
