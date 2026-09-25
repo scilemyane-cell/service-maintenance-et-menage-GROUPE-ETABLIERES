@@ -26,6 +26,7 @@ import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER
 import { getDossierUnique, activerCompteursSurTousLesDossiers } from "./site-dossier-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
+import { renderCentreControle } from "./compteurs-dashboard.js";
 import {
   enqueuePendingReleve, estErreurReseau, demarrerSyncAuto, countPendingReleves, onQueueChange,
 } from "./offline-queue.js";
@@ -1132,112 +1133,16 @@ async function renderStats() {
   }
   if (ui.screen !== "stats") return; // l'utilisateur a changé d'écran pendant le chargement
 
-  const compteurs = state.compteurs;
-  const parAssoc = new Map();
-  state.sites.forEach(s => { if (s.association) parAssoc.set(s.id, s.association); });
-
-  const enRetard = compteurs.filter(estEnRetard);
-  const aJour = compteurs.length - enRetard.length;
-  const illisiblesRecents = statsReleves.filter(r => {
-    if ((Date.now() - (r.createdAt || 0)) > 90 * 24 * 3600 * 1000) return false;
-    return r.illisibles && Object.values(r.illisibles).some(Boolean);
-  }).length;
-
-  const parType = {}; compteurs.forEach(c => { parType[c.type] = (parType[c.type] || 0) + 1; });
-  const typesPresents = TYPES_COMPTEUR.filter(t => parType[t] > 0);
-
-  const parAssocCount = {}; compteurs.forEach(c => { const a = parAssoc.get(c.dossierId) || "Sans association"; parAssocCount[a] = (parAssocCount[a] || 0) + 1; });
-  const assocArr = Object.entries(parAssocCount).sort((a, b) => b[1] - a[1]);
-
-  const topSitesArr = (() => {
-    const compteursDuType = compteurs.filter(c => c.type === statsTypeTop);
-    const parSite = {};
-    compteursDuType.forEach(c => {
-      const conso = consommationRecente(c, statsReleves, 365);
-      if (conso === null) return;
-      parSite[c.dossierNom] = (parSite[c.dossierNom] || 0) + conso;
-    });
-    return Object.entries(parSite).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  })();
-
-  mountedContainer.innerHTML = `
-    <div class="stack">
-      <button class="nav-btn" id="cpt-stats-retour">← Retour</button>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
-        <div class="stat-chip" style="border-color:var(--teal);color:var(--teal)">${compteurs.length} compteur(s) actif(s)</div>
-        <div class="stat-chip" style="border-color:${enRetard.length > 0 ? "var(--red)" : "var(--teal)"};color:${enRetard.length > 0 ? "var(--red)" : "var(--teal)"}">${aJour} à jour · ${enRetard.length} en retard</div>
-        <div class="stat-chip" style="border-color:var(--gold);color:var(--gold)">🌫️ ${illisiblesRecents} illisible(s) (3 derniers mois)</div>
-      </div>
-
-      <div class="stats-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par type</h3><div style="position:relative;height:200px"><canvas id="cpt-stats-type"></canvas></div></div>
-        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Répartition par association</h3><div style="position:relative;height:200px"><canvas id="cpt-stats-assoc"></canvas></div></div>
-      </div>
-
-      ${typesPresents.map(t => `
-        <div class="form-card">
-          <h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">${TYPE_ICONE[t]} Évolution ${TYPE_LABEL[t]} — 12 derniers mois (tous compteurs, ${uniteValeur({ type: t })})</h3>
-          <div style="position:relative;height:200px"><canvas id="cpt-stats-evo-${t}"></canvas></div>
-        </div>
-      `).join("")}
-
-      <div class="form-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <h3 style="margin:0;font-size:13px;color:var(--text-dim)">Sites les plus consommateurs (12 derniers mois)</h3>
-          <select id="cpt-stats-top-type">
-            ${TYPES_COMPTEUR.filter(t => parType[t] > 0).map(t => `<option value="${t}" ${statsTypeTop === t ? "selected" : ""}>${TYPE_ICONE[t]} ${TYPE_LABEL[t]}</option>`).join("")}
-          </select>
-        </div>
-        ${topSitesArr.length === 0 ? `<p class="hint">Pas assez d'historique pour ce type pour l'instant.</p>` : `<div style="position:relative;height:${Math.max(160, topSitesArr.length * 32)}px"><canvas id="cpt-stats-top"></canvas></div>`}
-      </div>
-
-      ${enRetard.length > 0 ? `
-        <div class="form-card">
-          <h3 style="margin:0 0 10px;font-size:13px;color:var(--red)">⚠️ Compteurs en retard (${enRetard.length})</h3>
-          ${enRetard.map(c => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
-              <span>${TYPE_ICONE[c.type]} ${esc(c.nom)} — <span class="hint">${esc(c.dossierNom)}</span></span>
-              <button class="nav-btn" data-stats-relever="${c.id}" style="font-size:12px">Relever</button>
-            </div>
-          `).join("")}
-        </div>
-      ` : ""}
-    </div>
-  `;
-  document.getElementById("cpt-stats-retour").addEventListener("click", () => { ui.screen = "liste"; render(); });
-  document.getElementById("cpt-stats-top-type")?.addEventListener("change", (e) => { statsTypeTop = e.target.value; render(); });
-  mountedContainer.querySelectorAll("[data-stats-relever]").forEach(btn => btn.addEventListener("click", () => ouvrirReleve(btn.dataset.statsRelever, null)));
-
-  if (!window.Chart) return; // librairie pas encore chargée (connexion lente) — chiffres et liste restent utilisables
-
-  graphiquesStats.type = new window.Chart(document.getElementById("cpt-stats-type").getContext("2d"), {
-    type: "doughnut",
-    data: { labels: typesPresents.map(t => `${TYPE_ICONE[t]} ${TYPE_LABEL[t]}`), datasets: [{ data: typesPresents.map(t => parType[t]), backgroundColor: typesPresents.map((_, i) => COULEURS_CPT[i % COULEURS_CPT.length]) }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
+  // Centre de contrôle énergie (voir compteurs-dashboard.js).
+  if (!state.compteurs.some(c => c.type === statsTypeTop)) statsTypeTop = state.compteurs[0]?.type || "eau";
+  renderCentreControle(mountedContainer, {
+    compteurs: state.compteurs, sites: state.sites, associations: state.associations || [], releves: statsReleves,
+    typeTop: statsTypeTop,
+    onRetour: () => { ui.screen = "liste"; render(); },
+    onRelever: (id) => ouvrirReleve(id, null),
+    onOuvrirSite: (id) => { ui.screen = "liste"; ui.siteSelectionne = id; ui.focusSiteId = id; render(); },
+    onTypeTop: (t) => { statsTypeTop = t; render(); },
   });
-  graphiquesStats.assoc = new window.Chart(document.getElementById("cpt-stats-assoc").getContext("2d"), {
-    type: "doughnut",
-    data: { labels: assocArr.map(([n]) => n), datasets: [{ data: assocArr.map(([, v]) => v), backgroundColor: assocArr.map((_, i) => COULEURS_CPT[i % COULEURS_CPT.length]) }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
-  });
-  typesPresents.forEach(t => {
-    const canvas = document.getElementById(`cpt-stats-evo-${t}`);
-    if (!canvas) return;
-    const { labels, valeurs } = consommationMensuelleAgregee(compteurs.filter(c => c.type === t), statsReleves);
-    graphiquesStats[`evo-${t}`] = new window.Chart(canvas.getContext("2d"), {
-      type: "bar",
-      data: { labels, datasets: [{ data: valeurs, backgroundColor: "rgba(217,178,76,.75)", borderColor: "#D9B24C", borderWidth: 1.5, borderRadius: 5, maxBarThickness: 26 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, x: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
-    });
-  });
-  const canvasTop = document.getElementById("cpt-stats-top");
-  if (canvasTop && topSitesArr.length > 0) {
-    graphiquesStats.top = new window.Chart(canvasTop.getContext("2d"), {
-      type: "bar",
-      data: { labels: topSitesArr.map(([n]) => n), datasets: [{ data: topSitesArr.map(([, v]) => Math.round(v)), backgroundColor: topSitesArr.map((_, i) => COULEURS_CPT[i % COULEURS_CPT.length]) }] },
-      options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, y: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
-    });
-  }
 }
 
 async function ouvrirReleve(compteurId, retourSiteId) {
