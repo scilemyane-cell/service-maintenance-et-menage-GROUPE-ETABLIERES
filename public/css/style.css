@@ -1506,3 +1506,18 @@ html[data-theme="sombre"] .cpt-detail > .form-card{border-top-color:#4d9dff}
 .sdw-bas{flex-wrap:wrap}.sdw-bas span{white-space:nowrap}
 .sdw-tuile.sdw-sel .sdw-etat.retard{background:#C23B27 !important;color:#fff !important}
 .sdw-tuile.sdw-sel .sdw-etat.ok{background:#1baf7a !important;color:#fff !important}
+
+/* Rétroéclairage du contour des vignettes (couleur de l'état pour les compteurs, de l'association pour les dossiers) */
+.sdw-tuile{--glow:var(--c)}
+.sdw-cpt.sdw-ok{--glow:#1baf7a}
+.sdw-cpt.sdw-retard{--glow:#e5533d}
+.sdw-cpt.sdw-vide{--glow:#9aa1ad}
+.sdw-tuile{border-color:color-mix(in srgb,var(--glow) 55%,transparent) !important;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--glow) 35%,transparent),0 0 14px color-mix(in srgb,var(--glow) 35%,transparent),0 0 32px -6px color-mix(in srgb,var(--glow) 40%,transparent) !important}
+.sdw-tuile:hover{box-shadow:0 0 0 1px var(--glow),0 0 20px color-mix(in srgb,var(--glow) 55%,transparent),0 0 44px -4px color-mix(in srgb,var(--glow) 55%,transparent) !important}
+html[data-theme="sombre"] .sdw-tuile{box-shadow:inset 0 0 12px color-mix(in srgb,var(--glow) 18%,transparent),0 0 0 1px color-mix(in srgb,var(--glow) 45%,transparent),0 0 18px color-mix(in srgb,var(--glow) 45%,transparent) !important}
+.sdw-cpt.sdw-retard{animation:sdw-halo 2.4s ease-in-out infinite}
+@keyframes sdw-halo{0%,100%{box-shadow:0 0 0 1px rgba(229,83,61,.45),0 0 12px rgba(229,83,61,.35)}50%{box-shadow:0 0 0 1px rgba(229,83,61,.8),0 0 26px rgba(229,83,61,.6)}}
+.sdw-cpt.sdw-vide{box-shadow:0 0 0 1px rgba(154,161,173,.3) !important}
+.sdw-tuile.sdw-sel{box-shadow:0 0 0 3px var(--glow),0 0 26px color-mix(in srgb,var(--glow) 65%,transparent),0 14px 30px rgba(11,33,64,.35) !important;animation:none}
+@media (prefers-reduced-motion:reduce){.sdw-cpt.sdw-retard,.sdw-cpt.sdw-retard .sdw-statut{animation:none}}
