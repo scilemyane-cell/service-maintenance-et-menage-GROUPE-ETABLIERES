@@ -1872,3 +1872,79 @@ html[data-theme="sombre"] .mod .form-card{box-shadow:0 0 0 1px rgba(255,255,255,
 .mod > .mod-hero{margin-bottom:16px}
 .mod-onglet{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:99px;padding:8px 16px;font-weight:700;font-size:13px;white-space:nowrap}
 .mod #mod-corps > .stack > .hint:first-child{margin-top:0}
+
+/* =====================================================================
+   DESIGN COMMUN v2 — appliqué à toutes les interfaces (hors accueil)
+   Cartes, champs, boutons, tableaux, onglets et en-tête harmonisés avec
+   le style des bandeaux marine (Dossier de site, Compteurs, Astreinte).
+   ===================================================================== */
+body:not(.accueil-gmao){font-family:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif}
+body:not(.accueil-gmao) h1,body:not(.accueil-gmao) h2,body:not(.accueil-gmao) h3,body:not(.accueil-gmao) h4{font-family:"Montserrat",system-ui,sans-serif}
+
+/* En-tête des modules */
+body:not(.accueil-gmao) .topbar{padding:12px 22px;background:var(--panel);box-shadow:0 2px 12px rgba(20,30,50,.06);position:sticky;top:0;z-index:40}
+body:not(.accueil-gmao) .topbar-title h1{font-weight:800;font-size:19px;letter-spacing:-.01em}
+body:not(.accueil-gmao) .back-btn{border-radius:99px;padding:5px 12px;font-weight:700}
+
+/* Barre d'onglets : pastilles */
+body:not(.accueil-gmao) .tabs{gap:6px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--border)}
+body:not(.accueil-gmao) .tab-btn{border:1px solid transparent;border-radius:99px;padding:8px 16px;font-weight:700;color:var(--text-dim)}
+body:not(.accueil-gmao) .tab-btn:hover{background:var(--panel-alt);color:var(--text)}
+body:not(.accueil-gmao) .tab-btn.active{background:linear-gradient(135deg,#0b2140,#1d3a66);color:#fff;border-color:#0b2140;box-shadow:0 4px 12px rgba(11,33,64,.25)}
+html[data-theme="sombre"] body:not(.accueil-gmao) .tab-btn.active{background:linear-gradient(135deg,#d9b24c,#b98f2b);color:#1A1305;border-color:transparent}
+
+/* Contenu */
+body:not(.accueil-gmao) .content{padding:20px 18px 40px}
+body:not(.accueil-gmao) .stack{gap:16px}
+
+/* Cartes */
+#content .form-card,#content .placeholder-card{border-radius:18px;padding:18px 20px;border:1px solid var(--border);box-shadow:0 2px 10px rgba(20,30,50,.06)}
+html[data-theme="sombre"] #content .form-card{box-shadow:0 10px 28px rgba(0,0,0,.25)}
+#content .form-card > h3:first-child,#content .form-card > h2:first-child{font-weight:800;font-size:15px;letter-spacing:0}
+
+/* Champs */
+#content .form-grid{gap:12px 14px}
+#content .form-grid label,#content label{font-weight:600}
+#content .form-grid label{font-size:11.5px}
+#content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),#content select,#content textarea{border-radius:10px}
+#content .form-grid input,#content .form-grid select,#content .form-grid textarea{min-height:42px;padding:9px 12px;font-size:14px}
+#content input:not([type="checkbox"]):not([type="radio"]):focus,#content select:focus,#content textarea:focus{outline:none;border-color:var(--gold) !important;box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 22%,transparent)}
+
+/* Boutons */
+#content .add-btn{border-radius:10px;padding:10px 18px;box-shadow:0 4px 12px color-mix(in srgb,var(--gold) 30%,transparent)}
+#content .nav-btn{border-radius:10px;padding:7px 13px;transition:border-color .15s,color .15s,background .15s}
+#content .nav-btn:hover{background:color-mix(in srgb,var(--gold) 8%,var(--panel-alt))}
+#content .del-btn{border-radius:8px;padding:5px 8px}
+#content .del-btn:hover{background:color-mix(in srgb,var(--red) 12%,transparent)}
+#content .stat-chip{border-radius:99px;padding:6px 12px;font-weight:600}
+
+/* Tableaux */
+#content .table-wrap{border-radius:16px;box-shadow:0 2px 10px rgba(20,30,50,.05)}
+#content table th{font-size:10.5px;letter-spacing:.08em;padding:12px 10px;font-weight:800}
+#content table td{padding:11px 10px;vertical-align:middle}
+#content table tbody tr{transition:background .12s}
+#content table tbody tr:hover{background:color-mix(in srgb,var(--gold) 6%,transparent)}
+
+/* Textes d'aide */
+#content .hint{font-size:12.5px}
+
+/* Cartes « bulles » (listes de sites/produits dans plusieurs modules) */
+#content .bubble-card{border-radius:16px;box-shadow:0 2px 8px rgba(20,30,50,.06);transition:transform .15s,box-shadow .15s,border-color .15s}
+#content .bubble-card:hover{box-shadow:0 0 0 1px var(--gold),0 10px 24px rgba(20,30,50,.14)}
+
+/* Étiquettes */
+#content .tag{border-radius:99px}
+
+@media (max-width:700px){
+  body:not(.accueil-gmao) .topbar{padding:10px 12px}
+  body:not(.accueil-gmao) .tabs{padding:8px 10px}
+  body:not(.accueil-gmao) .tab-btn{padding:7px 12px;font-size:12.5px}
+  body:not(.accueil-gmao) .content{padding:12px 10px 30px}
+  #content .form-card{padding:14px 12px;border-radius:16px}
+  #content input:not([type="checkbox"]):not([type="radio"]),#content select,#content textarea{font-size:16px}
+}
+#content .form-grid > *{min-width:0}
+@media (max-width:700px){
+  #content .form-grid label:has(#fc-prev){grid-column:1 / -1}
+  #content .form-grid label:has(#fc-prev) > div{justify-content:space-between}
+}
