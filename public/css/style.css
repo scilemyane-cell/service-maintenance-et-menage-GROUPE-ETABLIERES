@@ -1786,3 +1786,20 @@ html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
   .iv-grille:not(.iv-grille-h) > label:only-child{grid-column:1 / -1}
   .iv-carte input[type="time"],.iv-carte input[type="date"],.iv-completer input[type="time"]{min-height:44px;-webkit-appearance:none;appearance:none;text-align:left}
 }
+/* Synthèse : même style que Dossier de site / Relevé compteur */
+.sy.sdw .sdw-kpis > div:not(.sdw-actions){min-width:130px}
+.sy-tuile{position:relative;overflow:hidden;border-radius:18px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--c) 55%,transparent);
+  background:var(--sdw-carte);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 30%,transparent),0 0 16px color-mix(in srgb,var(--c) 28%,transparent)}
+html:not([data-theme="sombre"]) .sy-tuile{background:linear-gradient(155deg,#eceff3 0%,#c8cdd6 55%,#aab1bd 100%)}
+.sy-tuile:before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 4px 4px 0;background:var(--c)}
+.sy-tuile span{display:block;font-size:12px;font-weight:700;color:var(--sdw-dim)}
+html:not([data-theme="sombre"]) .sy-tuile span{color:#3a4252}
+.sy-tuile b{display:block;font:800 26px Montserrat,system-ui,sans-serif;color:var(--sdw-txt);margin:4px 0 2px}
+.sy-tuile small{font-size:11.5px;color:var(--sdw-dim)}
+html:not([data-theme="sombre"]) .sy-tuile small{color:#3a4252}
+.sy-tuile.alerte b{color:#C23B27}
+.sy.sdw .sy-kpis{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.sy.sdw .sy-carte{border-radius:18px}
+@media (max-width:700px){.sy.sdw .sdw-kpis > div:not(.sdw-actions){min-width:0;flex:1}}
+.sy.sdw .sy-kpis{grid-template-columns:repeat(3,1fr)}
+@media (max-width:860px){.sy.sdw .sy-kpis{grid-template-columns:1fr 1fr}}

@@ -18,6 +18,7 @@ import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOS
 import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js";
 import { imprimerFicheIsolee } from "./print-fiche.js";
 import { redigerCompteRendu, reformulerDecision } from "./ia.js";
+import { nomPropre } from "./sites-visuel.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 
@@ -2945,7 +2946,7 @@ function renderSynthese(container) {
   const weCount = parJour[5] + parJour[6];
   const grouper = (liste, cle) => { const o = {}; liste.forEach(i => { const k = cle(i) || "—"; (o[k] = o[k] || []).push(i); }); return Object.entries(o).sort((a, b) => b[1].length - a[1].length); };
   const parN1 = grouper(appels, i => i.n1Contacte);
-  const parSite = grouper(appels, i => i.site);
+  const parSite = grouper(appels, i => nomPropre(i.site));
   const parType = grouper(appels, i => i.type);
   const parTech = grouper(deplacements, i => i.technicien);
 
@@ -2975,7 +2976,18 @@ function renderSynthese(container) {
   const sel = (id, liste, val) => `<select id="${id}">${liste.map(x => `<option value="${esc(x)}" ${val === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
 
   container.innerHTML = `
-  <div class="stack sy">
+  <div class="stack sy sdw">
+    <div class="sdw-hero">
+      <div>
+        <h2>Synthèse de l'<span>astreinte</span></h2>
+        <p>${{ mois: "Ce mois-ci", "3mois": "3 derniers mois", "12mois": "12 derniers mois", scolaire: "Année scolaire", tout: "Toute la période" }[ui.synthPeriode]}${ui.synthN1 !== "Tous" ? ` · N1 : ${esc(ui.synthN1)}` : ""}${ui.filterTech !== "Tous" ? ` · ${esc(ui.filterTech)}` : ""}${ui.filterSite !== "Tous" ? ` · ${esc(nomPropre(ui.filterSite))}` : ""}</p>
+      </div>
+      <div class="sdw-kpis">
+        <div><b>${appels.length}</b><small>📞 appels reçus</small></div>
+        <div><b>${pct(parTel.length, appels.length)} %</b><small>☎️ réglés par téléphone</small></div>
+        <div><b>${deplacements.length}</b><small>🚗 déplacements</small></div>
+      </div>
+    </div>
     <div class="sy-filtres">
       <div class="iv-chips">${[["mois", "Ce mois-ci"], ["3mois", "3 mois"], ["12mois", "12 mois"], ["scolaire", "Année scolaire"], ["tout", "Tout"]].map(([k, l]) => `<button class="iv-chip ${ui.synthPeriode === k ? "on" : ""}" data-sy-periode="${k}">${l}</button>`).join("")}</div>
       <label>N1${sel("sy-n1", n1s, ui.synthN1)}</label>
@@ -2984,14 +2996,12 @@ function renderSynthese(container) {
     </div>
 
     <div class="sy-kpis">
-      <div class="sy-kpi"><span>📞 Appels reçus</span><b>${appels.length}</b><small>${minTel ? `${Math.round(minTel)} min au téléphone` : "&nbsp;"}</small></div>
-      <div class="sy-kpi vert"><span>☎️ Réglés par téléphone</span><b>${parTel.length}</b><small>${pct(parTel.length, appels.length)} % des appels</small></div>
-      <div class="sy-kpi bleu"><span>🚗 Déplacements</span><b>${deplacements.length}</b><small>${pct(deplacements.length, appels.length)} % des appels</small></div>
-      <div class="sy-kpi"><span>🕐 Heures sur site</span><b>${hSite.toFixed(1)} h</b><small>${deplacements.length ? `${(hSite / deplacements.length).toFixed(1)} h / déplacement` : "&nbsp;"}</small></div>
-      <div class="sy-kpi violet"><span>🌙 Heures de nuit</span><b>${hNuit.toFixed(1)} h</b><small>${nuitCount} appel${nuitCount > 1 ? "s" : ""} de nuit</small></div>
-      <div class="sy-kpi or"><span>🌞 Primes dimanche</span><b>${primes} €</b><small>${weCount} appel${weCount > 1 ? "s" : ""} le week-end</small></div>
-      <div class="sy-kpi"><span>⚡ Délai appel → départ</span><b>${delaiMoy != null ? `${delaiMoy} min` : "—"}</b><small>${delais.length ? `sur ${delais.length} déplacement${delais.length > 1 ? "s" : ""}` : "heure d'appel à saisir"}</small></div>
-      <div class="sy-kpi ${aCompleter ? "alerte" : ""}"><span>🕒 Horaires à compléter</span><b>${aCompleter}</b><small>déplacement${aCompleter > 1 ? "s" : ""} en attente</small></div>
+      <div class="sy-tuile" style="--c:#1baf7a"><span>☎️ Réglés par téléphone</span><b>${parTel.length}</b><small>${minTel ? `${Math.round(minTel)} min au téléphone (N1)` : `${pct(parTel.length, appels.length)} % des appels`}</small></div>
+      <div class="sy-tuile" style="--c:#2a78d6"><span>🕐 Heures sur site</span><b>${fmtDureeH(hSite)}</b><small>${deplacements.length ? `${fmtDureeH(hSite / deplacements.length)} par déplacement` : "&nbsp;"}</small></div>
+      <div class="sy-tuile" style="--c:#6a5cff"><span>🌙 Heures de nuit</span><b>${fmtDureeH(hNuit)}</b><small>${nuitCount} appel${nuitCount > 1 ? "s" : ""} de nuit (21h – 6h)</small></div>
+      <div class="sy-tuile" style="--c:#e0a526"><span>🌞 Primes dimanche</span><b>${primes} €</b><small>${weCount} appel${weCount > 1 ? "s" : ""} le week-end</small></div>
+      <div class="sy-tuile" style="--c:#eb6834"><span>⚡ Délai appel → départ</span><b>${delaiMoy != null ? `${delaiMoy} min` : "—"}</b><small>${delais.length ? `moyenne sur ${delais.length} déplacement${delais.length > 1 ? "s" : ""}` : "renseigne l'heure de l'appel"}</small></div>
+      <div class="sy-tuile ${aCompleter ? "alerte" : ""}" style="--c:${aCompleter ? "#C23B27" : "#1baf7a"}"><span>🕒 Horaires à compléter</span><b>${aCompleter}</b><small>${aCompleter ? `déplacement${aCompleter > 1 ? "s" : ""} en attente du technicien` : "tout est à jour"}</small></div>
     </div>
 
     ${insights.length ? `<div class="sy-carte sy-insights"><h3>💡 À retenir</h3><ul>${insights.map(x => `<li>${x}</li>`).join("")}</ul></div>` : ""}
