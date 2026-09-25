@@ -1521,3 +1521,9 @@ html[data-theme="sombre"] .sdw-tuile{box-shadow:inset 0 0 12px color-mix(in srgb
 .sdw-cpt.sdw-vide{box-shadow:0 0 0 1px rgba(154,161,173,.3) !important}
 .sdw-tuile.sdw-sel{box-shadow:0 0 0 3px var(--glow),0 0 26px color-mix(in srgb,var(--glow) 65%,transparent),0 14px 30px rgba(11,33,64,.35) !important;animation:none}
 @media (prefers-reduced-motion:reduce){.sdw-cpt.sdw-retard,.sdw-cpt.sdw-retard .sdw-statut{animation:none}}
+/* Le halo prend exactement la couleur du bord de la vignette (couleur de l'association) */
+.sdw-cpt.sdw-ok,.sdw-cpt.sdw-retard,.sdw-cpt.sdw-vide{--glow:var(--c)}
+.sdw-cpt.sdw-vide{box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 30%,transparent),0 0 10px color-mix(in srgb,var(--c) 20%,transparent) !important}
+@keyframes sdw-halo{0%,100%{box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 45%,transparent),0 0 12px color-mix(in srgb,var(--c) 35%,transparent)}50%{box-shadow:0 0 0 1px var(--c),0 0 26px color-mix(in srgb,var(--c) 65%,transparent)}}
+html:not([data-theme="sombre"]) .sdw-cpt.sdw-retard{border-color:color-mix(in srgb,var(--c) 55%,transparent) !important}
+html[data-theme="sombre"] .sdw-cpt.sdw-retard{border-color:color-mix(in srgb,var(--c) 55%,transparent) !important}
