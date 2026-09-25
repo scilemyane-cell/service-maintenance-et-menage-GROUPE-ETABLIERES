@@ -1233,3 +1233,4 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .fj-per-fait .fj-label{color:var(--text-dim)}
 .fj-per-coche.faite .fj-rond{animation:fj-pop .35s ease}
 .fj-semaine{display:flex;flex-direction:column;gap:14px}
+.fj-deja{border-top:1px solid #f0f1f4;padding:10px 4px}.fj-deja summary{cursor:pointer;color:#128077;font-weight:700;font-size:13px}

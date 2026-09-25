@@ -246,17 +246,26 @@ function blocPeriodiquesHTML(site, data) {
   const nbRetard = liste.filter(x => x.st.etat === "retard").length;
   const nbAFaire = liste.filter(x => x.st.etat === "afaire").length;
   const cetteSemaine = (x) => (data.periodiques?.[clePeriodique(x.room, x.task)] || []).length > 0;
+  // Une tâche déjà faite pour la période n'est plus proposée les semaines
+  // suivantes (elle revient quand la prochaine période commence). On la
+  // garde visible seulement la semaine où elle a été cochée (pour pouvoir
+  // décocher une erreur). Les autres sont repliées dans « Déjà faites ».
+  const visibles = liste.filter(x => x.st.etat !== "fait" || cetteSemaine(x));
+  const masquees = liste.filter(x => x.st.etat === "fait" && !cetteSemaine(x));
   return `
   <div class="fj-mois ${nbRetard ? "a-retard" : ""}">
     <div class="fj-mois-tete">
       <div><b>📅 Tâches du mois</b><small>À faire une fois dans la période, pas tous les jours</small></div>
       <span class="fj-mois-resume">${nbRetard ? `<span class="fj-pastille rouge">🔴 ${nbRetard} en retard</span>` : ""}${nbAFaire ? `<span class="fj-pastille orange">${nbAFaire} à faire</span>` : ""}${!nbRetard && !nbAFaire ? `<span class="fj-pastille vert">✓ Tout est à jour</span>` : ""}</span>
     </div>
-    ${liste.map(x => {
+    ${visibles.map(x => ligneHTML(x)).join("")}
+    ${masquees.length ? `<details class="fj-deja"><summary>✓ ${masquees.length} tâche${masquees.length > 1 ? "s" : ""} déjà faite${masquees.length > 1 ? "s" : ""} pour cette période</summary>${masquees.map(x => ligneHTML(x)).join("")}</details>` : ""}
+  </div>`;
+  function ligneHTML(x) {
       const cle = clePeriodique(x.room, x.task);
       const st = x.st;
       const info = st.etat === "fait"
-        ? (x.task.freq.match(/3/) ? `Fait le ${fmtJM(st.derniere)} · prochaine fois vers le ${fmtJM(st.echeance)}` : `Fait ce mois-ci${st.derniere ? ` (le ${fmtJM(st.derniere)})` : ""}`)
+        ? (periodeTache(x.task).mois > 1 ? `Fait le ${fmtJM(st.derniere)} · prochaine fois vers le ${fmtJM(st.echeance)}` : `Fait ce mois-ci${st.derniere ? ` (le ${fmtJM(st.derniere)})` : ""}`)
         : st.etat === "retard"
           ? `En retard — ${st.derniere ? `pas fait depuis le ${fmtJM(st.derniere)}` : "jamais fait"}`
           : `À faire avant le ${fmtJM(st.echeance)}${st.fois > 1 ? ` · ${st.faitsPeriode}/${st.fois} ce mois-ci` : ""}`;
@@ -267,8 +276,7 @@ function blocPeriodiquesHTML(site, data) {
           <span class="fj-label">${esc(x.task.label)}<em>${esc(x.task.freq)}</em><br><small>${esc(x.room.name)} · ${info}</small></span>
         </button>
       </div>`;
-    }).join("")}
-  </div>`;
+  }
 }
 
 function tachesDuJour(site, jour) {
