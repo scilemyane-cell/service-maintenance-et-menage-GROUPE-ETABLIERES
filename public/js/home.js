@@ -126,7 +126,7 @@ function sitesFiltresPourCarte() {
 // compteurs et favoris, mosaïque de tuiles, notifications à droite) pour
 // que les deux outils se ressemblent et que l'on passe de l'un à l'autre
 // sans se perdre.
-const URL_GMAO = "https://namixis.camileia.com";
+const URL_GMAO = "https://groupe-etablieres-reset.camileia.com/";
 const URL_SHAREPOINT = "https://etablieresfr.sharepoint.com/sites/appsmm";
 
 // Dégradés des tuiles (à défaut de photos) — attribués de façon stable
