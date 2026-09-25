@@ -40,8 +40,13 @@ function dansFranceMetro({ lat, lng }) {
 // garde-fou (potentiellement aberrant) : on ne le considère "localisé"
 // que s'il retombe dans la zone attendue, sinon il est traité comme non
 // géocodé (re-mis en file, exclu des marqueurs et du cadrage de la carte).
+// Les coordonnées ne valent que pour l'adresse qui a été géocodée : si
+// l'adresse du dossier a été modifiée depuis (ou si le géocodage date
+// d'avant l'enregistrement de l'adresse géocodée), le site est
+// re-géocodé et son marqueur déplacé automatiquement.
+const normAdresse = a => String(a || "").trim().replace(/\s+/g, " ").toLowerCase();
 function geoValide(d) {
-  return !!d.geo && dansFranceMetro(d.geo);
+  return !!d.geo && dansFranceMetro(d.geo) && !!d.geo.adresse && normAdresse(d.geo.adresse) === normAdresse(d.adresse);
 }
 
 async function geocoderAdresse(adresse) {
@@ -84,8 +89,9 @@ function demarrerBoucleGeocodage() {
       try {
         const coords = await geocoderAdresse(adresse);
         if (coords) {
-          await saveDossierGeo(id, coords);
-          abonnes.forEach(cb => cb(id, coords));
+          const geo = { ...coords, adresse };
+          await saveDossierGeo(id, geo);
+          abonnes.forEach(cb => cb(id, geo));
         }
       } catch (e) { console.error("Géocodage échoué pour", id, e); }
       await new Promise(r => setTimeout(r, 1100));
@@ -162,7 +168,11 @@ export function initCarteSites(holder, dossiers, options = {}) {
     abonnes.set(idAbonne, (id, coords) => {
       if (detruit) return;
       const d = dossiers.find(x => x.id === id);
-      if (d) { d.geo = coords; if (!markers[id]) ajouterMarker(d); }
+      if (d) {
+        d.geo = coords;
+        if (markers[id]) markers[id].setLatLng([coords.lat, coords.lng]); // adresse corrigée : le marqueur se déplace
+        else ajouterMarker(d);
+      }
       majStatut();
     });
     mettreEnFileSiBesoin(avecAdresse);
