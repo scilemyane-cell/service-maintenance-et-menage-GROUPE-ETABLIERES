@@ -23,6 +23,7 @@ let modeReorganisation = false;
 let carteInstance = null;
 let filtreAssociation = "";
 let filtreSite = "";
+let horlogeTimer = null;
 
 // "Mes sites favoris" — accès rapide personnel à quelques fiches (voir la
 // carte des sites sur Camelia GMAO). Purement une commodité d'affichage,
@@ -43,6 +44,7 @@ function cleanup() {
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
   if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
   if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+  if (horlogeTimer) { clearInterval(horlogeTimer); horlogeTimer = null; }
   modeReorganisation = false;
 }
 
@@ -54,6 +56,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder)
   onSelectRef = onSelect;
   onReorderRef = onReorder;
   filtreAssociation = ""; filtreSite = "";
+  container.classList.add("content-accueil");
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchPeople((p) => { people = p; scheduleRender(); }));
   unsubs.push(watchAbsences((a) => { absences = a; scheduleRender(); }));
@@ -83,48 +86,70 @@ function sitesFiltresPourCarte() {
   });
 }
 
-function blocSitesHTML() {
-  const totalEquipements = dossiers.reduce((s, d) => s + (d.sections || []).filter(sec => sec.concerne).length, 0);
+// Lien direct vers la GMAO Camileia du groupe — l'accueil reprend la
+// disposition de la page d'accueil Camileia (carte + filtres à gauche,
+// compteurs et favoris, mosaïque de tuiles, notifications à droite) pour
+// que les deux outils se ressemblent et que l'on passe de l'un à l'autre
+// sans se perdre.
+const URL_GMAO = "https://namixis.camileia.com";
+const URL_SHAREPOINT = "https://etablieresfr.sharepoint.com/sites/appsmm";
+
+// Dégradés des tuiles (à défaut de photos) — attribués de façon stable
+// par identifiant de tuile, pour qu'une tuile garde toujours sa couleur.
+const DEGRADES_TUILES = [
+  ["#1F3B63", "#0E1B30"], ["#5B2340", "#2A0F1F"], ["#1E4F4B", "#0C2422"], ["#4A3B1C", "#231B0B"],
+  ["#3A2E62", "#191430"], ["#1F4A2E", "#0D2215"], ["#5A3021", "#2A140C"], ["#23405A", "#0F1D2A"],
+];
+function degradePour(id) {
+  let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const [a, b] = DEGRADES_TUILES[h % DEGRADES_TUILES.length];
+  return `linear-gradient(145deg, ${a}, ${b})`;
+}
+
+function totalEquipements() {
+  return dossiers.reduce((s, d) => s + (d.sections || []).filter(sec => sec.concerne).length, 0);
+}
+
+function blocCarteHTML() {
+  const dossiersPourAssoc = filtreAssociation ? dossiers.filter(d => d.association === filtreAssociation) : dossiers;
+  return `
+    <section class="gh-carte gh-rouge">
+      <div class="gh-filtres">
+        <label>UG :<select id="hm-filtre-assoc"><option value="">Toutes</option>${associations.map(a => `<option value="${esc(a.nom)}" ${filtreAssociation === a.nom ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}</select></label>
+        <label>Site :<select id="hm-filtre-site"><option value="">Tous</option>${dossiersPourAssoc.map(d => `<option value="${d.id}" ${filtreSite === d.id ? "selected" : ""}>${esc(d.nom)}</option>`).join("")}</select></label>
+      </div>
+      <div id="hm-carte-holder" class="gh-carte-holder"></div>
+      <p id="hm-carte-statut" class="gh-carte-statut"></p>
+    </section>`;
+}
+
+function blocCompteursEtFavorisHTML() {
   const favorisIds = chargerFavoris();
   const favorisDossiers = favorisIds.map(id => dossiers.find(d => d.id === id)).filter(Boolean);
-  const dossiersPourAssoc = filtreAssociation ? dossiers.filter(d => d.association === filtreAssociation) : dossiers;
   const dispoPourAjout = dossiers.filter(d => !favorisIds.includes(d.id)).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
-
   return `
-    <div class="form-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px">
-        <h3 style="margin:0;font-size:14px;color:var(--gold)">🗺️ Vos sites</h3>
-        <div style="display:flex;gap:20px">
-          <div style="text-align:center"><div style="font-size:20px;font-weight:800">${dossiers.length}</div><div class="hint" style="margin:0">Sites</div></div>
-          <div style="text-align:center"><div style="font-size:20px;font-weight:800">${totalEquipements}</div><div class="hint" style="margin:0">Équipements suivis</div></div>
+    <div class="gh-milieu">
+      <section class="gh-panneau-clair gh-compteurs">
+        <div><b>${dossiers.length}</b><span>Sites</span></div>
+        <div class="gh-sep"></div>
+        <div><b>${totalEquipements()}</b><span>Équipements</span></div>
+      </section>
+      <section class="gh-panneau-clair gh-favoris">
+        <h3>Mes sites favoris</h3>
+        <div class="gh-favoris-liste">
+          ${favorisDossiers.length === 0 ? `<p class="gh-vide">Aucun site épinglé.</p>` : favorisDossiers.map(d => `
+            <div class="gh-favori">
+              <button data-ouvrir-favori="${d.id}">${esc(d.nom)}</button>
+              <button class="gh-favori-suppr" data-retirer-favori="${d.id}" title="Retirer">✕</button>
+            </div>`).join("")}
         </div>
-      </div>
-      <div class="home-carte-grid" style="display:grid;gap:16px;align-items:start">
-        <div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-            <select id="hm-filtre-assoc"><option value="">Toutes les associations</option>${associations.map(a => `<option value="${esc(a.nom)}" ${filtreAssociation === a.nom ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}</select>
-            <select id="hm-filtre-site"><option value="">Tous les sites</option>${dossiersPourAssoc.map(d => `<option value="${d.id}" ${filtreSite === d.id ? "selected" : ""}>${esc(d.nom)}</option>`).join("")}</select>
-          </div>
-          <p class="hint" id="hm-carte-statut" style="margin:0 0 6px"></p>
-          <div id="hm-carte-holder" style="height:360px;min-height:280px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
-        </div>
-        <div>
-          <h4 style="margin:0 0 8px;font-size:13px;color:var(--gold)">Mes sites favoris</h4>
-          ${favorisDossiers.length === 0 ? `<p class="hint">Aucun site épinglé pour l'instant.</p>` : favorisDossiers.map(d => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);gap:8px">
-              <button data-ouvrir-favori="${d.id}" style="border:none;background:none;padding:0;color:var(--gold);font-weight:700;text-align:left;cursor:pointer;font-size:13px">${esc(d.nom)}</button>
-              <button class="del-btn" data-retirer-favori="${d.id}" title="Retirer" style="padding:2px 8px">🗑️</button>
-            </div>
-          `).join("")}
-          ${dispoPourAjout.length > 0 ? `
-          <div style="display:flex;gap:6px;margin-top:10px">
-            <select id="hm-favori-select" style="flex:1;min-width:0">${dispoPourAjout.map(d => `<option value="${d.id}">${esc(d.nom)}</option>`).join("")}</select>
-            <button class="add-btn" id="hm-favori-ajouter" style="white-space:nowrap">+ Ajouter</button>
+        ${dispoPourAjout.length > 0 ? `
+          <div class="gh-favori-ajout">
+            <select id="hm-favori-select">${dispoPourAjout.map(d => `<option value="${d.id}">${esc(d.nom)}</option>`).join("")}</select>
+            <button class="gh-bouton-rouge" id="hm-favori-ajouter">＋ Ajouter un site</button>
           </div>` : ""}
-        </div>
-      </div>
-    </div>
-  `;
+      </section>
+    </div>`;
 }
 
 function attacherEcouteursBlocSites() {
@@ -192,73 +217,113 @@ function render() {
 
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
 
+  const estAdmin = mountedUser.role === "admin" || mountedUser.role === "super_admin";
+  const afficherSites = catsRef.some(c => c.id === "sites") && dossiers.length > 0;
+
+  // ---- Notifications (panneau de droite) ----
+  const notifs = [];
+  catsRef.forEach(c => {
+    if (c.badgeAtelier) notifs.push({ cat: c.id, icone: "🔧", texte: `${c.badgeAtelier} alerte(s) stock atelier`, niveau: "rouge" });
+    if (c.badgeSites) notifs.push({ cat: c.id, icone: "🏢", texte: `${c.badgeSites} alerte(s) stock déporté (sites)`, niveau: "orange" });
+    if (!c.badgeAtelier && !c.badgeSites && c.badge) notifs.push({ cat: c.id, icone: c.icon, texte: `${c.badge} élément(s) à traiter — ${c.label}`, niveau: "rouge" });
+  });
+  if (next && !debugForce) notifs.push({ cat: "astreinte", icone: "📞", texte: `Transfert d'astreinte ${next.daysUntil === 0 ? "aujourd'hui" : next.daysUntil === 1 ? "demain" : `dans ${next.daysUntil} j`} : ${next.from} → ${next.to}`, niveau: confirmedRecord ? "vert" : "orange" });
+  if (holidayToday) notifs.push({ icone: "☀️", texte: `Jour férié : ${holidayToday}`, niveau: "violet" });
+
+  const jour = today.toLocaleDateString("fr-FR", { weekday: "short" });
+  const heure = today.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
   mountedContainer.innerHTML = `
-    <div class="stack">
+    <div class="gh">
       ${transfertBannerHTML(next, confirmedRecord)}
 
-      <div class="hero">
-        <div class="hero-label">Bonjour ${esc(mountedUser.nom || mountedUser.email)}</div>
-        ${hasPeople ? `
-        <div class="hero-blocks">
-          <div class="hero-block n1">
-            <div class="avatar" style="background:${colorForPerson(n1.assigned, people)}"></div>
-            <div><div class="hero-block-label">Astreinte N1 aujourd'hui</div><div class="hero-block-value">${esc(n1.assigned)}</div></div>
-          </div>
-          <div class="hero-block n2">
-            <div class="avatar" style="background:${colorForPerson(n2.assigned, people)}"></div>
-            <div><div class="hero-block-label">Astreinte N2 aujourd'hui</div><div class="hero-block-value">${esc(n2.assigned)}</div></div>
-          </div>
+      <div class="gh-entete">
+        <div class="gh-date">
+          <span class="gh-horloge" id="gh-heure">🕘 ${heure}</span>
+          <span class="gh-jour"><span>${esc(jour)}</span> <b>${today.getDate()}</b><br>${today.toLocaleDateString("fr-FR", { month: "long" })}</span>
         </div>
-        ${holidayToday ? `<div style="margin-top:10px;color:var(--violet);font-size:12px">☀️ ${esc(holidayToday)}</div>` : ""}
-        ` : `<p class="hint">Astreinte pas encore configurée.</p>`}
+        <img src="img/logo-etablieres.png" alt="Groupe Établières" class="gh-logo">
+        <div class="gh-bonjour">Bonjour <b>${esc(mountedUser.nom || mountedUser.email)}</b></div>
       </div>
 
-      ${catsRef.some(c => c.id === "sites") && dossiers.length > 0 ? blocSitesHTML() : ""}
+      <div class="gh-grille ${afficherSites ? "" : "gh-sans-sites"}">
+        ${afficherSites ? blocCarteHTML() : ""}
+        ${afficherSites ? blocCompteursEtFavorisHTML() : ""}
 
-      <div class="bubble-grid">
-        ${catsRef.map((c, idx) => {
-          const peutReorganiser = modeReorganisation && (mountedUser.role === "admin" || mountedUser.role === "super_admin");
-          return `
-          <div style="position:relative;height:100%">
-            <button class="bubble-card" data-cat="${c.id}">
-              ${c.badgeAtelier || c.badgeSites ? `
-                <span style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
-                  ${c.badgeAtelier ? `<span title="Alertes stock atelier" style="background:var(--red);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">🔧${c.badgeAtelier > 99 ? "99+" : c.badgeAtelier}</span>` : ""}
-                  ${c.badgeSites ? `<span title="Alertes stock déporté (sites)" style="background:var(--orange,#e08a2e);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">🏢${c.badgeSites > 99 ? "99+" : c.badgeSites}</span>` : ""}
-                </span>
-              ` : c.badge ? `<span style="position:absolute;top:8px;left:8px;background:var(--red);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">${c.badge > 99 ? "99+" : c.badge}</span>` : ""}
-              <span class="bubble-icon">${c.icon}</span>
-              <span class="bubble-label">${esc(c.label)}</span>
-              <span class="bubble-desc">${esc(c.desc || "")}</span>
-            </button>
-            ${peutReorganiser ? `
-              <div style="position:absolute;top:6px;right:6px;display:flex;gap:2px">
-                <button class="nav-btn" data-reorder-left="${c.id}" style="padding:2px 6px;font-size:10px" ${idx === 0 ? "disabled" : ""}>◀</button>
-                <button class="nav-btn" data-reorder-right="${c.id}" style="padding:2px 6px;font-size:10px" ${idx === catsRef.length - 1 ? "disabled" : ""}>▶</button>
-              </div>
-            ` : ""}
+        <section class="gh-tuiles">
+          ${catsRef.map((c, idx) => {
+            const peutReorganiser = modeReorganisation && estAdmin;
+            return `
+            <div class="gh-tuile-wrap">
+              <button class="gh-tuile" data-cat="${c.id}" title="${esc(c.desc || c.label)}" style="background:${degradePour(c.id)}">
+                ${c.badgeAtelier || c.badgeSites ? `
+                  <span class="gh-badges">
+                    ${c.badgeAtelier ? `<span class="gh-badge" title="Alertes stock atelier">🔧${c.badgeAtelier > 99 ? "99+" : c.badgeAtelier}</span>` : ""}
+                    ${c.badgeSites ? `<span class="gh-badge gh-badge-orange" title="Alertes stock déporté (sites)">🏢${c.badgeSites > 99 ? "99+" : c.badgeSites}</span>` : ""}
+                  </span>` : c.badge ? `<span class="gh-badges"><span class="gh-badge">${c.badge > 99 ? "99+" : c.badge}</span></span>` : ""}
+                <span class="gh-tuile-icone">${c.icon}</span>
+                <span class="gh-tuile-label">${esc(c.label)}</span>
+              </button>
+              ${peutReorganiser ? `
+                <div class="gh-reorg">
+                  <button class="nav-btn" data-reorder-left="${c.id}" ${idx === 0 ? "disabled" : ""}>◀</button>
+                  <button class="nav-btn" data-reorder-right="${c.id}" ${idx === catsRef.length - 1 ? "disabled" : ""}>▶</button>
+                </div>` : ""}
+            </div>`;
+          }).join("")}
+          <div class="gh-tuile-wrap">
+            <a class="gh-tuile gh-tuile-gmao" href="${URL_GMAO}" target="_blank" rel="noopener" title="Ouvrir la GMAO Camileia dans un nouvel onglet">
+              <span class="gh-tuile-icone">🛠️</span>
+              <span class="gh-tuile-label">GMAO Camileia ↗</span>
+            </a>
           </div>
-        `;}).join("")}
+          <div class="gh-tuile-wrap">
+            <a class="gh-tuile" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" title="Ouvrir le site SharePoint appsmm" style="background:${degradePour("sharepoint")}">
+              <span class="gh-tuile-icone">🔗</span>
+              <span class="gh-tuile-label">SharePoint ↗</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="gh-notifs gh-rouge">
+          <h3>${notifs.length} Notification${notifs.length > 1 ? "s" : ""}</h3>
+          <div class="gh-notifs-corps">
+            ${hasPeople ? `
+              <div class="gh-astreinte">
+                <p class="gh-astreinte-titre">Astreinte aujourd'hui</p>
+                <div class="gh-astreinte-ligne"><span class="avatar" style="background:${colorForPerson(n1.assigned, people)}"></span><span>N1</span><b>${esc(n1.assigned)}</b></div>
+                <div class="gh-astreinte-ligne"><span class="avatar" style="background:${colorForPerson(n2.assigned, people)}"></span><span>N2</span><b>${esc(n2.assigned)}</b></div>
+              </div>` : `<p class="gh-vide">Astreinte pas encore configurée.</p>`}
+            ${notifs.length === 0 ? `<p class="gh-aucune">Aucune notification</p>` : notifs.map(n => `
+              <${n.cat ? `button data-notif-cat="${n.cat}"` : "div"} class="gh-notif gh-notif-${n.niveau}">
+                <span>${n.icone}</span><span>${esc(n.texte)}</span>
+              </${n.cat ? "button" : "div"}>`).join("")}
+          </div>
+        </section>
       </div>
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="https://etablieresfr.sharepoint.com/sites/appsmm" target="_blank" rel="noopener" class="nav-btn" style="text-decoration:none;display:inline-flex;align-items:center">🔗 Ouvrir SharePoint (appsmm)</a>
-      </div>
-
-      ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
-      <button class="nav-btn" id="toggle-reorg" style="width:fit-content;opacity:.7;font-size:11px">${modeReorganisation ? "✓ Terminé" : "🔧 Réorganiser les bulles"}</button>
-      ` : ""}
-
-      ${(mountedUser.role === "admin" || mountedUser.role === "super_admin") ? `
-      <button class="nav-btn" id="debug-toggle" style="width:fit-content;opacity:.6;font-size:11px">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester l'affichage du bandeau de transfert"}</button>
-      ` : ""}
+      ${estAdmin ? `
+      <div class="gh-outils">
+        <button class="nav-btn" id="toggle-reorg">${modeReorganisation ? "✓ Terminé" : "🔧 Réorganiser les tuiles"}</button>
+        <button class="nav-btn" id="debug-toggle">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester le bandeau de transfert"}</button>
+      </div>` : ""}
     </div>
   `;
+
+  mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
+    btn.addEventListener("click", () => onSelectRef(btn.dataset.notifCat));
+  });
+  if (horlogeTimer) clearInterval(horlogeTimer);
+  horlogeTimer = setInterval(() => {
+    const el = document.getElementById("gh-heure");
+    if (!el) { clearInterval(horlogeTimer); horlogeTimer = null; return; }
+    el.textContent = "🕘 " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }, 30000);
 
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => onSelectRef(btn.dataset.cat));
   });
-  if (catsRef.some(c => c.id === "sites") && dossiers.length > 0) attacherEcouteursBlocSites();
+  if (afficherSites) attacherEcouteursBlocSites();
   mountedContainer.querySelectorAll("[data-reorder-left], [data-reorder-right]").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();

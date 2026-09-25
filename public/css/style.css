@@ -524,3 +524,116 @@ body, .topbar, .tabs, .panel, .form-card, .table-wrap, table, th, td,
 @media (prefers-reduced-motion: reduce){
   *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
 }
+
+/* ================================================================
+   Accueil façon GMAO Camileia — même disposition que la page
+   d'accueil Camileia (carte + filtres, compteurs, favoris, mosaïque de
+   tuiles, notifications), pour que l'appli et la GMAO se ressemblent.
+   ================================================================ */
+.content.content-accueil{ max-width:1760px; }
+.gh{ --gh-rouge:#E4104B; --gh-rouge-fonce:#8A1238; display:flex; flex-direction:column; gap:16px; }
+.gh-entete{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; }
+.gh-date{ justify-self:start; display:flex; align-items:center; gap:14px; background:var(--gh-rouge); color:#fff; padding:10px 16px; border-radius:0 0 14px 0; margin:-18px 0 0 -18px; }
+.gh-horloge{ font-size:15px; font-weight:700; white-space:nowrap; }
+.gh-jour{ font-size:11px; line-height:1.25; text-transform:lowercase; }
+.gh-jour b{ font-size:20px; }
+.gh-logo{ height:64px; justify-self:center; }
+.gh-bonjour{ justify-self:end; font-size:13px; color:var(--text-dim); }
+.gh-bonjour b{ color:var(--text); }
+
+.gh-grille{
+  display:grid; gap:16px; align-items:stretch;
+  grid-template-columns:minmax(280px,1.2fr) minmax(220px,.85fr) minmax(0,2.3fr) minmax(240px,1fr);
+  grid-template-areas:"carte milieu tuiles notifs";
+}
+.gh-grille.gh-sans-sites{ grid-template-columns:minmax(0,3fr) minmax(240px,1fr); grid-template-areas:"tuiles notifs"; }
+.gh-grille > *{ min-width:0; }
+.gh-carte{ grid-area:carte; }
+.gh-milieu{ grid-area:milieu; display:flex; flex-direction:column; gap:16px; }
+.gh-tuiles{ grid-area:tuiles; }
+.gh-notifs{ grid-area:notifs; }
+
+.gh-rouge{ background:linear-gradient(180deg, var(--gh-rouge) 0, var(--gh-rouge-fonce) 45%, #1A1030 100%); border:1px solid var(--gh-rouge); border-radius:18px; padding:14px; color:#fff; display:flex; flex-direction:column; gap:10px; }
+.gh-panneau-clair{ background:#E7E7EA; color:#1B2330; border-radius:18px; padding:16px; }
+
+/* Carte */
+.gh-filtres{ display:flex; gap:10px; flex-wrap:wrap; }
+.gh-filtres label{ display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; flex:1; min-width:120px; }
+.gh-filtres select{ flex:1; min-width:0; background:#fff; color:#1B2330; border:none; border-radius:6px; padding:7px 8px; font-size:12px; }
+.gh-carte-holder{ flex:1; min-height:320px; border-radius:6px; overflow:hidden; }
+.gh-carte-statut{ margin:0; font-size:11px; opacity:.85; }
+
+/* Compteurs + favoris */
+.gh-compteurs{ display:flex; align-items:center; justify-content:space-around; text-align:center; padding:26px 12px; }
+.gh-compteurs b{ display:block; font-size:24px; font-weight:800; color:var(--gh-rouge); }
+.gh-compteurs span{ font-size:14px; }
+.gh-sep{ width:1px; align-self:stretch; background:#1B2330; opacity:.5; }
+.gh-favoris{ flex:1; display:flex; flex-direction:column; gap:8px; }
+.gh-favoris h3{ margin:0; font-size:16px; text-align:center; padding-bottom:10px; border-bottom:1px solid #1B2330; }
+.gh-favoris-liste{ flex:1; }
+.gh-favori{ display:flex; justify-content:space-between; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid #C9CBD1; }
+.gh-favori button:first-child{ border:none; background:none; padding:0; color:#1B2330; font-weight:700; font-size:13px; text-align:left; cursor:pointer; }
+.gh-favori button:first-child:hover{ color:var(--gh-rouge); }
+.gh-favori-suppr{ border:none; background:none; color:#8A8F99; cursor:pointer; font-size:13px; }
+.gh-favori-ajout{ display:flex; flex-direction:column; gap:8px; align-items:center; }
+.gh-favori-ajout select{ width:100%; background:#fff; color:#1B2330; border:1px solid #C9CBD1; border-radius:6px; padding:6px; font-size:12px; }
+.gh-bouton-rouge{ background:var(--gh-rouge); color:#fff; border:none; border-radius:999px; padding:9px 18px; font-size:12px; font-weight:600; cursor:pointer; }
+.gh-vide{ margin:0; font-size:12px; opacity:.7; }
+
+/* Mosaïque de tuiles */
+.gh-tuiles{ display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:12px; align-content:start; }
+.gh-tuile-wrap{ position:relative; }
+.gh-tuile{ position:relative; width:100%; aspect-ratio:5/4; border:none; border-radius:6px; overflow:hidden; cursor:pointer; color:#fff; text-decoration:none;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:8px; box-shadow:0 2px 8px rgba(0,0,0,.35); transition:transform .15s, box-shadow .15s; }
+.gh-tuile::after{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 30% 20%, rgba(255,255,255,.10), transparent 60%); pointer-events:none; }
+.gh-tuile:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,.45); outline:2px solid var(--gh-rouge); }
+.gh-tuile-icone{ font-size:30px; line-height:1; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.gh-tuile-label{ font-size:12.5px; font-weight:800; text-align:center; line-height:1.2; text-shadow:0 1px 3px rgba(0,0,0,.8); }
+.gh-tuile-gmao{ background:linear-gradient(145deg, var(--gh-rouge), var(--gh-rouge-fonce)); }
+.gh-badges{ position:absolute; top:6px; left:6px; display:flex; gap:4px; }
+.gh-badge{ background:var(--gh-rouge); color:#fff; border-radius:999px; min-width:20px; height:20px; padding:0 5px; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px rgba(255,255,255,.8); }
+.gh-badge-orange{ background:#E08A2E; }
+.gh-reorg{ position:absolute; top:4px; right:4px; display:flex; gap:2px; }
+.gh-reorg .nav-btn{ padding:2px 6px; font-size:10px; }
+
+/* Notifications */
+.gh-notifs h3{ margin:4px 0 2px; text-align:center; font-size:18px; }
+.gh-notifs-corps{ flex:1; background:#E7E7EA; color:#1B2330; border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:8px; min-height:200px; }
+.gh-aucune{ margin:4px 0 0; font-weight:700; text-transform:uppercase; font-size:14px; }
+.gh-astreinte{ border-bottom:1px solid #C9CBD1; padding-bottom:8px; }
+.gh-astreinte-titre{ margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#5A6070; font-weight:700; }
+.gh-astreinte-ligne{ display:flex; align-items:center; gap:8px; font-size:13px; padding:2px 0; }
+.gh-astreinte-ligne span:nth-child(2){ font-size:11px; color:#5A6070; width:20px; }
+.gh-astreinte-ligne .avatar{ width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+.gh-notif{ display:flex; gap:8px; align-items:flex-start; text-align:left; width:100%; font-size:12.5px; background:#fff; color:#1B2330; border:none; border-left:4px solid var(--gh-rouge); border-radius:6px; padding:8px 10px; cursor:pointer; font-family:inherit; }
+div.gh-notif{ cursor:default; }
+.gh-notif-orange{ border-left-color:#E08A2E; }
+.gh-notif-vert{ border-left-color:#2E9E6A; }
+.gh-notif-violet{ border-left-color:#6656C9; }
+button.gh-notif:hover{ background:#FFF2F5; }
+
+.gh-outils{ display:flex; gap:8px; flex-wrap:wrap; opacity:.7; }
+.gh-outils .nav-btn{ font-size:11px; }
+
+@media (max-width:1400px){
+  .gh-grille{ grid-template-columns:minmax(260px,1.2fr) minmax(200px,.8fr) minmax(220px,1fr); grid-template-areas:"carte milieu notifs" "tuiles tuiles tuiles"; }
+  .gh-grille.gh-sans-sites{ grid-template-columns:minmax(0,2fr) minmax(220px,1fr); grid-template-areas:"tuiles notifs"; }
+}
+@media (max-width:900px){
+  .gh-grille{ grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"notifs notifs" "tuiles tuiles" "carte carte" "milieu milieu"; }
+  .gh-grille.gh-sans-sites{ grid-template-columns:minmax(0,1fr); grid-template-areas:"notifs" "tuiles"; }
+  .gh-notifs-corps{ min-height:0; }
+}
+@media (max-width:720px){
+  .gh-entete{ grid-template-columns:auto 1fr; }
+  .gh-date{ margin:-12px 0 0 -12px; }
+  .gh-logo{ height:44px; justify-self:end; }
+  .gh-bonjour{ display:none; }
+  .gh-tuiles{ grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  .gh-tuile-icone{ font-size:24px; }
+  .gh-tuile-label{ font-size:11px; }
+  .gh-carte-holder{ min-height:260px; }
+}
+@media (max-width:340px){
+  .gh-tuiles{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
