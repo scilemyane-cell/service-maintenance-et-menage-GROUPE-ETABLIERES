@@ -3,8 +3,9 @@ import {
   watchSitesDossiers, nouveauDossier, createDossier, saveDossier, envoyerDossierCorbeille,
   watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
 } from "./site-dossier-data.js";
-import { initCarteSites } from "./site-map.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
+import { initCarteSites, categorieSite, CATEGORIES_CARTE } from "./site-map.js";
+import { getGraphTokenSilentOnly } from "./graph-auth.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrls, getImageThumbUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
@@ -17,7 +18,8 @@ import {
 import { activerGlisserDeposer } from "./drag-reorder.js";
 
 let state = { dossiers: [], associations: [], sectionsOrder: [] };
-let ui = { openId: null, mode: "view", lightbox: null };
+let ui = { openId: null, mode: "view", lightbox: null, recherche: "", filtreCat: "", affichage: "cartes" };
+let miniatures = {}; // itemId -> url de la miniature (vignettes de la liste)
 // Cache local des boîtes à clés en cours d'édition (voir renderEdit) —
 // chargé une fois par dossier ouvert en modification, puis mutable
 // localement comme le reste du formulaire.
@@ -87,6 +89,144 @@ function groupedDossiers() {
   return result;
 }
 
+// ---- Aides d'affichage (liste en cartes, fiche) ----
+const sansAcc = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function iconeSection(titre) {
+  const t = sansAcc(titre);
+  if (/gaz/.test(t)) return "🔥";
+  if (/electri|linky|tgbt|tableau/.test(t)) return "⚡";
+  if (/eau|nourrice/.test(t)) return "💧";
+  if (/baie|reseau|telecom/.test(t)) return "🌐";
+  if (/vmc|ventil/.test(t)) return "🌀";
+  if (/cle|badge/.test(t)) return "🔑";
+  if (/poubelle/.test(t)) return "🗑️";
+  if (/registre/.test(t)) return "📘";
+  if (/incendie|ssi/.test(t)) return "🚨";
+  if (/intrusion|alarme/.test(t)) return "🚓";
+  return "🔧";
+}
+function photosSection(sec) {
+  return [...(sec.photos || []), ...(sec.lignes || []).flatMap(l => l.photos || [])];
+}
+function sectionRemplie(sec) {
+  if (sec.multiLignes) return (sec.lignes || []).some(l => (l.valeur || l.notes || "").trim() || (l.photos || []).length);
+  return !!((sec.emplacement || "").trim() || (sec.procedure || "").trim() || (sec.photos || []).length);
+}
+// Niveau de remplissage du dossier : adresse + pour chaque équipement
+// concerné, un emplacement/une procédure ET au moins une photo.
+function completude(d) {
+  const concernes = (d.sections || []).filter(x => x.concerne);
+  let total = 1, ok = d.adresse ? 1 : 0;
+  const manque = [];
+  if (!d.adresse) manque.push("adresse");
+  concernes.forEach(sec => {
+    total += 2;
+    if (sectionRemplie(sec)) ok++; else manque.push(sec.titre);
+    if (photosSection(sec).length) ok++; else if (sectionRemplie(sec)) manque.push(`photo ${sec.titre}`);
+  });
+  if (!concernes.length) { total += 2; manque.push("aucun équipement renseigné"); }
+  return { pct: Math.round(ok / total * 100), manque };
+}
+function couleurPct(p) { return p >= 80 ? "#1baf7a" : p >= 50 ? "#e6a100" : "#C23B27"; }
+function premierePhoto(d) {
+  for (const sec of (d.sections || []).filter(x => x.concerne)) {
+    const ph = photosSection(sec).find(p => p.isImage && p.itemId);
+    if (ph) return ph.itemId;
+  }
+  return null;
+}
+async function chargerMiniatures() {
+  const ids = state.dossiers.map(premierePhoto).filter(id => id && !miniatures[id]);
+  if (!ids.length) return;
+  try {
+    const token = await getGraphTokenSilentOnly(); // jamais de fenêtre de connexion pour de simples vignettes
+    if (!token) return;
+    const res = await getImageThumbUrls(ids);
+    if (!Object.keys(res).length) return;
+    Object.assign(miniatures, res);
+    mountedContainer?.querySelectorAll("[data-mini]").forEach(el => {
+      const url = miniatures[el.dataset.mini];
+      if (url) { el.style.backgroundImage = `url("${url}")`; el.classList.add("a-photo"); }
+    });
+  } catch (e) { console.warn("Vignettes dossiers :", e); }
+}
+function filtrerDossiers(liste) {
+  const q = sansAcc(ui.recherche).trim();
+  return liste.filter(d => (!ui.filtreCat || categorieSite(d).cle === ui.filtreCat)
+    && (!q || sansAcc(`${d.nom} ${d.adresse} ${d.association} ${d.groupe}`).includes(q)));
+}
+
+function carteDossierHTML(d, i, glisser) {
+  const cat = categorieSite(d);
+  const concernes = (d.sections || []).filter(x => x.concerne);
+  const nbPhotos = (d.sections || []).reduce((n, sec) => n + photosSection(sec).length, 0);
+  const { pct, manque } = completude(d);
+  const icones = [...new Set(concernes.filter(sectionRemplie).map(x => iconeSection(x.titre)))].slice(0, 6);
+  const mini = premierePhoto(d);
+  const url = mini && miniatures[mini];
+  return `
+  <div class="sdl-item" ${glisser ? `data-drag-index="${i}"` : ""}>
+    <button class="sdl-carte" data-open="${d.id}">
+      <span class="sdl-photo ${url ? "a-photo" : ""}" ${mini ? `data-mini="${mini}"` : ""} style="${url ? `background-image:url('${url}');` : ""}--cat:${cat.couleur}">
+        <span class="sdl-ico">${cat.cle === "ecole" ? "🏫" : cat.cle === "mna" ? "🏠" : "🏢"}</span>
+        <span class="sdl-tag"><i style="background:${cat.couleur}"></i>${esc(cat.cle === "autre" ? (d.association || "Autre") : cat.label)}</span>
+      </span>
+      <span class="sdl-corps">
+        <span class="sdl-nom">${esc(d.nom)}</span>
+        <span class="sdl-adr">${esc(d.adresse || "Adresse non renseignée")}</span>
+        <span class="sdl-icos">${icones.map(ic => `<span>${ic}</span>`).join("")}<span>📷 ${nbPhotos}</span></span>
+        <span class="sdl-comp" title="${esc(manque.length ? "À compléter : " + manque.join(", ") : "Dossier complet")}">
+          <span class="sdl-comp-b"><i style="width:${pct}%;background:${couleurPct(pct)}"></i></span>
+          <b style="color:${couleurPct(pct)}">${pct} %</b>
+        </span>
+        ${manque.length && pct < 100 ? `<span class="sdl-manque">À compléter : ${esc(manque.slice(0, 2).join(", "))}${manque.length > 2 ? "…" : ""}</span>` : `<span class="sdl-manque ok">✓ Dossier complet</span>`}
+      </span>
+    </button>
+    ${glisser ? `<span data-drag-handle title="Glisser pour réordonner" class="sdl-poignee">☰</span>` : ""}
+  </div>`;
+}
+function ligneDossierHTML(d) {
+  const cat = categorieSite(d);
+  const { pct } = completude(d);
+  return `<button class="sdl-ligne" data-open="${d.id}">
+    <i style="background:${cat.couleur}"></i>
+    <span class="sdl-ligne-txt"><b>${esc(d.nom)}</b><small>${esc(d.adresse || "Adresse non renseignée")}</small></span>
+    <span class="sdl-ligne-pct" style="color:${couleurPct(pct)}">${pct} %</span>
+  </button>`;
+}
+function barreListeHTML() {
+  const presentes = CATEGORIES_CARTE.filter(c => state.dossiers.some(d => categorieSite(d).cle === c.cle));
+  return `
+  <div class="sdl-barre">
+    <input id="sdl-q" class="sdl-recherche" placeholder="🔍 Rechercher un site, une adresse…" value="${esc(ui.recherche)}">
+    <div class="sdl-chips">
+      <button class="sdl-chip ${!ui.filtreCat ? "on" : ""}" data-cat="">Tous · ${state.dossiers.length}</button>
+      ${presentes.map(c => `<button class="sdl-chip ${ui.filtreCat === c.cle ? "on" : ""}" data-cat="${c.cle}"><i style="background:${c.couleur}"></i>${c.label}</button>`).join("")}
+    </div>
+    <div class="sdl-vues">
+      <button class="${ui.affichage === "cartes" ? "on" : ""}" data-aff="cartes">▦ Cartes</button>
+      <button class="${ui.affichage === "liste" ? "on" : ""}" data-aff="liste">☰ Liste</button>
+      <button data-aff="carte">🗺️ Carte</button>
+    </div>
+  </div>`;
+}
+function brancherBarreListe(rerender) {
+  const inp = document.getElementById("sdl-q");
+  inp?.addEventListener("input", () => {
+    ui.recherche = inp.value;
+    const pos = inp.selectionStart;
+    rerender();
+    const n = document.getElementById("sdl-q"); if (n) { n.focus(); n.setSelectionRange(pos, pos); }
+  });
+  mountedContainer.querySelectorAll("[data-cat]").forEach(b => b.addEventListener("click", () => { ui.filtreCat = b.dataset.cat; rerender(); }));
+  mountedContainer.querySelectorAll("[data-aff]").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.aff === "carte") { ui.mode = "map"; }
+    else { ui.affichage = b.dataset.aff; ui.mode = "view"; }
+    if (carteInstance && ui.mode !== "map") { carteInstance.detruire(); carteInstance = null; }
+    render();
+  }));
+}
+
 function render() {
   if (!mountedContainer) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; }
@@ -100,43 +240,39 @@ function render() {
   if (ui.mode === "map") { renderMap(); return; }
 
   const groups = groupedDossiers();
+  const filtreActif = !!(ui.recherche.trim() || ui.filtreCat);
+  const glisser = isEditorUser(mountedUser) && !filtreActif && ui.affichage === "cartes";
+  const nbVisibles = filtrerDossiers(state.dossiers).length;
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <p class="hint">Dossier technique et sécurité de chaque résidence — organes de coupure, accès clés, contacts d'urgence, photos. Structure uniforme reprise de la fiche index papier. Maintiens l'icône ☰ appuyée sur une carte puis fais glisser pour réordonner les sites (au sein d'une même catégorie).</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="nav-btn" id="sd-carte" style="width:fit-content">🗺️ Voir la carte des sites</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <p class="hint" style="margin:0;flex:1;min-width:220px">Dossier technique et sécurité de chaque résidence : organes de coupure, accès clés, contacts d'urgence, photos.${glisser ? " ☰ : maintenir et glisser pour réordonner." : ""}</p>
         ${isEditorUser(mountedUser) ? `
-          <button class="add-btn" id="sd-new" style="width:fit-content">➕ Créer un nouveau dossier</button>
-          <button class="nav-btn" id="sd-params" style="width:fit-content">⚙️ Paramètres (ordre des équipements)</button>
+          <button class="add-btn" id="sd-new" style="width:fit-content">➕ Nouveau dossier</button>
+          <button class="nav-btn" id="sd-params" style="width:fit-content" title="Ordre des équipements">⚙️</button>
         ` : ""}
       </div>
-      ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` :
-        groups.map(g => `
+      ${barreListeHTML()}
+      ${state.dossiers.length === 0 ? `<p class="hint">Aucun dossier créé pour l'instant.</p>` : nbVisibles === 0 ? `<p class="hint">Aucun site ne correspond à la recherche.</p>` :
+        groups.map(g => {
+          const sous = g.groups.map(sub => ({ ...sub, dossiers: filtrerDossiers(sub.dossiers) })).filter(sub => sub.dossiers.length);
+          if (!sous.length) return "";
+          return `
           <div>
-            <h3 style="margin:12px 0 8px;font-size:15px;color:var(--gold)">${esc(g.assocLabel)}</h3>
-            ${g.groups.map(sub => `
-              ${sub.groupeLabel ? `<div style="font-size:12px;color:var(--text-dim);margin:6px 0 6px 4px">${esc(sub.groupeLabel)}</div>` : ""}
-              <div class="bubble-grid" style="margin-bottom:8px">
-                ${sub.dossiers.map((d, i) => {
-                  const nbFichiers = (d.sections || []).reduce((s, sec) => s + (sec.photos?.length || 0), 0);
-                  const icone = g.assocLabel === "École" ? "🏫" : (sub.groupeLabel || "").toLowerCase().includes("residence") ? "🏢" : (sub.groupeLabel || "").toLowerCase() === "mna" ? "🏠" : "🏢";
-                  return `
-                  <div style="position:relative" data-drag-index="${i}">
-                    <button class="bubble-card" data-open="${d.id}">
-                      <span class="bubble-icon">${icone}</span>
-                      <span class="bubble-label">${esc(d.nom)}</span>
-                      <span class="bubble-desc">${esc(d.adresse || "Adresse non renseignée")}${nbFichiers ? ` · 📎 ${nbFichiers}` : ""}</span>
-                    </button>
-                    ${isEditorUser(mountedUser) ? `<span data-drag-handle title="Glisser pour réordonner" style="position:absolute;top:8px;left:8px;font-size:14px;color:var(--text-dim);cursor:grab;background:var(--panel);border-radius:6px;padding:3px 6px;opacity:.75">☰</span>` : ""}
-                  </div>`;
-                }).join("")}
-              </div>
+            <h3 class="sdl-assoc">${esc(g.assocLabel)} <span>${sous.reduce((n, x) => n + x.dossiers.length, 0)}</span></h3>
+            ${sous.map(sub => `
+              ${sub.groupeLabel ? `<div class="sdl-groupe">${esc(sub.groupeLabel)}</div>` : ""}
+              ${ui.affichage === "liste"
+                ? `<div class="sdl-lignes">${sub.dossiers.map(d => ligneDossierHTML(d)).join("")}</div>`
+                : `<div class="sdl-grille bubble-grid" data-sous="${esc(g.assocLabel)}|${esc(sub.groupeLabel || "")}">${sub.dossiers.map((d, i) => carteDossierHTML(d, i, glisser)).join("")}</div>`}
             `).join("")}
-          </div>
-        `).join("")}
+          </div>`;
+        }).join("")}
     </div>
   `;
+  brancherBarreListe(render);
+  chargerMiniatures();
 
   document.getElementById("sd-new")?.addEventListener("click", async () => {
     const id = await createDossier(nouveauDossier(state.sectionsOrder));
@@ -144,7 +280,6 @@ function render() {
     window.scrollTo(0, 0);
   });
   document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
-  document.getElementById("sd-carte")?.addEventListener("click", () => { ui.mode = "map"; render(); });
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (btn.closest("[data-drag-index]")?.dataset.dragMoved) return; // clic déclenché juste après un glissement de réorganisation, à ignorer
@@ -157,6 +292,7 @@ function render() {
   // même sous-groupe (association/groupe) — ne redessine pas l'écran
   // ensuite (la position visuelle est déjà correcte grâce au glissement
   // lui-même), seule la sauvegarde se fait en tâche de fond.
+  if (!glisser) return;
   const sousGroupesAPlat = groups.flatMap(g => g.groups);
   mountedContainer.querySelectorAll(".bubble-grid").forEach((grid, idx) => {
     const sub = sousGroupesAPlat[idx];
@@ -179,24 +315,37 @@ function render() {
 // d'accueil).
 // =================================================================
 function renderMap() {
+  const visibles = filtrerDossiers(state.dossiers).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
   mountedContainer.innerHTML = `
     <div class="stack">
+      ${barreListeHTML().replace('<button data-aff="carte">', '<button class="on" data-aff="carte">')}
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <button class="nav-btn" id="sd-carte-retour">← Retour à la liste</button>
+        <button class="nav-btn" id="sd-carte-retour">← Retour aux cartes</button>
         <p class="hint" id="sd-carte-statut" style="margin:0"></p>
       </div>
-      ${isEditorUser(mountedUser) ? `<p class="hint" style="margin:0">✋ Repère mal placé : clique sur « 🔒 Carte verrouillée » (en haut à droite) pour déverrouiller, puis clique sur le repère → « 📍 Déplacer ce repère » → clique au bon endroit (ou fais-le glisser), puis reverrouille ; les sites absents de la carte sont listés dessous : « 📍 Placer » puis clic sur la carte.</p>` : ""}
-      <div id="sd-carte-holder" style="height:70vh;min-height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
+      <div class="sdl-split">
+        <div class="sdl-split-liste">
+          ${visibles.map(d => ligneDossierHTML(d).replace('data-open=', 'data-focus=')).join("") || `<p class="hint">Aucun site.</p>`}
+        </div>
+        <div id="sd-carte-holder" class="sdl-split-carte"></div>
+      </div>
+      ${isEditorUser(mountedUser) ? `<p class="hint" style="margin:0">✋ Repère mal placé : clique sur « 🔒 Carte verrouillée » pour déverrouiller, puis sur le repère → « 📍 Déplacer ce repère » → clique au bon endroit, puis reverrouille.</p>` : ""}
       <div id="sd-non-places"></div>
     </div>
   `;
+  brancherBarreListe(render);
+  mountedContainer.querySelectorAll("[data-focus]").forEach(b => b.addEventListener("click", () => {
+    mountedContainer.querySelectorAll("[data-focus]").forEach(x => x.classList.toggle("sel", x === b));
+    if (!carteInstance?.focus(b.dataset.focus)) window.toast?.("Ce site n'est pas encore placé sur la carte (voir la liste en dessous).");
+    if (window.innerWidth < 760) document.getElementById("sd-carte-holder")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
   document.getElementById("sd-carte-retour").addEventListener("click", () => {
     if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
     ui.mode = "view"; render();
   });
 
   if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
-  carteInstance = initCarteSites(document.getElementById("sd-carte-holder"), state.dossiers, {
+  carteInstance = initCarteSites(document.getElementById("sd-carte-holder"), visibles, {
     onOpenSite: (id) => {
       if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
       ui.openId = id; ui.mode = "view"; render();
@@ -705,7 +854,7 @@ function renderView(d) {
         <button class="nav-btn" id="sd-qr-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
 
-      <div class="sdv-hero">
+      <div class="sdv-hero" style="--cat:${categorieSite(d).couleur}">
         <div class="sdv-hero-txt">
           <p class="sdv-sur">${esc([d.association, d.groupe].filter(Boolean).join(" · ") || "Dossier de site")}</p>
           <h2>${esc(d.nom)}</h2>
@@ -718,19 +867,36 @@ function renderView(d) {
         </div>
       </div>
 
-      <div class="form-card">
-        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">📞 Numéros d'urgence</h3>
-        <div class="table-wrap" style="border:none">
-          <table>
-            <thead><tr><th>Service</th><th>Mission</th><th>Téléphone</th></tr></thead>
-            <tbody>
-              ${(d.urgences || []).map(u => `
-                <tr><td>${esc(u.service)}</td><td>${esc(u.mission)}</td><td><a href="tel:${esc(u.telephone)}" style="color:var(--gold);font-weight:700">${esc(u.telephone)}</a></td></tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
+      <div class="sdv-urgences">
+        ${(d.urgences || []).filter(u => u.telephone).map(u => `
+          <a class="sdv-urg" href="tel:${esc(String(u.telephone).split(/\s+ou\s+|\//)[0].replace(/[^\d+]/g, ""))}">
+            <span>📞 ${esc(u.service)}</span><b>${esc(u.telephone)}</b>${u.mission ? `<small>${esc(u.mission)}</small>` : ""}
+          </a>`).join("")}
       </div>
+
+      ${(() => {
+        const secs = (d.sections || []).map((sec, si) => ({ sec, si })).filter(x => x.sec.concerne);
+        const nonConcernes = (d.sections || []).filter(x => !x.concerne).length;
+        const { pct, manque } = completude(d);
+        if (!secs.length) return "";
+        return `
+        <div class="sdv-recap">
+          <div class="sdv-recap-tete"><b>🔧 L'essentiel en un coup d'œil</b>
+            <span class="sdv-recap-pct" style="color:${couleurPct(pct)}">Dossier complet à ${pct} %</span></div>
+          <div class="sdv-tuiles">
+            ${secs.map(({ sec, si }) => {
+              const ok = sectionRemplie(sec);
+              const nb = photosSection(sec).length;
+              const detail = sec.multiLignes ? `${(sec.lignes || []).length} élément(s)` : (sec.emplacement || sec.procedure || "");
+              return `<button class="sdv-tuile ${ok ? "ok" : "ko"}" data-aller="${si}">
+                <b>${iconeSection(sec.titre)} ${esc(sec.titre)}</b>
+                <small>${ok ? esc(String(detail).slice(0, 70)) || "Renseigné" : "À compléter"}${nb ? ` · 📷 ${nb}` : ""}</small>
+              </button>`;
+            }).join("")}
+          </div>
+          ${nonConcernes ? `<p class="hint" style="margin:8px 0 0">${nonConcernes} équipement(s) marqué(s) « non concerné » pour ce site.</p>` : ""}
+        </div>`;
+      })()}
 
       <div class="form-card" id="sd-masterlock-card" style="display:none">
         <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">🔐 Codes Masterlock</h3>
@@ -743,7 +909,7 @@ function renderView(d) {
         concernes.map((s) => {
           const si = d.sections.indexOf(s);
           return `
-          <div class="form-card">
+          <div class="form-card" id="sd-sec-${si}">
             <h4 style="margin:0 0 6px;font-size:14px">${esc(s.titre)}</h4>
             ${s.multiLignes ? `
               ${(s.lignes || []).map((ligne, li) => `
@@ -771,6 +937,12 @@ function renderView(d) {
   `;
 
   document.getElementById("sd-back").addEventListener("click", () => { ui.openId = null; render(); });
+  mountedContainer.querySelectorAll("[data-aller]").forEach(b => b.addEventListener("click", () => {
+    const cible = document.getElementById(`sd-sec-${b.dataset.aller}`);
+    if (!cible) return;
+    cible.scrollIntoView({ behavior: "smooth", block: "start" });
+    cible.classList.remove("sdv-flash"); void cible.offsetWidth; cible.classList.add("sdv-flash");
+  }));
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; boitesEnEdition = { dossierId: null, liste: [] }; render(); });
   document.getElementById("sd-preview").addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");

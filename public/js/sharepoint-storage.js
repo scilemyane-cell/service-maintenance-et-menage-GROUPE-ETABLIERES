@@ -137,6 +137,35 @@ function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|#%]/g, "_").trim() || "fichier";
 }
 
+// Miniatures (petites images légères) pour des vignettes — via un seul
+// appel groupé. Renvoie { itemId: url }. Cache mémoire le temps de la session.
+const cacheMiniatures = new Map();
+export async function getImageThumbUrls(itemIds) {
+  const resultat = {};
+  const restants = [];
+  itemIds.forEach(id => { const c = cacheMiniatures.get(id); if (c && c.expireLe > Date.now()) resultat[id] = c.url; else restants.push(id); });
+  if (!restants.length) return resultat;
+  const token = await getGraphToken();
+  const driveId = await resolveDriveId(token);
+  for (let i = 0; i < restants.length; i += 20) {
+    const lot = restants.slice(i, i + 20);
+    try {
+      const res = await fetchWithTimeout(`${GRAPH_ROOT}/$batch`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ requests: lot.map(id => ({ id, method: "GET", url: `/drives/${driveId}/items/${id}/thumbnails?select=medium` })) }),
+      }, 20000);
+      if (!res.ok) continue;
+      const j = await res.json();
+      (j.responses || []).forEach(r => {
+        const url = r.status === 200 ? r.body?.value?.[0]?.medium?.url : null;
+        if (url) { resultat[r.id] = url; cacheMiniatures.set(r.id, { url, expireLe: Date.now() + 45 * 60 * 1000 }); }
+      });
+    } catch (e) { console.warn("Miniatures SharePoint :", e); }
+  }
+  return resultat;
+}
+
 // Liste le contenu d'un dossier SharePoint (fichiers + sous-dossiers),
 // toutes pages confondues. Renvoie null si le dossier n'existe pas.
 export async function listerDossierDrive(folderSegments = [], rootFolder = ROOT_FOLDER) {

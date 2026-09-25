@@ -46,7 +46,7 @@ function dansFranceMetro({ lat, lng }) {
 // re-géocodé et son marqueur déplacé automatiquement.
 // Couleur des repères par association, et une couleur à part pour les
 // dispositifs MNA (sous-groupe « MNA » ou nom contenant « MNA »).
-const CATEGORIES_CARTE = [
+export const CATEGORIES_CARTE = [
   { cle: "mna", label: "MNA", couleur: "#eb6834" },
   { cle: "agropolis", label: "Agropolis", couleur: "#1baf7a" },
   { cle: "ecole", label: "École", couleur: "#2a78d6" },
@@ -54,7 +54,7 @@ const CATEGORIES_CARTE = [
   { cle: "autre", label: "Autres", couleur: "#8A8D93" },
 ];
 const sansAccent = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function categorieSite(d) {
+export function categorieSite(d) {
   if (/\bmna\b/.test(sansAccent(d.groupe)) || /\bmna\b/.test(sansAccent(d.nom))) return CATEGORIES_CARTE[0];
   const a = sansAccent(d.association);
   return CATEGORIES_CARTE.find(c => c.cle !== "autre" && c.cle !== "mna" && a.includes(c.cle)) || CATEGORIES_CARTE[4];
@@ -174,6 +174,8 @@ export function initCarteSites(holder, dossiers, options = {}) {
   // Verrou : par défaut les repères ne bougent pas (évite un déplacement
   // par erreur). Bouton 🔒/🔓 sur la carte pour autoriser les modifications.
   let deverrouille = false;
+  const markers_ = {};
+  let markersRef = null;
   let detruit = false;
   let map = null;
   const idAbonne = Symbol("carte-sites");
@@ -195,7 +197,8 @@ export function initCarteSites(holder, dossiers, options = {}) {
       maxZoom: 19,
     }).addTo(map);
 
-    const markers = {};
+    markersRef = markers_;
+    const markers = markers_;
     // Légende des couleurs (uniquement les catégories présentes)
     const presentes = CATEGORIES_CARTE.filter(c => dossiers.some(d => categorieSite(d).cle === c.cle));
     if (presentes.length > 1) {
@@ -316,6 +319,14 @@ export function initCarteSites(holder, dossiers, options = {}) {
       const d = dossiers.find(x => x.id === id);
       if (!d || !map) return;
       activerPlacement(d);
+    },
+    // Centre la carte sur un site et ouvre sa bulle (liste à côté de la carte).
+    focus(id) {
+      const m = markersRef?.[id];
+      if (!m || !map) return false;
+      map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), { animate: true });
+      m.openPopup();
+      return true;
     },
     detruire() {
       detruit = true;
