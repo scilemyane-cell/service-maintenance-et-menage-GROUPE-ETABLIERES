@@ -89,7 +89,7 @@ body{
 .topbar-eyebrow{ font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:700; }
 .topbar-title h1{ margin:3px 0 0; font-size:18px; font-weight:700; }
 .topbar-title h1 .accent{ color:var(--gold); }
-.topbar-user{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text-dim); }
+.topbar-user{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--text-dim); }
 .topbar-user b{ color:var(--text); }
 .logout-btn{ background:var(--panel-alt); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:6px 12px; cursor:pointer; font-size:12px; }
 .logout-btn:hover{ border-color:var(--red); color:var(--red); }
@@ -637,3 +637,16 @@ button.gh-notif:hover{ background:#FFF2F5; }
 @media (max-width:340px){
   .gh-tuiles{ grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+
+/* ---- Modules en construction / aperçu en tant que / roue Administration ---- */
+.gh-tuile-construction{ outline:2px dashed #F2B705; outline-offset:-2px; }
+.gh-tuile-construction .gh-tuile-icone, .gh-tuile-construction .gh-tuile-label{ opacity:.75; }
+.gh-ruban{ position:absolute; bottom:6px; left:50%; transform:translateX(-50%); background:repeating-linear-gradient(45deg,#F2B705 0 8px,#1B1B1B 8px 16px); color:#fff; font-size:9.5px; font-weight:800; padding:2px 8px; border-radius:4px; white-space:nowrap; text-shadow:0 1px 2px #000; }
+.gh-reorg .nav-btn.active{ background:#F2B705; color:#1B1B1B; }
+.construction-bandeau{ background:repeating-linear-gradient(45deg,rgba(242,183,5,.18) 0 12px,transparent 12px 24px); border-bottom:1px solid #F2B705; color:var(--text); padding:8px 16px; font-size:12px; }
+.apercu-bandeau{ background:#6656C9; color:#fff; padding:8px 16px; font-size:12.5px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.apercu-bandeau .nav-btn{ background:#fff; color:#3A2E8F; border-color:#fff; font-size:11px; }
+.gear-btn{ font-size:17px; padding:4px 10px; line-height:1; }
+.gear-btn.active{ border-color:var(--gold); }
+.apercu-select{ background:var(--panel-alt); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-size:12px; max-width:220px; }
+@media (max-width:720px){ .apercu-select{ max-width:100%; flex:1; } }

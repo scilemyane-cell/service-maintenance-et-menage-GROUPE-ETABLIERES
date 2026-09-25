@@ -19,10 +19,13 @@
 import { db } from "./firebase-init.js";
 import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { esc } from "./astreinte-logic.js";
+import { modulesMasquesPour } from "./modules-construction-data.js";
 
 let mountedContainer = null;
 let graphiquesActifs = {};
 let cache = null;
+let userCourant = null;
+let masques = []; // modules "en construction" masqués pour l'utilisateur courant
 const filtres = { periode: "annee", association: "" };
 
 const SOURCES = {
@@ -41,8 +44,10 @@ const SOURCES = {
   commandes: "stock-commandes",
 };
 
-export async function mountStatistiques(container) {
+export async function mountStatistiques(container, user) {
   mountedContainer = container;
+  userCourant = user;
+  masques = modulesMasquesPour(user);
   container.innerHTML = `<div class="hint">⏳ Calcul des statistiques…</div>`;
   try {
     cache = await collecterDonnees();
@@ -287,9 +292,9 @@ function calculer(data, p) {
     .sort((a, b) => (a._dernier || 0) - (b._dernier || 0));
 
   // ---- Stock ----
-  const sousSeuilMaint = data.stockProduits.filter(p2 => (p2.stockActuel || 0) <= (p2.stockMin || 0));
+  const sousSeuilMaint = masques.includes("stock") ? [] : data.stockProduits.filter(p2 => (p2.stockActuel || 0) <= (p2.stockMin || 0));
   const menageZoneOk = pr => !assocFiltre || !pr.zone || norm(pr.zone).includes(norm(assocFiltre)) || norm(assocFiltre).includes(norm(pr.zone));
-  const sousSeuilMenage = data.stockMenageProduits.filter(pr => menageZoneOk(pr) && (pr.stockActuel || 0) <= (pr.stockMin || 0));
+  const sousSeuilMenage = masques.includes("stock-menage") ? [] : data.stockMenageProduits.filter(pr => menageZoneOk(pr) && (pr.stockActuel || 0) <= (pr.stockMin || 0));
   const mouvements = data.stockMenageSorties.filter(s => menageZoneOk(s) && dans(versIso(s.date), p.debut, p.fin));
   const totalEntrees = somme(mouvements.filter(s => s.type === "entree"), s => s.quantite);
   const sorties = mouvements.filter(s => s.type !== "entree");
@@ -384,6 +389,8 @@ function render() {
   const p = calculerPeriode(filtres.periode);
   const s = calculer(data, p);
   const comp = p.libelleComparaison;
+  const v = id => !masques.includes(id);
+  const vFiches = !masques.some(id => id.startsWith("disp-"));
   const fmtDate = iso => iso.split("-").reverse().join("/");
   const titre = (t, sous) => `<h3 style="margin:0 0 ${sous ? 4 : 12}px;font-size:14px;color:var(--gold)">${t}</h3>${sous ? `<p class="hint" style="margin:0 0 12px">${sous}</p>` : ""}`;
   const canvas = (id, h = 220) => `<div style="position:relative;height:${h}px"><canvas id="${id}"></canvas></div>`;
@@ -406,27 +413,27 @@ function render() {
       ${data.erreurs.length ? `<div class="form-card" style="border-color:var(--red)"><p style="margin:0;color:var(--red)"><b>⚠️ Données incomplètes</b> — lecture impossible de : ${esc(data.erreurs.join(", "))}. Les chiffres correspondants sont à zéro ; vérifier les droits Firestore de ton compte.</p></div>` : ""}
 
       <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-        ${carteKpi("🛠️", fmtNb(s.interv.length), "Interventions astreinte", null, variation(s.interv.length, s.intervPrev.length), comp)}
-        ${carteKpi("⏱️", fmtNb(s.heuresTot) + " h", "Heures d'astreinte", null, variation(s.heuresTot, s.heuresPrev), comp)}
-        ${carteKpi("🌙", fmtNb(s.heuresNuit, 1) + " h", "Dont heures de nuit")}
-        ${carteKpi("📆", formatMontant(s.primesDimanche), "Primes dimanche")}
-        ${carteKpi("📞", fmtNb(s.appelsN1), "Appels au N1")}
-        ${carteKpi("📄", fmtNb(s.dem.length), "Demandes reçues", null, variation(s.dem.length, s.demPrev.length), comp)}
-        ${carteKpi("✔️", s.pctTraitees + " %", "Demandes traitées", s.dem.length ? (s.pctTraitees >= 70 ? "var(--teal)" : "var(--gold)") : null)}
-        ${carteKpi("⏳", s.delaiMoyen === null ? "—" : fmtNb(s.delaiMoyen, 1) + " j", "Délai moyen de traitement", null, null, s.delaiMedian === null ? "" : `médiane ${fmtNb(s.delaiMedian, 1)} j`)}
-        ${carteKpi("🚩", fmtNb(s.attentePlus30), "Demandes en attente > 30 j", s.attentePlus30 > 0 ? "var(--red)" : "var(--teal)", null, "toutes périodes")}
-        ${carteKpi("📟", fmtNb(s.relevesPeriode.length), "Relevés compteurs")}
-        ${carteKpi("⏰", fmtNb(s.compteursEnRetard.length), `Compteurs sans relevé > ${SEUIL_RETARD_RELEVE_J} j`, s.compteursEnRetard.length ? "var(--gold)" : "var(--teal)", null, `sur ${s.compteurs.length}`)}
-        ${carteKpi("📦", fmtNb(s.sousSeuilMaint.length + s.sousSeuilMenage.length), "Produits sous le seuil", (s.sousSeuilMaint.length + s.sousSeuilMenage.length) > 0 ? "var(--red)" : null, null, "état actuel")}
-        ${carteKpi("🛒", fmtNb(s.commandes.length), "Commandes fournisseurs", null, variation(s.commandes.length, s.commandesPrev.length), comp)}
-        ${carteKpi("🌴", fmtNb(s.totalJoursAbsence), "Jours d'absence", null, variation(s.totalJoursAbsence, s.totalJoursAbsencePrev), comp)}
-        ${carteKpi("🧽", fmtNb(s.fiches.length), "Fiches ménage")}
-        ${carteKpi("💰", formatMontant(s.montantPropose), `Prévisionnel ${s.anneeCourante}–${s.anneeCourante + 1}`)}
-        ${carteKpi("✅", formatMontant(s.montantValide), "Dont validé CA", "var(--teal)")}
+        ${v("astreinte") ? carteKpi("🛠️", fmtNb(s.interv.length), "Interventions astreinte", null, variation(s.interv.length, s.intervPrev.length), comp) : ""}
+        ${v("astreinte") ? carteKpi("⏱️", fmtNb(s.heuresTot) + " h", "Heures d'astreinte", null, variation(s.heuresTot, s.heuresPrev), comp) : ""}
+        ${v("astreinte") ? carteKpi("🌙", fmtNb(s.heuresNuit, 1) + " h", "Dont heures de nuit") : ""}
+        ${v("astreinte") ? carteKpi("📆", formatMontant(s.primesDimanche), "Primes dimanche") : ""}
+        ${v("astreinte") ? carteKpi("📞", fmtNb(s.appelsN1), "Appels au N1") : ""}
+        ${v("suivi-demandes") ? carteKpi("📄", fmtNb(s.dem.length), "Demandes reçues", null, variation(s.dem.length, s.demPrev.length), comp) : ""}
+        ${v("suivi-demandes") ? carteKpi("✔️", s.pctTraitees + " %", "Demandes traitées", s.dem.length ? (s.pctTraitees >= 70 ? "var(--teal)" : "var(--gold)") : null) : ""}
+        ${v("suivi-demandes") ? carteKpi("⏳", s.delaiMoyen === null ? "—" : fmtNb(s.delaiMoyen, 1) + " j", "Délai moyen de traitement", null, null, s.delaiMedian === null ? "" : `médiane ${fmtNb(s.delaiMedian, 1)} j`) : ""}
+        ${v("suivi-demandes") ? carteKpi("🚩", fmtNb(s.attentePlus30), "Demandes en attente > 30 j", s.attentePlus30 > 0 ? "var(--red)" : "var(--teal)", null, "toutes périodes") : ""}
+        ${v("compteurs") ? carteKpi("📟", fmtNb(s.relevesPeriode.length), "Relevés compteurs") : ""}
+        ${v("compteurs") ? carteKpi("⏰", fmtNb(s.compteursEnRetard.length), `Compteurs sans relevé > ${SEUIL_RETARD_RELEVE_J} j`, s.compteursEnRetard.length ? "var(--gold)" : "var(--teal)", null, `sur ${s.compteurs.length}`) : ""}
+        ${v("stock") || v("stock-menage") ? carteKpi("📦", fmtNb(s.sousSeuilMaint.length + s.sousSeuilMenage.length), "Produits sous le seuil", (s.sousSeuilMaint.length + s.sousSeuilMenage.length) > 0 ? "var(--red)" : null, null, "état actuel") : ""}
+        ${v("stock") ? carteKpi("🛒", fmtNb(s.commandes.length), "Commandes fournisseurs", null, variation(s.commandes.length, s.commandesPrev.length), comp) : ""}
+        ${v("astreinte") ? carteKpi("🌴", fmtNb(s.totalJoursAbsence), "Jours d'absence", null, variation(s.totalJoursAbsence, s.totalJoursAbsencePrev), comp) : ""}
+        ${vFiches ? carteKpi("🧽", fmtNb(s.fiches.length), "Fiches ménage") : ""}
+        ${v("previsionnel") ? carteKpi("💰", formatMontant(s.montantPropose), `Prévisionnel ${s.anneeCourante}–${s.anneeCourante + 1}`) : ""}
+        ${v("previsionnel") ? carteKpi("✅", formatMontant(s.montantValide), "Dont validé CA", "var(--teal)") : ""}
       </div>
-      <p class="hint" style="margin:-4px 0 0">Patrimoine suivi : ${data.sites.length} site(s) · ${s.compteurs.length} compteur(s) · ${data.masterlockCodes.length} code(s) Masterlock.</p>
+      <p class="hint" style="margin:-4px 0 0">Patrimoine suivi : ${[v("sites") ? `${data.sites.length} site(s)` : "", v("compteurs") ? `${s.compteurs.length} compteur(s)` : "", v("masterlock") ? `${data.masterlockCodes.length} code(s) Masterlock` : ""].filter(Boolean).join(" · ") || "—"}.</p>
 
-      <!-- ============ ASTREINTE ============ -->
+      ${v("astreinte") ? `<!-- ============ ASTREINTE ============ -->
       <div class="form-card">
         ${titre("🛠️ Astreinte — interventions et heures par mois")}
         ${s.interv.length ? canvas("stat-chart-interv-mois", 260) : vide("Aucune intervention sur la période.")}
@@ -449,8 +456,9 @@ function render() {
         <div class="form-card">${titre("Top 10 des sites")}${canvas("stat-chart-interv-sites", 280)}</div>
         <div class="form-card">${titre("Par jour de la semaine", "Charge du week-end mise en évidence")}${canvas("stat-chart-interv-jours", 240)}</div>
       </div>` : ""}
+      ` : ""}
 
-      <!-- ============ DEMANDES ============ -->
+      ${v("suivi-demandes") ? `<!-- ============ DEMANDES ============ -->
       <div class="form-card">
         ${titre("📄 Suivi des demandes — reçues vs réalisées", `${s.dem.length} reçue(s) sur la période · ${s.demTraitees} traitée(s) (${s.pctTraitees} %) · ${s.enAttente.length} en attente au total (toutes périodes)`)}
         ${canvas("stat-chart-demandes-mois", 240)}
@@ -480,8 +488,9 @@ function render() {
         </div>
       </div>
       ${s.parTypeDem.length ? `<div class="form-card">${titre("Demandes par type")}${canvas("stat-chart-demandes-type", Math.max(160, s.parTypeDem.length * 30))}</div>` : ""}
+      ` : ""}
 
-      <!-- ============ COMPTEURS ============ -->
+      ${v("compteurs") ? `<!-- ============ COMPTEURS ============ -->
       <div class="form-card">
         ${titre("📟 Compteurs — consommations sur la période", "Écart entre le dernier relevé avant la période (ou le premier de la période) et le dernier relevé de la période. Index illisibles et remises à zéro ignorés.")}
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:8px">
@@ -504,14 +513,16 @@ function render() {
           ${s.compteursEnRetard.length ? `<div style="max-height:220px;overflow:auto">${tableau(["Compteur", "Site", "Dernier relevé"], s.compteursEnRetard.map(c => [`${TYPE_COMPTEUR[c.type]?.icone || ""} ${esc(c.nom || "")}`, esc(c.dossierNom || "—"), c._dernier ? `${new Date(c._dernier).toLocaleDateString("fr-FR")} <span class="hint">(${Math.floor((Date.now() - c._dernier) / JOUR_MS)} j)</span>` : `<span style="color:var(--red)">Jamais</span>`]))}</div>` : vide("✅ Tous les compteurs sont à jour.")}
         </div>
       </div>
+      ` : ""}
 
-      <!-- ============ PRÉVISIONNEL ============ -->
+      ${v("previsionnel") ? `<!-- ============ PRÉVISIONNEL ============ -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="stats-2col">
         <div class="form-card">${titre(`💰 Prévisionnel travaux ${s.anneeCourante}–${s.anneeCourante + 1} — par statut`)}${canvas("stat-chart-previsionnel", 240)}</div>
         <div class="form-card">${titre("Prévisionnel — par catégorie")}${s.categoriePrevTriee.length ? canvas("stat-chart-previsionnel-cat", 240) : vide("Aucune ligne.")}</div>
       </div>
+      ` : ""}
 
-      <!-- ============ STOCK ============ -->
+      ${v("stock-menage") ? `<!-- ============ STOCK ============ -->
       <div class="form-card">
         ${titre("🧴 Stock Ménage — entrées / sorties", filtres.association ? `Zone : ${esc(filtres.association)}` : "École + Agropolis confondus")}
         <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px">
@@ -526,7 +537,8 @@ function render() {
             <div>${sousTitre("Produits les plus consommés")}${canvas("stat-chart-top-produits", Math.max(160, s.topProduitsTries.length * 30))}</div>
           </div>`}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="stats-2col">
+      ` : ""}
+      ${v("stock") || v("stock-menage") ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="stats-2col">
         <div class="form-card">
           ${titre("📦 Produits sous le seuil minimum", "État actuel")}
           ${(s.sousSeuilMaint.length + s.sousSeuilMenage.length) === 0 ? vide("✅ Aucun produit sous le seuil.") : `<div style="max-height:260px;overflow:auto">${tableau(["Produit", "Stock", "Seuil", "Module"], [
@@ -534,14 +546,14 @@ function render() {
             ...s.sousSeuilMenage.map(x => [esc(x.nom || "?"), `<b style="color:var(--red)">${fmtNb(x.stockActuel)}</b>`, fmtNb(x.stockMin), `Ménage${x.zone ? " · " + esc(x.zone) : ""}`]),
           ])}</div>`}
         </div>
-        <div class="form-card">
+        ${v("stock") ? `<div class="form-card">
           ${titre("🛒 Commandes fournisseurs", `${s.commandes.length} commande(s) sur la période`)}
           ${canvas("stat-chart-commandes-mois", 180)}
           ${s.commandesParFournisseur.length ? `${sousTitre("Par fournisseur")}${tableau(["Fournisseur", "Commandes"], s.commandesParFournisseur.map(([n, c]) => [esc(n), c]))}` : ""}
-        </div>
-      </div>
+        </div>` : ""}
+      </div>` : ""}
 
-      <!-- ============ ABSENCES ============ -->
+      ${v("astreinte") ? `<!-- ============ ABSENCES ============ -->
       <div class="form-card">
         ${titre("🌴 Absences — congés, RTT, arrêts", `${fmtNb(s.totalJoursAbsence)} jour(s) sur la période (jours calendaires tombant dans la période)`)}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="stats-2col">
@@ -550,18 +562,20 @@ function render() {
         </div>
         ${s.personnesTriees.length ? `${sousTitre("Par personne")}${s.personnesTriees.map(([nom, j]) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)"><span>${esc(nom)}</span><b>${j} j</b></div>`).join("")}` : ""}
       </div>
+      ` : ""}
 
-      <!-- ============ FICHES MÉNAGE ============ -->
+      ${vFiches ? `<!-- ============ FICHES MÉNAGE ============ -->
       <div class="form-card">
         ${titre("🧽 Fiches ménage — activité terrain", `${s.fiches.length} fiche(s) sur la période, dont ${s.fichesSoumises} soumise(s) · graphique : 12 dernières semaines`)}
         ${canvas("stat-chart-fiches-semaine")}
       </div>
+      ` : ""}
     </div>
   `;
 
   document.getElementById("stat-f-periode")?.addEventListener("change", e => { filtres.periode = e.target.value; render(); });
   document.getElementById("stat-f-assoc")?.addEventListener("change", e => { filtres.association = e.target.value; render(); });
-  document.getElementById("stat-rafraichir")?.addEventListener("click", () => mountStatistiques(mountedContainer));
+  document.getElementById("stat-rafraichir")?.addEventListener("click", () => mountStatistiques(mountedContainer, userCourant));
 
   dessinerGraphiques(s, p);
 }

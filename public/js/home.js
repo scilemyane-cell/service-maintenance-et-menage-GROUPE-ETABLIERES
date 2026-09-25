@@ -5,6 +5,7 @@ import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { initCarteSites } from "./site-map.js";
+import { watchCompteursTotal } from "./compteurs-data.js";
 
 let unsubs = [];
 let people = { n1: [], n2: [] };
@@ -24,6 +25,8 @@ let carteInstance = null;
 let filtreAssociation = "";
 let filtreSite = "";
 let horlogeTimer = null;
+let nbCompteurs = null;
+let onToggleConstructionRef = null;
 
 // "Mes sites favoris" — accès rapide personnel à quelques fiches (voir la
 // carte des sites sur Camelia GMAO). Purement une commodité d'affichage,
@@ -48,13 +51,14 @@ function cleanup() {
   modeReorganisation = false;
 }
 
-export function mountDashboard(container, user, categories, onSelect, onReorder) {
+export function mountDashboard(container, user, categories, onSelect, onReorder, onToggleConstruction = null) {
   cleanup();
   mountedContainer = container;
   mountedUser = user;
   catsRef = categories;
   onSelectRef = onSelect;
   onReorderRef = onReorder;
+  onToggleConstructionRef = onToggleConstruction;
   filtreAssociation = ""; filtreSite = "";
   container.classList.add("content-accueil");
   container.innerHTML = `<div class="hint">Chargement…</div>`;
@@ -63,6 +67,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder)
   unsubs.push(watchTransferts((t) => { transferts = t; scheduleRender(); }));
   unsubs.push(watchSitesDossiers((d) => { dossiers = d; scheduleRender(); }));
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
+  unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
 }
 
 // L'accueil écoute 5 flux Firestore indépendants — sans regroupement, la
@@ -132,7 +137,7 @@ function blocCompteursEtFavorisHTML() {
       <section class="gh-panneau-clair gh-compteurs">
         <div><b>${dossiers.length}</b><span>Sites</span></div>
         <div class="gh-sep"></div>
-        <div><b>${totalEquipements()}</b><span>Équipements</span></div>
+        <div><b>${nbCompteurs === null ? "—" : nbCompteurs}</b><span>Compteurs</span></div>
       </section>
       <section class="gh-panneau-clair gh-favoris">
         <h3>Mes sites favoris</h3>
@@ -255,7 +260,8 @@ function render() {
             const peutReorganiser = modeReorganisation && estAdmin;
             return `
             <div class="gh-tuile-wrap">
-              <button class="gh-tuile" data-cat="${c.id}" title="${esc(c.desc || c.label)}" style="background:${degradePour(c.id)}">
+              <button class="gh-tuile ${c.enConstruction ? "gh-tuile-construction" : ""}" data-cat="${c.id}" title="${esc(c.desc || c.label)}${c.enConstruction ? " — 🚧 en construction, visible uniquement par le Super Admin" : ""}" style="background:${degradePour(c.id)}">
+                ${c.enConstruction ? `<span class="gh-ruban">🚧 En construction</span>` : ""}
                 ${c.badgeAtelier || c.badgeSites ? `
                   <span class="gh-badges">
                     ${c.badgeAtelier ? `<span class="gh-badge" title="Alertes stock atelier">🔧${c.badgeAtelier > 99 ? "99+" : c.badgeAtelier}</span>` : ""}
@@ -268,6 +274,7 @@ function render() {
                 <div class="gh-reorg">
                   <button class="nav-btn" data-reorder-left="${c.id}" ${idx === 0 ? "disabled" : ""}>◀</button>
                   <button class="nav-btn" data-reorder-right="${c.id}" ${idx === catsRef.length - 1 ? "disabled" : ""}>▶</button>
+                  ${onToggleConstructionRef && c.id !== "statistiques" ? `<button class="nav-btn ${c.enConstruction ? "active" : ""}" data-construction="${c.id}" title="${c.enConstruction ? "Remettre en service (visible par tous)" : "Passer en construction (masqué pour les autres)"}">🚧</button>` : ""}
                 </div>` : ""}
             </div>`;
           }).join("")}
@@ -304,12 +311,15 @@ function render() {
 
       ${estAdmin ? `
       <div class="gh-outils">
-        <button class="nav-btn" id="toggle-reorg">${modeReorganisation ? "✓ Terminé" : "🔧 Réorganiser les tuiles"}</button>
+        <button class="nav-btn" id="toggle-reorg">${modeReorganisation ? "✓ Terminé" : (onToggleConstructionRef ? "🔧 Réorganiser / 🚧 construction" : "🔧 Réorganiser les tuiles")}</button>
         <button class="nav-btn" id="debug-toggle">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester le bandeau de transfert"}</button>
       </div>` : ""}
     </div>
   `;
 
+  mountedContainer.querySelectorAll("[data-construction]").forEach(btn => {
+    btn.addEventListener("click", (e) => { e.stopPropagation(); onToggleConstructionRef?.(btn.dataset.construction); });
+  });
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
     btn.addEventListener("click", () => onSelectRef(btn.dataset.notifCat));
   });

@@ -35,6 +35,8 @@
   import { watchSites } from "./sites-data.js";
   import { watchAccess, hasAccess } from "./access-data.js";
   import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS } from "./theme.js";
+  import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
+  import { watchUsers } from "./users-data.js";
 
   initTheme();
 
@@ -52,6 +54,23 @@
   let compteursAlertCount = 0;
   let compteursAlertSubscribed = false;
   let backButtonGuardSetup = false;
+  let modulesConstruction = [];
+  let modulesConstructionSubscribed = false;
+  // Mode "Aperçu en tant que…" (Super Admin uniquement) : l'appli est
+  // affichée avec le rôle et les droits de la personne choisie, pour
+  // vérifier ce que voit chaque technicien. Les données lues restent
+  // celles du compte Super Admin (règles Firestore), et une saisie faite
+  // dans ce mode serait enregistrée au nom de la personne affichée —
+  // d'où le bandeau d'avertissement.
+  let apercuUid = null;
+  let usersList = [];
+  let usersSubscribed = false;
+  function utilisateurEffectif() {
+    if (!apercuUid || currentUser?.role !== "super_admin") return currentUser;
+    const u = usersList.find(x => x.uid === apercuUid);
+    return u ? { ...u, apercu: true } : currentUser;
+  }
+  const estMasqueConstruction = (id, user) => modulesConstruction.includes(id) && (user.role !== "super_admin" || user.apercu);
 
   // Bouton "retour" du navigateur (ou geste retour mobile) : par défaut
   // il quitte carrément l'appli puisque celle-ci ne pousse jamais
@@ -286,6 +305,14 @@
       // utilisateur au même moment).
       watchStockAlertCount((counts) => { stockAlertCount = counts; if (currentCategory === null) render(); });
     }
+    if (!modulesConstructionSubscribed) {
+      modulesConstructionSubscribed = true;
+      watchModulesConstruction((ids) => { modulesConstruction = ids; if (currentCategory === null || estMasqueConstruction(currentCategory, utilisateurEffectif())) render(); });
+    }
+    if (!usersSubscribed && user.role === "super_admin") {
+      usersSubscribed = true;
+      watchUsers((l) => { usersList = l; if (apercuUid) render(); else majSelectApercu(); });
+    }
     if (!compteursAlertSubscribed) {
       compteursAlertSubscribed = true;
       watchCompteursAlertCount((n) => { compteursAlertCount = n; if (currentCategory === null) render(); });
@@ -319,7 +346,11 @@
     return category.subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {
-    const visibles = allCategories(user).filter(c => categorySubtabsFor(c, user).length > 0);
+    const visibles = allCategories(user)
+      .filter(c => c.id !== "administration") // accessible par la roue crantée en haut, plus en tuile
+      .filter(c => !estMasqueConstruction(c.id, user))
+      .filter(c => categorySubtabsFor(c, user).length > 0)
+      .map(c => modulesConstruction.includes(c.id) ? { ...c, enConstruction: true } : c);
     if (homeOrder.length === 0) return visibles;
     // Catégories déjà classées, dans l'ordre sauvegardé, puis toute
     // catégorie nouvelle (pas encore dans l'ordre — ex. nouveau
@@ -348,8 +379,14 @@
       return;
     }
 
-    const cats = allCategories(currentUser);
+    const eff = utilisateurEffectif();
+    const cats = allCategories(eff);
+    if (currentCategory && (estMasqueConstruction(currentCategory, eff) || !cats.some(c => c.id === currentCategory && categorySubtabsFor(c, eff).length > 0))) {
+      currentCategory = null; currentSubtab = null;
+    }
     const category = cats.find(c => c.id === currentCategory) || null;
+    const adminCat = cats.find(c => c.id === "administration");
+    const voitAdministration = adminCat && categorySubtabsFor(adminCat, eff).length > 0;
 
     app.innerHTML = `
       <header class="topbar">
@@ -360,20 +397,25 @@
             <div class="topbar-title-text">
               <span class="topbar-eyebrow">Groupe Établières · Service Maintenance et Ménage</span>
               ${category
-                ? `<h1>${escapeHtml(category.label)}${categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab) ? ` <span class="accent">› ${escapeHtml(categorySubtabsFor(category, currentUser).find(s => s.id === currentSubtab).label)}</span>` : ""}</h1>`
+                ? `<h1>${escapeHtml(category.label)}${modulesConstruction.includes(category.id) ? " 🚧" : ""}${categorySubtabsFor(category, eff).find(s => s.id === currentSubtab) ? ` <span class="accent">› ${escapeHtml(categorySubtabsFor(category, eff).find(s => s.id === currentSubtab).label)}</span>` : ""}</h1>`
                 : `<h1>Établières</h1>`}
             </div>
           </div>
         </div>
         <div class="topbar-user">
           <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
+          ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
+          ${voitAdministration ? `<button class="nav-btn gear-btn ${currentCategory === "administration" ? "active" : ""}" id="admin-btn" title="Administration">⚙️</button>` : ""}
           <button class="nav-btn" id="theme-btn" title="Changer l'apparence (propre à cet appareil)">${THEME_LABELS[getStoredTheme()]}</button>
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
       </header>
+      ${eff.apercu ? `
+      <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Évite toute saisie : elle serait enregistrée à son nom. <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
+      ${category && modulesConstruction.includes(category.id) && !eff.apercu ? `<div class="construction-bandeau">🚧 Module en construction — visible uniquement par le Super Admin (masqué pour tous les autres, y compris dans Statistiques).</div>` : ""}
       ${category ? `
       <nav class="tabs">
-        ${categorySubtabsFor(category, currentUser).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}">${s.icon} ${s.label}</button>`).join("")}
+        ${categorySubtabsFor(category, eff).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}">${s.icon} ${s.label}</button>`).join("")}
       </nav>` : ""}
       <main class="content" id="content"></main>
     `;
@@ -382,6 +424,17 @@
     document.getElementById("theme-btn").addEventListener("click", (e) => {
       cycleTheme();
       e.currentTarget.textContent = THEME_LABELS[getStoredTheme()]; // mise à jour du libellé seule, sans re-render de l'écran en cours (évite de perdre une saisie non enregistrée)
+    });
+    document.getElementById("admin-btn")?.addEventListener("click", () => {
+      if (currentCategory === "administration") { currentCategory = null; currentSubtab = null; }
+      else { currentCategory = "administration"; currentSubtab = null; }
+      render();
+    });
+    document.getElementById("apercu-select")?.addEventListener("change", (e) => {
+      apercuUid = e.target.value || null; currentCategory = null; currentSubtab = null; render();
+    });
+    document.getElementById("apercu-quitter")?.addEventListener("click", () => {
+      apercuUid = null; currentCategory = null; currentSubtab = null; render();
     });
     const backBtn = document.getElementById("back-home");
     if (backBtn) backBtn.addEventListener("click", () => { currentCategory = null; currentSubtab = null; render(); });
@@ -393,8 +446,20 @@
     renderContent(category);
   }
 
+  function optionsApercu() {
+    return usersList.filter(u => u.uid !== currentUser.uid && u.role)
+      .map(u => `<option value="${escapeHtml(u.uid)}" ${u.uid === apercuUid ? "selected" : ""}>${escapeHtml(u.nom || u.email || u.uid)} — ${escapeHtml(roleLabel(u.role))}</option>`).join("");
+  }
+  // La liste des utilisateurs arrive après le premier affichage : on
+  // complète le sélecteur sans redessiner l'écran en cours.
+  function majSelectApercu() {
+    const sel = document.getElementById("apercu-select");
+    if (sel) sel.innerHTML = `<option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}`;
+  }
+
   function renderContent(category) {
     const content = document.getElementById("content");
+    const currentUser = utilisateurEffectif(); // masque volontairement la variable globale : tout le rendu se fait avec l'utilisateur affiché
 
     if (!category) {
       const cats = visibleCategoriesFor(currentUser);
@@ -414,7 +479,10 @@
         if (cible < 0 || cible >= ids.length) return;
         [ids[idx], ids[cible]] = [ids[cible], ids[idx]];
         saveHomeOrder(ids);
-      });
+      }, currentUser.role === "super_admin" && !currentUser.apercu ? (catId) => basculerModuleConstruction(catId).catch(err => {
+        console.error("basculerModuleConstruction:", err);
+        alert("Échec de l'enregistrement du statut « en construction » : " + (err?.message || err));
+      }) : null);
       return;
     }
 

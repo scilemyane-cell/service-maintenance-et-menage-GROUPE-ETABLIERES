@@ -493,3 +493,13 @@ export function consommationRecente(compteur, tousReleves, jours) {
   if (avant === null || apres === null) return null;
   return Math.max(0, apres - avant);
 }
+
+// Nombre total de compteurs actifs (hors corbeille) — pour le compteur
+// "Compteurs" de l'écran d'accueil.
+export function watchCompteursTotal(callback) {
+  return onSnapshot(collection(db, COMPTEURS), (snap) => {
+    let n = 0;
+    snap.forEach((d) => { if (!d.data().supprimeLe) n++; });
+    callback(n);
+  }, (err) => { console.error("watchCompteursTotal:", err); callback(null); });
+}
