@@ -16,13 +16,13 @@ import { watchAssociations } from "./associations-data.js";
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], codes: [], associations: [] };
-let ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set(), modeMasse: false };
+let ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set(), modeMasse: false, recherche: "", reveles: new Set(), toutReveler: false, choixSite: false };
 
 export async function mountMasterlock(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], codes: [], associations: [] };
-  ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set(), modeMasse: false };
+  ui = { ouverts: new Set(), addingSiteId: null, editingCodeId: null, historiqueOuverts: new Set(), modeMasse: false, recherche: "", reveles: new Set(), toutReveler: false, choixSite: false };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
 
   watchAssociations((a) => { state.associations = a; render(); });
@@ -76,7 +76,12 @@ function render() {
 // aux Compteurs, chaque site n'a pas forcément de Masterlock).
 function renderListe() {
   const sitesAvecCodes = state.sites.filter(s => state.codes.some(c => c.dossierId === s.id) || ui.addingSiteId === s.id);
-  const groupes = groupedSites(sitesAvecCodes);
+  const q = ui.recherche.trim().toLowerCase();
+  const correspond = (site) => !q || (site.nom || "").toLowerCase().includes(q)
+    || state.codes.some(c => c.dossierId === site.id && [c.nom, c.code, c.notes].some(x => String(x || "").toLowerCase().includes(q)));
+  const sitesVisibles = sitesAvecCodes.filter(correspond);
+  const focusRecherche = document.activeElement?.id === "mlk-recherche" ? document.activeElement.selectionStart : null;
+  const groupes = groupedSites(sitesVisibles);
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -88,26 +93,47 @@ function renderListe() {
         <button class="nav-btn" id="mlk-export-recap">🖨️ Exporter le récap complet (toutes résidences)</button>
       </div>
       <div id="mlk-import-status" style="font-size:12px"></div>
-      ${sitesAvecCodes.length === 0 ? `<p class="hint">Aucun code enregistré pour l'instant.</p>` : groupes.map(g => `
-        <div>
-          <h3 style="margin:12px 0 8px;font-size:15px;color:var(--gold)">${esc(g.assocLabel)}</h3>
-          ${g.groups.map(sub => `
-            ${sub.groupeLabel ? `<div style="font-size:12px;color:var(--text-dim);margin:6px 0 6px 4px">${esc(sub.groupeLabel)}</div>` : ""}
-            ${sub.sites.map(site => renderSiteCard(site)).join("")}
-          `).join("")}
-        </div>
+      <div class="mlk-barre">
+        <input id="mlk-recherche" placeholder="🔍 Rechercher un site, une boîte, un code…" value="${esc(ui.recherche)}">
+        <button class="nav-btn" id="mlk-tout-reveler">${ui.toutReveler ? "🙈 Masquer les codes" : "👁️ Afficher tous les codes"}</button>
+      </div>
+      ${ui.choixSite ? `
+        <div class="form-card mlk-choix">
+          <label>Site où ajouter une boîte à clés
+            <select id="mlk-site-select"><option value="">— Choisir un site —</option>${groupedSites(state.sites).map(g => `<optgroup label="${esc(g.assocLabel)}">${g.groups.flatMap(sub => sub.sites).map(st => `<option value="${st.id}">${esc(st.nom)}</option>`).join("")}</optgroup>`).join("")}</select>
+          </label>
+          <button class="nav-btn" id="mlk-choix-annuler">Annuler</button>
+        </div>` : ""}
+      ${sitesVisibles.length === 0 ? `<p class="hint">${sitesAvecCodes.length === 0 ? "Aucun code enregistré pour l'instant." : "Aucun résultat pour cette recherche."}</p>` : groupes.map(g => `
+        <h3 class="mlk-assoc">${esc(g.assocLabel)}</h3>
+        ${g.groups.map(sub => `
+          ${sub.groupeLabel ? `<div class="mlk-groupe">${esc(sub.groupeLabel)}</div>` : ""}
+          <div class="mlk-sites">${sub.sites.map(site => renderSiteBloc(site)).join("")}</div>
+        `).join("")}
       `).join("")}
     </div>
   `;
 
   document.getElementById("mlk-mode-masse").addEventListener("click", () => { ui.modeMasse = true; render(); });
-  document.getElementById("mlk-choisir-site").addEventListener("click", () => {
-    const nom = prompt("Nom du site (tape le début du nom pour chercher) :");
-    if (!nom) return;
-    const match = state.sites.find(s => s.nom.toLowerCase().includes(nom.trim().toLowerCase()));
-    if (!match) { window.toast("Aucun site trouvé avec ce nom."); return; }
-    ui.addingSiteId = match.id; ui.ouverts.add(match.id); render();
+  document.getElementById("mlk-choisir-site").addEventListener("click", () => { ui.choixSite = !ui.choixSite; render(); });
+  document.getElementById("mlk-choix-annuler")?.addEventListener("click", () => { ui.choixSite = false; render(); });
+  document.getElementById("mlk-site-select")?.addEventListener("change", (e) => {
+    if (!e.target.value) return;
+    ui.addingSiteId = e.target.value; ui.choixSite = false; ui.recherche = ""; render();
+    requestAnimationFrame(() => document.getElementById(`mlk-add-zone-${e.target.value}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
   });
+  document.getElementById("mlk-recherche").addEventListener("input", (e) => { ui.recherche = e.target.value; render(); });
+  if (focusRecherche !== null) { const el = document.getElementById("mlk-recherche"); el.focus(); el.setSelectionRange(focusRecherche, focusRecherche); }
+  document.getElementById("mlk-tout-reveler").addEventListener("click", () => { ui.toutReveler = !ui.toutReveler; ui.reveles.clear(); render(); });
+  mountedContainer.querySelectorAll("[data-reveler]").forEach(btn => btn.addEventListener("click", () => {
+    const id = btn.dataset.reveler;
+    if (ui.reveles.has(id)) ui.reveles.delete(id); else ui.reveles.add(id);
+    render();
+  }));
+  mountedContainer.querySelectorAll("[data-copier]").forEach(btn => btn.addEventListener("click", async () => {
+    const c = state.codes.find(x => x.id === btn.dataset.copier);
+    try { await navigator.clipboard.writeText(c?.code || ""); window.toast?.("Code copié"); } catch { window.toast?.("Copie impossible sur cet appareil"); }
+  }));
   document.getElementById("mlk-export-recap").addEventListener("click", () => exporterRecap(state.sites));
   document.getElementById("mlk-import").addEventListener("click", async () => {
     const statusEl = document.getElementById("mlk-import-status");
@@ -229,6 +255,45 @@ function renderModeMasse() {
     ui.modeMasse = false;
     render();
   });
+}
+
+// Bloc d'un site : en-tête (nom + actions) puis une « carte boîte à clés »
+// par code, code masqué par défaut (👁️ pour l'afficher, 📋 pour copier).
+function renderSiteBloc(site) {
+  const codes = state.codes.filter(c => c.dossierId === site.id);
+  return `
+    <section class="mlk-site">
+      <header>
+        <h4>🔐 ${esc(site.nom)} <small>${codes.length} boîte${codes.length > 1 ? "s" : ""}</small></h4>
+        <div class="mlk-site-actions">
+          <button class="nav-btn" data-open-add="${site.id}" title="Ajouter une boîte à clés">➕</button>
+          <button class="nav-btn" data-toggle-hist="${site.id}" title="Historique des changements">🗂️</button>
+          <button class="nav-btn" data-export-site="${site.id}" title="Exporter ce site" ${codes.length === 0 ? "disabled" : ""}>🖨️</button>
+        </div>
+      </header>
+      <div class="mlk-boites">
+        ${codes.map(c => {
+          const visible = ui.toutReveler || ui.reveles.has(c.id);
+          return `
+          <div class="mlk-boite">
+            <p class="mlk-nom">${esc(c.nom || "Boîte à clés")}</p>
+            <div class="mlk-code ${visible ? "" : "mlk-masque"}">${visible ? esc(c.code || "—") : "••••"}</div>
+            ${c.notes ? `<p class="mlk-notes">${esc(c.notes)}</p>` : ""}
+            <p class="mlk-maj">Mis à jour le ${formatDate(c.derniereMajAt)} · ${esc(c.derniereMajParNom || "—")}</p>
+            <div class="mlk-actions">
+              <button class="nav-btn" data-reveler="${c.id}">${visible ? "🙈" : "👁️ Voir"}</button>
+              <button class="nav-btn" data-copier="${c.id}" title="Copier le code">📋</button>
+              <button class="nav-btn" data-edit-code="${c.id}" title="Modifier">✏️</button>
+              <button class="del-btn" data-del-code="${c.id}" title="Supprimer">🗑️</button>
+            </div>
+            ${ui.editingCodeId === c.id ? renderEditForm(c) : ""}
+          </div>`;
+        }).join("")}
+      </div>
+      <div id="mlk-add-zone-${site.id}">${ui.addingSiteId === site.id ? renderAddForm(site) : ""}</div>
+      <div id="mlk-status-${site.id}" style="font-size:12px"></div>
+      ${ui.historiqueOuverts.has(site.id) ? `<div id="mlk-hist-${site.id}" style="margin-top:8px"></div>` : ""}
+    </section>`;
 }
 
 function renderSiteCard(site) {
