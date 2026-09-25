@@ -1650,3 +1650,6 @@ html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
 .iv-ouinon button + button{border-left:1.5px solid var(--border)}
 .iv-ouinon button.actif{background:var(--gold);color:#1A1305}
 .iv-ouinon button[data-n1-ouinon="non"].actif{background:var(--panel-alt);color:var(--text)}
+.iv-n1-ia{display:flex;gap:8px;align-items:center}
+.iv-n1-ia input{flex:1}
+.iv-ia.petit{padding:0;width:42px;height:42px;border-radius:10px;font-size:16px;flex:none}

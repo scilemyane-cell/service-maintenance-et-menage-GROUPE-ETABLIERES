@@ -17,7 +17,7 @@ import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js";
 import { imprimerFicheIsolee } from "./print-fiche.js";
-import { redigerCompteRendu } from "./ia.js";
+import { redigerCompteRendu, reformulerDecision } from "./ia.js";
 
 const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
 
@@ -2156,7 +2156,10 @@ function appelN1HTML() {
         </select>
       </label>
       <label class="iv-n1-large">Motif de l'appel<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. besoin d'un accord pour commander une pièce"></label>
-      <label class="iv-n1-plein">Décision / consigne donnée<input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"></label>
+      <label class="iv-n1-plein">Décision / consigne donnée
+        <span class="iv-n1-ia"><input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"><button type="button" class="iv-ia petit" id="f-ia-decision" title="Reformuler proprement avec l'IA">✨</button></span>
+        <span id="f-ia-decision-statut" class="iv-ia-statut"></span>
+      </label>
     </div>
   `;
 }
@@ -2165,6 +2168,18 @@ function attacherEcouteursAppelN1() {
   document.getElementById("f-n1-contacte")?.addEventListener("change", (e) => { ui.form.n1Contacte = e.target.value; });
   document.getElementById("f-motif-n1")?.addEventListener("input", (e) => { ui.form.motifAppelN1 = e.target.value; });
   document.getElementById("f-decision-n1")?.addEventListener("input", (e) => { ui.form.decisionN1 = e.target.value; });
+  document.getElementById("f-ia-decision")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const btn = e.currentTarget, statut = document.getElementById("f-ia-decision-statut");
+    if (!(ui.form.decisionN1 || "").trim()) { statut.innerHTML = `<span style="color:var(--red)">Tape d'abord la décision en quelques mots.</span>`; return; }
+    btn.disabled = true; btn.textContent = "⏳"; statut.textContent = "";
+    try {
+      ui.form.decisionN1 = (await reformulerDecision(ui.form)).replace(/\*\*/g, "");
+      document.getElementById("f-decision-n1").value = ui.form.decisionN1;
+      statut.innerHTML = `<span style="color:var(--teal)">✓ Reformulé — modifiable.</span>`;
+    } catch (err) { statut.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`; }
+    finally { btn.disabled = false; btn.textContent = "✨"; }
+  });
 }
 
 function interventionPhotosHTML() {

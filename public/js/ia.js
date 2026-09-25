@@ -75,3 +75,10 @@ n'invente AUCUN fait, matériel, cause ou chiffre absent des informations ; corr
 
 ${lignes}`);
 }
+
+// Reformule proprement la décision / consigne du N1 (1 à 2 phrases).
+export async function reformulerDecision(f) {
+  return genererTexte(`Reformule en français, en 1 à 2 phrases courtes et professionnelles, la décision ou consigne donnée par le cadre d'astreinte (N1) à un technicien de maintenance.
+Corrige l'orthographe, garde exactement le sens, n'ajoute aucun fait, pas de guillemets, pas de Markdown.
+${f.motifAppelN1 ? `Motif de l'appel : ${f.motifAppelN1}\n` : ""}Décision / consigne notée : ${f.decisionN1}`);
+}
