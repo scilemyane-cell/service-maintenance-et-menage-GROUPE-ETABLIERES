@@ -1046,3 +1046,16 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .sdv-grille{ display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
 .sdv-grille > .form-card{ margin:0; }
 @media (max-width:720px){ .sdv-hero{ padding:16px; } .sdv-hero h2{ font-size:20px; } .sdv-chiffres{ gap:14px; } .sdv-menu-pop{ left:0; right:auto; } .sdv-grille{ grid-template-columns:minmax(0,1fr); } }
+
+/* Écran « chantier » (module en construction vu par la Direction) */
+.chantier{ max-width:640px; margin:30px auto; text-align:center; background:var(--panel); border:1px solid var(--border); border-radius:18px; overflow:hidden; padding-bottom:6px; box-shadow:0 10px 30px rgba(0,0,0,.12); }
+.chantier-bande{ height:18px; background:repeating-linear-gradient(-45deg,#F2B705 0 18px,#1B1B1B 18px 36px); animation:chantier-defile 1.2s linear infinite; background-size:51px 18px; }
+@keyframes chantier-defile{ to{ background-position:51px 0; } }
+.chantier-scene{ font-size:54px; margin:26px 0 6px; display:flex; justify-content:center; gap:24px; }
+.chantier-engin{ display:inline-block; animation:chantier-roule 2.6s ease-in-out infinite alternate; }
+@keyframes chantier-roule{ from{ transform:translateX(-26px); } to{ transform:translateX(26px); } }
+.chantier-casque{ display:inline-block; animation:chantier-hop 1.4s ease-in-out infinite; }
+@keyframes chantier-hop{ 50%{ transform:translateY(-10px) rotate(-8deg); } }
+.chantier h2{ margin:10px 24px 8px; font-size:22px; color:var(--text); }
+.chantier p{ margin:0 28px 12px; color:var(--text-dim); font-size:15px; line-height:1.5; }
+.chantier-module{ font-size:13px !important; }

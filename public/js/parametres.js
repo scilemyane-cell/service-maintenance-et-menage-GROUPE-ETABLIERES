@@ -139,7 +139,7 @@ const TUILES_GEREES = [
   { id: "stock-menage", label: "Stock Ménage" },
   { id: "stock", label: "Stock maintenance" },
 ];
-const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps", "direction"];
+const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
 const NIVEAUX_ACCES = [
   { value: "none", label: "Aucun accès" },
   { value: "read", label: "Lecture" },
@@ -192,7 +192,7 @@ function renderUtilisateurs(container) {
                   <td>
                     ${ROLES_ACCES_CAS_PAR_CAS.includes(u.role)
                       ? `<button class="nav-btn" data-toggle-acces="${u.uid}" style="padding:4px 10px;font-size:11px">🔐 ${usersState.accesOuvertPour === u.uid ? "Fermer" : "Gérer l'accès"}</button>`
-                      : `<span class="hint" style="font-size:11px">Accès complet (rôle ${esc(roleLabel(u.role))})</span>`}
+                      : `<span class="hint" style="font-size:11px">${u.role === "direction" ? "Tout en lecture (sauf Administration)" : `Accès complet (rôle ${esc(roleLabel(u.role))})`}</span>`}
                   </td>
                   <td>
                     <button class="nav-btn" data-reset-pwd="${u.uid}" style="padding:4px 10px;font-size:11px">🔑 Réinitialiser</button>

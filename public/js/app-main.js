@@ -70,7 +70,11 @@
     const u = usersList.find(x => x.uid === apercuUid);
     return u ? { ...u, apercu: true } : currentUser;
   }
-  const estMasqueConstruction = (id, user) => modulesConstruction.includes(id) && (user.role !== "super_admin" || user.apercu);
+  // Module en construction : visible et utilisable par le Super Admin ;
+  // visible (avec son ruban) mais fermé par un écran « chantier » pour la
+  // Direction ; totalement masqué pour les autres rôles.
+  const estMasqueConstruction = (id, user) => modulesConstruction.includes(id) && user.role !== "direction" && (user.role !== "super_admin" || user.apercu);
+  const estFermeConstruction = (id, user) => modulesConstruction.includes(id) && user.role === "direction";
 
   // Bouton "retour" du navigateur (ou geste retour mobile) : par défaut
   // il quitte carrément l'appli puisque celle-ci ne pousse jamais
@@ -92,7 +96,7 @@
 
   function dispositifCategories(user) {
     return dispositifsList
-      .filter(d => hasAccess(accessMap, d, user) || (user.extraOnglets || []).includes("disp-" + d))
+      .filter(d => user.role === "direction" || hasAccess(accessMap, d, user) || (user.extraOnglets || []).includes("disp-" + d))
       .map(d => ({
         id: "disp-" + d, label: d, icon: "🧽", desc: "Fiches, traçabilité",
         subtabs: [
@@ -338,8 +342,15 @@
   // super_admin) et les tuiles dispositif ménage ("disp-...",
   // via extraOnglets) ne sont pas concernés par ce mécanisme.
   const TUILES_GEREES_PAR_UTILISATEUR = ["statistiques", "astreinte", "sites", "compteurs", "masterlock", "previsionnel", "planning-individuel", "suivi-demandes", "stock-menage", "stock"];
-  const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps", "direction"];
+  const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
+  // Direction : voit tout comme le Super Admin, en consultation seule —
+  // sauf l'Administration (comptes, corbeille…) et le Suivi des tâches.
+  const TUILES_INTERDITES_DIRECTION = ["administration", "taches"];
   function categorySubtabsFor(category, user) {
+    if (user.role === "direction") {
+      if (TUILES_INTERDITES_DIRECTION.includes(category.id)) return [];
+      return category.subtabs;
+    }
     if (ROLES_ACCES_CAS_PAR_CAS.includes(user.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id)) {
       const niveau = (user.permissions || {})[category.id] || "none";
       if (niveau === "none") return [];
@@ -450,7 +461,7 @@
       </header>
       ${eff.apercu ? `
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
-      ${category && modulesConstruction.includes(category.id) && !eff.apercu ? `<div class="construction-bandeau">🚧 Module en construction — visible uniquement par le Super Admin (masqué pour tous les autres, y compris dans Statistiques).</div>` : ""}
+      ${category && modulesConstruction.includes(category.id) && !eff.apercu && eff.role === "super_admin" ? `<div class="construction-bandeau">🚧 Module en construction — visible uniquement par le Super Admin (masqué pour tous les autres, y compris dans Statistiques).</div>` : ""}
       ${category ? `
       <nav class="tabs">
         ${categorySubtabsFor(category, eff).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}">${s.icon} ${s.label}</button>`).join("")}
@@ -543,7 +554,8 @@
       const niveauTuile = (ROLES_ACCES_CAS_PAR_CAS.includes(currentUser.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id))
         ? ((currentUser.permissions || {})[category.id] || "none")
         : null;
-      const userPourModule = niveauTuile === "read" ? { ...currentUser, lectureSeule: true } : currentUser;
+      const userPourModule = (niveauTuile === "read" || currentUser.role === "direction") ? { ...currentUser, lectureSeule: true } : currentUser;
+      if (estFermeConstruction(category.id, currentUser)) { content.innerHTML = ecranChantier(category); return; }
       activeSub.mount(content, userPourModule);
       return;
     }
@@ -552,6 +564,26 @@
       <div class="placeholder-card">
         <b>Bientôt disponible</b><br><br>
         Ce module (${escapeHtml(activeSub?.label || category.label)}) arrive dans une prochaine phase du projet.
+      </div>`;
+  }
+
+  // Écran « chantier » (Direction sur un module en construction).
+  const MESSAGES_CHANTIER = [
+    ["Casque obligatoire au-delà de cette ligne !", "Nos meilleurs techniciens (et une quantité raisonnable de café) sont en train de monter ce module. Il ouvrira dès que la peinture sera sèche."],
+    ["Chantier interdit au public… même à la direction 😄", "Le module est en cours de construction. Promis, il n'y aura pas de dépassement de budget — le Prévisionnel travaux nous surveille."],
+    ["Attention, sol glissant : développement en cours", "Valentin est encore en train de serrer les derniers boulons. Revenez bientôt, la visite de chantier se fera avec les chaussures de sécurité."],
+    ["Zone en travaux — accès réservé au chef de chantier", "Ce module n'a pas encore reçu son PV de réception. On vous invitera à couper le ruban !"],
+  ];
+  function ecranChantier(category) {
+    const [titre, texte] = MESSAGES_CHANTIER[Math.floor(Math.random() * MESSAGES_CHANTIER.length)];
+    return `
+      <div class="chantier">
+        <div class="chantier-bande"></div>
+        <div class="chantier-scene"><span class="chantier-cone">🚧</span><span class="chantier-engin">🚜</span><span class="chantier-casque">⛑️</span></div>
+        <h2>${escapeHtml(titre)}</h2>
+        <p>${escapeHtml(texte)}</p>
+        <p class="chantier-module">Module : <b>${escapeHtml(category.label)}</b> · 🚧 en construction</p>
+        <div class="chantier-bande"></div>
       </div>`;
   }
 
