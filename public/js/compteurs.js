@@ -120,12 +120,12 @@ export async function mountCompteurs(container, user) {
   if (window.compteursRapideSiteDeepLinkId) {
     const siteId = window.compteursRapideSiteDeepLinkId;
     window.compteursRapideSiteDeepLinkId = null;
-    if (state.sites.some(s => s.id === siteId) && state.compteurs.some(c => c.dossierId === siteId)) {
-      ui.rapideSiteId = siteId; ui.rapideIndex = 0;
-    } else {
-      ui.ouverts.add(siteId);
-      window.toast?.("Aucun compteur actif sur ce site pour l'instant.");
-    }
+    // Tombe directement sur la fiche compteurs du site : déroulée, mise
+    // en évidence et amenée à l'écran.
+    ui.ouverts.add(siteId);
+    ui.focusSiteId = siteId;
+    if (!state.sites.some(s => s.id === siteId)) window.toast?.("Ce site n'a pas encore de compteurs activés.");
+    else if (!state.compteurs.some(c => c.dossierId === siteId)) window.toast?.("Aucun compteur enregistré sur ce site pour l'instant.");
   }
   render();
 }
@@ -250,7 +250,7 @@ function renderSiteCard(site) {
   const enRetard = compteurs.filter(estEnRetard);
   const ouvert = ui.ouverts.has(site.id);
   return `
-    <div class="form-card" style="padding:0;overflow:visible">
+    <div class="form-card" id="cpt-site-${site.id}" style="padding:0;overflow:visible;${ui.focusSiteId === site.id ? "box-shadow:0 0 0 2px var(--gold);" : ""}">
       <div style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px">
         <button data-toggle-site="${site.id}" style="flex:1;display:flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;text-align:left;padding:0;min-width:0">
           <span style="font-size:14px;color:var(--gold);font-weight:700">🏢 ${esc(site.nom)}</span>
@@ -336,6 +336,12 @@ function renderListe() {
       `).join("")}
     </div>
   `;
+
+  if (ui.focusSiteId) {
+    const cible = document.getElementById("cpt-site-" + ui.focusSiteId);
+    ui.focusSiteId = null;
+    if (cible) requestAnimationFrame(() => cible.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   document.getElementById("cpt-activer-tous")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("cpt-activer-tous-status");

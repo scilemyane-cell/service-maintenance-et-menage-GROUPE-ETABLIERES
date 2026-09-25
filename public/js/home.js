@@ -188,7 +188,7 @@ function blocCompteursEtFavorisHTML() {
             <div class="gh-favori">
               <button data-ouvrir-favori="${d.id}">${esc(d.nom)}</button>
               <span class="gh-favori-actions">
-                ${peutRelever && d.compteursActifs ? `<button class="gh-raccourci" data-relever-site="${d.id}" title="Relever les compteurs de ce site">🎛️</button>` : ""}
+                ${peutRelever && d.compteursActifs ? `<button class="gh-raccourci" data-relever-site="${d.id}" title="Compteurs de ce site">🎛️</button>` : ""}
                 <button class="gh-favori-suppr" data-retirer-favori="${d.id}" title="Retirer">✕</button>
               </span>
             </div>`).join("")}
