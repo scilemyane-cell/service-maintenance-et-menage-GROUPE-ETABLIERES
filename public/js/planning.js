@@ -53,6 +53,11 @@ function estDimanche(dateStr) {
 
 // Durée totale entre l'heure de départ et l'heure de retour, en gérant le
 // passage à minuit (retour le lendemain).
+function fmtDureeH(h) {
+  if (!(h > 0)) return "0 h";
+  const tot = Math.round(h * 60);
+  return `${Math.floor(tot / 60)} h ${String(tot % 60).padStart(2, "0")}`;
+}
 function dureeHeures(depart, retour) {
   const start = toMinutes(depart);
   let end = toMinutes(retour);
@@ -2406,8 +2411,9 @@ function renderInterventions(container, perms) {
         <div class="form-grid iv-grille iv-grille-h">
           <label>Heure de départ<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
           <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
-          <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calcul auto"></label>
+          <label>Heures<input type="number" step="0.25" min="0" inputmode="decimal" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calcul auto"></label>
         </div>
+        <div class="iv-total" id="f-total">${ui.form.heures ? `⏱️ Total : <b>${fmtDureeH(parseFloat(ui.form.heures))}</b>` : ""}</div>
         <div class="iv-section">Détails</div>
         <label class="iv-desc"><input id="f-desc" value="${esc(ui.form.description)}" placeholder="Notes rapides : ce qui a été constaté et fait…"></label>
         <div class="iv-cr">
@@ -2558,9 +2564,10 @@ function renderInterventions(container, perms) {
         ui.form.heures = String(duree);
         const heuresInput = document.getElementById("f-heures");
         if (heuresInput) heuresInput.value = duree;
+        const tot = document.getElementById("f-total"); if (tot) tot.innerHTML = `⏱️ Total : <b>${fmtDureeH(duree)}</b>`;
       }
     }
-    ["input", "change"].forEach(ev => {
+    ["input", "change", "blur"].forEach(ev => {
       document.getElementById("f-heure-debut").addEventListener(ev, onHeureChange);
       document.getElementById("f-heure-fin").addEventListener(ev, onHeureChange);
     });
@@ -2601,6 +2608,9 @@ function renderInterventions(container, perms) {
       }
       ui.form.appelN1 = true;
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+      ui.form.heureDebut = document.getElementById("f-heure-debut")?.value ?? ui.form.heureDebut;
+      ui.form.heureFin = document.getElementById("f-heure-fin")?.value ?? ui.form.heureFin;
+      if (!(parseFloat(ui.form.heures) > 0)) { const d = dureeHeures(ui.form.heureDebut, ui.form.heureFin); if (d !== null) ui.form.heures = String(d); }
       const nuit = heuresDeNuit(ui.form.heureDebut, ui.form.heureFin);
       const dimanche = estDimanche(ui.form.date);
       // Prime dimanche uniquement s'il y a eu déplacement : pas pour une
@@ -2722,8 +2732,7 @@ function renderInterventions(container, perms) {
         const d = dureeHeures(document.getElementById("c-debut").value, document.getElementById("c-fin").value);
         if (d !== null) document.getElementById("c-heures").value = d;
       };
-      document.getElementById("c-debut")?.addEventListener("input", calc);
-      document.getElementById("c-fin")?.addEventListener("input", calc);
+      ["input", "change", "blur"].forEach(ev => { document.getElementById("c-debut")?.addEventListener(ev, calc); document.getElementById("c-fin")?.addEventListener(ev, calc); });
       document.getElementById("c-annuler")?.addEventListener("click", () => { ui.completerId = null; renderAll(); });
       document.getElementById("c-ia")?.addEventListener("click", async (e) => {
         const b = e.currentTarget, st = document.getElementById("c-statut"), ta = document.getElementById("c-cr");

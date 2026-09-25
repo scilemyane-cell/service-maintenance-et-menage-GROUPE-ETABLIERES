@@ -1773,3 +1773,16 @@ html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
   .iv-completer-grille{grid-template-columns:1fr 1fr}
   .iv-completer-pied .add-btn,.iv-completer-pied .nav-btn{flex:1}
 }
+/* Correctifs téléphone : largeur des champs, horaires, total */
+.iv-carte .form-grid > *,.iv-n1 > *,.iv-completer-grille > *{min-width:0}
+.iv-carte input,.iv-carte select,.iv-carte textarea,.iv-completer input{max-width:100%;box-sizing:border-box}
+.iv-grille input,.iv-grille select{width:100%}
+.iv-total{margin-top:6px;font-size:13px;color:var(--text)}
+.iv-total:empty{display:none}
+.iv-qui{white-space:normal;min-width:0}
+@media (max-width:700px){
+  .iv-grille > label:first-child:nth-last-child(odd){grid-column:auto}
+  .iv-grille-h > label:nth-child(3){grid-column:1 / -1}
+  .iv-grille:not(.iv-grille-h) > label:only-child{grid-column:1 / -1}
+  .iv-carte input[type="time"],.iv-carte input[type="date"],.iv-completer input[type="time"]{min-height:44px;-webkit-appearance:none;appearance:none;text-align:left}
+}
