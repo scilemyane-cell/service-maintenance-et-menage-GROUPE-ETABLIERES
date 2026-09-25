@@ -10,6 +10,7 @@ import {
 } from "./firestore-data.js";
 import { watchTransferts, annulerTransfert } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
+import { watchUsers } from "./users-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -201,6 +202,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchInterventions((i) => { state.interventions = i; scheduleRenderAll(); }));
   unsubs.push(watchTransferts((t) => { state.transferts = t; scheduleRenderAll(); }));
   unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; scheduleRenderAll(); }));
+  if (tab === "coordonnees") unsubs.push(watchUsers((u) => { state.utilisateurs = u; scheduleRenderAll(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; scheduleRenderAll(); }));
   unsubs.push(watchReleves((r) => { state.releves = r; scheduleRenderAll(); }));
   unsubs.push(watchRecurrences((r) => { state.recurrences = r; scheduleRenderAll(); }));
@@ -425,6 +427,19 @@ function renderFicheTechnicien(nom, roles, c) {
       </div>
 
       <div class="fiche-tech-section">
+        <p class="fiche-tech-eyebrow">Compte de l'appli</p>
+        <p class="hint" style="margin:0 0 8px">Relie cette personne du planning à son compte de connexion : c'est ce qui lui affiche « Mon planning » sur l'accueil (si elle n'est pas d'astreinte).</p>
+        ${(() => {
+          const users = state.utilisateurs || [];
+          const lie = users.find(u => u.uid === c.uid);
+          return `<select data-fiche-uid="${esc(nom)}" style="max-width:360px">
+            <option value="">— Aucun compte lié —</option>
+            ${users.map(u => `<option value="${esc(u.uid)}" ${u.uid === c.uid ? "selected" : ""}>${esc(u.nom || u.email)}${u.email ? ` (${esc(u.email)})` : ""}</option>`).join("")}
+          </select>${c.uid && !lie && users.length ? ` <span class="hint" style="color:var(--red)">compte lié introuvable</span>` : ""}`;
+        })()}
+      </div>
+
+      <div class="fiche-tech-section">
         <p class="fiche-tech-eyebrow">Coordonnées</p>
         <div class="form-grid">
           <label>Téléphone<input type="tel" data-coord-tel="${esc(nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78"></label>
@@ -490,6 +505,20 @@ function attacherFicheTechnicienListeners() {
   mountedContainer.querySelectorAll("[data-fiche-association]").forEach(sel => sel.addEventListener("change", async () => {
     const nom = sel.dataset.ficheAssociation;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), association: sel.value });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-uid]").forEach(sel => sel.addEventListener("change", async () => {
+    const nom = sel.dataset.ficheUid;
+    try {
+      // Un compte ne peut être lié qu'à une seule personne du planning.
+      for (const [autre, co] of Object.entries(state.coordonnees || {})) {
+        if (autre !== nom && sel.value && co?.uid === sel.value) await saveCoordonnee(autre, { ...co, uid: "" });
+      }
+      await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), uid: sel.value });
+      window.toast?.("✓ Compte lié enregistré");
+    } catch (e) {
+      console.error("lien compte:", e);
+      alert("Échec de l'enregistrement du compte lié : " + (e.message || e));
+    }
   }));
   mountedContainer.querySelectorAll("[data-fiche-statut]").forEach(sel => sel.addEventListener("change", async () => {
     const nom = sel.dataset.ficheStatut;

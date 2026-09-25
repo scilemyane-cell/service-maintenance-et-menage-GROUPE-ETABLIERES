@@ -7,6 +7,7 @@ import { watchAssociations } from "./associations-data.js";
 import { initCarteSites } from "./site-map.js";
 import { watchCompteursTotal } from "./compteurs-data.js";
 import { watchFavoris, saveFavoris } from "./favoris-data.js";
+import { watchCoordonnees } from "./coordonnees-data.js";
 
 let unsubs = [];
 let people = { n1: [], n2: [] };
@@ -27,6 +28,7 @@ let filtreAssociation = "";
 let filtreSite = "";
 let horlogeTimer = null;
 let nbCompteurs = null;
+let coordonnees = {};
 let interventions = null;      // chargées seulement pour un utilisateur hors astreinte
 let interventionsUnsub = null;
 let onToggleConstructionRef = null;
@@ -82,6 +84,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchSitesDossiers((d) => { dossiers = d; scheduleRender(); }));
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
+  unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
   favoris = []; favorisErreur = null;
   if (user.uid) unsubs.push(watchFavoris(user.uid, (ids) => {
     if (ids === null) {
@@ -166,6 +169,10 @@ function optionsSitesRangees(liste, selectionne = "") {
 // (nom complet, ou prénom seul comme dans les listes N1/N2).
 const normNom = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 function personnePlanning(user, toutes) {
+  // 1) Lien explicite posé dans Astreinte → Coordonnées (fiche technicien)
+  const lie = Object.entries(coordonnees).find(([, c]) => c && c.uid && c.uid === user.uid);
+  if (lie) return lie[0];
+  // 2) À défaut, rapprochement par le nom
   const cibles = [user.nomPlanning, user.nom, (user.email || "").split("@")[0]].filter(Boolean).map(normNom);
   const prenom = normNom(user.nom).split(/\s+/)[0];
   return toutes.find(p => cibles.includes(normNom(p)))
