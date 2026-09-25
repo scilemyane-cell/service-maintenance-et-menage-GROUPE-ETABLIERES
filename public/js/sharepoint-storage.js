@@ -137,6 +137,28 @@ function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|#%]/g, "_").trim() || "fichier";
 }
 
+// Liste le contenu d'un dossier SharePoint (fichiers + sous-dossiers),
+// toutes pages confondues. Renvoie null si le dossier n'existe pas.
+export async function listerDossierDrive(folderSegments = [], rootFolder = ROOT_FOLDER) {
+  const token = await getGraphToken();
+  const driveId = await resolveDriveId(token);
+  const chemin = buildFolderPath(rootFolder, folderSegments).split("/").map(encodeURIComponent).join("/");
+  let url = `${GRAPH_ROOT}/drives/${driveId}/root:/${chemin}:/children?select=id,name,webUrl,lastModifiedDateTime,size,folder,file&$top=200`;
+  const out = [];
+  while (url) {
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, 20000);
+    if (res.status === 404) return out.length ? out : null;
+    if (!res.ok) throw new Error(`Lecture du dossier SharePoint impossible (${res.status})`);
+    const j = await res.json();
+    out.push(...(j.value || []));
+    url = j["@odata.nextLink"] || null;
+  }
+  return out;
+}
+
+// Nom de dossier tel qu'il est écrit sur SharePoint pour un segment donné.
+export function nomSegmentDrive(segment) { return sanitizeFilename(String(segment)).slice(0, 80); }
+
 // Construit un chemin de dossier lisible à partir de segments (ex. nom de
 // résidence, nom d'équipement) — chaque segment est nettoyé des caractères
 // interdits dans un chemin, tronqué pour rester raisonnable, et un segment

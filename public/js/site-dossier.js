@@ -4,7 +4,7 @@ import {
   watchSectionsOrder, saveSectionsOrder, definirOrdreDossiers, appliquerOrdreAuxDossiersExistants,
 } from "./site-dossier-data.js";
 import { initCarteSites } from "./site-map.js";
-import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl } from "./sharepoint-storage.js";
+import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations } from "./associations-data.js";
@@ -655,7 +655,24 @@ export async function generateAndUploadPdf(d, element) {
   const token = await getAccessToken();
   const { blob, filename } = await generatePdfBlob(d, element);
   const file = new File([blob], filename, { type: "application/pdf" });
-  return uploadToDrive(file, token, pdfFolderSegments(d), undefined, { conflictBehavior: "replace", fixedFilename: filename });
+  const result = await uploadToDrive(file, token, pdfFolderSegments(d), undefined, { conflictBehavior: "replace", fixedFilename: filename });
+  await supprimerAnciensPdfDossier(d, result.itemId);
+  return result;
+}
+
+// Anciennes copies du PDF récapitulatif dans le dossier du site (versions
+// horodatées d'avant le nom fixe, "(1)", ancien nom de site…) : on ne garde
+// que la version qui vient d'être envoyée. Ne touche qu'aux fichiers
+// "…Dossier technique….pdf" à la racine du dossier du site.
+export function estCopiePdfDossier(nom) { return /dossier technique.*\.pdf$/i.test(nom || ""); }
+async function supprimerAnciensPdfDossier(d, idGarde) {
+  try {
+    const items = await listerDossierDrive(pdfFolderSegments(d));
+    for (const it of items || []) {
+      if (it.folder || it.id === idGarde || !estCopiePdfDossier(it.name)) continue;
+      await deleteDriveItem(it.id).catch(e => console.warn("Suppression ancienne copie PDF :", it.name, e));
+    }
+  } catch (e) { console.warn("Nettoyage des anciennes copies PDF impossible :", e); }
 }
 
 function renderView(d) {
