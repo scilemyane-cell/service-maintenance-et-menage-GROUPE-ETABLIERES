@@ -21,10 +21,9 @@ service cloud.firestore {
     // Profil préparé sous l'email de la personne connectée, et données
     // envoyées strictement identiques (hormis la date de préparation).
     function profilEnAttenteIdentique() {
-      let chemin = /databases/$(database)/documents/comptes-en-attente/$(request.auth.token.email.lower());
-      return request.auth.token.email != null
-        && exists(chemin)
-        && request.resource.data.diff(get(chemin).data).affectedKeys().hasOnly(['preparerLe']);
+      return request.auth.token.email is string
+        && exists(/databases/$(database)/documents/comptes-en-attente/$(request.auth.token.email))
+        && request.resource.data.diff(get(/databases/$(database)/documents/comptes-en-attente/$(request.auth.token.email)).data).affectedKeys().hasOnly(['preparerLe']);
     }
 
     function isSuperAdmin() {
@@ -72,7 +71,7 @@ service cloud.firestore {
     // Authentication mais sans profil appli) : préparés par un admin, lus
     // et supprimés par la personne concernée à sa première connexion.
     match /comptes-en-attente/{email} {
-      allow read, delete: if isSignedIn() && (request.auth.token.email.lower() == email || isAdminLevel());
+      allow read, delete: if isSignedIn() && (request.auth.token.email == email || isAdminLevel());
       allow create, update: if isSuperAdmin()
         || (isAdminLevel() && request.resource.data.role != 'admin' && request.resource.data.role != 'super_admin');
     }
