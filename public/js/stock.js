@@ -17,7 +17,7 @@ function cleanup() { unsubs.forEach(u => u()); unsubs = []; Object.values(graphi
 export function mountStockProduits(container) {
   cleanup();
   mountedContainer = container;
-  ui = { filtre: "", categorie: "toutes", editId: null, qrId: null, analyseOuverte: false };
+  ui = { filtre: "", categorie: "toutes", editId: null, qrId: null, analyseOuverte: false, vue: ui?.vue || "cartes", etat: "tous" };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchStockProduits((p) => { state.produits = p; if (!ui.editId && !ui.qrId) render(); }));
   unsubs.push(watchFournisseurs((f) => { state.fournisseurs = f; if (!ui.editId) render(); }));
@@ -44,12 +44,18 @@ function render() {
   if (ui.qrId) { renderQr(state.produits.find(p => p.id === ui.qrId)); return; }
   if (ui.editId) { renderEditForm(ui.editId === "new" ? null : state.produits.find(p => p.id === ui.editId)); return; }
 
+  const q = ui.filtre.trim().toLowerCase();
   const filtered = state.produits.filter(p =>
     (ui.categorie === "toutes" || p.categorie === ui.categorie) &&
-    (ui.filtre.trim() === "" || (p.nom || "").toLowerCase().includes(ui.filtre.toLowerCase()))
+    (ui.etat === "tous" || stockStatus(p) === ui.etat) &&
+    (q === "" || [p.nom, p.categorie, p.fournisseurNom, p.refFournisseur].some(x => (x || "").toLowerCase().includes(q)))
   );
 
-  const sansFiltre = ui.categorie === "toutes" && ui.filtre.trim() === "";
+  const sansFiltre = ui.categorie === "toutes" && q === "" && ui.etat === "tous";
+  const nbDanger = state.produits.filter(p => stockStatus(p) === "danger").length;
+  const nbWarn = state.produits.filter(p => stockStatus(p) === "warn").length;
+  const nbOk = state.produits.length - nbDanger - nbWarn;
+  const focusRecherche = document.activeElement?.id === "sk-search" ? document.activeElement.selectionStart : null;
 
   mountedContainer.innerHTML = `
     <div class="stack">
@@ -66,11 +72,22 @@ function render() {
           <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">État du stock</h3><div style="position:relative;height:220px"><canvas id="sk-chart-etat"></canvas></div></div>
         </div>
       ` : ""}
-      <div class="filters-row">
-        <input id="sk-search" placeholder="Rechercher un produit…" value="${esc(ui.filtre)}" style="flex:1;min-width:160px">
-        <select id="sk-cat"><option value="toutes">Toutes catégories (${state.produits.length})</option>${categories().map(c => `<option value="${esc(c)}" ${ui.categorie === c ? 'selected' : ''}>${esc(c)} (${compteParCategorie(c)})</option>`).join("")}</select>
+      <div class="sk-kpis">
+        <button class="sk-kpi ${ui.etat === "tous" ? "sk-on" : ""}" data-etat="tous"><b>${state.produits.length}</b><span>produits</span></button>
+        <button class="sk-kpi sk-kpi-danger ${ui.etat === "danger" ? "sk-on" : ""}" data-etat="danger"><b>${nbDanger}</b><span>sous le seuil</span></button>
+        <button class="sk-kpi sk-kpi-warn ${ui.etat === "warn" ? "sk-on" : ""}" data-etat="warn"><b>${nbWarn}</b><span>à surveiller</span></button>
+        <button class="sk-kpi sk-kpi-ok ${ui.etat === "ok" ? "sk-on" : ""}" data-etat="ok"><b>${nbOk}</b><span>stock correct</span></button>
       </div>
-      ${sansFiltre ? `<p class="hint" style="margin:0">Maintiens l'icône ☰ appuyée puis fais glisser pour réordonner (correspond à l'ordre de rangement sur les étagères).</p>` : ""}
+      <div class="sk-barre">
+        <input id="sk-search" placeholder="🔍 Rechercher un produit, une référence, un fournisseur…" value="${esc(ui.filtre)}">
+        <div class="sk-seg"><button data-vue="cartes" class="${ui.vue === "cartes" ? "sk-on" : ""}">▦ Cartes</button><button data-vue="liste" class="${ui.vue === "liste" ? "sk-on" : ""}">☰ Liste</button></div>
+      </div>
+      <div class="sk-cats">
+        <button data-cat="toutes" class="${ui.categorie === "toutes" ? "sk-on" : ""}">Toutes <small>${state.produits.length}</small></button>
+        ${categories().map(c => `<button data-cat="${esc(c)}" class="${ui.categorie === c ? "sk-on" : ""}">${esc(c)} <small>${compteParCategorie(c)}</small></button>`).join("")}
+      </div>
+      ${ui.vue === "cartes" ? cartesProduitsHTML(filtered) : `
+      ${sansFiltre ? `<p class="hint" style="margin:0">Maintiens l'icône ☰ appuyée puis fais glisser pour réordonner (correspond à l'ordre de rangement sur les étagères).</p>` : `<p class="hint" style="margin:0">Retire les filtres pour pouvoir réordonner la liste.</p>`}
       <div class="table-wrap">
         <table>
           <thead><tr>${sansFiltre ? "<th></th>" : ""}<th></th><th>Produit</th><th>Catégorie</th><th>Stock</th><th>Fournisseur</th><th></th></tr></thead>
@@ -97,6 +114,7 @@ function render() {
           </tbody>
         </table>
       </div>
+      `}
     </div>
   `;
 
@@ -110,10 +128,13 @@ function render() {
     await seedProduitsType();
   });
   document.getElementById("sk-search").addEventListener("input", (e) => { ui.filtre = e.target.value; render(); });
-  document.getElementById("sk-cat").addEventListener("change", (e) => { ui.categorie = e.target.value; render(); });
+  mountedContainer.querySelectorAll("[data-cat]").forEach(b => b.addEventListener("click", () => { ui.categorie = b.dataset.cat; render(); }));
+  mountedContainer.querySelectorAll("[data-etat]").forEach(b => b.addEventListener("click", () => { ui.etat = ui.etat === b.dataset.etat && b.dataset.etat !== "tous" ? "tous" : b.dataset.etat; render(); }));
+  mountedContainer.querySelectorAll("[data-vue]").forEach(b => b.addEventListener("click", () => { ui.vue = b.dataset.vue; render(); }));
+  if (focusRecherche !== null) { const el = document.getElementById("sk-search"); el.focus(); el.setSelectionRange(focusRecherche, focusRecherche); }
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => { ui.editId = btn.dataset.edit; render(); }));
-  if (sansFiltre) {
+  if (sansFiltre && ui.vue === "liste") {
     activerGlisserDeposer(mountedContainer, "tbody tr[data-drag-index]", async (nouvelOrdre) => {
       const nouvelleListe = nouvelOrdre.map(ancienIndex => filtered[ancienIndex]);
       await definirOrdreProduits(nouvelleListe.map((p, i) => ({ id: p.id, ordre: i })));
@@ -124,6 +145,41 @@ function render() {
     if (await window.confirmDialog(`Mettre "${p.nom}" à la corbeille ? Récupérable 60 jours (Administration > Corbeille).`, { danger: true, texteValider: "Mettre à la corbeille" })) await envoyerProduitCorbeille(p.id);
   }));
   resolvePhotos(mountedContainer);
+}
+
+// Vue « cartes » : une fiche par produit, rangée par catégorie — photo,
+// jauge de stock (actuel / cible, repère du seuil minimum), état, fournisseur.
+function cartesProduitsHTML(liste) {
+  if (liste.length === 0) return `<p class="hint">Aucun produit ne correspond.</p>`;
+  const parCat = new Map();
+  liste.forEach(p => { const c = p.categorie || "Sans catégorie"; if (!parCat.has(c)) parCat.set(c, []); parCat.get(c).push(p); });
+  const LIB = { danger: "Sous le seuil", warn: "À surveiller", ok: "OK" };
+  return [...parCat].map(([cat, ps]) => `
+    <h3 class="sk-cat-titre">${esc(cat)} <small>${ps.length}</small></h3>
+    <div class="sk-grille">
+      ${ps.map(p => {
+        const st = stockStatus(p);
+        const cible = Math.max(p.stockCible || 0, p.stockActuel || 0, 1);
+        const pctAct = Math.min(100, ((p.stockActuel || 0) / cible) * 100);
+        const pctMin = Math.min(100, ((p.stockMin || 0) / cible) * 100);
+        const photo = p.photo?.itemId ? `<img data-resolve-photo="${esc(p.photo.itemId)}" alt="" onerror="this.style.opacity=0.3">` : p.photo?.url ? `<img src="${esc(p.photo.url)}" alt="" onerror="this.style.opacity=0.3">` : `<span class="sk-sans-photo">📦</span>`;
+        return `
+        <article class="sk-carte sk-${st}">
+          <div class="sk-photo">${photo}<span class="sk-etat sk-etat-${st}">${LIB[st]}</span></div>
+          <div class="sk-corps">
+            <h4 title="${esc(p.nom)}">${esc(p.nom)}</h4>
+            <div class="sk-qte"><b>${p.stockActuel ?? 0}</b> <span>/ ${p.stockCible ?? 0} ${esc(p.unite || "")}</span></div>
+            <div class="sk-jauge" title="Stock ${p.stockActuel ?? 0} · seuil ${p.stockMin ?? 0} · cible ${p.stockCible ?? 0}"><span style="width:${pctAct}%"></span><i style="left:${pctMin}%"></i></div>
+            <p class="sk-four">${esc(p.fournisseurNom || "Fournisseur non renseigné")}${p.refFournisseur ? ` · réf. ${esc(p.refFournisseur)}` : ""}</p>
+          </div>
+          <div class="sk-actions">
+            <button class="nav-btn" data-edit="${p.id}" title="Modifier">✏️ Modifier</button>
+            <button class="nav-btn" data-qr="${p.id}" title="QR code">🔳</button>
+            <button class="del-btn" data-del="${p.id}" title="Mettre à la corbeille">🗑️</button>
+          </div>
+        </article>`;
+      }).join("")}
+    </div>`).join("");
 }
 
 // SharePoint ne fournit pas de lien image permanent (contrairement à
