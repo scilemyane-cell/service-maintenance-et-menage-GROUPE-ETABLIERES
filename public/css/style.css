@@ -1059,3 +1059,5 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .chantier h2{ margin:10px 24px 8px; font-size:22px; color:var(--text); }
 .chantier p{ margin:0 28px 12px; color:var(--text-dim); font-size:15px; line-height:1.5; }
 .chantier-module{ font-size:13px !important; }
+.carte-placement, .carte-placement .leaflet-container{ cursor:crosshair !important; }
+.carte-placement{ outline:3px dashed var(--gold); outline-offset:-3px; }

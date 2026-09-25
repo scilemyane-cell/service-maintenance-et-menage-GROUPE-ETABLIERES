@@ -46,10 +46,30 @@ function dansFranceMetro({ lat, lng }) {
 // re-géocodé et son marqueur déplacé automatiquement.
 const normAdresse = a => String(a || "").trim().replace(/\s+/g, " ").toLowerCase();
 function geoValide(d) {
-  return !!d.geo && dansFranceMetro(d.geo) && !!d.geo.adresse && normAdresse(d.geo.adresse) === normAdresse(d.adresse);
+  if (!d.geo || !dansFranceMetro(d.geo)) return false;
+  // Position placée à la main : valable tant que l'adresse n'a pas changé
+  // (y compris pour un site sans adresse).
+  if (d.geo.manuel) return normAdresse(d.geo.adresse) === normAdresse(d.adresse);
+  return !!d.geo.adresse && normAdresse(d.geo.adresse) === normAdresse(d.adresse);
 }
 
+// Adresse complète d'abord ; en cas d'échec (lieu-dit, nom de bâtiment,
+// numéro inconnu…), repli sur « code postal + commune » — position
+// approximative, à ajuster ensuite à la main en déplaçant le repère.
 async function geocoderAdresse(adresse) {
+  const precis = await geocoderRequete(adresse);
+  if (precis) return precis;
+  const m = String(adresse).match(/(\d{5})\s*([^,\n]+)/);
+  if (m) {
+    await new Promise(r => setTimeout(r, 1100));
+    const approx = await geocoderRequete(`${m[1]} ${m[2].trim()}`);
+    if (approx) return { ...approx, approx: true };
+  }
+  return null;
+}
+const echecsGeocodage = new Set(); // adresses introuvables cette session (pas de nouvelle tentative)
+
+async function geocoderRequete(adresse) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${encodeURIComponent(adresse)}`;
   const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
   if (!res.ok) return null;
@@ -88,6 +108,7 @@ function demarrerBoucleGeocodage() {
       enFile.delete(id);
       try {
         const coords = await geocoderAdresse(adresse);
+        if (!coords) echecsGeocodage.add(normAdresse(adresse));
         if (coords) {
           const geo = { ...coords, adresse };
           await saveDossierGeo(id, geo);
@@ -105,7 +126,7 @@ function demarrerBoucleGeocodage() {
 // boucle si besoin — sans effet si tout est déjà en file ou déjà géocodé.
 function mettreEnFileSiBesoin(dossiers) {
   dossiers.forEach((d) => {
-    if (d.adresse && d.adresse.trim() && !geoValide(d) && !enFile.has(d.id)) enFile.set(d.id, d.adresse);
+    if (d.adresse && d.adresse.trim() && !geoValide(d) && !enFile.has(d.id) && !echecsGeocodage.has(normAdresse(d.adresse))) enFile.set(d.id, d.adresse);
   });
   demarrerBoucleGeocodage();
 }
@@ -121,7 +142,11 @@ function mettreEnFileSiBesoin(dossiers) {
 // options.onStatut(texte) : appelé avec un texte du type "12/15 site(s)
 // localisé(s)" à chaque mise à jour, pour affichage libre par l'appelant.
 export function initCarteSites(holder, dossiers, options = {}) {
-  const { onOpenSite, onStatut } = options;
+  // options.editable : repères déplaçables (glisser) + placement manuel
+  // des sites non localisés (voir placer()). options.onNonPlaces(liste) :
+  // appelé avec les dossiers encore absents de la carte.
+  const { onOpenSite, onStatut, editable = false, onNonPlaces } = options;
+  let modePlacement = null;
   let detruit = false;
   let map = null;
   const idAbonne = Symbol("carte-sites");
@@ -130,6 +155,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
   const majStatut = () => {
     if (!onStatut) return;
     const localises = avecAdresse.filter(geoValide).length;
+    onNonPlaces?.(dossiers.filter(d => !geoValide(d)));
     onStatut(`${localises}/${avecAdresse.length} site(s) localisé(s)${avecAdresse.length !== dossiers.length ? ` · ${dossiers.length - avecAdresse.length} sans adresse renseignée` : ""}`);
   };
   majStatut();
@@ -145,8 +171,16 @@ export function initCarteSites(holder, dossiers, options = {}) {
     const markers = {};
     const ajouterMarker = (d) => {
       if (!geoValide(d)) return;
-      const m = window.L.marker([d.geo.lat, d.geo.lng]).addTo(map);
-      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}`);
+      const m = window.L.marker([d.geo.lat, d.geo.lng], { draggable: editable, title: d.nom }).addTo(map);
+      m.bindPopup(`<b>${esc(d.nom)}</b><br>${esc(d.adresse || "")}${d.geo.approx ? `<br><i style="color:#9a6700">Position approximative (commune)${editable ? " — fais glisser le repère au bon endroit" : ""}</i>` : ""}${d.geo.manuel ? `<br><i style="color:#1a7f37">Position ajustée à la main</i>` : ""}<br>${onOpenSite ? `<a href="#" data-ouvrir-site="${d.id}">Ouvrir la fiche →</a>` : ""}`);
+      if (editable) {
+        m.on("dragend", async () => {
+          const { lat, lng } = m.getLatLng();
+          const geo = { lat, lng, adresse: d.adresse || "", manuel: true };
+          try { await saveDossierGeo(d.id, geo); d.geo = geo; window.toast?.(`📍 Position de « ${d.nom} » enregistrée`); }
+          catch (e) { console.error("saveDossierGeo:", e); alert("Position non enregistrée : " + (e.message || e)); m.setLatLng([d.geo.lat, d.geo.lng]); }
+        });
+      }
       m.on("popupopen", () => {
         document.querySelector(`[data-ouvrir-site="${d.id}"]`)?.addEventListener("click", (e) => {
           e.preventDefault();
@@ -176,11 +210,37 @@ export function initCarteSites(holder, dossiers, options = {}) {
       majStatut();
     });
     mettreEnFileSiBesoin(avecAdresse);
+
+    // Placement manuel : clic sur la carte pour poser le repère du site choisi.
+    map.on("click", async (e) => {
+      if (!modePlacement) return;
+      const d = modePlacement; modePlacement = null;
+      holder.classList.remove("carte-placement");
+      const geo = { lat: e.latlng.lat, lng: e.latlng.lng, adresse: d.adresse || "", manuel: true };
+      try {
+        await saveDossierGeo(d.id, geo);
+        d.geo = geo;
+        if (markers[d.id]) markers[d.id].setLatLng(e.latlng); else ajouterMarker(d);
+        window.toast?.(`📍 « ${d.nom} » placé sur la carte`);
+        majStatut();
+      } catch (err) { console.error("saveDossierGeo:", err); alert("Position non enregistrée : " + (err.message || err)); }
+    });
   }).catch(() => {
     if (!detruit && holder) holder.innerHTML = `<p class="hint" style="padding:16px">❌ Impossible de charger la carte (connexion internet nécessaire).</p>`;
   });
 
   return {
+    // Active le placement manuel du dossier `id` : le prochain clic sur la
+    // carte pose son repère (Échap pour annuler).
+    placer(id) {
+      const d = dossiers.find(x => x.id === id);
+      if (!d || !map) return;
+      modePlacement = d;
+      holder.classList.add("carte-placement");
+      window.toast?.(`Clique sur la carte à l'emplacement de « ${d.nom} »`);
+      const echap = (e) => { if (e.key === "Escape") { modePlacement = null; holder.classList.remove("carte-placement"); document.removeEventListener("keydown", echap); } };
+      document.addEventListener("keydown", echap);
+    },
     detruire() {
       detruit = true;
       abonnes.delete(idAbonne);

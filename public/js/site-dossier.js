@@ -185,7 +185,9 @@ function renderMap() {
         <button class="nav-btn" id="sd-carte-retour">← Retour à la liste</button>
         <p class="hint" id="sd-carte-statut" style="margin:0"></p>
       </div>
+      ${isEditorUser(mountedUser) ? `<p class="hint" style="margin:0">✋ Fais glisser un repère pour corriger la position d'un site ; les sites absents de la carte sont listés dessous : « 📍 Placer » puis clic sur la carte.</p>` : ""}
       <div id="sd-carte-holder" style="height:70vh;min-height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
+      <div id="sd-non-places"></div>
     </div>
   `;
   document.getElementById("sd-carte-retour").addEventListener("click", () => {
@@ -202,6 +204,25 @@ function renderMap() {
     onStatut: (texte) => {
       const el = document.getElementById("sd-carte-statut");
       if (el) el.textContent = texte;
+    },
+    editable: isEditorUser(mountedUser),
+    onNonPlaces: (liste) => {
+      const el = document.getElementById("sd-non-places");
+      if (!el) return;
+      el.innerHTML = liste.length === 0 ? `<p class="hint">✅ Tous les sites sont sur la carte.</p>` : `
+        <div class="form-card">
+          <h3 style="margin:0 0 8px;font-size:14px;color:var(--gold)">📍 ${liste.length} site${liste.length > 1 ? "s" : ""} pas encore sur la carte</h3>
+          <p class="hint" style="margin:0 0 8px">Adresse introuvable par le service de cartes, ou non renseignée. ${isEditorUser(mountedUser) ? "Clique sur « Placer » puis sur la carte à l'endroit du site." : ""}</p>
+          ${liste.map(d => `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <span><b>${esc(d.nom)}</b> <span class="hint">${esc(d.adresse || "adresse non renseignée")}</span></span>
+              ${isEditorUser(mountedUser) ? `<button class="nav-btn" data-placer="${d.id}" style="font-size:12px;white-space:nowrap">📍 Placer</button>` : ""}
+            </div>`).join("")}
+        </div>`;
+      el.querySelectorAll("[data-placer]").forEach(b => b.addEventListener("click", () => {
+        carteInstance?.placer(b.dataset.placer);
+        document.getElementById("sd-carte-holder")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }));
     },
   });
 }
