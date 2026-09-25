@@ -144,7 +144,11 @@ service cloud.firestore {
       // n'importe quel éditeur pouvait supprimer une intervention sans
       // aucun moyen de la récupérer, ce qui a déjà causé une perte de
       // données accidentelle.
-      allow update: if isEditor() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+      allow update: if isEditor() || (isSignedIn() && resource.data.createdBy == request.auth.uid)
+        // Le technicien assigné complète lui-même ses horaires au retour
+        // (uniquement ces champs-là).
+        || (isSignedIn() && resource.data.technicienUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['heureDebut', 'heureFin', 'heures', 'heuresNuit', 'compteRendu', 'description', 'photos', 'horairesACompleter', 'horairesCompletesPar', 'horairesCompletesLe']));
       allow delete: if isSuperAdmin();
     }
     // ---- Heures (agents d'entretien / temps partiel) ----

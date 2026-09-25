@@ -2264,6 +2264,31 @@ function reinitialiserFormIntervention() {
   ui.form.technicien = mountedUser?.role === "technicien" ? (mountedUser.nom || mountedUser.email) : "";
 }
 
+// L'intervention est-elle celle du compte connecté (technicien assigné) ?
+function estMonIntervention(i) {
+  if (i.technicienUid && i.technicienUid === mountedUser?.uid) return true;
+  const moi = personneDuCompte(mountedUser || {});
+  return !!(moi && normNomPlanning(moi) === normNomPlanning(i.technicien));
+}
+
+// Petit formulaire « Compléter mes horaires » (technicien, au retour).
+function completerHorairesHTML(i) {
+  return `
+  <div class="iv-completer">
+    <div class="iv-completer-tete"><b>🕒 Horaires de ${esc(i.technicien || "l'intervention")}</b><span>${esc(i.site || "")} · ${new Date(i.date).toLocaleDateString("fr-FR")}${i.motifAppelN1 ? ` · ${esc(i.motifAppelN1)}` : ""}</span></div>
+    <div class="iv-completer-grille">
+      <label>Heure de départ<input type="time" id="c-debut" value="${esc(i.heureDebut || "")}"></label>
+      <label>Heure de retour<input type="time" id="c-fin" value="${esc(i.heureFin || "")}"></label>
+      <label>Heures<input type="number" step="0.25" min="0" id="c-heures" value="${i.heures || ""}" placeholder="calcul auto"></label>
+    </div>
+    <label class="iv-completer-cr">Ce que tu as fait (optionnel)
+      <span class="iv-n1-ia"><textarea id="c-cr" rows="3" placeholder="ex. joint de siphon changé, fuite stoppée">${esc(i.compteRendu || i.description || "")}</textarea><button type="button" class="iv-ia petit" id="c-ia" title="Mettre au propre avec l'IA">✨</button></span>
+    </label>
+    <div class="iv-completer-pied"><span id="c-statut" class="iv-ia-statut"></span>
+      <button class="nav-btn" id="c-annuler">Annuler</button><button class="add-btn" id="c-valider">✓ Enregistrer mes horaires</button></div>
+  </div>`;
+}
+
 function renderInterventions(container, perms) {
   const intervenants = [...state.people.n1, ...state.people.n2];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -2284,8 +2309,17 @@ function renderInterventions(container, perms) {
     ? currentAssoc.sites.filter(s => ui.form.groupe ? s.groupe === ui.form.groupe : !s.groupe)
     : [];
 
+  const aCompleter = state.interventions.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe && (perms.isEditor || estMonIntervention(i)));
+  const mesACompleter = aCompleter.filter(estMonIntervention);
   container.innerHTML = `
     <div class="stack">
+      ${aCompleter.length ? `
+      <div class="iv-rappel">
+        <span class="iv-rappel-ico">🕒</span>
+        <div><b>${mesACompleter.length ? `Tu as ${mesACompleter.length} intervention${mesACompleter.length > 1 ? "s" : ""} dont les horaires sont à compléter` : `${aCompleter.length} intervention${aCompleter.length > 1 ? "s" : ""} en attente des horaires du technicien`}</b>
+        <small>Heure de départ et de retour à saisir au retour (repos de 11h). Clique sur « 🕒 Compléter » sur la ligne.</small></div>
+        ${aCompleter.length ? `<button class="iv-completer-btn" data-completer="${(mesACompleter[0] || aCompleter[0]).id}">🕒 Compléter ${mesACompleter.length ? "maintenant" : "la plus ancienne"}</button>` : ""}
+      </div>` : ""}
       ${perms.canLogIntervention ? `
       <div class="form-card iv-carte">
         <div class="iv-tete">
@@ -2337,7 +2371,7 @@ function renderInterventions(container, perms) {
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
         </div>
-        <div class="iv-section">Horaires</div>
+        <div class="iv-section">Horaires ${ui.form.sansDeplacement === false && mountedUser.role !== "technicien" ? `<small>— peut rester vide : le technicien les complètera à son retour</small>` : ""}</div>
         <div class="form-grid iv-grille iv-grille-h">
           <label>Heure de départ<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
           <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
@@ -2416,14 +2450,16 @@ function renderInterventions(container, perms) {
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
                     ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">📞 Par téléphone</span>` : ""}
+                    ${i.horairesACompleter && !i.sansDeplacement ? `<span class="tag" style="background:#e6a100;color:#1A1305;font-size:9px">🕒 Horaires à compléter</span>` : ""}
                     ${i.appelOrigineNumero ? `<span class="tag" style="background:#2a78d6;font-size:9px" title="Déplacement faisant suite à un appel">↪ suite ${esc(i.appelOrigineNumero)}</span>` : ""}
                   </td>
                   ${perms.isEditor ? `<td>${i.transmis
                     ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
                     : `<span class="iv-statut">En attente</span>`}</td>` : ''}
-                  <td><div class="iv-actions">${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div></td>
+                  <td><div class="iv-actions">${i.horairesACompleter && !i.sansDeplacement && (perms.isEditor || estMonIntervention(i)) && !perms.lectureSeule ? `<button class="iv-completer-btn" data-completer="${i.id}" title="Saisir l'heure de départ et de retour">🕒 Compléter</button>` : ""}${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div></td>
                 </tr>
                 ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? `<tr><td colspan="10" style="padding:0;border:none">${renderApercuNoteFrais()}</td></tr>` : ""}
+                ${ui.completerId === i.id ? `<tr class="iv-completer-ligne"><td colspan="11">${completerHorairesHTML(i)}</td></tr>` : ""}
                 `;
               }).join("")}
           </tbody>
@@ -2523,7 +2559,6 @@ function renderInterventions(container, perms) {
         if (!ui.form.association) return err("Choisis une association.");
         if (!ui.form.site) return err("Choisis un site.");
         if (!ui.form.type) return err("Indique un type d'intervention.");
-        if (!ui.form.heures) return err("Indique le nombre d'heures.");
       }
       ui.form.appelN1 = true;
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
@@ -2533,6 +2568,10 @@ function renderInterventions(container, perms) {
       // astreinte traitée par téléphone / à distance, ni pour un simple
       // appel au N1 sans intervenant envoyé sur place.
       const sansDeplacement = ui.form.sansDeplacement === true;
+      // Horaires laissés vides à la création par le cadre d'astreinte : le
+      // technicien les complètera lui-même à son retour (repos 11h).
+      const horairesACompleter = !sansDeplacement && (!ui.form.heureFin || !(parseFloat(ui.form.heures) > 0));
+      const techUid = mountedUser.role === "technicien" ? mountedUser.uid : (state.coordonnees?.[ui.form.technicien]?.uid || "");
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
         type: ui.form.type, heures: parseFloat(ui.form.heures) || 0, description: ui.form.description,
@@ -2540,6 +2579,7 @@ function renderInterventions(container, perms) {
         heuresNuit: nuit, primeDimanche: dimanche && !sansDeplacement ? PRIME_DIMANCHE : 0,
         sansDeplacement,
         compteRendu: (ui.form.compteRendu || "").trim(),
+        horairesACompleter, technicienUid: techUid,
         appelOrigineId: ui.form.appelOrigineId || "", appelOrigineNumero: ui.form.appelOrigineNumero || "",
         photos: ui.form.photos || [],
         appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
@@ -2629,6 +2669,50 @@ function renderInterventions(container, perms) {
         }
       });
     });
+    container.querySelectorAll("[data-completer]").forEach(btn => btn.addEventListener("click", () => {
+      ui.completerId = ui.completerId === btn.dataset.completer ? null : btn.dataset.completer;
+      renderAll();
+      document.getElementById("c-debut")?.focus();
+    }));
+    if (ui.completerId) {
+      const i = state.interventions.find(x => x.id === ui.completerId);
+      const calc = () => {
+        const d = dureeHeures(document.getElementById("c-debut").value, document.getElementById("c-fin").value);
+        if (d !== null) document.getElementById("c-heures").value = d;
+      };
+      document.getElementById("c-debut")?.addEventListener("input", calc);
+      document.getElementById("c-fin")?.addEventListener("input", calc);
+      document.getElementById("c-annuler")?.addEventListener("click", () => { ui.completerId = null; renderAll(); });
+      document.getElementById("c-ia")?.addEventListener("click", async (e) => {
+        const b = e.currentTarget, st = document.getElementById("c-statut"), ta = document.getElementById("c-cr");
+        if (!ta.value.trim()) { st.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques mots.</span>`; return; }
+        b.disabled = true; b.textContent = "⏳";
+        try {
+          ta.value = (await redigerCompteRendu({ ...i, description: ta.value, heureDebut: document.getElementById("c-debut").value, heureFin: document.getElementById("c-fin").value, compteRendu: "" })).replace(/\*\*/g, "");
+          st.innerHTML = `<span style="color:var(--teal)">✓ Relis avant d'enregistrer.</span>`;
+        } catch (err) { st.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`; }
+        finally { b.disabled = false; b.textContent = "✨"; }
+      });
+      document.getElementById("c-valider")?.addEventListener("click", async () => {
+        const st = document.getElementById("c-statut");
+        const debut = document.getElementById("c-debut").value, fin = document.getElementById("c-fin").value;
+        const heures = parseFloat(document.getElementById("c-heures").value) || 0;
+        if (!debut || !fin) { st.innerHTML = `<span style="color:var(--red)">Indique l'heure de départ et l'heure de retour.</span>`; return; }
+        st.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+        try {
+          await updateIntervention(i.id, {
+            heureDebut: debut, heureFin: fin, heures, heuresNuit: heuresDeNuit(debut, fin),
+            compteRendu: document.getElementById("c-cr").value.trim(),
+            horairesACompleter: false, horairesCompletesPar: mountedUser.nom || mountedUser.email || "", horairesCompletesLe: Date.now(),
+          });
+          ui.completerId = null;
+          window.toast?.("✓ Horaires enregistrés");
+          renderAll();
+        } catch (err) {
+          st.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}${/permission/i.test(String(err.message)) ? " — il faut publier la dernière règle Firestore (bloc interventions)." : ""}</span>`;
+        }
+      });
+    }
     container.querySelectorAll("[data-creer-deplacement]").forEach(btn => btn.addEventListener("click", () => {
       const a = state.interventions.find(x => x.id === btn.dataset.creerDeplacement);
       if (!a) return;
