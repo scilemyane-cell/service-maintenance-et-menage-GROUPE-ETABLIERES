@@ -642,14 +642,23 @@ function renderView(d) {
 
   mountedContainer.innerHTML = `
     <div class="stack">
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <!-- Présentation du dossier : on arrive sur une fiche lisible ; la
+           modification et les exports sont des actions, pas l'écran d'arrivée. -->
+      <div class="sdv-barre">
         <button class="nav-btn" id="sd-back">← Tous les dossiers</button>
-        ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-edit">✏️ Modifier</button>` : ""}
-        <button class="add-btn" id="sd-preview">👁️ Aperçu PDF</button>
-        <button class="nav-btn" id="sd-print">🖨️ Exporter en PDF (imprimer)</button>
-        <button class="nav-btn" id="sd-qr">🔳 QR fiche PDF (lien public, sans compte)</button>
-        ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
-        ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Mettre à la corbeille</button>` : ""}
+        <div class="sdv-actions">
+          <details class="sdv-menu">
+            <summary class="nav-btn">📤 Exporter / partager ▾</summary>
+            <div class="sdv-menu-pop">
+              <button class="nav-btn" id="sd-preview">👁️ Aperçu PDF</button>
+              <button class="nav-btn" id="sd-print">🖨️ Imprimer / PDF</button>
+              <button class="nav-btn" id="sd-qr">🔳 QR de la fiche (lien public)</button>
+              ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
+              ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del">🗑️ Mettre à la corbeille</button>` : ""}
+            </div>
+          </details>
+          ${isEditorUser(mountedUser) ? `<button class="add-btn sdv-modifier" id="sd-edit">✏️ Modifier le dossier</button>` : ""}
+        </div>
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
       <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
@@ -658,9 +667,17 @@ function renderView(d) {
         <button class="nav-btn" id="sd-qr-print" style="margin-top:10px">🖨️ Imprimer</button>
       </div>
 
-      <div class="form-card">
-        <h2 style="margin:0 0 4px;font-size:20px">${esc(d.nom)}</h2>
-        <p class="hint">${esc(d.adresse || "")}</p>
+      <div class="sdv-hero">
+        <div class="sdv-hero-txt">
+          <p class="sdv-sur">${esc([d.association, d.groupe].filter(Boolean).join(" · ") || "Dossier de site")}</p>
+          <h2>${esc(d.nom)}</h2>
+          ${d.adresse ? `<p class="sdv-adresse">📍 ${esc(d.adresse)} <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.adresse)}" target="_blank" rel="noopener">Itinéraire ↗</a></p>` : `<p class="sdv-adresse sdv-muet">Adresse non renseignée</p>`}
+        </div>
+        <div class="sdv-chiffres">
+          <div><b>${concernes.length}</b><span>équipement${concernes.length > 1 ? "s" : ""} renseigné${concernes.length > 1 ? "s" : ""}</span></div>
+          <div><b>${(d.sections || []).reduce((n, sec) => n + (sec.photos?.length || 0) + (sec.lignes || []).reduce((m, l) => m + (l.photos?.length || 0), 0), 0)}</b><span>photos</span></div>
+          <div><b>${(d.urgences || []).length}</b><span>contacts d'urgence</span></div>
+        </div>
       </div>
 
       <div class="form-card">
@@ -683,8 +700,8 @@ function renderView(d) {
         <p class="hint" style="margin:8px 0 0">Géré depuis l'onglet "Codes Masterlock" — mis à jour ici automatiquement.</p>
       </div>
 
-      <h3 style="margin:12px 0 0;font-size:14px;color:var(--gold)">🔧 Équipements & organes techniques</h3>
-      ${concernes.length === 0 ? `<p class="hint">Aucun équipement marqué "concerné" pour l'instant.</p>` :
+      <h3 class="sdv-titre-section">🔧 Équipements & organes techniques</h3>
+      ${concernes.length === 0 ? `<p class="hint">Aucun équipement marqué "concerné" pour l'instant.${isEditorUser(mountedUser) ? " Utilise « Modifier le dossier » pour les renseigner." : ""}</p>` : `<div class="sdv-grille">${
         concernes.map((s) => {
           const si = d.sections.indexOf(s);
           return `
@@ -705,7 +722,7 @@ function renderView(d) {
               ${photoGalleryHTML(s, si, false)}
             `}
           </div>`;
-        }).join("")}
+        }).join("")}</div>`}
 
       <!-- Version imprimable, cachée à l'écran (voir .print-only), utilisée
            uniquement pour l'impression (window.print) et comme source pour

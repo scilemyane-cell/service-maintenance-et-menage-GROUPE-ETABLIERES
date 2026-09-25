@@ -1021,3 +1021,28 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .accueil-gmao .gh-tuiles{ padding:4px; margin:-4px; }
 .gh-tuile:hover{ outline:2px solid var(--gh-rouge); outline-offset:-2px; }
 .pe-table td:nth-last-child(2), .pe-table td:last-child{ white-space:nowrap; }
+
+/* Dossier de site — écran de présentation (lecture), actions regroupées */
+.sdv-barre{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.sdv-actions{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.sdv-modifier{ font-size:14px; padding:10px 18px; }
+.sdv-menu{ position:relative; }
+.sdv-menu summary{ list-style:none; cursor:pointer; }
+.sdv-menu summary::-webkit-details-marker{ display:none; }
+.sdv-menu-pop{ position:absolute; right:0; top:calc(100% + 6px); z-index:30; background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 28px rgba(0,0,0,.18); padding:8px; display:flex; flex-direction:column; gap:6px; min-width:270px; }
+.sdv-menu-pop button{ width:100%; text-align:left; }
+.sdv-hero{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; padding:22px 24px; border-radius:16px; color:#fff;
+  background:linear-gradient(120deg, #05172B 0%, #0E2A4D 55%, #1F3B63 100%); box-shadow:0 8px 24px rgba(5,23,43,.25); }
+.sdv-sur{ margin:0; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#9FB4D3; }
+.sdv-hero h2{ margin:4px 0 6px; font-size:26px; font-weight:700; color:#fff; }
+.sdv-adresse{ margin:0; font-size:14px; color:#DCE6F5; }
+.sdv-adresse a{ color:#FFB3C6; margin-left:8px; font-weight:600; text-decoration:none; }
+.sdv-muet{ opacity:.7; }
+.sdv-chiffres{ display:flex; gap:22px; }
+.sdv-chiffres div{ text-align:center; }
+.sdv-chiffres b{ display:block; font-size:24px; font-weight:800; color:#fff; }
+.sdv-chiffres span{ font-size:11px; color:#9FB4D3; }
+.sdv-titre-section{ margin:14px 0 0; font-size:14px; color:var(--gold); }
+.sdv-grille{ display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+.sdv-grille > .form-card{ margin:0; }
+@media (max-width:720px){ .sdv-hero{ padding:16px; } .sdv-hero h2{ font-size:20px; } .sdv-chiffres{ gap:14px; } .sdv-menu-pop{ left:0; right:auto; } .sdv-grille{ grid-template-columns:minmax(0,1fr); } }
