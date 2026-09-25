@@ -2265,8 +2265,13 @@ function renderInterventions(container, perms) {
   container.innerHTML = `
     <div class="stack">
       ${perms.canLogIntervention ? `
-      <div class="form-card">
-        <div class="form-grid">
+      <div class="form-card iv-carte">
+        <div class="iv-tete">
+          <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
+          <span class="iv-sous">Astreinte · dépannage</span>
+        </div>
+        <div class="iv-section">Qui, où, quoi</div>
+        <div class="form-grid iv-grille">
           <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
           ${ui.editingId && mountedUser.role === "super_admin" ? `
           <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
@@ -2295,44 +2300,58 @@ function renderInterventions(container, perms) {
             </select>
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
-          <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calculé automatiquement"></label>
+        </div>
+        <div class="iv-section">Horaires</div>
+        <div class="form-grid iv-grille iv-grille-h">
           <label>Heure de départ<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
           <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
-          <label class="desc-field">Description<input id="f-desc" value="${esc(ui.form.description)}" placeholder="détail rapide"></label>
+          <label>Heures<input type="number" step="0.25" min="0" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calcul auto"></label>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:10px">
-          <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--gold)">
-          ☎️ Traité par téléphone / à distance, <b>sans déplacement</b> (pas de prime dimanche)
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:6px">
-          <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--gold)">
-          📞 Appel passé au N1 pendant cette intervention (escalade, décision, consigne)
-        </label>
+        <div class="iv-section">Détails</div>
+        <label class="iv-desc"><input id="f-desc" value="${esc(ui.form.description)}" placeholder="Ce qui a été fait, en quelques mots…"></label>
+        <div class="iv-options">
+          <label class="iv-option">
+            <input type="checkbox" id="f-sans-deplacement" ${ui.form.sansDeplacement ? "checked" : ""}>
+            <span class="iv-option-ico">☎️</span>
+            <span><b>Sans déplacement</b><small>Traité par téléphone / à distance — pas de prime dimanche</small></span>
+          </label>
+          <label class="iv-option">
+            <input type="checkbox" id="f-appel-n1" ${ui.form.appelN1 ? "checked" : ""}>
+            <span class="iv-option-ico">📞</span>
+            <span><b>Appel au N1</b><small>Escalade, décision ou consigne pendant l'intervention</small></span>
+          </label>
+        </div>
         <div id="interv-n1-zone">${appelN1HTML()}</div>
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin-top:8px">Photo(s) du dépannage (optionnel)</label>
+        <div class="iv-section">Photos du dépannage <small>(optionnel)</small></div>
         <div id="interv-photo-zone">${interventionPhotosHTML()}</div>
-        <div id="interv-nuit-indicator">${nuitIndicatorHTML()}</div>
-        <button class="add-btn" id="add-interv">${ui.editingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'intervention"}</button>
-        ${ui.editingId ? `<button class="nav-btn" id="cancel-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
-        <div id="interv-status" style="margin-top:8px;font-size:12px"></div>
+        <div class="iv-pied">
+          <div id="interv-nuit-indicator">${nuitIndicatorHTML()}</div>
+          <div class="iv-boutons">
+            ${ui.editingId ? `<button class="nav-btn" id="cancel-edit">✕ Annuler</button>` : ""}
+            <button class="add-btn" id="add-interv">${ui.editingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'intervention"}</button>
+          </div>
+        </div>
+        <div id="interv-status" style="margin-top:8px;font-size:12px;text-align:right"></div>
       </div>` : ""}
 
       ${perms.isEditor ? `
-      <div class="form-card">
-        <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">Générer un relevé d'heures supplémentaires</h3>
-        <div class="form-grid">
+      <div class="form-card iv-carte">
+        <div class="iv-tete"><h3>📄 Relevé d'heures supplémentaires</h3><span class="iv-sous">Document à transmettre au manager</span></div>
+        <div class="form-grid iv-grille">
           <label>Intervenant<select id="doc-person"><option value="Tous" ${ui.docForm.person === 'Tous' ? 'selected' : ''}>Tous</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.docForm.person === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select></label>
           <label>Du<input type="date" id="doc-start" value="${esc(ui.docForm.start)}"></label>
           <label>Au<input type="date" id="doc-end" value="${esc(ui.docForm.end)}"></label>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <button class="nav-btn" data-period="mois" style="padding:5px 12px;font-size:11px">Ce mois-ci</button>
-          <button class="nav-btn" data-period="3mois" style="padding:5px 12px;font-size:11px">3 derniers mois</button>
-          <button class="nav-btn" data-period="annee" style="padding:5px 12px;font-size:11px">Année en cours</button>
-          <button class="nav-btn" data-period="scolaire" style="padding:5px 12px;font-size:11px">Année scolaire (01/09 → 31/08)</button>
-          <button class="nav-btn" data-period="tout" style="padding:5px 12px;font-size:11px">Toute la période</button>
+        <div class="iv-pied">
+          <div class="iv-chips">
+            <button class="iv-chip" data-period="mois">Ce mois-ci</button>
+            <button class="iv-chip" data-period="3mois">3 derniers mois</button>
+            <button class="iv-chip" data-period="annee">Année en cours</button>
+            <button class="iv-chip" data-period="scolaire">Année scolaire</button>
+            <button class="iv-chip" data-period="tout">Tout</button>
+          </div>
+          <button class="add-btn" id="doc-generate">📄 Générer le document</button>
         </div>
-        <button class="add-btn" id="doc-generate">📄 Générer le document</button>
       </div>
       ${ui.docForm.generated ? renderDocPreview() : ""}
       ` : ""}
@@ -2341,8 +2360,9 @@ function renderInterventions(container, perms) {
       <div class="form-card" style="border:1px solid var(--red);background:rgba(230,80,80,.08)">
         <p style="margin:0;font-size:12px;color:var(--red)">⚠️ <b>${numerosEnDouble.length} numéro${numerosEnDouble.length > 1 ? "s" : ""} d'intervention en double</b> : ${numerosEnDouble.map(esc).join(", ")}. Les lignes concernées sont surlignées ci-dessous. Ouvre l'une des deux interventions (✏️) et attribue-lui un numéro libre via le champ "N° d'intervention (Super Admin)".</p>
       </div>` : ""}
-      <div class="table-wrap">
-        <table>
+      <div class="iv-liste-tete"><h3>🗂️ Interventions</h3><span>${sorted.length} enregistrée${sorted.length > 1 ? "s" : ""}</span></div>
+      <div class="table-wrap iv-table-wrap">
+        <table class="iv-table">
           <thead><tr><th>N°</th><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis au manager</th>' : ''}<th></th></tr></thead>
           <tbody>
             ${sorted.length === 0 ? `<tr><td colspan="10" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
@@ -2355,9 +2375,12 @@ function renderInterventions(container, perms) {
                     ${repos.violee ? "⚠️ Repos 11h non respecté" : "🛌 Reprise possible seulement à partir du"} ${fmtHeureJour(repos.reposJusqua)}
                   </span>` : "";
                 return `<tr ${enDouble ? 'style="background:rgba(230,80,80,.12)"' : ""}>
-                  <td style="font-family:ui-monospace,monospace;font-size:11px;color:${enDouble ? "var(--red)" : "var(--text-dim)"}">${esc(i.numero || "—")}${enDouble ? ` <span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}</td>
-                  <td>${new Date(i.date).toLocaleDateString("fr-FR")}</td><td>${esc(i.technicien)}</td><td>${esc(i.site)}</td><td>${esc(i.type)}</td>
-                  <td>${i.heures} h</td><td>${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
+                  <td><span class="iv-numero ${enDouble ? "double" : ""}">${esc(i.numero || "—")}</span>${enDouble ? ` <span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}</td>
+                  <td class="iv-date"><b>${new Date(i.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</b><small>${new Date(i.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${new Date(i.date).getFullYear()}</small></td>
+                  <td>${i.technicien ? `<span class="iv-qui"><i style="background:${colorForPerson(i.technicien, state.people)}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">—</span>`}</td>
+                  <td class="iv-site"><b>${esc(i.site || "—")}</b>${i.association ? `<small>${esc([i.association, i.groupe].filter(Boolean).join(" · "))}</small>` : ""}</td>
+                  <td>${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</td>
+                  <td class="iv-heures">${i.heures} h</td><td class="iv-descr">${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
                   <td style="white-space:nowrap">
                     ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
                     ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
@@ -2365,8 +2388,8 @@ function renderInterventions(container, perms) {
                   </td>
                   ${perms.isEditor ? `<td>${i.transmis
                     ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
-                    : `<span style="color:var(--text-dim);font-size:11px">En attente</span>`}</td>` : ''}
-                  <td>${canDelete ? `<button class="nav-btn" data-edit="${i.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${i.id}">🗑️</button>` : ""}${perms.isEditor ? ` <button class="nav-btn" data-note-frais-ligne="${i.id}" style="padding:4px 8px;font-size:11px" title="Générer la note de frais du mois de cette intervention">🖨️</button>` : ""}</td>
+                    : `<span class="iv-statut">En attente</span>`}</td>` : ''}
+                  <td><div class="iv-actions">${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div></td>
                 </tr>
                 ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? `<tr><td colspan="10" style="padding:0;border:none">${renderApercuNoteFrais()}</td></tr>` : ""}
                 `;

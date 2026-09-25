@@ -1548,3 +1548,60 @@ html:not([data-theme="sombre"]) .sdw-cpt.sdw-vide:not(.sdw-sel){background:linea
 .mlk-poignee{cursor:grab;user-select:none;font-size:15px;color:var(--text-dim);background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:2px 7px;margin-right:8px;flex:none}
 .mlk-poignee.petite{font-size:13px;padding:0 5px;margin-right:6px;display:inline-block}
 .mlk-site header{align-items:center}
+
+/* ===== Astreinte › Interventions : interface soignée ===== */
+.iv-carte{padding:20px 22px;border-radius:16px}
+.iv-tete{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.iv-tete h3{margin:0;font:800 17px Montserrat,system-ui,sans-serif;color:var(--text)}
+.iv-sous{font-size:12px;color:var(--text-dim)}
+.iv-num{font:700 13px ui-monospace,monospace;background:var(--panel-alt);border-radius:6px;padding:2px 8px;margin-left:6px}
+.iv-section{margin:16px 0 8px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:8px}
+.iv-section:after{content:"";flex:1;height:1px;background:var(--border)}
+.iv-section small{text-transform:none;letter-spacing:0;font-weight:600;color:var(--text-dim)}
+.iv-grille{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.iv-grille-h{grid-template-columns:repeat(auto-fill,minmax(150px,200px))}
+.iv-grille input,.iv-grille select,.iv-desc input{border-radius:10px;min-height:42px}
+.iv-desc{display:block}.iv-desc input{width:100%}
+.iv-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:12px}
+.iv-option{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;background:var(--panel);transition:border-color .15s,background .15s}
+.iv-option input{width:18px;height:18px;accent-color:var(--gold);flex:none}
+.iv-option-ico{font-size:22px;flex:none}
+.iv-option b{display:block;font-size:13px;color:var(--text)}
+.iv-option small{display:block;font-size:11.5px;color:var(--text-dim);margin-top:1px}
+.iv-option:has(input:checked){border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,var(--panel))}
+.iv-pied{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.iv-pied #interv-nuit-indicator > div{margin:0 !important}
+.iv-boutons{display:flex;gap:8px;margin-left:auto}
+.iv-boutons .add-btn{padding:11px 22px;font-size:14px;border-radius:10px}
+.iv-chips{display:flex;gap:6px;flex-wrap:wrap}
+.iv-chip{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:99px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.iv-chip:hover{border-color:var(--gold);color:var(--gold)}
+.iv-liste-tete{display:flex;align-items:baseline;gap:10px;margin:8px 0 -4px}
+.iv-liste-tete h3{margin:0;font:800 16px Montserrat,system-ui,sans-serif;color:var(--text)}
+.iv-liste-tete span{font-size:12px;color:var(--text-dim)}
+.iv-table-wrap{border-radius:16px;overflow:hidden}
+.iv-table thead th{font-size:10.5px;letter-spacing:.08em;padding:12px 10px}
+.iv-table tbody td{padding:12px 10px;vertical-align:middle}
+.iv-table tbody tr:hover{background:color-mix(in srgb,var(--gold) 6%,transparent)}
+.iv-numero{font:700 11px ui-monospace,monospace;background:var(--panel-alt);color:var(--text-dim);border-radius:6px;padding:3px 7px;white-space:nowrap}
+.iv-numero.double{background:rgba(229,83,61,.15);color:var(--red)}
+.iv-date b{display:block;font-size:14px}.iv-date small{font-size:11px;color:var(--text-dim)}
+.iv-qui{display:inline-flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap}
+.iv-qui i{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-size:11px;font-weight:800}
+.iv-site b{display:block;font-size:13.5px}.iv-site small{font-size:11px;color:var(--text-dim)}
+.iv-type{display:inline-block;font-size:11.5px;font-weight:700;background:var(--panel-alt);border:1px solid var(--border);border-radius:99px;padding:3px 10px;white-space:nowrap}
+.iv-heures{font-weight:800;white-space:nowrap}
+.iv-descr{font-size:12.5px;color:var(--text-dim);max-width:320px}
+.iv-muet{color:var(--text-dim)}
+.iv-statut{display:inline-block;font-size:11px;font-weight:700;color:#9a6700;background:rgba(240,180,41,.16);border-radius:99px;padding:3px 9px;white-space:nowrap}
+.iv-actions{display:flex;gap:4px;justify-content:flex-end}
+.iv-ico{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--panel);cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center}
+.iv-ico:hover{border-color:var(--gold)}
+.iv-ico.danger:hover{border-color:var(--red);background:rgba(229,83,61,.1)}
+@media (max-width:720px){.iv-carte{padding:16px}.iv-boutons{width:100%}.iv-boutons .add-btn{flex:1}.iv-grille-h{grid-template-columns:1fr 1fr}}
+.iv-desc input{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);padding:10px 12px;font-size:14px;font-family:inherit;outline:none}
+.iv-desc input:focus{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 20%,transparent)}
+.iv-date small{text-transform:capitalize}
+.iv-table td .tag{font-size:11px !important;padding:4px 9px;border-radius:99px;display:inline-block;margin:2px 2px 2px 0;white-space:nowrap}
+.iv-table td .nav-btn[data-remettre-attente]{font-size:11px !important;padding:3px 8px !important;border-radius:99px}
+html[data-theme="sombre"] .iv-statut{color:#f0b429;background:rgba(240,180,41,.14)}
