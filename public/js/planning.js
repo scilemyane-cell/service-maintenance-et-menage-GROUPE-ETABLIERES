@@ -316,15 +316,47 @@ function renderAll() {
   if (ui.subtab === "transferts" && !perms.canSeeTransfertsTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
   if (ui.subtab === "archive-releves" && !perms.canSeeArchiveReleves) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
 
-  if (ui.subtab === "calendrier") return renderCalendar(mountedContainer, perms);
-  if (ui.subtab === "absences") return renderAbsences(mountedContainer, perms);
-  if (ui.subtab === "interventions") return renderInterventions(mountedContainer, perms);
-  if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms);
-  if (ui.subtab === "transferts") return renderTransferts(mountedContainer, mountedUser);
-  if (ui.subtab === "coordonnees") return renderCoordonnees(mountedContainer, perms);
-  if (ui.subtab === "archive-releves") return renderArchiveReleves(mountedContainer, mountedUser);
-  if (ui.subtab === "planning-individuel") return renderPlanningIndividuel(mountedContainer, perms);
-  if (ui.subtab === "mon-planning") return renderMonPlanning(mountedContainer);
+  mountedContainer.classList.add("ast", "sdw");
+  if (ui.subtab === "calendrier") renderCalendar(mountedContainer, perms);
+  else if (ui.subtab === "absences") renderAbsences(mountedContainer, perms);
+  else if (ui.subtab === "interventions") renderInterventions(mountedContainer, perms);
+  else if (ui.subtab === "synthese") return renderSynthese(mountedContainer, perms); // a déjà son propre bandeau
+  else if (ui.subtab === "transferts") renderTransferts(mountedContainer, mountedUser);
+  else if (ui.subtab === "coordonnees") renderCoordonnees(mountedContainer, perms);
+  else if (ui.subtab === "archive-releves") renderArchiveReleves(mountedContainer, mountedUser);
+  else if (ui.subtab === "planning-individuel") renderPlanningIndividuel(mountedContainer, perms);
+  else if (ui.subtab === "mon-planning") renderMonPlanning(mountedContainer);
+  ajouterBandeauAstreinte();
+}
+
+// Bandeau commun à tous les onglets Astreinte (même style que Dossier de
+// site / Relevé compteur / Synthèse) : titre + 3 chiffres clés de l'onglet.
+function ajouterBandeauAstreinte() {
+  if (!mountedContainer || mountedContainer.querySelector(":scope > .sdw-hero")) return;
+  const auj = dateKey(new Date());
+  const debutMois = auj.slice(0, 7);
+  const iv = state.interventions.filter(i => !i.supprimeLe);
+  const absEnCours = state.absences.filter(a => a.start <= auj && a.end >= auj);
+  const absAvenir = state.absences.filter(a => a.start > auj && a.start <= dateKey(addDays(new Date(), 30)));
+  const personnes = [...new Set([...(state.people.n1 || []), ...(state.people.n2 || [])])];
+  const k = (v, l) => `<div><b>${v}</b><small>${l}</small></div>`;
+  const cfg = {
+    calendrier: ["Calendrier d'", "astreinte", "Qui est d'astreinte, jour par jour", [k((state.people.n1 || []).length, "cadres (N1)"), k((state.people.n2 || []).length, "techniciens (N2)"), k(absEnCours.length, "absent(s) aujourd'hui")]],
+    absences: ["", "Absences", "Congés, RTT et indisponibilités pris en compte dans le roulement", [k(absEnCours.length, "en cours"), k(absAvenir.length, "dans les 30 jours"), k(state.absences.length, "au total")]],
+    interventions: ["", "Interventions", "Appels reçus par le cadre d'astreinte et déplacements", [k(iv.filter(i => (i.date || "").startsWith(debutMois)).length, "ce mois-ci"), k(iv.filter(i => i.sansDeplacement && (i.date || "").startsWith(debutMois)).length, "par téléphone"), k(iv.filter(i => i.horairesACompleter && !i.sansDeplacement).length, "horaires à compléter")]],
+    transferts: ["Transferts de ", "ligne", "Historique des confirmations de transfert du téléphone d'astreinte", [k(state.transferts.length, "confirmations")]],
+    coordonnees: ["", "Coordonnées", "Cadres et techniciens : téléphone, e-mail, compte de l'appli", [k(personnes.length, "personnes"), k(Object.values(state.coordonnees || {}).filter(c => c && c.uid).length, "reliées à un compte")]],
+    "archive-releves": ["Archive des ", "relevés", "Relevés d'heures supplémentaires validés", [k((state.releves || []).length, "relevés archivés")]],
+    "planning-individuel": ["Planning ", "individuel", "Planning de chaque personne, interventions et récurrences", [k(personnes.length, "personnes"), k((state.recurrences || []).length, "récurrences")]],
+    "mon-planning": ["Mon ", "planning", "Tes interventions et absences à venir", []],
+  }[ui.subtab];
+  if (!cfg) return;
+  const [avant, accent, sous, kpis] = cfg;
+  mountedContainer.insertAdjacentHTML("afterbegin", `
+    <div class="sdw-hero ast-hero">
+      <div><h2>${avant}<span>${accent}</span></h2><p>${sous}</p></div>
+      ${kpis.length ? `<div class="sdw-kpis">${kpis.join("")}</div>` : ""}
+    </div>`);
 }
 
 // =================================================================

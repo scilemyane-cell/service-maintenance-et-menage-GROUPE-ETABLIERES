@@ -1803,3 +1803,38 @@ html:not([data-theme="sombre"]) .sy-tuile small{color:#3a4252}
 @media (max-width:700px){.sy.sdw .sdw-kpis > div:not(.sdw-actions){min-width:0;flex:1}}
 .sy.sdw .sy-kpis{grid-template-columns:repeat(3,1fr)}
 @media (max-width:860px){.sy.sdw .sy-kpis{grid-template-columns:1fr 1fr}}
+
+/* ===== Astreinte : même design sur tous les onglets ===== */
+.ast{--sdw-carte:#fff}
+.ast > .ast-hero{margin-bottom:16px}
+.ast .ast-hero h2 span{text-transform:none}
+.ast .form-card,.ast .placeholder-card{border-radius:18px;border:1px solid var(--border);box-shadow:0 2px 10px rgba(20,30,50,.06);padding:18px 20px}
+html[data-theme="sombre"] .ast .form-card{box-shadow:0 0 0 1px rgba(255,255,255,.03),0 10px 28px rgba(0,0,0,.25)}
+.ast .form-card > h3,.ast .form-card h3:first-child{font:800 15px Montserrat,system-ui,sans-serif !important;color:var(--text) !important;letter-spacing:0;margin-bottom:12px}
+.ast .table-wrap{border-radius:16px;border:1px solid var(--border);overflow-x:auto;background:var(--panel)}
+.ast table thead th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:12px 10px;background:var(--panel-alt)}
+.ast table tbody td{padding:11px 10px;vertical-align:middle}
+.ast table tbody tr:hover{background:color-mix(in srgb,var(--gold) 6%,transparent)}
+.ast .nav-btn{border-radius:10px}
+.ast .add-btn{border-radius:10px;padding:10px 18px}
+.ast .stat-chip{border-radius:99px}
+.ast input:not([type="checkbox"]):not([type="radio"]),.ast select,.ast textarea{border-radius:10px}
+.ast .tag{border-radius:99px}
+@media (max-width:700px){.ast .form-card{padding:14px 12px}.ast > .ast-hero{margin-bottom:10px}}
+/* Astreinte › Calendrier : bloc « astreinte du jour » et jours au nouveau style */
+.ast .hero-label{font:800 11px Montserrat,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+.ast .hero-block{border-radius:16px;padding:14px 16px;position:relative;overflow:hidden;
+  background:var(--panel);border:1px solid color-mix(in srgb,var(--c,#e0a526) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--c,#e0a526) 25%,transparent),0 0 16px color-mix(in srgb,var(--c,#e0a526) 25%,transparent)}
+.ast .hero-block.n1{--c:#e0a526}.ast .hero-block.n2{--c:#1baf7a}
+html:not([data-theme="sombre"]) .ast .hero-block{background:linear-gradient(155deg,#eceff3 0%,#c8cdd6 55%,#aab1bd 100%)}
+.ast .hero-block-label{font:700 11px Montserrat,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+html:not([data-theme="sombre"]) .ast .hero-block-label{color:#3a4252}
+.ast .hero-block-value{font:800 22px Montserrat,system-ui,sans-serif !important;color:var(--text)}
+html:not([data-theme="sombre"]) .ast .hero-block-value{color:#1B2330}
+.ast .hero-block .avatar{width:14px;height:14px;box-shadow:0 0 10px currentColor}
+.ast .day-detail-title,.ast [class*="day-num"]{font-family:Montserrat,system-ui,sans-serif}
+.ast .cal-daynum,.ast .cal-month-label{font-family:Montserrat,system-ui,sans-serif !important;font-weight:800}
+.ast .cal-card{border-radius:18px}
+.ast .cal-day{border-radius:12px}
+.ast .cal-day.today{box-shadow:0 0 0 2px var(--gold),0 0 16px color-mix(in srgb,var(--gold) 40%,transparent)}
+.ast .cal-day.selected{box-shadow:0 0 0 2px #2a78d6,0 0 16px rgba(42,120,214,.35)}
