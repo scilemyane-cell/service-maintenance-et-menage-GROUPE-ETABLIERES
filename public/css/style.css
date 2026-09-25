@@ -1237,3 +1237,8 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .carte-verrou{background:#fff;border:2px solid rgba(0,0,0,.25);border-radius:8px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer;color:#1B2330;box-shadow:0 1px 5px rgba(0,0,0,.2)}
 .carte-verrou.ouvert{background:#fff4dc;border-color:#A87A12;color:#6b4e00}
 .carte-deverrouillee{outline:3px solid #A87A12;outline-offset:-3px}
+.fj-tag-per{background:#e7f0fb !important;color:#2a78d6 !important;font-weight:700}
+.fj-tag-per.retard{background:#FBECEA !important;color:#C23B27 !important}
+.fj-derniere{display:block;font-size:11px;color:var(--text-dim);margin-top:2px}
+.fj-tache.periodique .fj-rond{border-style:dashed}
+.fj-tache.periodique.faite .fj-rond{border-style:solid}
