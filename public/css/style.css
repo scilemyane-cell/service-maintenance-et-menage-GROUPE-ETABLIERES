@@ -1136,3 +1136,14 @@ body.accueil-gmao .gh-pied{ flex-shrink:0; }
 .mlk-actions .nav-btn, .mlk-actions .del-btn{ padding:3px 7px; font-size:12px; }
 .mlk-actions .nav-btn:first-child{ flex:1; }
 @media (max-width:720px){ .mlk-sites{ grid-template-columns:minmax(0,1fr); } .mlk-boites{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+/* Masterlock : alignement — en-têtes de même hauteur, vignettes de même hauteur, actions en bas */
+.mlk-site{ display:flex; flex-direction:column; }
+.mlk-site header{ align-items:flex-start; min-height:40px; }
+.mlk-titre{ min-width:0; flex:1; }
+.mlk-titre h4{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mlk-titre small{ display:block; font-size:11px; color:var(--text-dim); margin-top:2px; }
+.mlk-boites{ align-items:stretch; }
+.mlk-boite{ height:100%; }
+.mlk-notes{ display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; min-height:3.9em; }
+.mlk-actions{ margin-top:auto; padding-top:6px; }
+.mlk-actions .nav-btn{ font-size:11.5px; }

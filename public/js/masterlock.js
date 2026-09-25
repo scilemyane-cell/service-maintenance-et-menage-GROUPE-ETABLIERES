@@ -264,7 +264,7 @@ function renderSiteBloc(site) {
   return `
     <section class="mlk-site">
       <header>
-        <h4>🔐 ${esc(site.nom)} <small>${codes.length} boîte${codes.length > 1 ? "s" : ""}</small></h4>
+        <div class="mlk-titre"><h4 title="${esc(site.nom)}">🔐 ${esc(String(site.nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\S+@\S+/g, "").trim())}</h4><small>${codes.length} boîte${codes.length > 1 ? "s" : ""}</small></div>
         <div class="mlk-site-actions">
           <button class="nav-btn" data-open-add="${site.id}" title="Ajouter une boîte à clés">➕</button>
           <button class="nav-btn" data-toggle-hist="${site.id}" title="Historique des changements">🗂️</button>
@@ -281,8 +281,8 @@ function renderSiteBloc(site) {
             ${c.notes ? `<p class="mlk-notes">${esc(c.notes)}</p>` : ""}
             <p class="mlk-maj">Mis à jour le ${formatDate(c.derniereMajAt)} · ${esc(c.derniereMajParNom || "—")}</p>
             <div class="mlk-actions">
-              <button class="nav-btn" data-reveler="${c.id}">${visible ? "🙈" : "👁️ Voir"}</button>
-              <button class="nav-btn" data-copier="${c.id}" title="Copier le code">📋</button>
+              <button class="nav-btn" data-reveler="${c.id}">${visible ? "Masquer" : "Voir"}</button>
+              <button class="nav-btn" data-copier="${c.id}" title="Copier le code">Copier</button>
               <button class="nav-btn" data-edit-code="${c.id}" title="Modifier">✏️</button>
               <button class="del-btn" data-del-code="${c.id}" title="Supprimer">🗑️</button>
             </div>
