@@ -18,6 +18,15 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.stockMenageZones;
     }
 
+    // Profil préparé sous l'email de la personne connectée, et données
+    // envoyées strictement identiques (hormis la date de préparation).
+    function profilEnAttenteIdentique() {
+      let chemin = /databases/$(database)/documents/comptes-en-attente/$(request.auth.token.email.lower());
+      return request.auth.token.email != null
+        && exists(chemin)
+        && request.resource.data.diff(get(chemin).data).affectedKeys().hasOnly(['preparerLe']);
+    }
+
     function isSuperAdmin() {
       return isSignedIn() && myRole() == 'super_admin';
     }
@@ -49,10 +58,23 @@ service cloud.firestore {
     // accidentelle ou l'auto-promotion).
     match /users/{userId} {
       allow read: if isSignedIn();
+      // Rattachement d'un profil préparé par un admin (comptes-en-attente),
+      // à la première connexion : uniquement son propre profil, et
+      // strictement identique à ce que l'admin a préparé.
+      allow create: if request.auth != null && request.auth.uid == userId && profilEnAttenteIdentique();
       allow write: if isSuperAdmin()
         || (isAdminLevel()
             && !(resource != null && (resource.data.role == 'admin' || resource.data.role == 'super_admin'))
             && request.resource.data.role != 'admin' && request.resource.data.role != 'super_admin');
+    }
+
+    // ---- Comptes en attente de rattachement (email déjà dans Firebase
+    // Authentication mais sans profil appli) : préparés par un admin, lus
+    // et supprimés par la personne concernée à sa première connexion.
+    match /comptes-en-attente/{email} {
+      allow read, delete: if isSignedIn() && (request.auth.token.email.lower() == email || isAdminLevel());
+      allow create, update: if isSuperAdmin()
+        || (isAdminLevel() && request.resource.data.role != 'admin' && request.resource.data.role != 'super_admin');
     }
 
     // ---- Sites favoris de l'accueil, par utilisateur ----

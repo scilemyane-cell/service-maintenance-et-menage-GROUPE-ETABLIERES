@@ -1,6 +1,6 @@
 import { esc, addDays, dateKey, fmtShort, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites, saveSites } from "./sites-data.js";
-import { watchUsers, updateUser, createUserProfile } from "./users-data.js";
+import { watchUsers, updateUser, createUserProfile, preparerCompteEnAttente } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
 import { watchAccess, setDispositifAccess } from "./access-data.js";
 import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate } from "./dispositif-settings-data.js";
@@ -28,12 +28,44 @@ function randomPassword() {
   return pwd;
 }
 
-async function createUserAccount(email, password, nom, role) {
+// Accès par défaut à la création d'un compte "cas par cas" — sans cela,
+// un technicien ou un agent tout juste créé arrivait sur un accueil vide
+// (aucune tuile) et il fallait tout régler à la main. Ajustables ensuite
+// dans "Gérer l'accès" (ouvert automatiquement après la création).
+const ACCES_PAR_DEFAUT = {
+  technicien: { astreinte: "write", sites: "read", compteurs: "write", masterlock: "read", "suivi-demandes": "write", stock: "write" },
+  menage: { "stock-menage": "write", sites: "read" },
+  mi_temps: { sites: "read" },
+  direction: { statistiques: "read", previsionnel: "read", "suivi-demandes": "read", sites: "read", "planning-individuel": "read" },
+};
+function profilInitial(nom, role, email) {
+  const profil = { nom, role, email };
+  if (ACCES_PAR_DEFAUT[role]) profil.permissions = { ...ACCES_PAR_DEFAUT[role] };
+  if (role === "menage") profil.stockMenageZones = [];
+  return profil;
+}
+
+// Enregistre un champ modifié dans le tableau et le signale visuellement
+// (auparavant, un refus des règles Firestore passait inaperçu et il
+// fallait aller corriger dans la console Firebase).
+async function enregistrerChamp(el, uid, champs) {
+  try {
+    await updateUser(uid, champs);
+    if (el) { el.style.outline = "2px solid var(--teal)"; setTimeout(() => { el.style.outline = ""; }, 1200); }
+  } catch (e) {
+    console.error("updateUser:", e);
+    if (el) el.style.outline = "2px solid var(--red)";
+    const msg = e.code === "permission-denied" ? "Modification refusée : ton rôle ne permet pas de modifier ce compte." : "Échec de l'enregistrement : " + (e.message || e);
+    window.toast ? window.toast("❌ " + msg) : alert(msg);
+  }
+}
+
+async function createUserAccount(email, password, nom, role, avecAccesDefaut = true) {
   const secondaryApp = initializeApp(firebaseConfig, "secondary-" + Date.now());
   const secondaryAuth = getAuth(secondaryApp);
   try {
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await createUserProfile(cred.user.uid, { nom, role, email });
+    await createUserProfile(cred.user.uid, avecAccesDefaut ? profilInitial(nom, role, email) : { nom, role, email });
     await signOut(secondaryAuth);
     return cred.user.uid;
   } finally {
@@ -44,7 +76,15 @@ async function createUserAccount(email, password, nom, role) {
 // =================================================================
 // ADMINISTRATION GLOBALE — Utilisateurs
 // =================================================================
-let usersState = { users: [], accesOuvertPour: null };
+let usersState = { users: [], accesOuvertPour: null, dernierResultat: "" };
+// Le message de résultat de "Créer le compte" (identifiants à transmettre)
+// est conservé dans l'état : sinon le rafraîchissement automatique de la
+// liste des comptes, déclenché par la création elle-même, l'effaçait aussitôt.
+function afficherResultat(_ancienneBoite, html) {
+  usersState.dernierResultat = html;
+  const boite = document.getElementById("nu-result");
+  if (boite) boite.innerHTML = html;
+}
 let newUserForm = { email: "", password: "", nom: "", role: "menage" };
 let currentUser = null;
 let dispositifsPourOnglets = []; // dispositifs MNA distincts, ajoutés dynamiquement à la liste des onglets bonus (ex. "Daoud Mahdi")
@@ -114,7 +154,7 @@ function renderUtilisateurs(container) {
           </div></label>
         </div>
         <button class="add-btn" id="nu-create">➕ Créer le compte</button>
-        <div id="nu-result"></div>
+        <div id="nu-result">${usersState.dernierResultat || ""}</div>
       </div>
 
       <p class="hint">Modifie le nom affiché, l'email ou le rôle de chaque compte existant. Si l'email est vide ci-dessous (comptes créés avant cette mise à jour), renseigne-le manuellement — nécessaire pour "Réinitialiser". "Réinitialiser" envoie un email à la personne pour qu'elle choisisse elle-même un nouveau mot de passe. La suppression d'un compte se fait depuis la console Firebase (voir manuel d'utilisation).</p>
@@ -183,35 +223,57 @@ function renderUtilisateurs(container) {
   document.getElementById("nu-create").addEventListener("click", async () => {
     const { email, password, nom, role } = newUserForm;
     const resultBox = document.getElementById("nu-result");
-    if (!email || !password || !nom) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Email, nom et mot de passe sont obligatoires.</p>`; return; }
-    if (password.length < 6) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Le mot de passe doit faire au moins 6 caractères.</p>`; return; }
-    resultBox.innerHTML = `<p class="hint">Création en cours…</p>`;
+    if (!email || !password || !nom) { afficherResultat(resultBox, `<p class="hint" style="color:var(--red)">Email, nom et mot de passe sont obligatoires.</p>`); return; }
+    if (password.length < 6) { afficherResultat(resultBox, `<p class="hint" style="color:var(--red)">Le mot de passe doit faire au moins 6 caractères.</p>`); return; }
+    afficherResultat(resultBox, `<p class="hint">Création en cours…</p>`);
     try {
-      await createUserAccount(email, password, nom, role);
-      resultBox.innerHTML = `
+      const nouvelUid = await createUserAccount(email, password, nom, role);
+      if (ROLES_ACCES_CAS_PAR_CAS.includes(role)) usersState.accesOuvertPour = nouvelUid;
+      afficherResultat(resultBox, `
         <div class="form-card" style="margin-top:12px">
-          <p class="hint">✓ Compte créé pour <b>${esc(nom)}</b>. Transmets-lui ces identifiants :</p>
+          <p class="hint">✓ Compte créé pour <b>${esc(nom)}</b>${ACCES_PAR_DEFAUT[role] ? " avec des accès par défaut (vérifie-les dans « Gérer l'accès », ouvert ci-dessous)" : ""}. Transmets-lui ces identifiants :</p>
           <p style="font-family:ui-monospace,monospace;font-size:13px">Email : ${esc(email)}<br>Mot de passe : ${esc(password)}</p>
-        </div>`;
+        </div>`);
       newUserForm = { email: "", password: "", nom: "", role: "menage" };
     } catch (e) {
+      if (e.code === "auth/email-already-in-use") {
+        const existant = usersState.users.find(u => (u.email || "").toLowerCase() === email.trim().toLowerCase());
+        if (existant) { afficherResultat(resultBox, `<p class="hint" style="color:var(--red)">Ce compte existe déjà dans la liste ci-dessous (${esc(existant.nom || email)}) : modifie-le directement.</p>`); return; }
+        // Compte d'accès Firebase existant mais profil appli absent
+        // (supprimé, ou créé à la main dans la console) : on prépare le
+        // profil, rattaché automatiquement à sa prochaine connexion.
+        try {
+          await preparerCompteEnAttente(email, profilInitial(nom, role, email.trim()));
+          let resetOk = false;
+          try { await sendPasswordResetEmail(auth, email.trim()); resetOk = true; } catch { /* sans gravité */ }
+          afficherResultat(resultBox, `
+            <div class="form-card" style="margin-top:12px">
+              <p class="hint">✓ <b>${esc(email)}</b> avait déjà un accès Firebase, mais plus de profil dans l'appli. Le profil <b>${esc(roleLabel(role))}</b> est prêt : il sera rattaché automatiquement à sa prochaine connexion.</p>
+              <p class="hint">${resetOk ? "📧 Un email lui a été envoyé pour choisir un nouveau mot de passe (le mot de passe saisi ici n'est pas utilisé)." : "Il se connecte avec son mot de passe habituel (sinon : bouton Réinitialiser une fois son compte apparu)."}</p>
+            </div>`);
+          newUserForm = { email: "", password: "", nom: "", role: "menage" };
+        } catch (e2) {
+          afficherResultat(resultBox, `<p class="hint" style="color:var(--red)">Cet email a déjà un accès Firebase et le profil n'a pas pu être préparé : ${esc(e2.code === "permission-denied" ? "règles Firestore à republier (comptes-en-attente)." : (e2.message || e2))}</p>`);
+        }
+        return;
+      }
       const msg = e.code === "auth/email-already-in-use" ? "Cet email est déjà utilisé par un autre compte."
         : e.code === "auth/invalid-email" ? "Adresse email invalide."
         : "Erreur : " + e.message;
-      resultBox.innerHTML = `<p class="hint" style="color:var(--red)">${esc(msg)}</p>`;
+      afficherResultat(resultBox, `<p class="hint" style="color:var(--red)">${esc(msg)}</p>`);
     }
   });
   container.querySelectorAll("[data-user-nom]").forEach(inp => {
-    inp.addEventListener("change", async () => { await updateUser(inp.dataset.userNom, { nom: inp.value }); });
+    inp.addEventListener("change", () => enregistrerChamp(inp, inp.dataset.userNom, { nom: inp.value.trim() }));
   });
   container.querySelectorAll("[data-user-email]").forEach(inp => {
     inp.addEventListener("change", async () => {
-      await updateUser(inp.dataset.userEmail, { email: inp.value.trim() });
+      await enregistrerChamp(inp, inp.dataset.userEmail, { email: inp.value.trim() });
       inp.style.borderColor = "";
     });
   });
   container.querySelectorAll("[data-user-role]").forEach(sel => {
-    sel.addEventListener("change", async () => { await updateUser(sel.dataset.userRole, { role: sel.value }); });
+    sel.addEventListener("change", () => enregistrerChamp(sel, sel.dataset.userRole, { role: sel.value }));
   });
   container.querySelectorAll("[data-user-zone]").forEach(cb => {
     cb.addEventListener("change", async () => {
@@ -219,7 +281,7 @@ function renderUtilisateurs(container) {
       const u = usersState.users.find(x => x.uid === uid);
       const zones = new Set(u?.stockMenageZones || []);
       if (cb.checked) zones.add(zone); else zones.delete(zone);
-      await updateUser(uid, { stockMenageZones: [...zones] });
+      await enregistrerChamp(cb.parentElement, uid, { stockMenageZones: [...zones] });
     });
   });
   container.querySelectorAll("[data-user-onglet]").forEach(cb => {
@@ -228,7 +290,7 @@ function renderUtilisateurs(container) {
       const u = usersState.users.find(x => x.uid === uid);
       const onglets = new Set(u?.extraOnglets || []);
       if (cb.checked) onglets.add(ongletId); else onglets.delete(ongletId);
-      await updateUser(uid, { extraOnglets: [...onglets] });
+      await enregistrerChamp(cb.parentElement, uid, { extraOnglets: [...onglets] });
     });
   });
   container.querySelectorAll("[data-toggle-acces]").forEach(btn => {
@@ -241,7 +303,7 @@ function renderUtilisateurs(container) {
   container.querySelectorAll("[data-user-permission]").forEach(sel => {
     sel.addEventListener("change", async () => {
       const [uid, tuileId] = sel.dataset.userPermission.split(":");
-      await updateUser(uid, { [`permissions.${tuileId}`]: sel.value });
+      await enregistrerChamp(sel, uid, { [`permissions.${tuileId}`]: sel.value });
     });
   });
   container.querySelectorAll("[data-reset-pwd]").forEach(btn => {
@@ -632,7 +694,7 @@ function renderGeneralEditor(container, user, dispositif) {
     if (password.length < 6) { resultBox.innerHTML = `<p class="hint" style="color:var(--red)">Le mot de passe doit faire au moins 6 caractères.</p>`; return; }
     resultBox.innerHTML = `<p class="hint">Création en cours…</p>`;
     try {
-      const uid = await createUserAccount(email, password, nom, "menage");
+      const uid = await createUserAccount(email, password, nom, "menage", false);
       const currentAccess = dpState.access[dispositif] || [];
       await setDispositifAccess(dispositif, [...currentAccess, uid]);
       resultBox.innerHTML = `
