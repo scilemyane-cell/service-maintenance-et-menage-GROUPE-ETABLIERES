@@ -3,7 +3,7 @@
 import { categorieSite } from "./site-map.js";
 
 // Nom sans l'adresse e-mail éventuelle ("La Yole (resfjt…@etablieres.fr)")
-export function nomPropre(nom) { return String(nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim(); }
+export function nomPropre(nom) { return String(nom || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\S+@\S+/g, "").replace(/\s+/g, " ").trim(); }
 // Ville à partir de l'adresse : ce qui suit le code postal, sinon la dernière partie.
 export function villeDe(adresse) {
   const a = String(adresse || "").trim();

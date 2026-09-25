@@ -371,13 +371,13 @@ function renderListe() {
                   const etat = nb === 0 ? "vide" : r > 0 ? "retard" : "ok";
                   const cat = categorieSite(site);
                   return `<button class="sdw-tuile sdw-cpt sdw-${etat} ${site.id === ui.siteSelectionne ? "sdw-sel" : ""}" data-select-site="${site.id}" style="--c:${cat.couleur}">
-                    ${dessinPourSite(site)}
+                    <span class="sdw-statut" title="${nb === 0 ? "Aucun compteur" : r > 0 ? `${r} compteur(s) en retard` : "Tous les relevés sont à jour"}">${nb === 0 ? "–" : r > 0 ? r : "✓"}</span>
                     <span class="sdw-tag"><i></i>${esc(cat.cle === "autre" ? (site.association || "Autre") : cat.label)}</span>
                     <b class="sdw-nom" title="${esc(site.nom)}">${esc(nomPropre(site.nom))}</b>
                     <small class="sdw-ville">${esc(villeDe(site.adresse) || "")}</small>
                     <span class="sdw-bas">
-                      <span>🎛️ ${nb}</span>
-                      ${nb === 0 ? `<span class="vide">Aucun compteur</span>` : r > 0 ? `<span class="sdw-etat retard">⚠ ${r} en retard</span>` : `<span class="sdw-etat ok">✓ À jour</span>`}
+                      <span>🎛️ ${nb} compteur${nb > 1 ? "s" : ""}</span>
+                      ${nb === 0 ? "" : r > 0 ? `<span class="sdw-etat retard">${r} en retard</span>` : `<span class="sdw-etat ok">À jour</span>`}
                     </span>
                   </button>`;
                 }).join("")}

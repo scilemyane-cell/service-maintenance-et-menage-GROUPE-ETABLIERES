@@ -1481,3 +1481,28 @@ html:not([data-theme="sombre"]) .sdw-outils-pop .nav-btn{color:#1B2330;backgroun
 /* Menu utilisateur de l'accueil (fond blanc) : texte toujours foncé, même en thème sombre */
 html[data-theme] .gh-user-pop select, html[data-theme] .gh-user-pop .apercu-select{ color:#1B2330; background:#F2F4F7; border-color:#D6D9DF; }
 html[data-theme] .gh-user-pop select option{ color:#1B2330; background:#fff; }
+
+/* Relevé compteur v2 : l'état saute aux yeux, le site choisi aussi */
+.sdw-cpt:after{display:none}
+.sdw-cpt .sdw-nom{max-width:calc(100% - 44px)}
+.sdw-statut{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 15px Montserrat,system-ui,sans-serif;color:#fff;z-index:2}
+.sdw-cpt.sdw-ok .sdw-statut{background:#1baf7a;box-shadow:0 4px 12px rgba(27,175,122,.45)}
+.sdw-cpt.sdw-retard .sdw-statut{background:#C23B27;box-shadow:0 4px 12px rgba(194,59,39,.5);animation:sdw-pulse 1.8s ease-in-out infinite}
+.sdw-cpt.sdw-vide .sdw-statut{background:#b8bdc7}
+@keyframes sdw-pulse{0%,100%{box-shadow:0 0 0 0 rgba(194,59,39,.5)}50%{box-shadow:0 0 0 7px rgba(194,59,39,0)}}
+html:not([data-theme="sombre"]) .sdw-cpt.sdw-ok{background:linear-gradient(160deg,#fff 55%,#e9f8f1)}
+html:not([data-theme="sombre"]) .sdw-cpt.sdw-retard{background:linear-gradient(160deg,#fff 40%,#fdecea);border:1.5px solid #e58b7e}
+.sdw-cpt.sdw-vide{border-style:dashed;opacity:.65;box-shadow:none}
+html:not([data-theme="sombre"]) .sdw-cpt.sdw-vide{background:#f4f5f8}
+html[data-theme="sombre"] .sdw-cpt.sdw-retard{border-color:rgba(255,107,91,.6);background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(229,83,61,.18))}
+/* Site sélectionné : tuile marine, bien visible, reliée au panneau de droite */
+.sdw-tuile.sdw-sel{outline:none;transform:translateY(-3px);background:linear-gradient(150deg,#0b2140,#16345e) !important;border-color:#0b2140 !important;color:#fff;box-shadow:0 14px 30px rgba(11,33,64,.35),0 0 0 3px color-mix(in srgb,var(--c) 70%,transparent) !important}
+.sdw-tuile.sdw-sel .sdw-ville{color:#a9bcd8}
+.sdw-tuile.sdw-sel .sdw-bas span:not(.sdw-etat){background:rgba(255,255,255,.12);color:#fff}
+.sdw-tuile.sdw-sel:before{background:#fff !important}
+html[data-theme="sombre"] .sdw-tuile.sdw-sel{background:linear-gradient(150deg,#1d3a66,#2a4f85) !important}
+.cpt-detail > .form-card{border-top:4px solid #0b2140}
+html[data-theme="sombre"] .cpt-detail > .form-card{border-top-color:#4d9dff}
+.sdw-bas{flex-wrap:wrap}.sdw-bas span{white-space:nowrap}
+.sdw-tuile.sdw-sel .sdw-etat.retard{background:#C23B27 !important;color:#fff !important}
+.sdw-tuile.sdw-sel .sdw-etat.ok{background:#1baf7a !important;color:#fff !important}
