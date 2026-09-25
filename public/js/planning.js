@@ -1617,8 +1617,12 @@ function renderPlanningIndividuel(container, perms) {
         }
         ui.planningQuickDate = null;
         renderAll();
+        window.toast?.("✓ Intervention enregistrée");
       } catch (e) {
-        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+        console.error("Intervention planning:", e);
+        const msg = e.code === "permission-denied" ? "enregistrement refusé par les règles Firestore (droits du compte connecté)" : (e.message || String(e));
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(msg)}</span>`;
+        alert("L'intervention n'a PAS été enregistrée : " + msg);
       }
     });
   }
