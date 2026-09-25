@@ -1,5 +1,5 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
-import { watchPeople, watchAbsences } from "./firestore-data.js";
+import { watchPeople, watchAbsences, watchInterventions } from "./firestore-data.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -27,6 +27,8 @@ let filtreAssociation = "";
 let filtreSite = "";
 let horlogeTimer = null;
 let nbCompteurs = null;
+let interventions = null;      // chargées seulement pour un utilisateur hors astreinte
+let interventionsUnsub = null;
 let onToggleConstructionRef = null;
 
 // "Mes sites favoris" — accès rapide personnel à quelques fiches (voir la
@@ -58,6 +60,8 @@ function cleanup() {
   if (carteInstance) { carteInstance.detruire(); carteInstance = null; }
   if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
   if (horlogeTimer) { clearInterval(horlogeTimer); horlogeTimer = null; }
+  if (interventionsUnsub) { interventionsUnsub(); interventionsUnsub = null; }
+  interventions = null;
   modeReorganisation = false;
 }
 
@@ -153,6 +157,44 @@ function optionsSitesRangees(liste, selectionne = "") {
     groupes.get(cle).push(d);
   });
   return [...groupes].map(([cle, ds]) => `<optgroup label="${esc(cle)}">${ds.map(d => `<option value="${d.id}" ${selectionne === d.id ? "selected" : ""}>${esc(d.nom)}</option>`).join("")}</optgroup>`).join("");
+}
+
+// ---- "Mon planning" pour les personnes hors roulement d'astreinte ----
+// (ex. technicien espaces verts) : à la place du bloc Astreinte, elles
+// voient leurs propres interventions (dont récurrences) et absences à
+// venir. Le lien compte ↔ nom du planning se fait sur le nom affiché
+// (nom complet, ou prénom seul comme dans les listes N1/N2).
+const normNom = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+function personnePlanning(user, toutes) {
+  const cibles = [user.nomPlanning, user.nom, (user.email || "").split("@")[0]].filter(Boolean).map(normNom);
+  const prenom = normNom(user.nom).split(/\s+/)[0];
+  return toutes.find(p => cibles.includes(normNom(p)))
+    || toutes.find(p => prenom && normNom(p).split(/\s+/)[0] === prenom)
+    || null;
+}
+function blocMonPlanningHTML(personne) {
+  const auj = dateKey(new Date());
+  const fin = dateKey(addDays(new Date(), 14));
+  const joursFR = iso => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+  if (interventions === null) return `<div class="gh-astreinte"><p class="gh-astreinte-titre">Mon planning</p><p class="gh-vide">Chargement…</p></div>`;
+  const aVenir = interventions
+    .filter(i => i.technicien === personne && i.date >= auj && i.date <= fin)
+    .sort((a, b) => (a.date + (a.heureDebut || "")).localeCompare(b.date + (b.heureDebut || "")))
+    .slice(0, 8);
+  const abs = absences
+    .filter(a => a.person === personne && (a.end || a.start) >= auj && a.start <= fin)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const LIB_ABS = { conge: "Congé", rtt: "RTT", arret: "Arrêt" };
+  return `
+    <div class="gh-astreinte">
+      <p class="gh-astreinte-titre">Mon planning — 15 prochains jours</p>
+      ${abs.map(a => `<div class="gh-planning-ligne gh-planning-abs"><b>${esc(LIB_ABS[a.type] || "Absence")}</b><span>${joursFR(a.start)}${a.end && a.end !== a.start ? ` → ${joursFR(a.end)}` : ""}</span></div>`).join("")}
+      ${aVenir.length === 0 ? `<p class="gh-vide">Aucune intervention prévue.</p>` : aVenir.map(i => `
+        <div class="gh-planning-ligne ${i.date === auj ? "gh-planning-auj" : ""}">
+          <b>${i.date === auj ? "Aujourd'hui" : joursFR(i.date)}${i.heureDebut ? ` · ${esc(i.heureDebut)}${i.heureFin ? `–${esc(i.heureFin)}` : ""}` : ""}</b>
+          <span>${esc(i.site || "—")}${i.type ? ` · ${esc(i.type)}` : ""}${i.recurrenceId ? " 🔁" : ""}</span>
+        </div>`).join("")}
+    </div>`;
 }
 
 function blocCarteHTML() {
@@ -287,6 +329,12 @@ function render() {
   if (clearCountdown) { clearCountdown(); clearCountdown = null; }
 
   const estAdmin = mountedUser.role === "admin" || mountedUser.role === "super_admin";
+  const toutesPersonnes = [...new Set([...(people.n1 || []), ...(people.n2 || [])])];
+  const maPersonne = personnePlanning(mountedUser, toutesPersonnes);
+  const horsAstreinte = !!maPersonne && !peopleAstreinte.n1.includes(maPersonne) && !peopleAstreinte.n2.includes(maPersonne);
+  if (horsAstreinte && !interventionsUnsub) {
+    interventionsUnsub = watchInterventions((l) => { interventions = l; scheduleRender(); });
+  }
   const afficherSites = catsRef.some(c => c.id === "sites") && dossiers.length > 0;
 
   // ---- Notifications (panneau de droite) ----
@@ -359,7 +407,7 @@ function render() {
         <section class="gh-notifs gh-rouge">
           <h3>${notifs.length} Notification${notifs.length > 1 ? "s" : ""}</h3>
           <div class="gh-notifs-corps">
-            ${hasPeople ? `
+            ${horsAstreinte ? blocMonPlanningHTML(maPersonne) : hasPeople ? `
               <div class="gh-astreinte">
                 <p class="gh-astreinte-titre">Astreinte aujourd'hui</p>
                 <div class="gh-astreinte-ligne"><span class="avatar" style="background:${colorForPerson(n1.assigned, people)}"></span><span>N1</span><b>${esc(n1.assigned)}</b></div>

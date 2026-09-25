@@ -654,3 +654,8 @@ button.gh-notif:hover{ background:#FFF2F5; }
 .gh-raccourci{ border:1px solid #C9CBD1; background:#fff; border-radius:6px; padding:3px 6px; font-size:14px; line-height:1; cursor:pointer; }
 .gh-raccourci:hover{ border-color:var(--gh-rouge); background:#FFF2F5; }
 .gh-favori-suppr-arme{ background:#C23B27 !important; color:#fff !important; border-radius:6px; padding:3px 8px !important; font-size:11px !important; font-weight:700; }
+.gh-planning-ligne{ display:flex; flex-direction:column; gap:1px; font-size:12px; padding:5px 0 5px 8px; border-left:3px solid #3FB6AC; margin:4px 0; }
+.gh-planning-ligne b{ font-size:12px; }
+.gh-planning-ligne span{ color:#5A6070; }
+.gh-planning-auj{ border-left-color:var(--gh-rouge); background:#FFF2F5; border-radius:0 6px 6px 0; }
+.gh-planning-abs{ border-left-color:#D9B24C; }
