@@ -175,7 +175,8 @@
       {
         id: "planning-individuel", label: "Planning individuel", icon: "🗓️", desc: "Congés, RTT, arrêts et interventions par personne, sur toute l'année",
         subtabs: [
-          { id: "liste", label: "Planning", icon: "🗓️", roles: GESTION, mount: mountPlanningIndividuelTab },
+          // Direction : consultation seule (planning.js ne permet la programmation qu'aux éditeurs)
+          { id: "liste", label: "Planning", icon: "🗓️", roles: [...GESTION, "direction"], mount: mountPlanningIndividuelTab },
         ],
       },
       {
