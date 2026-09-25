@@ -17,7 +17,7 @@
 //    dit explicitement au lieu d'afficher des zéros silencieux.
 
 import { db } from "./firebase-init.js";
-import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { esc } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
 
@@ -62,6 +62,11 @@ async function collecterDonnees() {
   const cles = Object.keys(SOURCES);
   const resultats = await Promise.allSettled(cles.map(k => getDocs(collection(db, SOURCES[k]))));
   const data = { erreurs: [] };
+  // Personnes hors roulement d'astreinte (case « Astreinte » décochée,
+  // ex. l'agent espaces verts) : leurs interventions sont du travail
+  // programmé, pas de l'astreinte.
+  try { const snap = await getDoc(doc(db, "config", "people")); data.astreinteActive = (snap.exists() && snap.data().astreinteActive) || {}; }
+  catch (e) { console.error("Statistiques — config/people:", e); data.astreinteActive = {}; }
   resultats.forEach((r, idx) => {
     const cle = cles[idx];
     data[cle] = [];
@@ -187,7 +192,14 @@ function calculer(data, p) {
   const assocParSite = {}; data.sites.forEach(s => { assocParSite[s.id] = s.association || ""; });
 
   // ---- Interventions (astreinte) ----
-  const intervValides = data.interventions.filter(i => i.date && i.date <= p.aujourdhui && okAssoc(i.association));
+  // Astreinte = interventions réelles d'astreinte uniquement. Sont exclus
+  // (et comptés à part en « travaux programmés ») : les passages issus
+  // d'une récurrence, ceux saisis depuis le planning individuel, et ceux
+  // des personnes hors roulement d'astreinte.
+  const estProgramme = i => !!i.recurrenceId || i.origine === "planning" || (data.astreinteActive || {})[i.technicien] === false;
+  const toutesInterv = data.interventions.filter(i => i.date && i.date <= p.aujourdhui && okAssoc(i.association));
+  const programmes = toutesInterv.filter(i => estProgramme(i) && dans(i.date, p.debut, p.fin));
+  const intervValides = toutesInterv.filter(i => !estProgramme(i));
   const interv = intervValides.filter(i => dans(i.date, p.debut, p.fin));
   const intervPrev = intervValides.filter(i => dans(i.date, p.prevDebut, p.prevFin));
   const heures = i => parseFloat(i.heures) || 0;
@@ -356,6 +368,7 @@ function calculer(data, p) {
   const fichesParSemaine = semaine12.map(cle => data.fiches.filter(f => f.weekStart === cle).length);
 
   return {
+    programmes, heuresProgrammes: somme(programmes, heures),
     interv, intervPrev, heuresTot, heuresPrev, heuresNuit, primesDimanche: primesDimancheReelles || primesDimanche, appelsN1,
     intervParMois, heuresParMois, parType, parAssocInterv, parSiteInterv, parJourSemaine, techTries,
     dem, demPrev, demTraitees, pctTraitees, delaiMoyen, delaiMedian, delaiParUrgence, avecDelai, recuesParMois, realiseesParMois,
@@ -418,6 +431,7 @@ function render() {
         ${v("astreinte") ? carteKpi("🌙", fmtNb(s.heuresNuit, 1) + " h", "Dont heures de nuit") : ""}
         ${v("astreinte") ? carteKpi("📆", formatMontant(s.primesDimanche), "Primes dimanche") : ""}
         ${v("astreinte") ? carteKpi("📞", fmtNb(s.appelsN1), "Appels au N1") : ""}
+        ${v("astreinte") ? carteKpi("🌿", fmtNb(s.programmes.length), "Travaux programmés", null, null, `${fmtNb(s.heuresProgrammes, 1)} h · hors astreinte`) : ""}
         ${v("suivi-demandes") ? carteKpi("📄", fmtNb(s.dem.length), "Demandes reçues", null, variation(s.dem.length, s.demPrev.length), comp) : ""}
         ${v("suivi-demandes") ? carteKpi("✔️", s.pctTraitees + " %", "Demandes traitées", s.dem.length ? (s.pctTraitees >= 70 ? "var(--teal)" : "var(--gold)") : null) : ""}
         ${v("suivi-demandes") ? carteKpi("⏳", s.delaiMoyen === null ? "—" : fmtNb(s.delaiMoyen, 1) + " j", "Délai moyen de traitement", null, null, s.delaiMedian === null ? "" : `médiane ${fmtNb(s.delaiMedian, 1)} j`) : ""}

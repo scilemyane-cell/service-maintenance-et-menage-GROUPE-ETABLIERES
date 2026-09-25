@@ -1612,6 +1612,7 @@ function renderPlanningIndividuel(container, perms) {
             heureDebut: f.heureDebut || "", heureFin: f.heureFin || "",
             heuresNuit: heuresDeNuit(f.heureDebut, f.heureFin), primeDimanche: estDimanche(ui.planningQuickDate) ? PRIME_DIMANCHE : 0,
             photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "",
+            origine: "planning", // travail programmé depuis le planning individuel, pas une intervention d'astreinte
             createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
           });
         }
