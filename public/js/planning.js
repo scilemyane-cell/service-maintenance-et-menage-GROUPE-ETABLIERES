@@ -2154,6 +2154,10 @@ function appelN1HTML() {
           ${state.people.n1.map(nom => `<option value="${esc(nom)}" ${ui.form.n1Contacte === nom ? "selected" : ""}>${esc(nom)}</option>`).join("")}
         </select>
       </label>
+      <div class="iv-n1-heure">
+        <label>Heure de l'appel<input type="time" id="f-heure-appel" value="${esc(ui.form.heureAppel || "")}"></label>
+        <label>Durée de l'appel (min)<input type="number" min="0" step="1" id="f-duree-appel" value="${esc(ui.form.dureeAppelMin || "")}" placeholder="ex. 10"></label>
+      </div>
       <label class="iv-n1-large">Demande de l'appelant<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. fuite d'eau signalée au 2e étage"></label>
       <label class="iv-n1-plein">Décision / consigne donnée
         <span class="iv-n1-ia"><input id="f-decision-n1" value="${esc(ui.form.decisionN1)}" placeholder="ex. accord donné, intervention d'une entreprise externe demandée…"><button type="button" class="iv-ia petit" id="f-ia-decision" title="Reformuler proprement avec l'IA">✨</button></span>
@@ -2167,6 +2171,8 @@ function attacherEcouteursAppelN1() {
   document.getElementById("f-n1-contacte")?.addEventListener("change", (e) => { ui.form.n1Contacte = e.target.value; });
   document.getElementById("f-motif-n1")?.addEventListener("input", (e) => { ui.form.motifAppelN1 = e.target.value; });
   document.getElementById("f-decision-n1")?.addEventListener("input", (e) => { ui.form.decisionN1 = e.target.value; });
+  document.getElementById("f-heure-appel")?.addEventListener("input", (e) => { ui.form.heureAppel = e.target.value; });
+  document.getElementById("f-duree-appel")?.addEventListener("input", (e) => { ui.form.dureeAppelMin = e.target.value; });
   document.getElementById("f-ia-decision")?.addEventListener("click", async (e) => {
     e.preventDefault();
     const btn = e.currentTarget, statut = document.getElementById("f-ia-decision-statut");
@@ -2260,7 +2266,7 @@ function attacherPhotosInterventionListeners() {
 // intervention à la mauvaise personne) — sauf pour un technicien, qui ne
 // saisit que pour lui-même.
 function reinitialiserFormIntervention() {
-  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "" });
+  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "", heureAppel: "", dureeAppelMin: "" });
   ui.form.technicien = mountedUser?.role === "technicien" ? (mountedUser.nom || mountedUser.email) : "";
 }
 
@@ -2296,6 +2302,7 @@ function renderInterventions(container, perms) {
   if (window.ouvrirCompleterId && state.interventions.some(x => x.id === window.ouvrirCompleterId)) {
     ui.completerId = window.ouvrirCompleterId; window.ouvrirCompleterId = null; defilerVersCompleter = true;
   }
+  if (!ui.editingId && ui.form.heureAppel === undefined) ui.form.heureAppel = "";
   const intervenants = [...state.people.n1, ...state.people.n2];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
   // Détection des N° d'intervention en double (ex. INT-00013 attribué deux
@@ -2586,6 +2593,7 @@ function renderInterventions(container, perms) {
         sansDeplacement,
         compteRendu: (ui.form.compteRendu || "").trim(),
         horairesACompleter, technicienUid: techUid,
+        heureAppel: ui.form.heureAppel || "", dureeAppelMin: parseFloat(ui.form.dureeAppelMin) || 0,
         appelOrigineId: ui.form.appelOrigineId || "", appelOrigineNumero: ui.form.appelOrigineNumero || "",
         photos: ui.form.photos || [],
         appelN1: ui.form.appelN1 || false, n1Contacte: ui.form.appelN1 ? ui.form.n1Contacte : "",
@@ -2652,6 +2660,7 @@ function renderInterventions(container, perms) {
           sansDeplacement: !!i.sansDeplacement,
           compteRendu: i.compteRendu || "",
           appelOrigineId: i.appelOrigineId || "", appelOrigineNumero: i.appelOrigineNumero || "",
+          heureAppel: i.heureAppel || "", dureeAppelMin: i.dureeAppelMin ? String(i.dureeAppelMin) : "",
           numero: i.numero || "",
         };
         renderAll();
@@ -2854,65 +2863,135 @@ function detruireGraphiquesSynthese() {
 
 function renderSynthese(container) {
   detruireGraphiquesSynthese();
-  if (state.interventions.length === 0) {
-    container.innerHTML = `<div class="stack"><p class="hint">Aucune donnée pour l'instant.</p></div>`;
-    return;
-  }
-  const sites = ["Tous", ...new Set(state.interventions.map(i => i.site))];
-  const techs = ["Tous", ...state.people.n2];
-  const filtered = state.interventions.filter(i =>
-    (ui.filterTech === "Tous" || i.technicien === ui.filterTech) && (ui.filterSite === "Tous" || i.site === ui.filterSite));
-  const totalHeures = filtered.reduce((s, i) => s + (i.heures || 0), 0);
+  const toutes = state.interventions.filter(i => !i.supprimeLe && i.date);
+  if (toutes.length === 0) { container.innerHTML = `<div class="stack"><p class="hint">Aucune donnée pour l'instant.</p></div>`; return; }
+  if (!ui.synthPeriode) ui.synthPeriode = "12mois";
+  if (!ui.synthN1) ui.synthN1 = "Tous";
+  const auj = new Date();
+  const debutPeriode = {
+    mois: dateKey(new Date(auj.getFullYear(), auj.getMonth(), 1)),
+    "3mois": dateKey(new Date(auj.getFullYear(), auj.getMonth() - 2, 1)),
+    "12mois": dateKey(new Date(auj.getFullYear(), auj.getMonth() - 11, 1)),
+    scolaire: dateKey(new Date(auj.getMonth() >= 8 ? auj.getFullYear() : auj.getFullYear() - 1, 8, 1)),
+    tout: "0000",
+  }[ui.synthPeriode];
+  const sites = ["Tous", ...[...new Set(toutes.map(i => i.site).filter(Boolean))].sort()];
+  const techs = ["Tous", ...[...new Set(toutes.map(i => i.technicien).filter(Boolean))].sort()];
+  const n1s = ["Tous", ...[...new Set(toutes.map(i => i.n1Contacte).filter(Boolean))].sort()];
+  const f = toutes.filter(i => i.date >= debutPeriode
+    && (ui.filterTech === "Tous" || i.technicien === ui.filterTech)
+    && (ui.filterSite === "Tous" || i.site === ui.filterSite)
+    && (ui.synthN1 === "Tous" || i.n1Contacte === ui.synthN1));
 
-  const byType = {}; filtered.forEach(i => { byType[i.type] = (byType[i.type] || 0) + 1; });
-  const byTypeArr = Object.entries(byType).sort((a, b) => b[1] - a[1]);
-  const bySite = {}; filtered.forEach(i => { bySite[i.site] = (bySite[i.site] || 0) + 1; });
-  const bySiteArr = Object.entries(bySite).sort((a, b) => b[1] - a[1]);
-  const heuresParTech = {}; filtered.forEach(i => { heuresParTech[i.technicien] = (heuresParTech[i.technicien] || 0) + (i.heures || 0); });
-  const heuresArr = Object.entries(heuresParTech).sort((a, b) => b[1] - a[1]);
-  const evolution = evolutionMensuelle(filtered);
+  // Un appel = une fiche qui n'est pas le déplacement « suite » d'un autre appel.
+  const appels = f.filter(i => !i.appelOrigineId);
+  const deplacements = f.filter(i => !i.sansDeplacement);
+  const parTel = appels.filter(i => i.sansDeplacement && !f.some(x => x.appelOrigineId === i.id));
+  const pct = (n, t) => t ? Math.round(n / t * 100) : 0;
+  const hSite = deplacements.reduce((s, i) => s + (parseFloat(i.heures) || 0), 0);
+  const hNuit = f.reduce((s, i) => s + (parseFloat(i.heuresNuit) || 0), 0);
+  const primes = f.reduce((s, i) => s + (parseFloat(i.primeDimanche) || 0), 0);
+  const minTel = f.reduce((s, i) => s + (parseFloat(i.dureeAppelMin) || 0), 0);
+  const aCompleter = deplacements.filter(i => i.horairesACompleter).length;
+  const hm = t => { if (!t) return null; const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0); };
+  const delais = deplacements.map(i => {
+    const origine = i.appelOrigineId ? toutes.find(x => x.id === i.appelOrigineId) : i;
+    const a = hm(origine?.heureAppel), d = hm(i.heureDebut);
+    if (a == null || d == null) return null;
+    let x = d - a; if (x < 0) x += 1440; return x <= 720 ? x : null;
+  }).filter(x => x != null);
+  const delaiMoy = delais.length ? Math.round(delais.reduce((s, x) => s + x, 0) / delais.length) : null;
+  const heureDe = i => hm(i.heureAppel) ?? hm(i.heureDebut);
+  const parHeure = Array(24).fill(0); appels.forEach(i => { const m = heureDe(i); if (m != null) parHeure[Math.floor(m / 60) % 24]++; });
+  const avecHeure = parHeure.reduce((s, x) => s + x, 0);
+  const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+  const parJour = Array(7).fill(0); appels.forEach(i => { parJour[(new Date(i.date + "T12:00").getDay() + 6) % 7]++; });
+  const nuitCount = appels.filter(i => { const m = heureDe(i); return m != null && (m >= 21 * 60 || m < 6 * 60); }).length;
+  const weCount = parJour[5] + parJour[6];
+  const grouper = (liste, cle) => { const o = {}; liste.forEach(i => { const k = cle(i) || "—"; (o[k] = o[k] || []).push(i); }); return Object.entries(o).sort((a, b) => b[1].length - a[1].length); };
+  const parN1 = grouper(appels, i => i.n1Contacte);
+  const parSite = grouper(appels, i => i.site);
+  const parType = grouper(appels, i => i.type);
+  const parTech = grouper(deplacements, i => i.technicien);
+
+  // Évolution 12 mois : réglés par téléphone / déplacements
+  const mois = []; for (let k = 11; k >= 0; k--) { const d = new Date(auj.getFullYear(), auj.getMonth() - k, 1); mois.push({ cle: d.toISOString().slice(0, 7), label: d.toLocaleDateString("fr-FR", { month: "short" }) }); }
+  const base = toutes.filter(i => (ui.filterTech === "Tous" || i.technicien === ui.filterTech) && (ui.filterSite === "Tous" || i.site === ui.filterSite) && (ui.synthN1 === "Tous" || i.n1Contacte === ui.synthN1));
+  const evo = mois.map(m => ({ ...m, tel: base.filter(i => i.date.startsWith(m.cle) && i.sansDeplacement && !i.appelOrigineId).length, dep: base.filter(i => i.date.startsWith(m.cle) && !i.sansDeplacement).length }));
+  const maxEvo = Math.max(1, ...evo.map(e => e.tel + e.dep));
+  const maxH = Math.max(1, ...parHeure), maxJ = Math.max(1, ...parJour);
+  const barres = (liste, total, extra) => liste.slice(0, 8).map(([k, l]) => `
+    <div class="sy-barre"><span class="sy-barre-nom" title="${esc(k)}">${esc(k)}</span>
+      <span class="sy-barre-piste"><i style="width:${pct(l.length, liste[0][1].length)}%"></i></span>
+      <b>${l.length}</b>${extra ? `<small>${extra(l)}</small>` : ""}</div>`).join("") || `<p class="hint">—</p>`;
+
+  const hPic = parHeure.indexOf(Math.max(...parHeure));
+  const jPic = parJour.indexOf(Math.max(...parJour));
+  const insights = [
+    appels.length && `<b>${pct(parTel.length, appels.length)} %</b> des appels ont été réglés par téléphone, sans déplacement.`,
+    avecHeure && `Créneau le plus chargé : <b>${hPic}h – ${hPic + 1}h</b> (${parHeure[hPic]} appel${parHeure[hPic] > 1 ? "s" : ""}).`,
+    appels.length && `Jour le plus chargé : <b>${["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"][jPic]}</b> · ${pct(weCount, appels.length)} % des appels tombent le week-end.`,
+    avecHeure && `<b>${pct(nuitCount, avecHeure)} %</b> des appels arrivent la nuit (21h – 6h).`,
+    parSite[0] && parSite[0][0] !== "—" && `Site le plus sollicité : <b>${esc(parSite[0][0])}</b> (${parSite[0][1].length} appel${parSite[0][1].length > 1 ? "s" : ""}).`,
+    delaiMoy != null && `Délai moyen entre l'appel et le départ du technicien : <b>${delaiMoy} min</b>.`,
+    minTel > 0 && `Temps passé au téléphone par le N1 : <b>${Math.floor(minTel / 60)} h ${String(Math.round(minTel % 60)).padStart(2, "0")}</b>.`,
+    aCompleter && `⚠️ ${aCompleter} déplacement${aCompleter > 1 ? "s" : ""} sans horaires : chiffres d'heures incomplets.`,
+  ].filter(Boolean);
+  const sel = (id, liste, val) => `<select id="${id}">${liste.map(x => `<option value="${esc(x)}" ${val === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
 
   container.innerHTML = `
-    <div class="stack">
-      <div class="filters-row" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
-        <label style="font-size:11px;color:var(--text-dim)">Technicien<br><select id="filter-tech">${techs.map(t => `<option value="${esc(t)}" ${ui.filterTech === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select></label>
-        <label style="font-size:11px;color:var(--text-dim)">Site<br><select id="filter-site">${sites.map(s => `<option value="${esc(s)}" ${ui.filterSite === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}</select></label>
-        <div class="stat-chip" style="border-color:var(--teal);color:var(--teal)">${filtered.length} intervention${filtered.length > 1 ? "s" : ""} · ${totalHeures.toFixed(2)} h</div>
+  <div class="stack sy">
+    <div class="sy-filtres">
+      <div class="iv-chips">${[["mois", "Ce mois-ci"], ["3mois", "3 mois"], ["12mois", "12 mois"], ["scolaire", "Année scolaire"], ["tout", "Tout"]].map(([k, l]) => `<button class="iv-chip ${ui.synthPeriode === k ? "on" : ""}" data-sy-periode="${k}">${l}</button>`).join("")}</div>
+      <label>N1${sel("sy-n1", n1s, ui.synthN1)}</label>
+      <label>Technicien${sel("filter-tech", techs, ui.filterTech)}</label>
+      <label>Site${sel("filter-site", sites, ui.filterSite)}</label>
+    </div>
+
+    <div class="sy-kpis">
+      <div class="sy-kpi"><span>📞 Appels reçus</span><b>${appels.length}</b><small>${minTel ? `${Math.round(minTel)} min au téléphone` : "&nbsp;"}</small></div>
+      <div class="sy-kpi vert"><span>☎️ Réglés par téléphone</span><b>${parTel.length}</b><small>${pct(parTel.length, appels.length)} % des appels</small></div>
+      <div class="sy-kpi bleu"><span>🚗 Déplacements</span><b>${deplacements.length}</b><small>${pct(deplacements.length, appels.length)} % des appels</small></div>
+      <div class="sy-kpi"><span>🕐 Heures sur site</span><b>${hSite.toFixed(1)} h</b><small>${deplacements.length ? `${(hSite / deplacements.length).toFixed(1)} h / déplacement` : "&nbsp;"}</small></div>
+      <div class="sy-kpi violet"><span>🌙 Heures de nuit</span><b>${hNuit.toFixed(1)} h</b><small>${nuitCount} appel${nuitCount > 1 ? "s" : ""} de nuit</small></div>
+      <div class="sy-kpi or"><span>🌞 Primes dimanche</span><b>${primes} €</b><small>${weCount} appel${weCount > 1 ? "s" : ""} le week-end</small></div>
+      <div class="sy-kpi"><span>⚡ Délai appel → départ</span><b>${delaiMoy != null ? `${delaiMoy} min` : "—"}</b><small>${delais.length ? `sur ${delais.length} déplacement${delais.length > 1 ? "s" : ""}` : "heure d'appel à saisir"}</small></div>
+      <div class="sy-kpi ${aCompleter ? "alerte" : ""}"><span>🕒 Horaires à compléter</span><b>${aCompleter}</b><small>déplacement${aCompleter > 1 ? "s" : ""} en attente</small></div>
+    </div>
+
+    ${insights.length ? `<div class="sy-carte sy-insights"><h3>💡 À retenir</h3><ul>${insights.map(x => `<li>${x}</li>`).join("")}</ul></div>` : ""}
+
+    <div class="sy-carte">
+      <h3>Évolution sur 12 mois <span class="sy-leg"><i class="vert"></i>Réglés par téléphone <i class="bleu"></i>Déplacements</span></h3>
+      <div class="sy-evo">${evo.map(e => `<div class="sy-evo-col" title="${e.label} : ${e.tel} par téléphone, ${e.dep} déplacement(s)"><div class="sy-evo-pile"><i class="bleu" style="height:${e.dep / maxEvo * 100}%"></i><i class="vert" style="height:${e.tel / maxEvo * 100}%"></i></div><b>${e.tel + e.dep || ""}</b><small>${e.label}</small></div>`).join("")}</div>
+    </div>
+
+    <div class="sy-2col">
+      <div class="sy-carte">
+        <h3>Heure des appels ${avecHeure < appels.length ? `<small>(${avecHeure}/${appels.length} avec heure)</small>` : ""}</h3>
+        <div class="sy-heures">${parHeure.map((n, h) => `<div class="sy-h ${h >= 21 || h < 6 ? "nuit" : ""}" title="${h}h : ${n} appel(s)"><i style="height:${n / maxH * 100}%"></i><small>${h % 3 === 0 ? h + "h" : ""}</small></div>`).join("")}</div>
+        <p class="sy-note">En violet : la nuit (21h – 6h).</p>
       </div>
-      <div class="form-card">
-        <h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Évolution mensuelle — 12 derniers mois</h3>
-        <div style="position:relative;height:220px"><canvas id="synth-evolution"></canvas></div>
-      </div>
-      <div class="stats-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par type d'intervention</h3><div style="position:relative;height:220px"><canvas id="synth-types"></canvas></div></div>
-        <div class="form-card"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Par site</h3><div style="position:relative;height:220px"><canvas id="synth-sites"></canvas></div></div>
-        <div class="form-card" style="grid-column:1/-1"><h3 style="margin:0 0 12px;font-size:13px;color:var(--text-dim)">Heures cumulées par technicien</h3><div style="position:relative;height:${Math.max(160, heuresArr.length * 34)}px"><canvas id="synth-heures"></canvas></div></div>
+      <div class="sy-carte">
+        <h3>Jour de la semaine</h3>
+        <div class="sy-jours">${parJour.map((n, j) => `<div class="sy-j ${j >= 5 ? "we" : ""}"><b>${n}</b><div class="sy-j-piste"><i style="height:${n / maxJ * 100}%"></i></div><small>${JOURS[j]}</small></div>`).join("")}</div>
       </div>
     </div>
-  `;
+
+    <div class="sy-2col">
+      <div class="sy-carte"><h3>Appels par cadre d'astreinte (N1)</h3>${barres(parN1, appels.length, l => `${pct(l.filter(i => i.sansDeplacement).length, l.length)} % tél.`)}</div>
+      <div class="sy-carte"><h3>Sites les plus sollicités</h3>${barres(parSite, appels.length, l => `${l.filter(i => !i.sansDeplacement).length} dépl.`)}</div>
+      <div class="sy-carte"><h3>Types d'intervention</h3>${barres(parType, appels.length)}</div>
+      <div class="sy-carte"><h3>Techniciens (déplacements)</h3>
+        <table class="sy-table"><thead><tr><th>Technicien</th><th>Dépl.</th><th>Heures</th><th>Nuit</th><th>Primes</th></tr></thead><tbody>
+        ${parTech.map(([t, l]) => `<tr><td><b>${esc(t)}</b></td><td>${l.length}</td><td>${l.reduce((s, i) => s + (parseFloat(i.heures) || 0), 0).toFixed(1)} h</td><td>${l.reduce((s, i) => s + (parseFloat(i.heuresNuit) || 0), 0).toFixed(1)} h</td><td>${l.reduce((s, i) => s + (parseFloat(i.primeDimanche) || 0), 0)} €</td></tr>`).join("") || `<tr><td colspan="5" class="hint">Aucun déplacement</td></tr>`}
+        </tbody></table>
+      </div>
+    </div>
+  </div>`;
+
+  container.querySelectorAll("[data-sy-periode]").forEach(b => b.addEventListener("click", () => { ui.synthPeriode = b.dataset.syPeriode; renderAll(); }));
+  document.getElementById("sy-n1").addEventListener("change", (e) => { ui.synthN1 = e.target.value; renderAll(); });
   document.getElementById("filter-tech").addEventListener("change", (e) => { ui.filterTech = e.target.value; renderAll(); });
   document.getElementById("filter-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; renderAll(); });
-
-  if (!window.Chart) return; // librairie pas encore chargée (connexion lente) — les filtres/chiffres restent utilisables
-
-  graphiquesSynthese.evolution = new window.Chart(document.getElementById("synth-evolution").getContext("2d"), {
-    type: "bar",
-    data: { labels: evolution.labels, datasets: [{ label: "Interventions", data: evolution.valeurs, backgroundColor: "rgba(217,178,76,.75)", borderColor: "#D9B24C", borderWidth: 1.5, borderRadius: 5, maxBarThickness: 28 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0, color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, x: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
-  });
-  graphiquesSynthese.types = new window.Chart(document.getElementById("synth-types").getContext("2d"), {
-    type: "doughnut",
-    data: { labels: byTypeArr.map(([n]) => n), datasets: [{ data: byTypeArr.map(([, v]) => v), backgroundColor: byTypeArr.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { color: "#8A93A3", boxWidth: 11, font: { size: 11 } } } } },
-  });
-  graphiquesSynthese.sites = new window.Chart(document.getElementById("synth-sites").getContext("2d"), {
-    type: "bar",
-    data: { labels: bySiteArr.map(([n]) => n), datasets: [{ data: bySiteArr.map(([, v]) => v), backgroundColor: bySiteArr.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) }] },
-    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0, color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, y: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
-  });
-  graphiquesSynthese.heures = new window.Chart(document.getElementById("synth-heures").getContext("2d"), {
-    type: "bar",
-    data: { labels: heuresArr.map(([n]) => n), datasets: [{ label: "Heures", data: heuresArr.map(([, v]) => Math.round(v * 100) / 100), backgroundColor: "rgba(63,182,172,.75)", borderColor: "#3FB6AC", borderWidth: 1.5, borderRadius: 5, maxBarThickness: 26 }] },
-    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { color: "#8A93A3" }, grid: { color: "rgba(255,255,255,.06)" } }, y: { ticks: { color: "#8A93A3" }, grid: { display: false } } } },
-  });
 }

@@ -1679,3 +1679,54 @@ html[data-theme="sombre"] .iv-suite-btn{color:#4cc38a}
 @keyframes gh-bc-pulse{0%,100%{box-shadow:0 0 0 3px rgba(255,212,59,.35),0 10px 30px rgba(255,184,0,.3)}50%{box-shadow:0 0 0 8px rgba(255,212,59,.15),0 10px 36px rgba(255,184,0,.55)}}
 @media (max-width:640px){.gh-bandeau-completer{flex-wrap:wrap;padding:14px}.gh-bc-go{width:100%;text-align:center}}
 @media (prefers-reduced-motion:reduce){.gh-bandeau-completer{animation:none}}
+.iv-n1-heure{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ===== Astreinte › Synthèse ===== */
+.iv-n1-large{grid-column:1 / -1}
+.sy-filtres{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.sy-filtres label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-dim)}
+.sy-filtres select{min-height:38px;border-radius:10px;padding:0 10px;background:var(--panel);border:1px solid var(--border);color:var(--text)}
+.iv-chip.on{background:var(--gold);border-color:var(--gold);color:#1A1305}
+.sy-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.sy-kpi{background:var(--panel);border:1px solid var(--border);border-left:4px solid #8A8D93;border-radius:14px;padding:12px 14px}
+.sy-kpi span{display:block;font-size:12px;color:var(--text-dim);font-weight:600}
+.sy-kpi b{display:block;font:800 26px Montserrat,system-ui,sans-serif;color:var(--text);margin:2px 0}
+.sy-kpi small{font-size:11.5px;color:var(--text-dim)}
+.sy-kpi.vert{border-left-color:#1baf7a}.sy-kpi.bleu{border-left-color:#2a78d6}.sy-kpi.violet{border-left-color:#6a5cff}.sy-kpi.or{border-left-color:#e0a526}.sy-kpi.alerte{border-left-color:#C23B27}.sy-kpi.alerte b{color:#C23B27}
+.sy-carte{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
+.sy-carte h3{margin:0 0 12px;font:800 14px Montserrat,system-ui,sans-serif;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.sy-carte h3 small{font-weight:500;color:var(--text-dim);font-size:11px}
+.sy-insights{border-left:5px solid var(--gold)}
+.sy-insights ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:13.5px;color:var(--text)}
+.sy-leg{font-size:11px;font-weight:600;color:var(--text-dim);display:flex;gap:6px;align-items:center}
+.sy-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}
+.vert{--c:#1baf7a}.bleu{--c:#2a78d6}
+.sy-leg i.vert,.sy-evo-pile i.vert{background:#1baf7a}.sy-leg i.bleu,.sy-evo-pile i.bleu{background:#2a78d6}
+.sy-evo{display:grid;grid-template-columns:repeat(12,1fr);gap:6px;align-items:end;height:190px}
+.sy-evo-col{display:flex;flex-direction:column;align-items:center;gap:3px;height:100%}
+.sy-evo-pile{flex:1;width:100%;max-width:34px;display:flex;flex-direction:column-reverse;border-radius:6px;overflow:hidden;background:var(--panel-alt)}
+.sy-evo-pile i{display:block;width:100%}
+.sy-evo-col b{font-size:11px;color:var(--text);min-height:14px}.sy-evo-col small{font-size:10.5px;color:var(--text-dim);text-transform:capitalize}
+.sy-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:860px){.sy-2col{grid-template-columns:1fr}.sy-evo{height:150px}}
+.sy-heures{display:grid;grid-template-columns:repeat(24,1fr);gap:3px;align-items:end;height:150px}
+.sy-h{height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
+.sy-h i{display:block;width:100%;border-radius:4px 4px 0 0;background:#e0a526;min-height:2px}
+.sy-h.nuit i{background:#6a5cff}
+.sy-h small{font-size:9.5px;color:var(--text-dim);height:12px}
+.sy-note{margin:8px 0 0;font-size:11px;color:var(--text-dim)}
+.sy-jours{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;height:170px}
+.sy-j{display:flex;flex-direction:column;align-items:center;gap:4px}
+.sy-j b{font-size:12px;color:var(--text)}
+.sy-j-piste{flex:1;width:100%;max-width:40px;display:flex;align-items:flex-end;background:var(--panel-alt);border-radius:8px;overflow:hidden}
+.sy-j-piste i{display:block;width:100%;background:#2a78d6;border-radius:8px 8px 0 0}
+.sy-j.we .sy-j-piste i{background:#e0a526}
+.sy-j small{font-size:11px;color:var(--text-dim);font-weight:700}
+.sy-barre{display:grid;grid-template-columns:minmax(90px,150px) 1fr 34px auto;gap:8px;align-items:center;padding:5px 0;font-size:13px}
+.sy-barre-nom{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.sy-barre-piste{height:10px;background:var(--panel-alt);border-radius:99px;overflow:hidden}
+.sy-barre-piste i{display:block;height:100%;background:linear-gradient(90deg,#e0a526,#eb6834);border-radius:99px}
+.sy-barre b{text-align:right;color:var(--text)}.sy-barre small{font-size:11px;color:var(--text-dim);white-space:nowrap}
+.sy-table{width:100%;border-collapse:collapse;font-size:13px}
+.sy-table th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);text-align:left;padding:6px 6px;border-bottom:1px solid var(--border)}
+.sy-table td{padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text)}
