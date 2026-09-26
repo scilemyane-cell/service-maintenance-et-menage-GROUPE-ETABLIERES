@@ -103,6 +103,16 @@
   const mountCorbeille = aLaDemande(charger_corbeille, "mountCorbeille");
   const charger_connexions = () => import("./connexions.js");
   const mountConnexions = aLaDemande(charger_connexions, "mountConnexions");
+  // Préchargement en arrière-plan de TOUS les modules, juste après
+  // l'affichage de l'accueil : l'ouverture reste légère, et chaque tuile
+  // s'ouvre ensuite instantanément (code déjà là, gardé en cache).
+  let modulesPrecharges = false;
+  function prechargerModules() {
+    if (modulesPrecharges) return; modulesPrecharges = true;
+    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_statistiques, charger_corbeille, charger_connexions];
+    const suivant = () => { const f = liste.shift(); if (!f) return; f().catch(() => {}).finally(() => setTimeout(suivant, 30)); };
+    (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(() => { suivant(); suivant(); suivant(); }, { timeout: 1500 });
+  }
   const runDailyExportIfNeeded = () => { setTimeout(() => import("./export-sharepoint.js").then(m => m.runDailyExportIfNeeded()).catch(e => console.warn("Export quotidien :", e)), 4000); };
   let currentSubtab = null;
   let dispositifsList = [];
@@ -589,6 +599,7 @@
 
     if (!category) {
       const cats = visibleCategoriesFor(currentUser);
+      setTimeout(prechargerModules, 600);
       mountDashboard(content, currentUser, cats, (catId, dossierIdAOuvrir) => {
         currentCategory = catId;
         const cat = allCategories(currentUser).find(c => c.id === catId);
