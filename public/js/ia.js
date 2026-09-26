@@ -55,25 +55,35 @@ export async function genererTexte(prompt) {
 }
 
 // Compte rendu d'intervention rédigé à partir des champs du formulaire.
+// Le compte rendu décrit CE QUE LE TECHNICIEN A FAIT SUR PLACE : l'appel au
+// N1, la décision et la validation du déplacement sont déjà affichés à part
+// dans la fiche, ils servent seulement de contexte et ne sont pas racontés.
 export async function redigerCompteRendu(f) {
-  const lignes = [
+  const contexte = [
     f.date && `Date : ${f.date}`,
-    f.technicien && `Intervenant : ${f.technicien}`,
     (f.association || f.site) && `Lieu : ${[f.association, f.groupe, f.site].filter(Boolean).join(" / ")}`,
     f.type && `Type : ${f.type}`,
-    (f.heureDebut || f.heureFin) && `Horaires : ${f.heureDebut || "?"} → ${f.heureFin || "?"}`,
-    f.heures && `Durée : ${f.heures} h`,
+    f.appelN1 && f.motifAppelN1 && `Motif de l'appel : ${f.motifAppelN1}`,
     f.sansDeplacement && `Traité par téléphone / à distance, sans déplacement`,
-    f.appelN1 && `Appel au N1 (${f.n1Contacte || "?"}) : ${f.motifAppelN1 || ""}${f.decisionN1 ? " → décision : " + f.decisionN1 : ""}`,
+  ].filter(Boolean).join("\n");
+  const notes = [
     f.description && `Notes du technicien : ${f.description}`,
     f.compteRendu && `Brouillon existant à améliorer : ${f.compteRendu}`,
   ].filter(Boolean).join("\n");
   return genererTexte(`Tu es l'assistant du service maintenance d'un organisme de formation (Groupe Établières, Vendée).
-Rédige le compte rendu d'une intervention d'astreinte, en français, clair et professionnel, à partir des informations ci-dessous.
-Règles : 4 à 8 lignes maximum ; structure « Constat », « Intervention réalisée », « Suite à donner » (écrire « Aucune » s'il n'y a rien) ;
-n'invente AUCUN fait, matériel, cause ou chiffre absent des informations ; corrige l'orthographe ; pas de titre, pas de formule de politesse, pas de Markdown (pas d'astérisques).
+Un technicien${f.technicien ? ` (${f.technicien})` : ""} rédige le compte rendu de SON intervention d'astreinte. Mets ses notes au propre, en français, clair et professionnel, comme s'il l'écrivait lui-même.
+Règles :
+- 2 à 5 lignes, structure « Constat : … », « Travaux réalisés : … », « Suite à donner : … » (« Aucune » si rien n'est indiqué).
+- Décris uniquement ce que le technicien a constaté et fait sur place, d'après SES notes.
+- Ne parle PAS de l'appel au cadre d'astreinte (N1), de qui a appelé qui, ni de la validation du déplacement : c'est déjà noté ailleurs.
+- Ne répète pas la date, le site, le nom du technicien ni les horaires : ils sont déjà affichés.
+- N'invente AUCUN fait, test, résultat, matériel, cause ou chiffre absent des notes. Si les notes ne disent pas que c'est réglé, ne le dis pas.
+- Corrige l'orthographe ; pas de titre, pas de formule de politesse, pas de Markdown (pas d'astérisques).
 
-${lignes}`);
+Contexte (à ne pas recopier) :
+${contexte || "—"}
+
+${notes}`);
 }
 
 // Reformule proprement la décision / consigne du N1 (1 à 2 phrases).

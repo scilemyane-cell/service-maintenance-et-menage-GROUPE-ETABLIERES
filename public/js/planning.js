@@ -2415,12 +2415,12 @@ if (!window.__ivDelegues) {
     if (cible.id === "c-annuler") { ui.completerId = null; ui.completerDraft = null; renderAll(); return; }
     if (cible.id === "c-ia") {
       const ta = document.getElementById("c-cr");
-      const notes = ta.value.trim() || i.description || i.motifAppelN1 || "";
-      if (!notes) { st.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques mots.</span>`; return; }
+      const notes = ta.value.trim();
+      if (!notes) { st.innerHTML = `<span style="color:var(--red)">Écris d'abord en quelques mots ce que tu as constaté et fait sur place.</span>`; return; }
       cible.disabled = true; cible.textContent = "⏳"; st.innerHTML = `<span style="color:var(--text-dim)">✨ Rédaction en cours…</span>`;
       window.__iaEnCours = true;
       try {
-        const texte = (await redigerCompteRendu({ ...i, description: notes, heureDebut: document.getElementById("c-debut")?.value || "", heureFin: document.getElementById("c-fin")?.value || "", compteRendu: "" })).replace(/\*\*/g, "");
+        const texte = (await redigerCompteRendu({ ...i, decisionN1: "", n1Contacte: "", description: notes, heureDebut: document.getElementById("c-debut")?.value || "", heureFin: document.getElementById("c-fin")?.value || "", compteRendu: "" })).replace(/\*\*/g, "");
         if (ui.completerDraft) ui.completerDraft.cr = texte;
         const ta2 = document.getElementById("c-cr"); if (ta2) ta2.value = texte;
         const st2 = document.getElementById("c-statut"); if (st2) st2.innerHTML = `<span style="color:var(--teal)">✓ Relis avant d'enregistrer.</span>`;
@@ -2461,7 +2461,7 @@ if (!window.__ivDelegues) {
 function completerHorairesHTML(i) {
   // Brouillon gardé en mémoire : un ré-affichage (mise à jour de la base)
   // ne doit jamais effacer ce que le technicien vient de saisir.
-  if (!ui.completerDraft || ui.completerDraft.id !== i.id) ui.completerDraft = { id: i.id, debut: i.heureDebut || "", fin: i.heureFin || "", heures: i.heures ? String(i.heures) : "", cr: i.compteRendu || i.description || "" };
+  if (!ui.completerDraft || ui.completerDraft.id !== i.id) ui.completerDraft = { id: i.id, debut: i.heureDebut || "", fin: i.heureFin || "", heures: i.heures ? String(i.heures) : "", cr: i.compteRendu || "" };
   const dr = ui.completerDraft;
   return `
   <div class="iv-completer">
