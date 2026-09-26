@@ -57,8 +57,9 @@
 <!-- Ce fichier est regroupé (bundlé) à partir de public/js/app-main.js
      (source lisible/éditable) par le workflow de déploiement — voir
      .github/workflows/. En local (sans build), ce fichier n'existe pas ;
-     lance `npx esbuild public/js/app-main.js --bundle --format=esm
-     --outfile=public/js/dist/app.bundle.js --external:https://www.gstatic.com/*`
+     lance `npx esbuild public/js/app-main.js --bundle --splitting --format=esm
+     --outdir=public/js/dist --entry-names=app.bundle --chunk-names=chunk-[hash]
+     --external:https://www.gstatic.com/*` (un fichier par module, chargé à la demande)
      pour le générer et tester. -->
 <script type="module" src="js/dist/app.bundle.js"></script>
 </body>

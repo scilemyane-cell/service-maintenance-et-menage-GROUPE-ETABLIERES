@@ -1,6 +1,6 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
 import { watchPeople, watchAbsences, watchInterventions, watchRecurrences } from "./firestore-data.js";
-import { genererOccurrencesRecurrence } from "./planning.js";
+import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";

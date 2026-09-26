@@ -1,48 +1,109 @@
   import { watchAuth, logout, roleLabel } from "./auth.js";
-  import { mountCalendrier, mountAbsencesTab, mountInterventionsTab, mountSyntheseTab, mountTransfertsTab, mountCoordonneesTab, mountArchiveRelevesTab, mountPlanningIndividuelTab, mountMonPlanningTab } from "./planning.js";
-  import { mountSitesDossiers } from "./site-dossier.js";
   import "./ui-feedback.js";
-  import { mountCompteurs } from "./compteurs.js";
-  import { mountMasterlock } from "./masterlock.js";
   import { watchCompteursAlertCount } from "./compteurs-data.js";
-  import { mountStockProduits } from "./stock.js";
-  import { mountStockInventaire } from "./stock-inventaire.js";
-  import { mountStockCommandes } from "./stock-commandes.js";
-  import { mountStockSites } from "./stock-sites.js";
-  import { mountStockCatalogueSite } from "./stock-site-catalogue.js";
-  import { mountFournisseurs } from "./fournisseurs.js";
   import { mountDashboard } from "./home.js";
   import { watchHomeOrder, saveHomeOrder } from "./home-order-data.js";
   import { watchStockAlertCount } from "./stock-alerts-data.js";
   import { mountFichesForDispositif } from "./fiches.js";
-  import { mountHeures } from "./heures.js";
-  import { mountRepartitionForDispositif } from "./heures-repartition.js";
-  import { mountArchiveForDispositif } from "./heures-archive.js";
   import { watchDispositifSettings, heuresEnabled } from "./dispositif-settings-data.js";
-  import { mountTracabilite, mountTracabiliteForDispositif } from "./tracabilite.js";
-  import { mountUtilisateurs, mountAccesRemplacants, mountParametresDispositif, mountAssociationsSites } from "./parametres.js";
-  import { mountMigrationTool } from "./migration-tool.js";
-  import { runDailyExportIfNeeded } from "./export-sharepoint.js";
-  import { mountExportSharepointAdmin } from "./export-sharepoint-admin.js";
-  import { mountQrMasse } from "./qr-print-masse.js";
-  import { mountTaches } from "./taches.js";
-  import { mountSuiviDemandesTab } from "./suivi-demandes.js";
-  import { mountPermissionsDoc } from "./permissions-doc.js";
-  import { mountPrevisionnel } from "./previsionnel.js";
-  import { mountStockMenage } from "./stock-menage.js";
-  import { mountStatistiques } from "./statistiques.js";
-  import { mountCorbeille } from "./corbeille.js";
   import { watchSites } from "./sites-data.js";
   import { watchAccess, hasAccess } from "./access-data.js";
   import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS, getThemeModules, basculerThemeModules } from "./theme.js";
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
   import { watchUsers } from "./users-data.js";
-  import { mountConnexions } from "./connexions.js";
 
   initTheme();
 
   let currentUser = null;
   let currentCategory = null; // null = accueil (bulles)
+
+  // ---------------------------------------------------------------
+  // Modules chargés À LA DEMANDE : le code d'un module (Astreinte, Stock,
+  // Compteurs…) n'est téléchargé qu'à la première ouverture de sa tuile,
+  // au lieu de tout charger au démarrage (ouverture plus rapide sur
+  // téléphone). Les modules déjà ouverts restent en mémoire.
+  // ---------------------------------------------------------------
+  let jetonNavigation = 0;
+  function aLaDemande(charger, nom) {
+    return (cible, user, ...reste) => {
+      const jeton = ++jetonNavigation;
+      const attente = setTimeout(() => { if (jeton === jetonNavigation && cible && !cible.childElementCount) cible.innerHTML = `<div class="hint" style="padding:24px;text-align:center">Chargement…</div>`; }, 120);
+      return charger().then(m => {
+        clearTimeout(attente);
+        if (jeton !== jetonNavigation) return; // l'utilisateur est déjà ailleurs
+        return m[nom](cible, user, ...reste);
+      }).catch(err => {
+        clearTimeout(attente);
+        console.error("Chargement du module", nom, err);
+        if (jeton === jetonNavigation && cible) cible.innerHTML = `<div class="placeholder-card"><b>Module impossible à charger</b><br><br>Vérifie la connexion puis <button class="nav-btn" onclick="location.reload()">Recharger</button></div>`;
+      });
+    };
+  }
+  const charger_planning = () => import("./planning.js");
+  const mountCalendrier = aLaDemande(charger_planning, "mountCalendrier");
+  const mountAbsencesTab = aLaDemande(charger_planning, "mountAbsencesTab");
+  const mountInterventionsTab = aLaDemande(charger_planning, "mountInterventionsTab");
+  const mountSyntheseTab = aLaDemande(charger_planning, "mountSyntheseTab");
+  const mountTransfertsTab = aLaDemande(charger_planning, "mountTransfertsTab");
+  const mountCoordonneesTab = aLaDemande(charger_planning, "mountCoordonneesTab");
+  const mountArchiveRelevesTab = aLaDemande(charger_planning, "mountArchiveRelevesTab");
+  const mountPlanningIndividuelTab = aLaDemande(charger_planning, "mountPlanningIndividuelTab");
+  const mountMonPlanningTab = aLaDemande(charger_planning, "mountMonPlanningTab");
+  const charger_site_dossier = () => import("./site-dossier.js");
+  const mountSitesDossiers = aLaDemande(charger_site_dossier, "mountSitesDossiers");
+  const charger_compteurs = () => import("./compteurs.js");
+  const mountCompteurs = aLaDemande(charger_compteurs, "mountCompteurs");
+  const charger_masterlock = () => import("./masterlock.js");
+  const mountMasterlock = aLaDemande(charger_masterlock, "mountMasterlock");
+  const charger_stock = () => import("./stock.js");
+  const mountStockProduits = aLaDemande(charger_stock, "mountStockProduits");
+  const charger_stock_inventaire = () => import("./stock-inventaire.js");
+  const mountStockInventaire = aLaDemande(charger_stock_inventaire, "mountStockInventaire");
+  const charger_stock_commandes = () => import("./stock-commandes.js");
+  const mountStockCommandes = aLaDemande(charger_stock_commandes, "mountStockCommandes");
+  const charger_stock_sites = () => import("./stock-sites.js");
+  const mountStockSites = aLaDemande(charger_stock_sites, "mountStockSites");
+  const charger_stock_site_catalogue = () => import("./stock-site-catalogue.js");
+  const mountStockCatalogueSite = aLaDemande(charger_stock_site_catalogue, "mountStockCatalogueSite");
+  const charger_fournisseurs = () => import("./fournisseurs.js");
+  const mountFournisseurs = aLaDemande(charger_fournisseurs, "mountFournisseurs");
+  const charger_heures = () => import("./heures.js");
+  const mountHeures = aLaDemande(charger_heures, "mountHeures");
+  const charger_heures_repartition = () => import("./heures-repartition.js");
+  const mountRepartitionForDispositif = aLaDemande(charger_heures_repartition, "mountRepartitionForDispositif");
+  const charger_heures_archive = () => import("./heures-archive.js");
+  const mountArchiveForDispositif = aLaDemande(charger_heures_archive, "mountArchiveForDispositif");
+  const charger_tracabilite = () => import("./tracabilite.js");
+  const mountTracabilite = aLaDemande(charger_tracabilite, "mountTracabilite");
+  const mountTracabiliteForDispositif = aLaDemande(charger_tracabilite, "mountTracabiliteForDispositif");
+  const charger_parametres = () => import("./parametres.js");
+  const mountUtilisateurs = aLaDemande(charger_parametres, "mountUtilisateurs");
+  const mountAccesRemplacants = aLaDemande(charger_parametres, "mountAccesRemplacants");
+  const mountParametresDispositif = aLaDemande(charger_parametres, "mountParametresDispositif");
+  const mountAssociationsSites = aLaDemande(charger_parametres, "mountAssociationsSites");
+  const charger_migration_tool = () => import("./migration-tool.js");
+  const mountMigrationTool = aLaDemande(charger_migration_tool, "mountMigrationTool");
+  const charger_export_sharepoint_admin = () => import("./export-sharepoint-admin.js");
+  const mountExportSharepointAdmin = aLaDemande(charger_export_sharepoint_admin, "mountExportSharepointAdmin");
+  const charger_qr_print_masse = () => import("./qr-print-masse.js");
+  const mountQrMasse = aLaDemande(charger_qr_print_masse, "mountQrMasse");
+  const charger_taches = () => import("./taches.js");
+  const mountTaches = aLaDemande(charger_taches, "mountTaches");
+  const charger_suivi_demandes = () => import("./suivi-demandes.js");
+  const mountSuiviDemandesTab = aLaDemande(charger_suivi_demandes, "mountSuiviDemandesTab");
+  const charger_permissions_doc = () => import("./permissions-doc.js");
+  const mountPermissionsDoc = aLaDemande(charger_permissions_doc, "mountPermissionsDoc");
+  const charger_previsionnel = () => import("./previsionnel.js");
+  const mountPrevisionnel = aLaDemande(charger_previsionnel, "mountPrevisionnel");
+  const charger_stock_menage = () => import("./stock-menage.js");
+  const mountStockMenage = aLaDemande(charger_stock_menage, "mountStockMenage");
+  const charger_statistiques = () => import("./statistiques.js");
+  const mountStatistiques = aLaDemande(charger_statistiques, "mountStatistiques");
+  const charger_corbeille = () => import("./corbeille.js");
+  const mountCorbeille = aLaDemande(charger_corbeille, "mountCorbeille");
+  const charger_connexions = () => import("./connexions.js");
+  const mountConnexions = aLaDemande(charger_connexions, "mountConnexions");
+  const runDailyExportIfNeeded = () => { setTimeout(() => import("./export-sharepoint.js").then(m => m.runDailyExportIfNeeded()).catch(e => console.warn("Export quotidien :", e)), 4000); };
   let currentSubtab = null;
   let dispositifsList = [];
   let accessMap = {};
