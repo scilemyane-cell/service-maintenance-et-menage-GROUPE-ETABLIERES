@@ -2210,7 +2210,7 @@ function appelN1HTML() {
         </select>
       </label>
       <div class="iv-n1-heure">
-        <label>Heure de l'appel<input type="time" id="f-heure-appel" value="${esc(ui.form.heureAppel || "")}"></label>
+        ${champHeureHTML("f-heure-appel", "Heure de l'appel", ui.form.heureAppel || "")}
         <label>Durée de l'appel (min)<input type="number" min="0" step="1" id="f-duree-appel" value="${esc(ui.form.dureeAppelMin || "")}" placeholder="ex. 10"></label>
       </div>
       <label class="iv-n1-large">Demande de l'appelant<input id="f-motif-n1" value="${esc(ui.form.motifAppelN1)}" placeholder="ex. fuite d'eau signalée au 2e étage"></label>
@@ -2333,6 +2333,130 @@ function estMonIntervention(i) {
   return !!(moi && normNomPlanning(moi) === normNomPlanning(i.technicien));
 }
 
+// Saisie d'heure simple (téléphone) : liste Heures + liste Minutes +
+// bouton « Maintenant », au lieu du cadran natif peu pratique. La valeur
+// HH:MM est tenue dans un champ caché qui garde l'id d'origine.
+const HEURES_24 = Array.from({ length: 24 }, (_, k) => String(k).padStart(2, "0"));
+function champHeureHTML(id, libelle, val) {
+  const [h, m] = String(val || "").split(":");
+  const mins = []; for (let x = 0; x < 60; x += 5) mins.push(String(x).padStart(2, "0"));
+  if (m && !mins.includes(m)) { mins.push(m); mins.sort(); }
+  return `<div class="hsel-champ"><span class="hsel-lib">${libelle}</span>
+    <span class="hsel" data-hsel="${id}">
+      <select data-hsel-h aria-label="${libelle} — heure"><option value="">--</option>${HEURES_24.map(x => `<option value="${x}" ${x === h ? "selected" : ""}>${x} h</option>`).join("")}</select>
+      <b>:</b>
+      <select data-hsel-m aria-label="${libelle} — minutes"><option value="">--</option>${mins.map(x => `<option value="${x}" ${x === m ? "selected" : ""}>${x}</option>`).join("")}</select>
+      <button type="button" class="hsel-now" data-hsel-now title="Mettre l'heure actuelle">Maintenant</button>
+      <input type="hidden" id="${id}" value="${esc(val || "")}">
+    </span></div>`;
+}
+function calcHorairesCompleter() {
+  const dr = ui.completerDraft || (ui.completerDraft = { id: ui.completerId });
+  dr.debut = document.getElementById("c-debut")?.value || "";
+  dr.fin = document.getElementById("c-fin")?.value || "";
+  const d = dureeHeures(dr.debut, dr.fin);
+  if (d !== null) { dr.heures = String(d); const hi = document.getElementById("c-heures"); if (hi) hi.value = d; }
+  const tot = document.getElementById("c-total");
+  if (tot) tot.innerHTML = parseFloat(dr.heures) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(dr.heures))}</b>` : "";
+}
+function calcHorairesForm() {
+  ui.form.heureDebut = document.getElementById("f-heure-debut")?.value || "";
+  ui.form.heureFin = document.getElementById("f-heure-fin")?.value || "";
+  const indicator = document.getElementById("interv-nuit-indicator");
+  if (indicator) indicator.innerHTML = nuitIndicatorHTML();
+  const duree = dureeHeures(ui.form.heureDebut, ui.form.heureFin);
+  if (duree !== null) {
+    ui.form.heures = String(duree);
+    const hi = document.getElementById("f-heures"); if (hi) hi.value = duree;
+    const tot = document.getElementById("f-total"); if (tot) tot.innerHTML = `⏱️ Total : <b>${fmtDureeH(duree)}</b>`;
+  }
+}
+function majChampHeure(w) {
+  const h = w.querySelector("[data-hsel-h]"), m = w.querySelector("[data-hsel-m]");
+  if (h.value && !m.value) m.value = "00";
+  const cache = w.querySelector("input[type=hidden]");
+  cache.value = h.value && m.value ? `${h.value}:${m.value}` : "";
+  if (cache.id === "f-heure-appel") ui.form.heureAppel = cache.value;
+  else if (cache.id.startsWith("c-")) calcHorairesCompleter(); else calcHorairesForm();
+}
+// Écouteurs délégués posés UNE fois sur le document : ils marchent quel que
+// soit le moment où le formulaire est (ré)affiché, et ne dépendent plus des
+// autres écouteurs du formulaire (une erreur ailleurs ne les bloque plus).
+if (!window.__ivDelegues) {
+  window.__ivDelegues = true;
+  document.addEventListener("change", (e) => {
+    const w = e.target.closest?.("[data-hsel]"); if (w) majChampHeure(w);
+  });
+  document.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.id === "c-heures" && ui.completerDraft) {
+      ui.completerDraft.heures = t.value;
+      const tot = document.getElementById("c-total");
+      if (tot) tot.innerHTML = parseFloat(t.value) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(t.value))}</b>` : "";
+    }
+    if (t.id === "c-cr" && ui.completerDraft) ui.completerDraft.cr = t.value;
+  });
+  document.addEventListener("click", async (e) => {
+    const now = e.target.closest?.("[data-hsel-now]");
+    if (now) {
+      const w = now.closest("[data-hsel]"), d = new Date();
+      const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+      const sm = w.querySelector("[data-hsel-m]");
+      if (![...sm.options].some(o => o.value === mm)) sm.add(new Option(mm, mm));
+      w.querySelector("[data-hsel-h]").value = hh; sm.value = mm;
+      majChampHeure(w);
+      return;
+    }
+    const cible = e.target.closest?.("#c-ia, #c-valider, #c-annuler");
+    if (!cible || !ui.completerId) return;
+    const i = state.interventions.find(x => x.id === ui.completerId);
+    const st = document.getElementById("c-statut");
+    if (!i) return;
+    if (cible.id === "c-annuler") { ui.completerId = null; ui.completerDraft = null; renderAll(); return; }
+    if (cible.id === "c-ia") {
+      const ta = document.getElementById("c-cr");
+      const notes = ta.value.trim() || i.description || i.motifAppelN1 || "";
+      if (!notes) { st.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques mots.</span>`; return; }
+      cible.disabled = true; cible.textContent = "⏳"; st.innerHTML = `<span style="color:var(--text-dim)">✨ Rédaction en cours…</span>`;
+      window.__iaEnCours = true;
+      try {
+        const texte = (await redigerCompteRendu({ ...i, description: notes, heureDebut: document.getElementById("c-debut")?.value || "", heureFin: document.getElementById("c-fin")?.value || "", compteRendu: "" })).replace(/\*\*/g, "");
+        if (ui.completerDraft) ui.completerDraft.cr = texte;
+        const ta2 = document.getElementById("c-cr"); if (ta2) ta2.value = texte;
+        const st2 = document.getElementById("c-statut"); if (st2) st2.innerHTML = `<span style="color:var(--teal)">✓ Relis avant d'enregistrer.</span>`;
+      } catch (err) {
+        console.error("IA :", err);
+        const st2 = document.getElementById("c-statut"); if (st2) st2.innerHTML = `<span style="color:var(--red)">❌ IA : ${esc(err.message || String(err))}</span>`;
+      } finally {
+        window.__iaEnCours = false;
+        const b2 = document.getElementById("c-ia"); if (b2) { b2.disabled = false; b2.textContent = "✨"; }
+        if (renderEnAttente) setTimeout(renderSiLibre, 80);
+      }
+      return;
+    }
+    // c-valider
+    const debut = document.getElementById("c-debut")?.value || "", fin = document.getElementById("c-fin")?.value || "";
+    if (!debut || !fin) { st.innerHTML = `<span style="color:var(--red)">Indique l'heure de départ et l'heure de retour.</span>`; return; }
+    let heures = parseFloat(document.getElementById("c-heures")?.value) || 0;
+    if (!heures) heures = dureeHeures(debut, fin) || 0;
+    st.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    cible.disabled = true;
+    try {
+      await updateIntervention(i.id, {
+        heureDebut: debut, heureFin: fin, heures, heuresNuit: heuresDeNuit(debut, fin),
+        compteRendu: (document.getElementById("c-cr")?.value || "").trim(),
+        horairesACompleter: false, horairesCompletesPar: mountedUser?.nom || mountedUser?.email || "", horairesCompletesLe: Date.now(),
+      });
+      ui.completerId = null; ui.completerDraft = null;
+      window.toast?.(`✓ Horaires enregistrés (${fmtDureeH(heures)})`);
+      renderAll();
+    } catch (err) {
+      cible.disabled = false;
+      st.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}${/permission/i.test(String(err.message)) ? " — il faut publier la dernière règle Firestore (bloc interventions)." : ""}</span>`;
+    }
+  });
+}
+
 // Petit formulaire « Compléter mes horaires » (technicien, au retour).
 function completerHorairesHTML(i) {
   // Brouillon gardé en mémoire : un ré-affichage (mise à jour de la base)
@@ -2343,13 +2467,11 @@ function completerHorairesHTML(i) {
   <div class="iv-completer">
     <div class="iv-completer-tete"><b>🕒 Horaires de ${esc(i.technicien || "l'intervention")}</b><span>${esc(nomPropre(i.site || ""))} · ${new Date(i.date).toLocaleDateString("fr-FR")}${i.motifAppelN1 ? ` · ${esc(i.motifAppelN1)}` : ""}</span></div>
     <div class="iv-completer-grille">
-      <label>Heure de départ<input type="time" id="c-debut" value="${esc(dr.debut)}"></label>
-      <label>Heure de retour<input type="time" id="c-fin" value="${esc(dr.fin)}"></label>
-      <label>Heures<input type="number" step="0.25" min="0" inputmode="decimal" id="c-heures" value="${esc(dr.heures)}" placeholder="calcul auto"></label>
+      ${champHeureHTML("c-debut", "🚗 Départ", dr.debut)}
+      ${champHeureHTML("c-fin", "🏠 Retour", dr.fin)}
     </div>
-    <div class="iv-total" id="c-total">${parseFloat(dr.heures) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(dr.heures))}</b>` : ""}</div>
-    <div>
-    </div>
+    <div class="iv-total iv-total-c" id="c-total">${parseFloat(dr.heures) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(dr.heures))}</b>` : ""}</div>
+    <label class="iv-completer-h">Corriger le total si besoin (heures)<input type="number" step="0.25" min="0" inputmode="decimal" id="c-heures" value="${esc(dr.heures)}" placeholder="calcul auto"></label>
     <label class="iv-completer-cr">Ce que tu as fait (optionnel)
       <span class="iv-n1-ia"><textarea id="c-cr" rows="3" placeholder="ex. joint de siphon changé, fuite stoppée">${esc(dr.cr)}</textarea><button type="button" class="iv-ia petit" id="c-ia" title="Mettre au propre avec l'IA">✨</button></span>
     </label>
@@ -2449,8 +2571,8 @@ function renderInterventions(container, perms) {
         </div>
         <div class="iv-section">Horaires ${ui.form.sansDeplacement === false && mountedUser.role !== "technicien" ? `<small>— peut rester vide : le technicien les complètera à son retour</small>` : ""}</div>
         <div class="form-grid iv-grille iv-grille-h">
-          <label>Heure de départ<input type="time" id="f-heure-debut" value="${esc(ui.form.heureDebut)}"></label>
-          <label>Heure de retour<input type="time" id="f-heure-fin" value="${esc(ui.form.heureFin)}"></label>
+          ${champHeureHTML("f-heure-debut", "Heure de départ", ui.form.heureDebut)}
+          ${champHeureHTML("f-heure-fin", "Heure de retour", ui.form.heureFin)}
           <label>Heures<input type="number" step="0.25" min="0" inputmode="decimal" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calcul auto"></label>
         </div>
         <div class="iv-total" id="f-total">${ui.form.heures ? `⏱️ Total : <b>${fmtDureeH(parseFloat(ui.form.heures))}</b>` : ""}</div>
@@ -2546,8 +2668,8 @@ function renderInterventions(container, perms) {
   `;
 
   if (perms.canLogIntervention) {
-    attacherPhotosInterventionListeners();
-    attacherEcouteursAppelN1();
+    try { attacherPhotosInterventionListeners(); } catch (e) { console.error(e); }
+    try { attacherEcouteursAppelN1(); } catch (e) { console.error(e); }
     container.querySelectorAll("[data-iv-mode]").forEach(b => b.addEventListener("click", () => {
       ui.form.sansDeplacement = b.dataset.ivMode === "appel";
       container.querySelectorAll("[data-iv-mode]").forEach(x => x.classList.toggle("actif", x === b));
@@ -2581,7 +2703,7 @@ function renderInterventions(container, perms) {
       el.addEventListener("input", () => { const key = field === "desc" ? "description" : field; ui.form[key] = el.value; });
     });
     document.getElementById("f-numero")?.addEventListener("input", (e) => { ui.form.numero = e.target.value; });
-    document.getElementById("f-date").addEventListener("change", (e) => {
+    document.getElementById("f-date")?.addEventListener("change", (e) => {
       // On accepte toujours ce qui est tapé, même une valeur intermédiaire
       // improbable en cours de frappe — la remettre de force à l'ancienne
       // valeur ici empêchait de taper une nouvelle date au clavier
@@ -2591,27 +2713,7 @@ function renderInterventions(container, perms) {
       const indicator = document.getElementById("interv-nuit-indicator");
       if (indicator) indicator.innerHTML = nuitIndicatorHTML();
     });
-    function onHeureChange() {
-      // Mise à jour ciblée seulement (pas de renderAll) : un ré-affichage
-      // complet du formulaire à chaque frappe faisait perdre le focus du
-      // champ et provoquait des bugs de saisie sur les heures.
-      ui.form.heureDebut = document.getElementById("f-heure-debut").value;
-      ui.form.heureFin = document.getElementById("f-heure-fin").value;
-      const indicator = document.getElementById("interv-nuit-indicator");
-      if (indicator) indicator.innerHTML = nuitIndicatorHTML();
-      const duree = dureeHeures(ui.form.heureDebut, ui.form.heureFin);
-      if (duree !== null) {
-        ui.form.heures = String(duree);
-        const heuresInput = document.getElementById("f-heures");
-        if (heuresInput) heuresInput.value = duree;
-        const tot = document.getElementById("f-total"); if (tot) tot.innerHTML = `⏱️ Total : <b>${fmtDureeH(duree)}</b>`;
-      }
-    }
-    ["input", "change", "blur"].forEach(ev => {
-      document.getElementById("f-heure-debut").addEventListener(ev, onHeureChange);
-      document.getElementById("f-heure-fin").addEventListener(ev, onHeureChange);
-    });
-    document.getElementById("f-association").addEventListener("change", (e) => {
+    document.getElementById("f-association")?.addEventListener("change", (e) => {
       ui.form.association = e.target.value;
       ui.form.groupe = "";
       ui.form.site = "";
@@ -2622,12 +2724,12 @@ function renderInterventions(container, perms) {
       ui.form.site = "";
       renderAll();
     });
-    document.getElementById("f-site").addEventListener("change", (e) => { ui.form.site = e.target.value; });
+    document.getElementById("f-site")?.addEventListener("change", (e) => { ui.form.site = e.target.value; });
     if (!isLockedTech) {
       const techEl = document.getElementById("f-tech");
       if (techEl) ["input", "change"].forEach(ev => techEl.addEventListener(ev, () => { ui.form.technicien = techEl.value; }));
     }
-    document.getElementById("add-interv").addEventListener("click", async () => {
+    document.getElementById("add-interv")?.addEventListener("click", async () => {
       const statusEl = document.getElementById("interv-status");
       if (!isPlausibleDate(ui.form.date)) { statusEl.innerHTML = `<span style="color:var(--red)">La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement.</span>`; return; }
       if (ui.form.sansDeplacement !== true && ui.form.sansDeplacement !== false) {
@@ -2763,54 +2865,10 @@ function renderInterventions(container, perms) {
     container.querySelectorAll("[data-completer]").forEach(btn => btn.addEventListener("click", () => {
       ui.completerId = ui.completerId === btn.dataset.completer ? null : btn.dataset.completer;
       renderAll();
-      document.getElementById("c-debut")?.focus();
+      if (ui.completerId) requestAnimationFrame(() => document.querySelector(".iv-completer")?.scrollIntoView({ behavior: "smooth", block: "center" }));
     }));
     if (ui.completerId) {
-      if (defilerVersCompleter) requestAnimationFrame(() => { document.querySelector(".iv-completer")?.scrollIntoView({ behavior: "smooth", block: "center" }); document.getElementById("c-debut")?.focus({ preventScroll: true }); });
-      const i = state.interventions.find(x => x.id === ui.completerId);
-      const calc = () => {
-        const dr = ui.completerDraft || (ui.completerDraft = { id: i.id });
-        dr.debut = document.getElementById("c-debut").value;
-        dr.fin = document.getElementById("c-fin").value;
-        const d = dureeHeures(dr.debut, dr.fin);
-        if (d !== null) { dr.heures = String(d); document.getElementById("c-heures").value = d; }
-        const tot = document.getElementById("c-total");
-        if (tot) tot.innerHTML = parseFloat(dr.heures) > 0 ? `⏱️ Total : <b>${fmtDureeH(parseFloat(dr.heures))}</b>` : "";
-      };
-      document.getElementById("c-heures")?.addEventListener("input", (e) => { if (ui.completerDraft) ui.completerDraft.heures = e.target.value; });
-      document.getElementById("c-cr")?.addEventListener("input", (e) => { if (ui.completerDraft) ui.completerDraft.cr = e.target.value; });
-      ["input", "change", "blur"].forEach(ev => { document.getElementById("c-debut")?.addEventListener(ev, calc); document.getElementById("c-fin")?.addEventListener(ev, calc); });
-      document.getElementById("c-annuler")?.addEventListener("click", () => { ui.completerId = null; renderAll(); });
-      document.getElementById("c-ia")?.addEventListener("click", async (e) => {
-        const b = e.currentTarget, st = document.getElementById("c-statut"), ta = document.getElementById("c-cr");
-        if (!ta.value.trim()) { st.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques mots.</span>`; return; }
-        b.disabled = true; b.textContent = "⏳";
-        try {
-          ta.value = (await redigerCompteRendu({ ...i, description: ta.value, heureDebut: document.getElementById("c-debut").value, heureFin: document.getElementById("c-fin").value, compteRendu: "" })).replace(/\*\*/g, "");
-          st.innerHTML = `<span style="color:var(--teal)">✓ Relis avant d'enregistrer.</span>`;
-        } catch (err) { st.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`; }
-        finally { b.disabled = false; b.textContent = "✨"; }
-      });
-      document.getElementById("c-valider")?.addEventListener("click", async () => {
-        const st = document.getElementById("c-statut");
-        const debut = document.getElementById("c-debut").value, fin = document.getElementById("c-fin").value;
-        let heures = parseFloat(document.getElementById("c-heures").value) || 0;
-        if (!heures) heures = dureeHeures(debut, fin) || 0;
-        if (!debut || !fin) { st.innerHTML = `<span style="color:var(--red)">Indique l'heure de départ et l'heure de retour.</span>`; return; }
-        st.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
-        try {
-          await updateIntervention(i.id, {
-            heureDebut: debut, heureFin: fin, heures, heuresNuit: heuresDeNuit(debut, fin),
-            compteRendu: document.getElementById("c-cr").value.trim(),
-            horairesACompleter: false, horairesCompletesPar: mountedUser.nom || mountedUser.email || "", horairesCompletesLe: Date.now(),
-          });
-          ui.completerId = null; ui.completerDraft = null;
-          window.toast?.("✓ Horaires enregistrés");
-          renderAll();
-        } catch (err) {
-          st.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}${/permission/i.test(String(err.message)) ? " — il faut publier la dernière règle Firestore (bloc interventions)." : ""}</span>`;
-        }
-      });
+      if (defilerVersCompleter) requestAnimationFrame(() => { document.querySelector(".iv-completer")?.scrollIntoView({ behavior: "smooth", block: "center" }); });
     }
     container.querySelectorAll("[data-creer-deplacement]").forEach(btn => btn.addEventListener("click", () => {
       const a = state.interventions.find(x => x.id === btn.dataset.creerDeplacement);

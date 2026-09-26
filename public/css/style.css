@@ -1948,3 +1948,18 @@ html[data-theme="sombre"] #content .form-card{box-shadow:0 10px 28px rgba(0,0,0,
   #content .form-grid label:has(#fc-prev){grid-column:1 / -1}
   #content .form-grid label:has(#fc-prev) > div{justify-content:space-between}
 }
+
+/* ===== Saisie d'heure simplifiée (listes + « Maintenant ») ===== */
+.hsel-champ{display:flex;flex-direction:column;gap:4px;min-width:0}
+.hsel-lib{font-size:12px;color:var(--text-dim);font-weight:600}
+.hsel{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+.hsel b{font-size:18px;color:var(--text-dim)}
+.hsel select{flex:1 1 0;min-width:64px;height:44px;font-size:17px;font-weight:700;text-align:center;border-radius:10px;padding:0 6px}
+.hsel-now{flex:0 0 auto;height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--teal,#14b8a6);background:rgba(20,184,166,.12);color:var(--teal,#0d9488);font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.hsel-now:active{transform:scale(.96)}
+.iv-grille-h .hsel-champ,.iv-completer-grille .hsel-champ,.iv-n1-heure .hsel-champ{grid-column:span 2}
+.iv-completer-grille{grid-template-columns:1fr 1fr !important}
+.iv-n1-heure{grid-template-columns:1fr 1fr}
+.iv-total-c{font-size:16px;padding:10px 12px;border-radius:10px;background:rgba(20,184,166,.12);border:1px solid rgba(20,184,166,.35);margin:10px 0}
+.iv-completer-h{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-dim);max-width:260px;margin-bottom:8px}
+@media (min-width:721px){.iv-grille-h .hsel-champ,.iv-completer-grille .hsel-champ{grid-column:auto}.iv-grille-h{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
