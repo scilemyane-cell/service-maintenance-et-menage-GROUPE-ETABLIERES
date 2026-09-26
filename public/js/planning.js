@@ -2485,7 +2485,7 @@ function renderInterventions(container, perms) {
   // formulaire « Compléter mes horaires » de cette intervention.
   let defilerVersCompleter = false;
   if (window.ouvrirCompleterId && state.interventions.some(x => x.id === window.ouvrirCompleterId)) {
-    ui.completerId = window.ouvrirCompleterId; window.ouvrirCompleterId = null; defilerVersCompleter = true;
+    ui.completerId = window.ouvrirCompleterId; window.ouvrirCompleterId = null; defilerVersCompleter = true; if (perms.canLogIntervention) ui.ivOnglet = "mes";
   }
   if (!ui.editingId && ui.form.heureAppel === undefined) ui.form.heureAppel = "";
   const intervenants = [...state.people.n1, ...state.people.n2];
@@ -2509,16 +2509,100 @@ function renderInterventions(container, perms) {
 
   const aCompleter = state.interventions.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe && (perms.isEditor || estMonIntervention(i)));
   const mesACompleter = aCompleter.filter(estMonIntervention);
-  container.innerHTML = `
-    <div class="stack">
-      ${aCompleter.length ? `
+  // ----- Deux onglets : « Mes interventions » (saisie + les miennes) et
+  // « Interventions réalisées » (historique complet, filtres, relevé). -----
+  if (!ui.ivOnglet) ui.ivOnglet = perms.canLogIntervention ? "mes" : "realisees";
+  if (!perms.canLogIntervention) ui.ivOnglet = "realisees";
+  if (!ui.ivFiltre) ui.ivFiltre = { q: "", tech: "", type: "", periode: "tout" };
+  const fl = ui.ivFiltre;
+  const moiUid = mountedUser?.uid;
+  const mesInterv = sorted.filter(i => estMonIntervention(i) || (moiUid && i.createdBy === moiUid));
+  const debutPeriode = (() => {
+    const t = new Date();
+    if (fl.periode === "mois") return dateKey(new Date(t.getFullYear(), t.getMonth(), 1));
+    if (fl.periode === "3mois") return dateKey(new Date(t.getFullYear(), t.getMonth() - 2, 1));
+    if (fl.periode === "scolaire") return dateKey(new Date(t.getMonth() >= 8 ? t.getFullYear() : t.getFullYear() - 1, 8, 1));
+    return "";
+  })();
+  const normQ = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const q = normQ(fl.q.trim());
+  const filtrees = sorted.filter(i =>
+    (!fl.tech || (fl.tech === "__aucun" ? !i.technicien : i.technicien === fl.tech)) &&
+    (!fl.type || (i.type || "") === fl.type) &&
+    (!debutPeriode || (i.date || "") >= debutPeriode) &&
+    (!q || normQ([i.numero, i.site, i.association, i.groupe, i.technicien, i.type, i.description, i.motifAppelN1, i.decisionN1, i.compteRendu].join(" ")).includes(q)));
+  const typesDispo = [...new Set(sorted.map(i => i.type).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
+  const somme = (l, k) => l.reduce((t, i) => t + (parseFloat(i[k]) || 0), 0);
+  const MOIS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+  const carteHTML = (i, avecCompleter) => {
+    const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
+    const repos = analyseReposIntervention(i, state.interventions);
+    const enDouble = i.numero && numerosEnDouble.includes(i.numero);
+    const d = new Date(i.date);
+    const jour = d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
+    const couleur = i.technicien ? colorForPerson(i.technicien, state.people) : "#8A93A3";
+    const aCompl = i.horairesACompleter && !i.sansDeplacement;
+    const h = parseFloat(i.heures) || 0;
+    const reposHTML = repos && (repos.decalageNecessaire || repos.violee) ? `
+      <span class="iv-repos ${repos.violee ? "viole" : ""}" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">
+        ${repos.violee ? "⚠️ Repos 11 h non respecté —" : "🛌 Reprise à partir du"} <b>${fmtHeureJour(repos.reposJusqua)}</b>
+      </span>` : "";
+    return `
+    <article class="ivc ${enDouble ? "double" : ""} ${aCompl ? "a-completer" : ""} ${i.sansDeplacement ? "tel" : ""}" style="--ivc:${couleur}">
+      <div class="ivc-tete">
+        <span class="ivc-date"><b>${esc(jour)} ${d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</b><small>${d.getFullYear()}</small></span>
+        <span class="iv-numero ${enDouble ? "double" : ""}">${esc(i.numero || "—")}</span>${enDouble ? `<span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}
+        <span class="ivc-badges">
+          ${i.sansDeplacement ? `<span class="ivc-b gris">📞 Par téléphone</span>` : `<span class="ivc-b bleu">🚗 Sur place</span>`}
+          ${aCompl ? `<span class="ivc-b orange">🕒 Horaires à compléter</span>` : ""}
+          ${i.appelOrigineNumero ? `<span class="ivc-b bleu" title="Déplacement faisant suite à un appel">↪ suite ${esc(i.appelOrigineNumero)}</span>` : ""}
+          ${perms.isEditor && i.transmis ? `<span class="ivc-b vert">✓ Transmis</span>` : ""}
+        </span>
+        <span class="ivc-duree">${h > 0 ? `<b>${fmtDureeH(h)}</b>` : `<b class="muet">${i.sansDeplacement ? "Appel" : "—"}</b>`}${i.heureDebut || i.heureFin ? `<small>${esc(i.heureDebut || "?")} → ${esc(i.heureFin || "?")}</small>` : ""}</span>
+      </div>
+      <div class="ivc-corps">
+        <div class="ivc-lieu"><b>${esc(nomPropre(i.site) || "Site non précisé")}</b>${i.association ? `<small>${esc([i.association, i.groupe].filter(Boolean).join(" · "))}</small>` : ""}</div>
+        <div class="ivc-qui">${i.technicien ? `<span class="iv-qui"><i style="background:${couleur}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">Pas de technicien</span>`}${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</div>
+      </div>
+      ${i.appelN1 ? `<div class="ivc-appel"><span>📞 Appel N1 · <b>${esc(i.n1Contacte || "—")}</b>${i.heureAppel ? ` · ${esc(i.heureAppel)}` : ""}</span><p>${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` <em>→ ${esc(i.decisionN1)}</em>` : ""}</p></div>` : ""}
+      ${i.description ? `<p class="ivc-desc">${esc(i.description)}</p>` : ""}
+      ${i.compteRendu ? `<details class="ivc-cr"><summary>📝 Compte rendu</summary><div>${esc(i.compteRendu).replace(/\n/g, "<br>")}</div></details>` : ""}
+      ${reposHTML}
+      <div class="ivc-pied">
+        <span class="ivc-primes">
+          ${i.heuresNuit > 0 ? `<span class="ivc-b nuit">🌙 ${fmtDureeH(i.heuresNuit)} de nuit</span>` : ""}
+          ${i.primeDimanche > 0 ? `<span class="ivc-b dim">🌞 Dimanche +${i.primeDimanche} €</span>` : ""}
+          ${(i.photos || []).length ? `<button class="ivc-b photo" data-voir-photos-interv="${i.id}">📷 ${i.photos.length} photo${i.photos.length > 1 ? "s" : ""}</button>` : ""}
+          ${perms.isEditor && i.transmis && mountedUser.role === "super_admin" ? `<button class="ivc-b" data-remettre-attente="${i.id}">🔓 Débloquer</button>` : ""}
+        </span>
+        <div class="iv-actions">${aCompl && (perms.isEditor || estMonIntervention(i)) && !perms.lectureSeule ? `<button class="iv-completer-btn" data-completer="${i.id}" title="Saisir l'heure de départ et de retour">🕒 Compléter</button>` : ""}${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div>
+      </div>
+    </article>
+    ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? renderApercuNoteFrais() : ""}
+    ${avecCompleter && ui.completerId === i.id ? completerHorairesHTML(i) : ""}`;
+  };
+  const listeParMois = (liste, avecCompleter) => {
+    if (!liste.length) return `<div class="ivc-vide">Aucune intervention${fl.q || fl.tech || fl.type || fl.periode !== "tout" ? " pour ces filtres" : ""}.</div>`;
+    const groupes = [];
+    liste.forEach(i => { const k = (i.date || "").slice(0, 7); const g = groupes[groupes.length - 1]; if (g && g.k === k) g.l.push(i); else groupes.push({ k, l: [i] }); });
+    return groupes.map(g => {
+      const [a, m] = g.k.split("-");
+      return `<div class="ivc-mois"><h4>${MOIS_FR[parseInt(m, 10) - 1] || ""} ${a}</h4><span>${g.l.length} intervention${g.l.length > 1 ? "s" : ""} · ${fmtDureeH(somme(g.l, "heures"))}</span></div>
+      <div class="ivc-liste">${g.l.map(i => carteHTML(i, avecCompleter)).join("")}</div>`;
+    }).join("");
+  };
+  const completerHorsListe = ui.completerId && state.interventions.find(x => x.id === ui.completerId);
+
+  const rappelHTML = `      ${aCompleter.length ? `
       <div class="iv-rappel">
         <span class="iv-rappel-ico">🕒</span>
         <div><b>${mesACompleter.length ? `Tu as ${mesACompleter.length} intervention${mesACompleter.length > 1 ? "s" : ""} dont les horaires sont à compléter` : `${aCompleter.length} intervention${aCompleter.length > 1 ? "s" : ""} en attente des horaires du technicien`}</b>
         <small>Heure de départ et de retour à saisir au retour (repos de 11h). Clique sur « 🕒 Compléter » sur la ligne.</small></div>
         ${aCompleter.length ? `<button class="iv-completer-btn" data-completer="${(mesACompleter[0] || aCompleter[0]).id}">🕒 Compléter ${mesACompleter.length ? "maintenant" : "la plus ancienne"}</button>` : ""}
       </div>` : ""}
-      ${perms.canLogIntervention ? `
+`;
+  const formHTML = `      ${perms.canLogIntervention ? `
       <div class="form-card iv-carte">
         <div class="iv-tete">
           <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
@@ -2598,7 +2682,8 @@ function renderInterventions(container, perms) {
         <div id="interv-status" style="margin-top:8px;font-size:12px;text-align:right"></div>
       </div>` : ""}
 
-      ${perms.isEditor ? `
+`;
+  const releveHTML = `      ${perms.isEditor ? `
       <div class="form-card iv-carte">
         <div class="iv-tete"><h3>📄 Relevé d'heures supplémentaires</h3><span class="iv-sous">Document à transmettre au manager</span></div>
         <div class="form-grid iv-grille">
@@ -2620,52 +2705,63 @@ function renderInterventions(container, perms) {
       ${ui.docForm.generated ? renderDocPreview() : ""}
       ` : ""}
 
-      ${numerosEnDouble.length > 0 && perms.isEditor ? `
+`;
+  const doublonsHTML = `      ${numerosEnDouble.length > 0 && perms.isEditor ? `
       <div class="form-card" style="border:1px solid var(--red);background:rgba(230,80,80,.08)">
         <p style="margin:0;font-size:12px;color:var(--red)">⚠️ <b>${numerosEnDouble.length} numéro${numerosEnDouble.length > 1 ? "s" : ""} d'intervention en double</b> : ${numerosEnDouble.map(esc).join(", ")}. Les lignes concernées sont surlignées ci-dessous. Ouvre l'une des deux interventions (✏️) et attribue-lui un numéro libre via le champ "N° d'intervention (Super Admin)".</p>
       </div>` : ""}
-      <div class="iv-liste-tete"><h3>🗂️ Interventions</h3><span>${sorted.length} enregistrée${sorted.length > 1 ? "s" : ""}</span></div>
-      <div class="table-wrap iv-table-wrap">
-        <table class="iv-table">
-          <thead><tr><th>N°</th><th>Date</th><th>Intervenant</th><th>Site</th><th>Type</th><th>Heures</th><th>Description</th><th>Primes</th>${perms.isEditor ? '<th>Transmis au manager</th>' : ''}<th></th></tr></thead>
-          <tbody>
-            ${sorted.length === 0 ? `<tr><td colspan="10" class="empty-row">Aucune intervention enregistrée.</td></tr>` :
-              sorted.map(i => {
-                const canDelete = perms.isEditor || i.createdBy === mountedUser.uid;
-                const repos = analyseReposIntervention(i, state.interventions);
-                const enDouble = i.numero && numerosEnDouble.includes(i.numero);
-                const reposHTML = repos && (repos.decalageNecessaire || repos.violee) ? `
-                  <span class="iv-repos ${repos.violee ? "viole" : ""}" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">
-                    ${repos.violee ? "⚠️ Repos 11 h non respecté —" : "🛌 Reprise à partir du"} <b>${fmtHeureJour(repos.reposJusqua)}</b>
-                  </span>` : "";
-                return `<tr ${enDouble ? 'style="background:rgba(230,80,80,.12)"' : ""}>
-                  <td><span class="iv-numero ${enDouble ? "double" : ""}">${esc(i.numero || "—")}</span>${enDouble ? ` <span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}</td>
-                  <td class="iv-date"><b>${new Date(i.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</b><small>${new Date(i.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${new Date(i.date).getFullYear()}</small></td>
-                  <td>${i.technicien ? `<span class="iv-qui"><i style="background:${colorForPerson(i.technicien, state.people)}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">—</span>`}</td>
-                  <td class="iv-site"><b>${esc(nomPropre(i.site) || "—")}</b>${i.association ? `<small>${esc([i.association, i.groupe].filter(Boolean).join(" · "))}</small>` : ""}</td>
-                  <td>${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</td>
-                  <td class="iv-heures">${i.heures} h</td><td class="iv-descr">${i.description ? esc(i.description) : ""}${i.appelN1 ? `${i.description ? "<br>" : ""}<span style="font-size:12px">📞 <b>Appel N1 (${esc(i.n1Contacte || "—")})</b> — ${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` → ${esc(i.decisionN1)}` : ""}</span>` : ""}${i.compteRendu ? `<details class="iv-cr-voir"><summary>📝 Compte rendu</summary><div>${esc(i.compteRendu).replace(/\n/g, "<br>")}</div></details>` : ""}${(i.photos || []).length ? ` <button class="nav-btn" data-voir-photos-interv="${i.id}" style="padding:2px 6px;font-size:10px">📷 ${i.photos.length}</button>` : ""}${reposHTML}</td>
-                  <td style="white-space:nowrap">
-                    ${i.heuresNuit > 0 ? `<span class="tag" style="background:#3A3160;font-size:9px">🌙 ${i.heuresNuit.toFixed(2)}h</span> ` : ""}
-                    ${i.primeDimanche > 0 ? `<span class="tag" style="background:#8F5FBF;font-size:9px">🌞 +${i.primeDimanche}€</span>` : ""}
-                    ${i.sansDeplacement ? `<span class="tag" style="background:#5A6070;font-size:9px">📞 Par téléphone</span>` : ""}
-                    ${i.horairesACompleter && !i.sansDeplacement ? `<span class="tag" style="background:#e6a100;color:#1A1305;font-size:9px">🕒 Horaires à compléter</span>` : ""}
-                    ${i.appelOrigineNumero ? `<span class="tag" style="background:#2a78d6;font-size:9px" title="Déplacement faisant suite à un appel">↪ suite ${esc(i.appelOrigineNumero)}</span>` : ""}
-                  </td>
-                  ${perms.isEditor ? `<td>${i.transmis
-                    ? `<span class="tag" style="background:var(--teal);font-size:9px">✓ Dans un relevé validé</span>${mountedUser.role === "super_admin" ? ` <button class="nav-btn" data-remettre-attente="${i.id}" style="padding:2px 6px;font-size:9px;margin-left:4px">🔓 Débloquer</button>` : ""}`
-                    : `<span class="iv-statut">En attente</span>`}</td>` : ''}
-                  <td><div class="iv-actions">${i.horairesACompleter && !i.sansDeplacement && (perms.isEditor || estMonIntervention(i)) && !perms.lectureSeule ? `<button class="iv-completer-btn" data-completer="${i.id}" title="Saisir l'heure de départ et de retour">🕒 Compléter</button>` : ""}${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div></td>
-                </tr>
-                ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? `<tr><td colspan="10" style="padding:0;border:none">${renderApercuNoteFrais()}</td></tr>` : ""}
-                ${ui.completerId === i.id ? `<tr class="iv-completer-ligne"><td colspan="11">${completerHorairesHTML(i)}</td></tr>` : ""}
-                `;
-              }).join("")}
-          </tbody>
-        </table>
+`;
+  const onglets = `
+      <div class="ivo-onglets" role="tablist">
+        ${perms.canLogIntervention ? `<button class="ivo-onglet ${ui.ivOnglet === "mes" ? "actif" : ""}" data-iv-onglet="mes" role="tab"><span class="ivo-ico">🔧</span> Mes interventions <em>${mesInterv.length}</em>${mesACompleter.length ? `<i class="ivo-pastille" title="Horaires à compléter">${mesACompleter.length}</i>` : ""}</button>` : ""}
+        <button class="ivo-onglet ${ui.ivOnglet === "realisees" ? "actif" : ""}" data-iv-onglet="realisees" role="tab"><span class="ivo-ico">🗂️</span> <span class="ivo-l">Interventions réalisées</span><span class="ivo-c">Réalisées</span> <em>${sorted.length}</em></button>
+      </div>`;
+  const vueMes = `
+      ${rappelHTML}
+      ${completerHorsListe ? completerHorairesHTML(completerHorsListe) : ""}
+      ${formHTML}
+      <div class="iv-liste-tete"><h3>🧰 Mes dernières interventions</h3><span>${mesInterv.length} au total</span></div>
+      ${mesInterv.length ? `<div class="ivc-liste">${mesInterv.slice(0, 8).map(i => carteHTML(i, false)).join("")}</div>
+      ${mesInterv.length > 8 ? `<button class="nav-btn ivc-voir-tout" data-iv-onglet="realisees">Voir tout l'historique →</button>` : ""}` : `<div class="ivc-vide">Aucune intervention à ton nom pour l'instant.</div>`}`;
+  const vueRealisees = `
+      <div class="ivf">
+        <label class="ivf-recherche"><span>🔎</span><input id="ivf-q" type="search" placeholder="Rechercher : site, N°, technicien, motif…" value="${esc(fl.q)}"></label>
+        <select id="ivf-tech"><option value="">Tous les intervenants</option>${intervenants.map(t => `<option value="${esc(t)}" ${fl.tech === t ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__aucun" ${fl.tech === "__aucun" ? "selected" : ""}>Sans technicien (téléphone)</option></select>
+        <select id="ivf-type"><option value="">Tous les types</option>${typesDispo.map(t => `<option value="${esc(t)}" ${fl.type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+        <div class="ivf-periodes">${[["mois", "Ce mois"], ["3mois", "3 mois"], ["scolaire", "Année scolaire"], ["tout", "Tout"]].map(([k, l]) => `<button class="ivf-p ${fl.periode === k ? "actif" : ""}" data-ivf-periode="${k}">${l}</button>`).join("")}</div>
       </div>
+      <div class="ivk">
+        <div class="ivk-t"><b>${filtrees.length}</b><span>interventions</span></div>
+        <div class="ivk-t"><b>${fmtDureeH(somme(filtrees, "heures"))}</b><span>heures au total</span></div>
+        <div class="ivk-t nuit"><b>${fmtDureeH(somme(filtrees, "heuresNuit"))}</b><span>dont de nuit</span></div>
+        <div class="ivk-t"><b>${filtrees.filter(i => i.sansDeplacement).length}</b><span>réglées par téléphone</span></div>
+        <div class="ivk-t dim"><b>${somme(filtrees, "primeDimanche")} €</b><span>primes dimanche</span></div>
+      </div>
+      ${doublonsHTML}
+      ${listeParMois(filtrees, true)}
+      ${releveHTML}`;
+  container.innerHTML = `
+    <div class="stack iv-v3">
+      ${onglets}
+      ${ui.ivOnglet === "mes" ? vueMes : vueRealisees}
     </div>
   `;
+
+  container.querySelectorAll("[data-iv-onglet]").forEach(b => b.addEventListener("click", () => {
+    ui.ivOnglet = b.dataset.ivOnglet; ui.completerId = null; renderAll();
+    requestAnimationFrame(() => document.querySelector(".ivo-onglets")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }));
+  let ivfTimer = null;
+  document.getElementById("ivf-q")?.addEventListener("input", (e) => {
+    fl.q = e.target.value; clearTimeout(ivfTimer);
+    ivfTimer = setTimeout(() => {
+      renderAll();
+      const el = document.getElementById("ivf-q"); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} }
+    }, 300);
+  });
+  document.getElementById("ivf-tech")?.addEventListener("change", (e) => { fl.tech = e.target.value; renderAll(); });
+  document.getElementById("ivf-type")?.addEventListener("change", (e) => { fl.type = e.target.value; renderAll(); });
+  container.querySelectorAll("[data-ivf-periode]").forEach(b => b.addEventListener("click", () => { fl.periode = b.dataset.ivfPeriode; renderAll(); }));
 
   if (perms.canLogIntervention) {
     try { attacherPhotosInterventionListeners(); } catch (e) { console.error(e); }
@@ -2830,6 +2926,7 @@ function renderInterventions(container, perms) {
         const i = state.interventions.find(x => x.id === btn.dataset.edit);
         if (!i) return;
         ui.editingId = i.id;
+        ui.ivOnglet = "mes";
         ui.form = {
           date: i.date, technicien: i.technicien, association: i.association || "", groupe: i.groupe || "",
           site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
@@ -2874,6 +2971,7 @@ function renderInterventions(container, perms) {
       const a = state.interventions.find(x => x.id === btn.dataset.creerDeplacement);
       if (!a) return;
       ui.editingId = null;
+      ui.ivOnglet = "mes";
       reinitialiserFormIntervention();
       Object.assign(ui.form, {
         date: a.date, technicien: a.technicien || ui.form.technicien, association: a.association || "", groupe: a.groupe || "", site: a.site || "",
@@ -2899,8 +2997,8 @@ function renderInterventions(container, perms) {
   }
 
   if (perms.isEditor) {
-    document.getElementById("doc-person").addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
-    document.getElementById("doc-start").addEventListener("change", (e) => {
+    document.getElementById("doc-person")?.addEventListener("change", (e) => { ui.docForm.person = e.target.value; if (ui.docForm.generated) { ui.docForm.generated = true; renderAll(); } });
+    document.getElementById("doc-start")?.addEventListener("change", (e) => {
       // On n'empêche plus de taper, et on ne relance plus un rendu complet
       // ici : un renderAll() en cours de frappe recréait le champ et
       // coupait la saisie du clavier (ex. année tapée à moitié). La
@@ -2908,10 +3006,10 @@ function renderInterventions(container, perms) {
       // document".
       ui.docForm.start = e.target.value;
     });
-    document.getElementById("doc-end").addEventListener("change", (e) => {
+    document.getElementById("doc-end")?.addEventListener("change", (e) => {
       ui.docForm.end = e.target.value;
     });
-    document.getElementById("doc-generate").addEventListener("click", () => {
+    document.getElementById("doc-generate")?.addEventListener("click", () => {
       if (!isPlausibleDate(ui.docForm.start) || !isPlausibleDate(ui.docForm.end)) {
         window.toast("Une des dates saisies semble incorrecte (année incomplète) — vérifie et retape-la entièrement.");
         return;

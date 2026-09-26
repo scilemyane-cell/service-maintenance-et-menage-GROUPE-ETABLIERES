@@ -1968,3 +1968,97 @@ html[data-theme="sombre"] #content .form-card{box-shadow:0 10px 28px rgba(0,0,0,
 .iv-repos{display:block;width:fit-content;max-width:100%;margin-top:6px;padding:5px 10px;border-radius:10px;background:var(--gold,#E0B12E);color:#1A1305;font-size:12px;font-weight:600;line-height:1.35;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;overflow-wrap:anywhere}
 .iv-repos b{font-weight:800;white-space:nowrap}
 .iv-repos.viole{background:var(--red,#E24B4A);color:#fff}
+
+/* =====================================================================
+   INTERVENTIONS v3 — deux onglets + cartes (remplace le grand tableau)
+   ===================================================================== */
+.ivo-onglets{display:flex;gap:8px;padding:6px;background:var(--panel);border:1px solid var(--border);border-radius:99px;width:fit-content;max-width:100%;box-shadow:0 2px 10px rgba(20,30,50,.06);overflow-x:auto;scroll-margin-top:120px}
+.ivo-onglet{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--text-dim);font:700 14px "Montserrat",system-ui,sans-serif;padding:10px 18px;border-radius:99px;cursor:pointer;white-space:nowrap;position:relative}
+.ivo-onglet:hover{background:var(--panel-alt);color:var(--text)}
+.ivo-onglet em{font-style:normal;font-size:11.5px;background:var(--panel-alt);color:var(--text-dim);border-radius:99px;padding:2px 8px}
+.ivo-onglet.actif{background:linear-gradient(135deg,#0b2140,#1d3a66);color:#fff;box-shadow:0 4px 12px rgba(11,33,64,.25)}
+.ivo-onglet.actif em{background:rgba(255,255,255,.18);color:#fff}
+html[data-theme="sombre"] .ivo-onglet.actif{background:linear-gradient(135deg,#d9b24c,#b98f2b);color:#1A1305}
+html[data-theme="sombre"] .ivo-onglet.actif em{background:rgba(0,0,0,.15);color:#1A1305}
+.ivo-c{display:none}
+.ivo-pastille{font-style:normal;background:#e6a100;color:#1A1305;font-size:11px;font-weight:800;min-width:20px;height:20px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+
+/* Filtres + chiffres clés */
+.ivf{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:12px 14px;box-shadow:0 2px 10px rgba(20,30,50,.06)}
+.ivf-recherche{flex:1 1 260px;display:flex;align-items:center;gap:8px;background:var(--panel-alt);border:1px solid var(--border);border-radius:12px;padding:0 12px;min-height:42px}
+#content .ivf-recherche input{flex:1;border:0 !important;background:transparent !important;box-shadow:none !important;min-height:40px;font-size:14px;padding:0;color:var(--text)}
+#content .ivf select{min-height:42px;padding:0 12px;font-size:13.5px;font-weight:600;flex:0 1 200px}
+.ivf-periodes{display:flex;gap:4px;background:var(--panel-alt);border-radius:99px;padding:4px;flex-wrap:wrap}
+.ivf-p{border:0;background:transparent;color:var(--text-dim);font:700 12.5px "Montserrat",system-ui,sans-serif;padding:7px 12px;border-radius:99px;cursor:pointer;white-space:nowrap}
+.ivf-p.actif{background:var(--panel);color:var(--text);box-shadow:0 1px 4px rgba(20,30,50,.15)}
+.ivk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.ivk-t{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;box-shadow:0 2px 10px rgba(20,30,50,.05);border-top:3px solid #1d3a66}
+.ivk-t b{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.01em}
+.ivk-t span{font-size:11.5px;color:var(--text-dim);font-weight:600}
+.ivk-t.nuit{border-top-color:#3A3160}.ivk-t.dim{border-top-color:#8F5FBF}
+
+/* Groupes par mois */
+.ivc-mois{display:flex;align-items:baseline;gap:10px;margin:6px 4px -4px}
+.ivc-mois h4{margin:0;font-size:15px;font-weight:800;color:var(--text)}
+.ivc-mois span{font-size:12px;color:var(--text-dim);font-weight:600}
+.ivc-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px;align-items:start}
+.ivc-liste > .iv-completer,.ivc-liste > :not(.ivc){grid-column:1/-1;max-width:none}
+.ivc-vide{background:var(--panel);border:1px dashed var(--border);border-radius:16px;padding:26px;text-align:center;color:var(--text-dim);font-weight:600}
+.ivc-voir-tout{align-self:center}
+
+/* Carte d'intervention */
+.ivc{background:var(--panel);border:1px solid var(--border);border-left:5px solid var(--ivc);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 2px 10px rgba(20,30,50,.06);min-width:0;transition:box-shadow .15s,transform .15s}
+.ivc:hover{box-shadow:0 8px 22px rgba(20,30,50,.12)}
+.ivc.double{background:color-mix(in srgb,var(--red) 7%,var(--panel))}
+.ivc.a-completer{border-color:#e6a100;border-left-color:#e6a100}
+.ivc-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ivc-date{display:flex;flex-direction:column;line-height:1.1;margin-right:2px}
+.ivc-date b{font-size:15px;font-weight:800;text-transform:capitalize;color:var(--text)}
+.ivc-date small{font-size:11px;color:var(--text-dim);font-weight:600}
+.ivc-badges{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.ivc-b{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--panel-alt);color:var(--text-dim);border:1px solid var(--border);white-space:nowrap;font-family:inherit;line-height:1.4}
+button.ivc-b{cursor:pointer}button.ivc-b:hover{color:var(--text);border-color:var(--text-dim)}
+.ivc-b.bleu{background:rgba(42,120,214,.12);color:#2a78d6;border-color:rgba(42,120,214,.3)}
+.ivc-b.orange{background:rgba(230,161,0,.16);color:#a06f00;border-color:rgba(230,161,0,.45)}
+.ivc-b.vert{background:rgba(63,182,172,.14);color:var(--teal);border-color:rgba(63,182,172,.35)}
+.ivc-b.nuit{background:#3A3160;color:#fff;border-color:#3A3160}
+.ivc-b.dim{background:#8F5FBF;color:#fff;border-color:#8F5FBF}
+html[data-theme="sombre"] .ivc-b.orange{color:#f2c14e}
+.ivc-duree{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+.ivc-duree b{font-size:18px;font-weight:800;color:var(--text);white-space:nowrap}
+.ivc-duree b.muet{font-size:13px;color:var(--text-dim)}
+.ivc-duree small{font-size:11.5px;color:var(--text-dim);font-weight:600;white-space:nowrap}
+.ivc-corps{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.ivc-lieu{display:flex;flex-direction:column;min-width:0}
+.ivc-lieu b{font-size:16px;font-weight:800;color:var(--text)}
+.ivc-lieu small{font-size:12px;color:var(--text-dim);font-weight:600}
+.ivc-qui{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ivc-appel{background:var(--panel-alt);border-radius:12px;padding:9px 12px;font-size:12.5px}
+.ivc-appel > span{font-weight:700;color:#c2185b}
+html[data-theme="sombre"] .ivc-appel > span{color:#f48fb1}
+.ivc-appel p{margin:3px 0 0;color:var(--text);line-height:1.4}
+.ivc-appel em{font-style:normal;color:var(--text-dim)}
+.ivc-desc{margin:0;font-size:13.5px;color:var(--text);line-height:1.45}
+.ivc-cr{border:1px solid var(--border);border-radius:12px;padding:0 12px;background:var(--panel)}
+.ivc-cr summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--gold);padding:8px 0;list-style-position:inside}
+.ivc-cr div{font-size:13px;line-height:1.5;color:var(--text);padding:0 0 10px}
+.ivc .iv-repos{margin-top:0}
+.ivc-pied{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px}
+.ivc-primes{display:flex;gap:6px;flex-wrap:wrap}
+.ivc-pied .iv-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+
+@media (max-width:900px){.ivk{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:700px){
+  .ivo-onglets{width:100%;border-radius:16px}
+  .ivo-onglet{flex:1;justify-content:center;padding:10px 10px;font-size:13px}
+  .ivo-onglet .ivo-ico,.ivo-onglet .ivo-l{display:none}
+  .ivo-onglet .ivo-c{display:inline}
+  .ivc-tete .ivc-badges{order:5;flex-basis:100%}
+  .ivc-liste{grid-template-columns:1fr}
+  .ivk{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ivk-t:first-child{grid-column:1/-1}
+  #content .ivf select{flex:1 1 45%}
+  .ivf-periodes{width:100%;justify-content:space-between}
+  .ivf-p{flex:1;padding:7px 6px}
+  .ivc{padding:12px 13px}
+}
