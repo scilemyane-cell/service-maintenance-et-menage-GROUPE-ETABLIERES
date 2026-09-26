@@ -5,20 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Établières</title>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@500&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<!-- "defer" sur ces 6 librairies : chacune n'est utilisée que par une
-     fonctionnalité précise déclenchée plus tard (export PDF/Excel, QR,
-     scan...), jamais au tout premier affichage. Sans "defer", le
-     navigateur devait les télécharger et exécuter une par une AVANT même
-     de pouvoir afficher "Chargement…", ce qui ajoutait une latence bien
-     visible à chaque ouverture de l'appli. -->
-<script defer src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.9.2/lib/qr-code-styling.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<!-- Librairies lourdes (≈ 2,5 Mo : Excel, PDF, graphiques, QR, Microsoft)
+     chargées EN ARRIÈRE-PLAN après l'ouverture, ou tout de suite à la
+     demande (window.chargerLib). Avant, en "defer", elles bloquaient le
+     démarrage de l'appli : le code principal ne s'exécutait qu'une fois
+     toutes téléchargées, d'où la latence à l'ouverture sur téléphone. -->
+<script>
+(function () {
+  var LIBS = {
+    msal: { src: "https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.24.0/lib/msal-browser.min.js" },
+    Chart: { src: "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" },
+    XLSX: { src: "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" },
+    jsQR: { src: "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" },
+    QRCodeStyling: { src: "https://cdn.jsdelivr.net/npm/qr-code-styling@1.9.2/lib/qr-code-styling.js" },
+    html2pdf: { src: "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js", integrity: "sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" }
+  };
+  var enCours = {};
+  window.chargerLib = function (nom) {
+    if (window[nom]) return Promise.resolve(window[nom]);
+    if (enCours[nom]) return enCours[nom];
+    var def = LIBS[nom];
+    if (!def) return Promise.reject(new Error("Librairie inconnue : " + nom));
+    enCours[nom] = new Promise(function (ok, ko) {
+      var s = document.createElement("script");
+      s.src = def.src; s.async = true;
+      if (def.integrity) { s.integrity = def.integrity; s.crossOrigin = "anonymous"; s.referrerPolicy = "no-referrer"; }
+      s.onload = function () { ok(window[nom]); };
+      s.onerror = function () { delete enCours[nom]; ko(new Error("Chargement impossible (" + nom + ") : vérifie la connexion.")); };
+      document.head.appendChild(s);
+    });
+    return enCours[nom];
+  };
+  function prechargement(noms) { noms.forEach(function (n) { window.chargerLib(n).catch(function () {}); }); }
+  window.addEventListener("load", function () {
+    setTimeout(function () { prechargement(["msal", "Chart"]); }, 300);
+    setTimeout(function () { prechargement(["XLSX", "jsQR", "QRCodeStyling"]); }, 2500);
+    setTimeout(function () { prechargement(["html2pdf"]); }, 5000);
+  });
+})();
+</script>
 </head>
 <body>
 <div id="app">

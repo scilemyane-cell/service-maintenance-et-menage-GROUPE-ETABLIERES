@@ -35,6 +35,7 @@ function getMsalInstance() {
 
 async function ensureInitialized() {
   if (!initPromise) {
+    if (!window.msal && window.chargerLib) await window.chargerLib("msal");
     const instance = getMsalInstance();
     initPromise = instance.initialize().then(() => instance.handleRedirectPromise());
   }

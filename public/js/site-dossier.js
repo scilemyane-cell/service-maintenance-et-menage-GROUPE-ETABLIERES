@@ -695,7 +695,7 @@ async function generatePdfBlob(d, element, { rapide = false } = {}) {
     await inlineImagesForPdf(clone, rapide ? 700 : 1100, rapide ? 0.65 : 0.8);
     const filename = `${d.nom} - Dossier technique.pdf`;
     const blob = await withTimeout(
-      window.html2pdf()
+      (await window.chargerLib("html2pdf"))()
         .set({
           margin: 10,
           filename,

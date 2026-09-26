@@ -92,7 +92,7 @@ async function genererPdf(titre, lignes) {
   await attendreImages(cible);
 
   try {
-    return await window.html2pdf()
+    return await (await window.chargerLib("html2pdf"))()
       .set({
         margin: 10,
         filename: `${titre}.pdf`,
@@ -141,6 +141,7 @@ async function genererEtEnvoyerPdf(token, dossierSegments, nomFichier, titre, li
 
   const nomFichierExcel = nomFichier.replace(/\.pdf$/, ".xlsx");
   try {
+    await window.chargerLib?.("XLSX");
     const blobExcel = genererExcel(titre, lignes);
     const fileExcelActuel = new File([blobExcel], nomFichierExcel, { type: blobExcel.type });
     await uploadToDrive(fileExcelActuel, token, dossierSegments, EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomFichierExcel });
@@ -154,6 +155,7 @@ async function genererEtEnvoyerPdf(token, dossierSegments, nomFichier, titre, li
     const fileArchive = new File([blob], nomArchive, { type: "application/pdf" });
     await uploadToDrive(fileArchive, token, [...dossierSegments, "Archives"], EXPORTS_ROOT_FOLDER, { conflictBehavior: "replace", fixedFilename: nomArchive });
     try {
+      await window.chargerLib?.("XLSX");
       const blobExcel = genererExcel(titre, lignes);
       const nomArchiveExcel = `${nomFichierExcel.replace(/\.xlsx$/, "")}_${moisStr()}.xlsx`;
       const fileArchiveExcel = new File([blobExcel], nomArchiveExcel, { type: blobExcel.type });
@@ -459,6 +461,7 @@ async function genererPdfCompteur(compteur, releves) {
 
   // Graphique en bâtons de la consommation mensuelle sur 12 mois.
   let chart = null;
+  if (releves.length >= 2 && !window.Chart) await window.chargerLib?.("Chart").catch(() => {});
   if (releves.length >= 2 && window.Chart) {
     const canvas = hidden.querySelector("#cpt-export-chart");
     const parCle = clesConso.map(cle => consommationMensuelle(releves, cle, 12));
@@ -497,7 +500,7 @@ async function genererPdfCompteur(compteur, releves) {
   }
 
   try {
-    return await window.html2pdf()
+    return await (await window.chargerLib("html2pdf"))()
       .set({
         margin: 10, filename: `${compteur.nom}.pdf`,
         image: { type: "jpeg", quality: 0.92 },
@@ -617,7 +620,7 @@ async function genererPdfMasterlock(codes) {
   const cible = hidden.firstElementChild;
   await attendreImages(cible); // sinon html2canvas peut capturer avant la fin du chargement du logo
   try {
-    return await window.html2pdf()
+    return await (await window.chargerLib("html2pdf"))()
       .set({
         margin: 10, filename: "Codes_masterlock.pdf",
         image: { type: "jpeg", quality: 0.92 },

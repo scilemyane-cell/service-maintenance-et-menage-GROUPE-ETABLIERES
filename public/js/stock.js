@@ -399,7 +399,7 @@ const COULEURS_STOCK = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "
 function dessinerAnalyseStock() {
   Object.values(graphiquesStock).forEach(c => c.destroy());
   graphiquesStock = {};
-  if (!window.Chart) return; // librairie pas encore chargée (connexion lente) — le reste de l'écran reste utilisable
+  if (!window.Chart) { window.chargerLib?.("Chart").then(() => { try { dessinerAnalyseStock(); } catch (e) { console.warn(e); } }).catch(() => {}); return; } // librairie pas encore chargée (connexion lente) — le reste de l'écran reste utilisable
 
   const parCat = {}; state.produits.forEach(p => { const c = p.categorie || "Sans catégorie"; parCat[c] = (parCat[c] || 0) + 1; });
   const catArr = Object.entries(parCat).sort((a, b) => b[1] - a[1]);

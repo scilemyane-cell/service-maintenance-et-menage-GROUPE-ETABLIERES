@@ -628,7 +628,7 @@ function tableau(entetes, lignes, total = null) {
 function dessinerGraphiques(s, p) {
   Object.values(graphiquesActifs).forEach(c => c.destroy());
   graphiquesActifs = {};
-  if (!window.Chart) return;
+  if (!window.Chart) { window.chargerLib?.("Chart").then(() => { try { dessinerGraphiques(s, p); } catch (e) { console.warn(e); } }).catch(() => {}); return; }
 
   const cs = getComputedStyle(document.body);
   const couleurTexte = (cs.getPropertyValue("--text-dim") || "#999").trim() || "#999";

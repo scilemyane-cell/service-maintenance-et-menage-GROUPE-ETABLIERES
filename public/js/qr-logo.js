@@ -17,6 +17,7 @@
 // QR sans logo incrusté (voir plus haut).
 export async function renderQrWithLogo(container, text, size = 220, sansLogo = false) {
   container.innerHTML = "";
+  if (!window.QRCodeStyling) await window.chargerLib?.("QRCodeStyling").catch(() => {});
   if (!window.QRCodeStyling) { container.textContent = "Librairie QR non chargée."; return; }
 
   const options = {

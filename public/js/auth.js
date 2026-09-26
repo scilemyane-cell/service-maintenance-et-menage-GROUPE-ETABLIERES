@@ -44,9 +44,32 @@ async function rattacherCompteEnAttente(user) {
   }
 }
 
+// Profil mémorisé sur l'appareil : à l'ouverture, l'appli s'affiche tout
+// de suite avec le profil connu, sans attendre l'aller-retour Firestore
+// (lent sur téléphone). Le profil est relu en arrière-plan et mis à jour
+// pour la prochaine ouverture ; les règles Firestore restent la vraie
+// barrière de sécurité.
+const CLE_PROFIL = "etablieres-profil";
+function lireProfilMemo(uid) {
+  try { const c = JSON.parse(localStorage.getItem(CLE_PROFIL) || "null"); return c && c.uid === uid && c.profil ? c.profil : null; } catch { return null; }
+}
+function memoriserProfil(uid, profil) {
+  try { localStorage.setItem(CLE_PROFIL, JSON.stringify({ uid, profil })); localStorage.setItem("etablieres-connecte", "1"); } catch {}
+}
+function oublierProfil() {
+  try { localStorage.removeItem(CLE_PROFIL); localStorage.removeItem("etablieres-connecte"); } catch {}
+}
+
 export function watchAuth(callback) {
   onAuthStateChanged(auth, async (user) => {
-    if (!user) { callback(null); return; }
+    if (!user) { oublierProfil(); callback(null); return; }
+    const memo = lireProfilMemo(user.uid);
+    if (memo && memo.role) {
+      callback({ uid: user.uid, email: user.email, ...memo });
+      journaliserConnexion(user, memo);
+      getCurrentUserProfile(user.uid).then(p => { if (p) memoriserProfil(user.uid, p); }).catch(() => {});
+      return;
+    }
     let profile = await getCurrentUserProfile(user.uid);
     if (!profile) profile = await rattacherCompteEnAttente(user);
     journaliserConnexion(user, profile); // en arrière-plan, jamais bloquant
@@ -54,6 +77,7 @@ export function watchAuth(callback) {
       callback({ uid: user.uid, email: user.email, role: null, nom: user.email });
       return;
     }
+    memoriserProfil(user.uid, profile);
     callback({ uid: user.uid, email: user.email, ...profile });
   });
 }

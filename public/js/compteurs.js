@@ -656,6 +656,7 @@ let statsTypeTop = "eau"; // type sélectionné pour le classement des sites les
 function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const canvas = holder.querySelector(`#cpt-hist-chart-${compteur.id}`);
   const carte = holder.querySelector(`#cpt-hist-chart-card-${compteur.id}`);
+  if (canvas && !window.Chart && historique.length >= 2) { window.chargerLib?.("Chart").then(() => { if (document.contains(canvas)) dessinerGraphiqueHistorique(holder, historique, compteur); }).catch(() => {}); }
   if (!canvas || !window.Chart || historique.length < 2) { if (carte) carte.style.display = "none"; return; }
   if (carte) carte.style.display = "block";
 

@@ -2055,6 +2055,7 @@ function attacherImportPrttListeners(container) {
     const fichier = e.target.files[0];
     const statusEl = document.getElementById("prtt-status");
     if (!fichier) return;
+    if (!window.XLSX) await window.chargerLib?.("XLSX").catch(() => {});
     if (!window.XLSX) { statusEl.innerHTML = `<span style="color:var(--red)">Librairie Excel non chargée.</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Lecture du fichier…</span>`;
     try {
