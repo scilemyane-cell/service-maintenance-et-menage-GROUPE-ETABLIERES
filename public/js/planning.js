@@ -2713,16 +2713,14 @@ function renderInterventions(container, perms) {
 `;
   const onglets = `
       <div class="ivo-onglets" role="tablist">
-        ${perms.canLogIntervention ? `<button class="ivo-onglet ${ui.ivOnglet === "mes" ? "actif" : ""}" data-iv-onglet="mes" role="tab"><span class="ivo-ico">🔧</span> Mes interventions <em>${mesInterv.length}</em>${mesACompleter.length ? `<i class="ivo-pastille" title="Horaires à compléter">${mesACompleter.length}</i>` : ""}</button>` : ""}
+        ${perms.canLogIntervention ? `<button class="ivo-onglet ${ui.ivOnglet === "mes" ? "actif" : ""}" data-iv-onglet="mes" role="tab"><span class="ivo-ico">➕</span> <span class="ivo-l">Nouvelle intervention</span><span class="ivo-c">Saisir</span>${mesACompleter.length ? `<i class="ivo-pastille" title="Horaires à compléter">${mesACompleter.length}</i>` : ""}</button>` : ""}
         <button class="ivo-onglet ${ui.ivOnglet === "realisees" ? "actif" : ""}" data-iv-onglet="realisees" role="tab"><span class="ivo-ico">🗂️</span> <span class="ivo-l">Interventions réalisées</span><span class="ivo-c">Réalisées</span> <em>${sorted.length}</em></button>
       </div>`;
   const vueMes = `
       ${rappelHTML}
       ${completerHorsListe ? completerHorairesHTML(completerHorsListe) : ""}
       ${formHTML}
-      <div class="iv-liste-tete"><h3>🧰 Mes dernières interventions</h3><span>${mesInterv.length} au total</span></div>
-      ${mesInterv.length ? `<div class="ivc-liste">${mesInterv.slice(0, 8).map(i => carteHTML(i, false)).join("")}</div>
-      ${mesInterv.length > 8 ? `<button class="nav-btn ivc-voir-tout" data-iv-onglet="realisees">Voir tout l'historique →</button>` : ""}` : `<div class="ivc-vide">Aucune intervention à ton nom pour l'instant.</div>`}`;
+`;
   const vueRealisees = `
       <div class="ivf">
         <label class="ivf-recherche"><span>🔎</span><input id="ivf-q" type="search" placeholder="Rechercher : site, N°, technicien, motif…" value="${esc(fl.q)}"></label>
