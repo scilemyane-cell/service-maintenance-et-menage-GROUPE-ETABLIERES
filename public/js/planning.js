@@ -2635,8 +2635,8 @@ function renderInterventions(container, perms) {
                 const repos = analyseReposIntervention(i, state.interventions);
                 const enDouble = i.numero && numerosEnDouble.includes(i.numero);
                 const reposHTML = repos && (repos.decalageNecessaire || repos.violee) ? `
-                  <br><span class="tag" style="background:${repos.violee ? "var(--red)" : "var(--gold)"};${repos.violee ? "color:#fff" : "color:#1A1305"};font-size:10px" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">
-                    ${repos.violee ? "⚠️ Repos 11h non respecté" : "🛌 Reprise possible seulement à partir du"} ${fmtHeureJour(repos.reposJusqua)}
+                  <span class="iv-repos ${repos.violee ? "viole" : ""}" title="Repos quotidien de 11h consécutives (art. L3121-10 du Code du travail) — calcul indicatif">
+                    ${repos.violee ? "⚠️ Repos 11 h non respecté —" : "🛌 Reprise à partir du"} <b>${fmtHeureJour(repos.reposJusqua)}</b>
                   </span>` : "";
                 return `<tr ${enDouble ? 'style="background:rgba(230,80,80,.12)"' : ""}>
                   <td><span class="iv-numero ${enDouble ? "double" : ""}">${esc(i.numero || "—")}</span>${enDouble ? ` <span title="Numéro attribué à plusieurs interventions">⚠️</span>` : ""}</td>
