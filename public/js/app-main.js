@@ -161,7 +161,18 @@
   let stockAlertCount = { central: 0, deporte: 0, total: 0 };
   let stockAlertSubscribed = false;
   let compteursAlertCount = 0;
-  let mesActionsCount = 0, mesActionsAbonne = false;
+  // Badge « actions attribuées » : suit l'utilisateur affiché (y compris en
+  // « Aperçu en tant que… », pour voir ce que voit la personne).
+  let mesActionsCount = 0, mesActionsUid = null, mesActionsUnsub = null;
+  function suivreMesActions(uid) {
+    if (!uid || uid === mesActionsUid) return;
+    mesActionsUid = uid; mesActionsCount = 0;
+    if (mesActionsUnsub) { mesActionsUnsub(); mesActionsUnsub = null; }
+    import("./firestore-data.js").then(({ watchMesActionsDemandes }) => {
+      if (mesActionsUid !== uid) return;
+      mesActionsUnsub = watchMesActionsDemandes(uid, (n) => { if (mesActionsUid !== uid) return; const avant = mesActionsCount; mesActionsCount = n; if (avant !== n && currentCategory === null) render(); });
+    });
+  }
   let compteursAlertSubscribed = false;
   let backButtonGuardSetup = false;
   let modulesConstruction = [];
@@ -440,10 +451,6 @@
       let migFaite = false;
       watchUsers((l) => { usersList = l; if (!migFaite && l.length) { migFaite = true; migrationAccesTechSuivi(l); } if (apercuUid) render(); else majSelectApercu(); });
     }
-    if (!mesActionsAbonne && user.uid) {
-      mesActionsAbonne = true;
-      import("./firestore-data.js").then(({ watchMesActionsDemandes }) => watchMesActionsDemandes(user.uid, (n) => { const avant = mesActionsCount; mesActionsCount = n; if (avant !== n && currentCategory === null) render(); }));
-    }
     if (!compteursAlertSubscribed) {
       compteursAlertSubscribed = true;
       watchCompteursAlertCount((n) => { compteursAlertCount = n; if (currentCategory === null) render(); });
@@ -532,6 +539,7 @@
 
   function render() {
     const app = document.getElementById("app");
+    try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); } catch (e) { console.error(e); }
 
     if (currentUser.role === null) {
       app.innerHTML = `
