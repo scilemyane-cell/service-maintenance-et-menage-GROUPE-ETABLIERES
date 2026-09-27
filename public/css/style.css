@@ -2212,3 +2212,13 @@ html:not([data-theme="clair"]) .dst-pill.ok{color:#5fd35f}html:not([data-theme="
   .dst-sites-t span{font-size:9.5px;letter-spacing:.04em}
   .dst-urg-l{grid-template-columns:90px 1fr 42px 30px}
 }
+
+/* ===== Version de l'appli (Super Admin) + bandeau « nouvelle version » ===== */
+.app-version{font-style:normal;font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:.02em}
+.top-version{margin-left:6px;padding:2px 8px;border-radius:99px;background:var(--panel-alt);border:1px solid var(--border)}
+.gh-version{margin:2px 0 8px;opacity:.8}
+.maj-bandeau{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:4000;display:flex;align-items:center;gap:12px;background:#0b1d3a;color:#fff;padding:10px 10px 10px 16px;border-radius:16px;box-shadow:0 14px 34px rgba(0,0,0,.35);font:600 13.5px "Montserrat",system-ui,sans-serif;max-width:calc(100vw - 24px)}
+.maj-bandeau em{font-style:normal;opacity:.7}
+.maj-bandeau #maj-recharger{border:0;border-radius:10px;padding:9px 14px;background:linear-gradient(135deg,#f3c565,#e6a100);color:#1A1305;font:800 13px "Montserrat",system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.maj-bandeau .maj-fermer{border:0;background:transparent;color:rgba(255,255,255,.6);font-size:16px;cursor:pointer;padding:4px 6px}
+@media (max-width:700px){.maj-bandeau{left:12px;right:12px;transform:none;max-width:none;font-size:13px}.maj-bandeau > span{flex:1;min-width:0}}

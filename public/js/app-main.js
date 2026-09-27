@@ -113,6 +113,40 @@
     const suivant = () => { const f = liste.shift(); if (!f) return; f().catch(() => {}).finally(() => setTimeout(suivant, 30)); };
     (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(() => { suivant(); suivant(); suivant(); }, { timeout: 1500 });
   }
+  // ---------------------------------------------------------------
+  // Version de l'appli : numéro posé par le déploiement (GitHub Actions)
+  // dans le lien du code (app.bundle.js?v=NUMÉRO) et dans version.json.
+  // Super Admin : la version est affichée. Tout le monde : bandeau
+  // « Nouvelle version disponible » dès qu'une mise à jour est en ligne.
+  // ---------------------------------------------------------------
+  const VERSION_CHARGEE = (() => { try { return new URL(document.querySelector('script[src*="app.bundle.js"]').src).searchParams.get("v") || "dev"; } catch { return "dev"; } })();
+  let versionEnLigne = null;
+  function versionTexte() {
+    const d = versionEnLigne && String(versionEnLigne.version) === VERSION_CHARGEE && versionEnLigne.date ? new Date(versionEnLigne.date) : null;
+    return `Version ${escapeHtml(VERSION_CHARGEE)}${d && !isNaN(d) ? ` · ${d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}`;
+  }
+  function bandeauNouvelleVersion(v) {
+    if (document.getElementById("maj-bandeau")) return;
+    const b = document.createElement("div");
+    b.id = "maj-bandeau"; b.className = "maj-bandeau";
+    b.innerHTML = `<span>🚀 <b>Nouvelle version disponible</b>${currentUser?.role === "super_admin" ? ` <em>(version ${escapeHtml(String(v.version))})</em>` : ""}</span><button type="button" id="maj-recharger">Mettre à jour</button><button type="button" class="maj-fermer" aria-label="Plus tard">✕</button>`;
+    document.body.appendChild(b);
+    b.querySelector("#maj-recharger").addEventListener("click", () => location.reload());
+    b.querySelector(".maj-fermer").addEventListener("click", () => b.remove());
+  }
+  async function verifierVersion() {
+    try {
+      const r = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+      if (!r.ok) return;
+      versionEnLigne = await r.json();
+      document.querySelectorAll(".app-version").forEach(el => { el.innerHTML = versionTexte(); });
+      if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) bandeauNouvelleVersion(versionEnLigne);
+    } catch { /* hors ligne : on réessaiera */ }
+  }
+  setTimeout(verifierVersion, 3000);
+  setInterval(verifierVersion, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") verifierVersion(); });
+
   const runDailyExportIfNeeded = () => { setTimeout(() => import("./export-sharepoint.js").then(m => m.runDailyExportIfNeeded()).catch(e => console.warn("Export quotidien :", e)), 4000); };
   let currentSubtab = null;
   let dispositifsList = [];
@@ -503,6 +537,7 @@
           <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><svg class="gh-user-ico" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16" cy="12.5" r="5" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 26c2-5 5.5-7 9-7s7 2 9 7" fill="none" stroke="#fff" stroke-width="2"/></svg> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <svg class="gh-user-chev" viewBox="0 0 16 10" aria-hidden="true"><path d="M1 1l7 7 7-7" fill="none" stroke="#fff" stroke-width="1.8"/></svg></button>
           <div class="gh-user-pop" id="gh-user-pop" hidden>
             <p class="gh-user-role">${escapeHtml(roleLabel(currentUser.role))}</p>
+            ${currentUser.role === "super_admin" ? `<p class="app-version gh-version">${versionTexte()}</p>` : ""}
             ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
             ${voitAdministration ? `<button class="nav-btn" id="admin-btn">⚙️ Administration</button>` : ""}
             <button class="logout-btn" id="logout-btn">Se déconnecter</button>
@@ -531,7 +566,7 @@
           </div>
         </div>
         <div class="topbar-user">
-          <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}</span>
+          <span><b>${escapeHtml(currentUser.nom || currentUser.email)}</b> · ${escapeHtml(roleLabel(currentUser.role))}${currentUser.role === "super_admin" ? ` <em class="app-version top-version">${versionTexte()}</em>` : ""}</span>
           ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
           <button class="nav-btn theme-modules-btn" id="theme-modules-btn" title="Affichage clair ou sombre">${getThemeModules() === "sombre" ? "☀️ Clair" : "🌙 Sombre"}</button>
           ${voitAdministration ? `<button class="nav-btn gear-btn ${currentCategory === "administration" ? "active" : ""}" id="admin-btn" title="Administration">⚙️</button>` : ""}

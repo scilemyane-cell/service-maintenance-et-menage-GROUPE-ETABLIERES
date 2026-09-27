@@ -15,7 +15,9 @@ jobs:
         run: npx --yes esbuild@0.24.2 public/js/app-main.js --bundle --splitting --format=esm --minify --outdir=public/js/dist --entry-names=app.bundle --chunk-names=chunk-[hash] --external:https://www.gstatic.com/*
       - name: Forcer le rechargement de la nouvelle version (numéro de version dans les liens)
         run: |
-          V="${GITHUB_SHA::8}"
+          V="${GITHUB_RUN_NUMBER}"
+          python3 -c "import json,subprocess,datetime;print(json.dumps({'version':'$V','date':datetime.datetime.now(datetime.timezone.utc).isoformat(),'commit':'${GITHUB_SHA::7}','message':subprocess.check_output(['git','log','-1','--format=%s']).decode().strip()},ensure_ascii=False))" > public/version.json
+          cat public/version.json
           sed -i "s#js/dist/app.bundle.js\"#js/dist/app.bundle.js?v=$V\"#; s#css/style.css\"#css/style.css?v=$V\"#" public/app.html
           sed -i "s#css/style.css\"#css/style.css?v=$V\"#" public/index.html
           grep -n "?v=" public/app.html public/index.html
