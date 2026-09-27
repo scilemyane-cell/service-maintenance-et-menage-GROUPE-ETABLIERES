@@ -294,6 +294,9 @@ function blocCarteHTML() {
     </section>`;
 }
 
+// La croix « retirer » n'apparaît qu'en mode « ✏️ Modifier » : sur téléphone,
+// on appuyait dessus par erreur en voulant ouvrir les compteurs.
+let modeEditionFavoris = false;
 function blocCompteursEtFavorisHTML() {
   const favorisIds = chargerFavoris();
   const favorisDossiers = favorisIds.map(id => dossiers.find(d => d.id === id)).filter(Boolean);
@@ -307,15 +310,15 @@ function blocCompteursEtFavorisHTML() {
         <div><b>${nbCompteurs === null ? "—" : nbCompteurs}</b><span>Compteurs</span></div>
       </section>
       <section class="gh-panneau-clair gh-favoris">
-        <h3>${mountedUser.apercu ? `Favoris de ${esc(mountedUser.nom || mountedUser.email)}` : "Mes sites favoris"}</h3>
+        <h3>${mountedUser.apercu ? `Favoris de ${esc(mountedUser.nom || mountedUser.email)}` : "Mes sites favoris"}${favorisDossiers.length ? `<button type="button" class="gh-fav-edit ${modeEditionFavoris ? "on" : ""}" id="hm-fav-edit">${modeEditionFavoris ? "✓ Terminé" : "✏️ Modifier"}</button>` : ""}</h3>
         ${favorisErreur ? `<p class="gh-vide" style="color:#C23B27">⚠️ Favoris indisponibles${favorisErreur.code === "permission-denied" ? " — règles Firestore à republier (favoris-sites)" : ""}.</p>` : ""}
         <div class="gh-favoris-liste">
           ${favorisDossiers.length === 0 ? `<p class="gh-vide">Aucun site épinglé.</p>` : favorisDossiers.map(d => `
             <div class="gh-favori">
               <button data-ouvrir-favori="${d.id}">${esc(d.nom)}</button>
               <span class="gh-favori-actions">
-                ${peutRelever && d.compteursActifs ? `<button class="gh-raccourci" data-relever-site="${d.id}" title="Compteurs de ce site">🎛️</button>` : ""}
-                <button class="gh-favori-suppr" data-retirer-favori="${d.id}" title="Retirer">✕</button>
+                ${peutRelever && d.compteursActifs && !modeEditionFavoris ? `<button class="gh-raccourci gh-releve-gros" data-relever-site="${d.id}" title="Compteurs de ce site">🎛️ <span>Relever</span></button>` : ""}
+                ${modeEditionFavoris ? `<button class="gh-favori-suppr gh-favori-suppr-gros" data-retirer-favori="${d.id}" title="Retirer">✕ Retirer</button>` : ""}
               </span>
             </div>`).join("")}
         </div>
@@ -329,6 +332,7 @@ function blocCompteursEtFavorisHTML() {
 }
 
 function attacherEcouteursBlocSites() {
+  document.getElementById("hm-fav-edit")?.addEventListener("click", () => { modeEditionFavoris = !modeEditionFavoris; render(); });
   document.getElementById("hm-filtre-assoc")?.addEventListener("change", (e) => { filtreAssociation = e.target.value; filtreSite = ""; render(); });
   document.getElementById("hm-filtre-site")?.addEventListener("change", (e) => { filtreSite = e.target.value; render(); });
   mountedContainer.querySelectorAll("[data-ouvrir-favori]").forEach(btn => {

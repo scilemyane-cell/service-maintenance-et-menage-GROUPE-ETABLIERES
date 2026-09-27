@@ -2419,3 +2419,12 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-phrases-wrap>summary{cursor:pointer;font:700 12.5px system-ui,sans-serif;color:#2a78d6;list-style:none;display:inline-block}
 .dps-phrases-wrap>summary::-webkit-details-marker{display:none}
 .dps-phrases-wrap[open]>summary{margin-bottom:2px}
+/* Favoris accueil : gros bouton « Relever », croix seulement en mode Modifier */
+.gh-favoris h3{position:relative}
+.gh-fav-edit{position:absolute;right:0;top:50%;transform:translateY(-60%);border:1px solid #C9CBD1;background:#fff;color:#1B2330;border-radius:999px;padding:4px 10px;font:600 12px system-ui,sans-serif;cursor:pointer}
+.gh-fav-edit.on{background:#1B2330;color:#fff;border-color:#1B2330}
+.gh-releve-gros{display:inline-flex;align-items:center;gap:6px;min-height:40px;min-width:88px;justify-content:center;padding:6px 12px !important;border:1px solid #C9CBD1 !important;border-radius:12px !important;background:#fff !important;font-size:18px !important;cursor:pointer}
+.gh-releve-gros span{font:700 13px system-ui,sans-serif;color:#1B2330}
+.gh-favori-suppr-gros{min-height:36px;padding:4px 12px !important;border:1px solid #f0b4b4 !important;border-radius:10px;color:#C23B27 !important;background:#fdecec !important;font-weight:700;font-size:13px !important}
+.gh-favori{min-height:48px}
+@media (max-width:700px){.gh-fav-edit{position:static;transform:none;margin-left:10px;vertical-align:middle}}
