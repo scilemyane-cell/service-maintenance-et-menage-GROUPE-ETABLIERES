@@ -13,6 +13,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Regrouper les fichiers JS (bundling) — découpé par module, chargé à la demande
         run: npx --yes esbuild@0.24.2 public/js/app-main.js --bundle --splitting --format=esm --minify --outdir=public/js/dist --entry-names=app.bundle --chunk-names=chunk-[hash] --external:https://www.gstatic.com/*
+      - name: Forcer le rechargement de la nouvelle version (numéro de version dans les liens)
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i "s#js/dist/app.bundle.js\"#js/dist/app.bundle.js?v=$V\"#; s#css/style.css\"#css/style.css?v=$V\"#" public/app.html
+          sed -i "s#css/style.css\"#css/style.css?v=$V\"#" public/index.html
+          grep -n "?v=" public/app.html public/index.html
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

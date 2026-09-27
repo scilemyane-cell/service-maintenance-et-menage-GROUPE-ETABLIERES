@@ -14,7 +14,7 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(html|css)",
+        "source": "**/*.@(html|css|js)",
         "headers": [
           {
             "key": "Cache-Control",
@@ -23,25 +23,7 @@
         ]
       },
       {
-        "source": "js/*.js",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache, max-age=0, must-revalidate"
-          }
-        ]
-      },
-      {
-        "source": "js/dist/app.bundle.js",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache, max-age=0, must-revalidate"
-          }
-        ]
-      },
-      {
-        "source": "js/dist/chunk-*.js",
+        "regex": "^/js/dist/chunk-[A-Za-z0-9]+\\.js$",
         "headers": [
           {
             "key": "Cache-Control",
