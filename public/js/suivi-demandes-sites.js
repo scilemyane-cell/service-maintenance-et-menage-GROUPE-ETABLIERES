@@ -187,7 +187,10 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
   phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
-  const techs = utilisateurs.filter(u => u.role === "technicien");
+  // Personnes à qui l'on peut confier un site : techniciens d'abord, puis superviseurs / admins.
+  const ORDRE_ROLE = { technicien: 0, n1: 1, admin: 2, super_admin: 3 };
+  const techs = utilisateurs.filter(u => u.role in ORDRE_ROLE)
+    .sort((a, b) => (ORDRE_ROLE[a.role] - ORDRE_ROLE[b.role]) || String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
   const nomDe = (id) => { const u = utilisateurs.find(x => x.uid === id); return u ? (u.nom || u.email) : ""; };
   const estTech = perms.isTech && !perms.isEditor;
   const q = sa(st.q.trim());
