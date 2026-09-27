@@ -250,6 +250,22 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
   }));
 }
 
+// ---------- Nouvelles demandes ----------
+// Mémorisé sur l'appareil, par personne : date de dernière consultation de
+// chaque site. Une demande importée après cette date est « 🆕 nouvelle ».
+const vuCle = (uid) => `etablieres-dps-vu-${uid || "anon"}`;
+function lireVu(uid) {
+  try { const v = JSON.parse(localStorage.getItem(vuCle(uid)) || "null"); if (v && v.base) return v; } catch {}
+  const v = { base: Date.now(), sites: {} };
+  try { localStorage.setItem(vuCle(uid), JSON.stringify(v)); } catch {}
+  return v;
+}
+function marquerSiteVu(uid, site) {
+  const v = lireVu(uid); v.sites[site] = Date.now();
+  try { localStorage.setItem(vuCle(uid), JSON.stringify(v)); } catch {}
+}
+const estNouvelle = (l, depuis) => !!l.importeMs && l.importeMs > depuis && !TRAITE(l.statut) && l.statut !== A_VALIDER;
+
 const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {}, tech: "" };
 // Brouillon par demande : rien n'est enregistré tant que « Enregistrer » /
 // « Valider » n'est pas cliqué (on garde la saisie même si l'écran se
@@ -320,11 +336,13 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
 
   // ---------- Liste des sites ----------
   if (!st.site) {
+    const vu = lireVu(uid);
     const parSite = {};
     lignes.filter(filtreAssoc).forEach(l => {
       const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0 });
       s.total++;
       if (l.actionPour && !l.actionFaiteLe) s.actions++;
+      if (estNouvelle(l, vu.sites[l.site] || vu.base)) s.nouvelles = (s.nouvelles || 0) + 1;
       if (EN_ATTENTE_VALID(l.statut)) s.aValider++;
       else if (!TRAITE(l.statut)) {
         s.ouvertes++;
@@ -352,6 +370,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small>${techsDuSite(s.nom).length ? `<small class="dps-site-techs">👷 ${esc(techsDuSite(s.nom).map(nomDe).filter(Boolean).join(", "))}</small>` : ""}</div>
           <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
           <div class="dps-site-pied">
+            ${s.nouvelles ? `<span class="dps-pastille nouv">🆕 ${s.nouvelles} nouvelle${s.nouvelles > 1 ? "s" : ""}</span>` : ""}
             ${s.urgentes ? `<span class="dps-pastille urg">🔴 ${s.urgentes} urgente${s.urgentes > 1 ? "s" : ""}</span>` : ""}
             ${s.plusVieille > 30 ? `<span class="dps-pastille vieux">⏳ ${s.plusVieille} j</span>` : ""}
             ${s.realiseesMois ? `<span class="dps-pastille ok">✓ ${s.realiseesMois} ce mois</span>` : ""}
@@ -386,7 +405,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       ${attribues.length ? `
       <section class="dps-favoris dps-attribues">
-        <h3>👷 Mes sites attribués <small>${attribues.reduce((t, s) => t + s.ouvertes, 0)} demande(s) à traiter</small></h3>
+        <h3>👷 Mes sites attribués <small>${attribues.reduce((t, s) => t + s.ouvertes, 0)} demande(s) à traiter</small>${(n => n ? `<span class="dps-pastille nouv">🆕 ${n} nouvelle${n > 1 ? "s" : ""} demande${n > 1 ? "s" : ""}</span>` : "")(attribues.reduce((t, s) => t + (s.nouvelles || 0), 0))}</h3>
         <div class="dps-sites">${attribues.map(carteSite).join("")}</div>
       </section>` : ""}
       ${filtreTech ? `<h3 class="dps-autres-titre">👷 Sites de ${esc(nomDe(st.tech))} (${sites.length})</h3>` : ""}
@@ -414,13 +433,16 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelector("#dps-tech")?.addEventListener("change", (e) => { st.tech = e.target.value; rerender(); });
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
-    container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; rerender(); container.scrollIntoView({ block: "start" }); }));
+    container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" }); }));
     brancherValidation();
     apres?.();
     return;
   }
 
   // ---------- Demandes d'un site ----------
+  // À l'ouverture du site : on garde l'ancienne date de consultation pour
+  // afficher les « 🆕 », puis on note le site comme vu.
+  if (st.vuAvant == null || st.vuSite !== st.site) { const v = lireVu(uid); st.vuAvant = v.sites[st.site] || v.base; st.vuSite = st.site; marquerSiteVu(uid, st.site); }
   const duSite = lignes.filter(l => l.site === st.site);
   const enValidation = duSite.filter(l => EN_ATTENTE_VALID(l.statut));
   const ouvertes = duSite.filter(l => A_TRAITER(l.statut)).sort((a, b) => ((ORDRE_URG[a.urgence] ?? 9) - (ORDRE_URG[b.urgence] ?? 9)) || (a.date || "").localeCompare(b.date || ""));
@@ -430,7 +452,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>
@@ -567,4 +589,4 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
 }
 
 export function resetVueSites() { st.site = null; }
-export function ouvrirSite(nom) { st.site = nom; st.q = ""; }
+export function ouvrirSite(nom) { st.site = nom; st.q = ""; st.vuAvant = null; }

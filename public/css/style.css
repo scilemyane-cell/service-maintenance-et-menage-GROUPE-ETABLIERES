@@ -2452,3 +2452,4 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-action-edit[hidden]{display:none !important}
 .vue-badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#d03b3b;color:#fff;font:800 11.5px system-ui,sans-serif;margin-left:4px}
 .demandes-vue-toggle{grid-template-columns:repeat(auto-fit,minmax(140px,1fr)) !important}
+.dps-pastille.nouv{background:#e6f0ff;color:#1f5fbf;font-weight:800}.dps-favoris h3 .dps-pastille.nouv{font:800 12px system-ui,sans-serif;padding:3px 9px;border-radius:999px}
