@@ -80,14 +80,19 @@ export async function demandesDepuisClasseur(wb, XLSX) {
       numero: txt(r[0]) || numeroSansNumero(dDem, r[6]),
       dateDemande: dDem, association: association(r[2]), site: txt(r[3]) || "Non renseigné",
       type: typeNorm(r[5]), descriptif: txt(r[6]), urgence: urgence(r[8]), statut: statut(r[13]),
-      intervenant: cont || intervenantCat, categorieIntervenant: intervenantCat, contact: cont,
+      intervenant: cont, categorieIntervenant: intervenantCat, contact: cont,
+      local: txt(r[7]), demandeur: txt(r[4]), logementOccupe: txt(r[9]),
       dateIntervention: versIso(r[12], annee), dateStatut: versIso(r[14], annee), commentaireTech: txt(r[15]),
     });
   }
   return out;
 }
 
-const CHAMPS_FICHIER = ["statut", "intervenant", "contact", "dateIntervention", "dateStatut", "commentaireTech", "urgence", "descriptif", "site", "association", "type", "dateDemande"];
+// Champs saisis par les demandeurs : toujours repris du fichier.
+const CHAMPS_DEMANDEUR = ["dateDemande", "site", "association", "type", "descriptif", "urgence", "local", "demandeur", "logementOccupe"];
+// Champs de traitement : repris du fichier seulement si la demande n'a pas
+// encore été touchée dans l'appli (sinon c'est l'appli qui fait foi).
+const CHAMPS_TRAITEMENT = ["statut", "intervenant", "contact", "categorieIntervenant", "dateIntervention", "dateStatut", "commentaireTech"];
 
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
 // des demandes que personne n'a encore touchées dans l'appli.
@@ -106,10 +111,10 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
   for (const f of fichier) {
     const a = parNumero.get(f.numero);
     if (!a) { nouvelles.push(f); continue; }
-    if (a.dateMaj) continue; // déjà traitée dans l'appli : l'appli fait foi
     if (vus[f.numero] > 1 || appVus[f.numero] > 1) continue; // N° en double dans le fichier : ambigu, on ne touche pas
     const diff = {};
-    CHAMPS_FICHIER.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+    const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
+    champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
     if (Object.keys(diff).length) majs.push([a.id, diff]);
   }
   const ops = [...nouvelles.map(n => ["set", n]), ...majs.map(([id, d]) => ["update", id, d])];
@@ -133,6 +138,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } =
   const lignes = (demandesApp || []).filter(d => d.dateMaj && !String(d.numero).startsWith("SN-")).map(d => ({
     numero: d.numero,
     statut: d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
+    categorieIntervenant: d.categorieIntervenant || "",
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
     dateStatut: fr(d.dateStatut),
