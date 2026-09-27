@@ -11,11 +11,22 @@ const ASSOS = ["Agropolis", "École", "Armonia"]; // ordre fixe = couleur fixe p
 
 const st = { periode: "12m", association: "" };
 
-const dateValide = (s) => {
-  if (!s || !/^\d{4}-\d{2}-\d{2}/.test(s)) return null;
-  const d = new Date(s.slice(0, 10) + "T00:00:00");
+const dateValide = (v) => {
+  // Accepte "AAAA-MM-JJ", "JJ/MM/AAAA", un horodatage Firestore, un nombre ou une Date.
+  if (!v) return null;
+  let d = null;
+  if (typeof v === "string") {
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/), fr = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (iso) d = new Date(+iso[1], +iso[2] - 1, +iso[3]);
+    else if (fr) d = new Date(+fr[3], +fr[2] - 1, +fr[1]);
+  } else if (typeof v === "number") d = new Date(v > 1e11 ? v : v > 20000 && v < 80000 ? Math.round((v - 25569) * 86400000) : v * 1000);
+  else if (v.toDate) d = v.toDate();
+  else if (v instanceof Date) d = v;
+  else if (typeof v.seconds === "number") d = new Date(v.seconds * 1000);
+  if (!d || isNaN(d)) return null;
+  d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const y = d.getFullYear(), maxY = new Date().getFullYear() + 1;
-  return isNaN(d) || y < 2020 || y > maxY ? null : d;
+  return y < 2020 || y > maxY ? null : d;
 };
 const jours = (a, b) => Math.round((b - a) / 86400000);
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
