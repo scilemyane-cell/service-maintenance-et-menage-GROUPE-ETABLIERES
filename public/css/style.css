@@ -2233,3 +2233,4 @@ html:not([data-theme="clair"]) .dst-pill.ok{color:#5fd35f}html:not([data-theme="
 .tabs-reorg .tab-btn.tab-glisse{cursor:grabbing;opacity:.75;transform:scale(1.05);animation:none;z-index:2;box-shadow:0 10px 24px rgba(0,0,0,.25)}
 @keyframes tab-frisson{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
 @media (max-width:700px){ body:not(.accueil-gmao) .tabs .tab-reorg-btn{grid-column:1/-1;justify-self:center} }
+.dst-grille-3 .dst-bh-l{grid-template-columns:18px minmax(0,1.7fr) minmax(0,1fr) 34px;gap:8px}
