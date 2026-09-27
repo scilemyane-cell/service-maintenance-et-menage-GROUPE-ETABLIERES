@@ -361,6 +361,7 @@ function ligneDepuisDoc(d) {
     dateIntervention: d.dateIntervention || "", dateStatut: d.dateStatut || "", contact: d.contact || "", categorieIntervenant: d.categorieIntervenant || "",
     local: d.local || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "",
+    commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "",
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
     actionPar: d.actionPar || "", actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
   };
@@ -529,7 +530,7 @@ function renderTableau(container) {
                 <td>${perms.peutTraiter ? `<input type="date" class="demandes-cell-input demandes-input-date-interv" id="dateinterv-${esc(l.id)}" value="${esc(l.dateIntervention)}">` : (fmtDateFR(l.dateIntervention) === "—" ? "<span class=\"text-dim\">—</span>" : fmtDateFR(l.dateIntervention))}</td>
                 <td>${perms.peutTraiter ? statutSelectHTML(`statut-${esc(l.id)}`, l.statut) : badgeStatut(l.statut)}</td>
                 <td>${perms.isEditor ? `<input type="date" class="demandes-cell-input demandes-input-date-statut" value="${esc(l.dateStatut || "")}">` : (fmtDateFR(l.dateStatut) === "—" ? "<span class=\"text-dim\">—</span>" : fmtDateFR(l.dateStatut))}</td>
-                <td class="demandes-td-comment">${perms.peutTraiter ? `<textarea class="demandes-cell-input demandes-input-comment" rows="2" placeholder="—">${esc(l.commentaireTech || "")}</textarea>` : (esc(l.commentaireTech) || "<span class=\"text-dim\">—</span>")}</td>
+                <td class="demandes-td-comment">${perms.peutTraiter ? `<textarea class="demandes-cell-input demandes-input-comment" rows="2" placeholder="—">${esc(l.commentaireTech || "")}</textarea>${l.commentaireTech && l.commentaireTechPar ? `<small class="dps-com-auteur">✍️ ${esc(l.commentaireTechPar)}</small>` : ""}` : (esc(l.commentaireTech) ? esc(l.commentaireTech) + (l.commentaireTechPar ? ` <small class="dps-com-auteur">— ${esc(l.commentaireTechPar)}</small>` : "") : "<span class=\"text-dim\">—</span>")}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -616,7 +617,8 @@ function renderTableau(container) {
       inp.addEventListener(evt, async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        try { await updateDemande(id, { [champ]: e.target.value.trim() }); planifierDepotAuto(); }
+        const auteur = champ === "commentaireTech" ? { commentaireTechPar: mountedUser?.nom || mountedUser?.email || "", commentaireTechLe: new Date().toISOString().slice(0, 10) } : {};
+        try { await updateDemande(id, { [champ]: e.target.value.trim(), ...auteur }); planifierDepotAuto(); }
         catch (err) { console.error("updateDemande " + champ, err); alert(`Échec de l'enregistrement (${libelle}) — réessaie.`); e.target.disabled = false; }
       });
     });

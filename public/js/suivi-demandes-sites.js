@@ -154,7 +154,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-lecture">
         <span>Réalisée le <b>${fr(l.dateIntervention) || "—"}</b>${l.intervenant ? ` · intervenant : <b>${esc(l.intervenant)}</b>` : ""}</span>
         ${l.declarePar ? `<span>Déclarée par <b>${esc(l.declarePar)}</b>${l.declareLe ? ` le ${fr(l.declareLe)}` : ""}</span>` : ""}
-        ${l.commentaireTech ? `<span class="dps-com-lu">« ${esc(l.commentaireTech)} »</span>` : `<span class="dps-com-lu vide">Pas de commentaire</span>`}
+        ${l.commentaireTech ? `<span class="dps-com-lu">« ${esc(l.commentaireTech)} »${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : `<span class="dps-com-lu vide">Pas de commentaire</span>`}
       </div>
       ${perms.isEditor ? `<div class="dps-actions">
         <button type="button" class="dps-enregistrer valider" data-dps-valider>✓ Valider</button>
@@ -294,7 +294,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
         <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
         <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
-        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea><button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
+        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech && l.commentaireTechPar ? `<small class="dps-com-auteur">✍️ ${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}</small>` : ""}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
       </div>
       <div class="dps-actions">
         ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>${perms.isEditor ? "✓ Réalisé aujourd'hui" : "✓ Intervention terminée"}</button>` : ""}
@@ -303,7 +303,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">${perms.isEditor ? "Vérifie la date, le contact et le commentaire, puis valide." : "Complète le contact et le commentaire, puis envoie au superviseur."}</p>` : ""}
       ` : `
-      <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}</span>` : ""}</div>`}
+      <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : ""}</div>`}
       ${blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
     </article>`;
@@ -395,14 +395,15 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         else Object.assign(champs, { statut: A_VALIDER, declarePar: utilisateur, declareLe: aujourdhui() });
       }
       if (champs.statut && perms.isEditor) champs.dateStatut = aujourdhui();
+      if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui() });
       e.target.disabled = true;
       const etat = c.querySelector(".dps-etat"); etat.textContent = "⏳ Enregistrement…"; etat.className = "dps-etat";
       try {
         try { await maj(c.dataset.id, champs); }
         catch (err) {
           // Règles Firestore pas encore publiées pour « déclaré par » : on enregistre sans.
-          if (!("declarePar" in champs) || !/permission/i.test(String(err?.message || err))) throw err;
-          delete champs.declarePar; delete champs.declareLe;
+          if (!("declarePar" in champs || "commentaireTechPar" in champs) || !/permission/i.test(String(err?.message || err))) throw err;
+          delete champs.declarePar; delete champs.declareLe; delete champs.commentaireTechPar; delete champs.commentaireTechLe;
           await maj(c.dataset.id, champs);
         }
         delete st.brouillons[c.dataset.id];

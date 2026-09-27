@@ -96,14 +96,16 @@ ${f.motifAppelN1 ? `Motif de l'appel : ${f.motifAppelN1}\n` : ""}Décision / con
 // Commentaire intervenant d'une demande (Suivi des demandes) : met au propre
 // les notes du technicien, sans rien inventer.
 export async function redigerCommentaireDemande(f) {
-  return genererTexte(`Tu es l'assistant du service maintenance d'un organisme de formation (Groupe Établières, Vendée).
-Un technicien remplit le commentaire de suivi d'une demande d'intervention. Mets SES notes au propre, en français, clair et professionnel, comme s'il l'écrivait lui-même.
-Règles :
-- 1 à 3 phrases courtes, style factuel (ex. « Remplacement du mitigeur effectué. Fuite résolue. »).
-- Garde uniquement les faits présents dans les notes : n'invente AUCUNE cause, pièce, test, résultat ou chiffre. Si les notes ne disent pas que c'est réglé, ne le dis pas.
-- Garde les éventuelles suites à donner (pièce à commander, devis, repasser…).
-- Ne répète pas le site, le numéro ni la date. Corrige l'orthographe. Pas de titre, pas de guillemets, pas de Markdown.
+  return genererTexte(`Corrige et reformule légèrement le texte ci-dessous, écrit dans le champ « commentaire » d'une demande d'intervention (service maintenance, Groupe Établières).
+RÈGLE ABSOLUE : garde EXACTEMENT le sens et la nature du texte.
+- Si c'est une question ou un message adressé à quelqu'un (ex. « Bonjour Julie, as-tu fait… ? »), rends une question / un message, avec le même destinataire et la même signature. Ne le transforme JAMAIS en constat ou en action réalisée.
+- Si c'est une note de travaux, rends une note factuelle courte.
+- N'ajoute AUCUNE information, cause, action, résultat ou suite qui n'est pas écrite. Ne supprime rien d'important (noms, initiales, organismes, références).
+- Corrige l'orthographe, la ponctuation et les majuscules (noms propres, ex. Vendée Habitat). Reste bref, même longueur ou presque.
+- Réponds uniquement par le texte corrigé : pas de guillemets, pas de titre, pas de Markdown.
 
-Demande d'origine (contexte, à ne pas recopier) : ${f.descr || "—"}${f.local ? ` (local : ${f.local})` : ""}
-${f.statut ? `Statut choisi : ${f.statut}\n` : ""}Notes du technicien : ${f.notes}`);
+Contexte de la demande (ne pas recopier) : ${f.descr || "—"}
+
+Texte à corriger :
+${f.notes}`);
 }

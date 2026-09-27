@@ -2402,3 +2402,4 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-affect-tech{border:1px solid var(--border);background:transparent;border-radius:999px;padding:6px 12px;font-weight:700;cursor:pointer;color:var(--text)}
 .dps-affect-tech.on{background:#2a78d6;border-color:#2a78d6;color:#fff}
 @media (max-width:600px){.dps-action-champs{grid-template-columns:1fr}}
+.dps-com-auteur{display:block;margin-top:4px;font-size:11.5px;font-weight:600;color:var(--text-dim)}
