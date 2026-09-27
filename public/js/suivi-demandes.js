@@ -27,6 +27,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
+import { synchroniserDemandesVersSharePoint, lireDerniereSynchro, ErreurDroitsSharePoint } from "./demandes-sharepoint.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
 const COULEUR_ASSOCIATION = { "Agropolis": "var(--gold)", "École": "var(--teal)", "Armonia": "var(--violet)", "Autres": "var(--text-dim)" };
@@ -396,7 +397,8 @@ function renderTableau(container) {
   container.innerHTML = `
     <div class="stack">
       <div class="demandes-source-note">
-        📥 Demandes importées depuis le fichier Excel externe <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : ""}. La resynchro automatique vers le fichier Excel (SharePoint) n'est pas encore en place.
+        📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-synchro-sp">🔄 Envoyer les modifications vers le fichier SharePoint</button><span id="demandes-synchro-statut" class="dsp-statut"></span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -477,12 +479,30 @@ function renderTableau(container) {
     render(container);
   });
 
+  const btnSp = document.getElementById("demandes-synchro-sp");
+  if (btnSp) {
+    const st = document.getElementById("demandes-synchro-statut");
+    lireDerniereSynchro().then(d => { if (d?.derniereSynchro && st && !st.textContent) st.textContent = `Dernier envoi : ${new Date(d.derniereSynchro).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`; });
+    btnSp.addEventListener("click", async () => {
+      btnSp.disabled = true;
+      try {
+        const r = await synchroniserDemandesVersSharePoint(state.demandes || [], { onProgress: (t) => { st.textContent = t; } });
+        st.innerHTML = r.envoyees ? `✓ ${r.envoyees} demande${r.envoyees > 1 ? "s" : ""} mise${r.envoyees > 1 ? "s" : ""} à jour dans le fichier${r.introuvables ? ` · ${r.introuvables} N° absent${r.introuvables > 1 ? "s" : ""} du fichier` : ""} · <a href="${esc(r.webUrl || "#")}" target="_blank" rel="noopener">ouvrir</a>` : "✓ Rien à envoyer : le fichier est déjà à jour.";
+      } catch (err) {
+        console.error("Synchro SharePoint demandes :", err);
+        st.innerHTML = err instanceof ErreurDroitsSharePoint
+          ? `<span style="color:var(--red)">❌ L'appli n'a pas encore le droit d'écrire sur le site SharePoint « Sharepoint ». Voir avec l'administrateur Microsoft 365.</span>`
+          : `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+      } finally { btnSp.disabled = false; }
+    });
+  }
+
   if (perms.peutTraiter) {
     container.querySelectorAll(".demandes-cell-select").forEach(sel => {
       sel.addEventListener("change", async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        try { await updateDemande(id, { statut: e.target.value }); }
+        try { await updateDemande(id, perms.isEditor ? { statut: e.target.value, dateStatut: new Date().toISOString().slice(0, 10) } : { statut: e.target.value }); }
         catch (err) { console.error("updateDemande statut:", err); alert("Échec de l'enregistrement du statut — réessaie."); e.target.disabled = false; }
         // Pas de réactivation en cas de succès : le onSnapshot Firestore va rafraîchir tout l'écran de toute façon.
       });
