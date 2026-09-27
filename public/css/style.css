@@ -2408,3 +2408,14 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-groupe-tech h3 small{font:600 12.5px system-ui,sans-serif;color:var(--text-dim)}
 .dps-groupe-tech h3 small .urg{color:#d03b3b}
 .dps-avatar{width:34px;height:34px;border-radius:50%;background:#2a78d6;color:#fff;display:grid;place-items:center;font-size:15px}
+/* Phrases types */
+.dps-phrases{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dps-phrase{display:inline-flex;align-items:stretch;border:1px solid var(--border);border-radius:999px;overflow:hidden;background:var(--panel)}
+.dps-phrase button{border:0;background:transparent;color:var(--text);font:600 12px system-ui,sans-serif;padding:5px 10px;cursor:pointer}
+.dps-phrase button:hover{background:rgba(42,120,214,.08)}
+.dps-phrase .x{padding:5px 8px;color:var(--text-dim);border-left:1px solid var(--border)}
+.dps-phrase-plus{border:1px dashed var(--border);background:transparent;border-radius:999px;padding:5px 10px;font:600 12px system-ui,sans-serif;color:var(--text-dim);cursor:pointer}
+.dps-phrases-wrap{margin-top:6px}
+.dps-phrases-wrap>summary{cursor:pointer;font:700 12.5px system-ui,sans-serif;color:#2a78d6;list-style:none;display:inline-block}
+.dps-phrases-wrap>summary::-webkit-details-marker{display:none}
+.dps-phrases-wrap[open]>summary{margin-bottom:2px}

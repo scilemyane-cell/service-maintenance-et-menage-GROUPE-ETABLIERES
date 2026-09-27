@@ -6,6 +6,46 @@ import { esc } from "./astreinte-logic.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAffectationsSites, saveAffectationSite } from "./affectations-sites-data.js";
+import { watchPhrasesDemandes, savePhrasesDemandes, PHRASES_DEFAUT } from "./phrases-demandes-data.js";
+
+// ---------- Phrases types (commentaires / actions) ----------
+const phr = { data: PHRASES_DEFAUT, abonne: false, rerender: null };
+function suivrePhrases() {
+  if (phr.abonne) return; phr.abonne = true;
+  watchPhrasesDemandes((d) => { phr.data = d; phr.rerender?.(); });
+}
+// Puces cliquables ; l'éditeur peut enregistrer le texte courant (💾) ou retirer une phrase (✕).
+function phrasesHTML(type, editeur) {
+  const liste = phr.data[type] || [];
+  return `<details class="dps-phrases-wrap"><summary>💬 Phrases types</summary><div class="dps-phrases" data-phr-type="${type}">${liste.map((t, i) => `<span class="dps-phrase"><button type="button" data-phr-i="${i}" title="Insérer">${esc(t)}</button>${editeur ? `<button type="button" class="x" data-phr-suppr="${i}" title="Retirer cette phrase type">✕</button>` : ""}</span>`).join("")}${editeur ? `<button type="button" class="dps-phrase-plus" data-phr-ajout title="Enregistrer le texte saisi comme phrase type">💾 Enregistrer comme phrase type</button>` : ""}</div></details>`;
+}
+// cible() renvoie le champ texte ; mode "ajout" (commentaire) ou "remplace" (action).
+function brancherPhrases(racine, cible, mode, apresSaisie) {
+  racine.querySelectorAll(".dps-phrases").forEach(z => {
+    const type = z.dataset.phrType;
+    z.querySelectorAll("[data-phr-i]").forEach(b => b.addEventListener("click", (e) => {
+      e.preventDefault();
+      const t = (phr.data[type] || [])[+b.dataset.phrI] || "", c = cible(z); if (!c) return;
+      c.value = mode === "ajout" && c.value.trim() ? c.value.replace(/\s+$/, "") + " " + t : t;
+      apresSaisie?.(c); c.focus();
+    }));
+    z.querySelectorAll("[data-phr-suppr]").forEach(b => b.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const liste = [...(phr.data[type] || [])], t = liste[+b.dataset.phrSuppr];
+      if (!confirm(`Retirer la phrase type « ${t} » ?`)) return;
+      liste.splice(+b.dataset.phrSuppr, 1);
+      try { await savePhrasesDemandes(type, liste); } catch (err) { alert("Échec : " + (err?.message || err)); }
+    }));
+    z.querySelector("[data-phr-ajout]")?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const c = cible(z), t = (c?.value || "").trim();
+      if (!t) { alert("Écris d'abord la phrase dans le champ, puis clique sur 💾."); c?.focus(); return; }
+      const liste = phr.data[type] || [];
+      if (liste.includes(t)) { window.toast?.("Cette phrase existe déjà."); return; }
+      try { await savePhrasesDemandes(type, [...liste, t]); window.toast?.("Phrase type enregistrée ✓"); } catch (err) { alert("Échec : " + (err?.message || err)); }
+    });
+  });
+}
 
 // ---------- Sites attribués aux techniciens (par le superviseur) ----------
 const aff = { data: {}, abonne: false, rerender: null };
@@ -93,10 +133,12 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
       <label>Pour<select data-act-pour><option value="">— choisir —</option>${utilisateurs.map(u => `<option value="${esc(u.uid)}">${esc(u.nom || u.email)}</option>`).join("")}</select></label>
       <label>Avant le<input type="date" data-act-ech></label>
       <label class="large">Action à faire<input data-act-texte placeholder="ex. Commander le mitigeur, rappeler le fournisseur…"></label>
+      <div class="large">${phrasesHTML("actions", perms.isEditor)}</div>
       <button type="button" class="dps-action-ok" data-act-attribuer="${esc(l.id)}">📌 Attribuer</button>
     </div></details>`;
 }
 export function brancherActions(container, { lignes, maj, utilisateur, utilisateurs = [] }) {
+  container.querySelectorAll(".dps-action-form").forEach(f => brancherPhrases(f, () => f.querySelector("[data-act-texte]"), "remplace"));
   container.querySelectorAll("[data-act-fait]").forEach(b => b.addEventListener("click", async () => {
     b.disabled = true; b.textContent = "⏳";
     try { await maj(b.dataset.actFait, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur }); }
@@ -139,10 +181,12 @@ function badgeAge(j) {
 export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null }) {
   suivreFavoris(uid);
   suivreAffectations();
+  suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
   const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
+  phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
   const techs = utilisateurs.filter(u => u.role === "technicien");
   const nomDe = (id) => { const u = utilisateurs.find(x => x.uid === id); return u ? (u.nom || u.email) : ""; };
   const estTech = perms.isTech && !perms.isEditor;
@@ -307,7 +351,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
         <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
         <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
-        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech && l.commentaireTechPar ? `<small class="dps-com-auteur">✍️ ${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}</small>` : ""}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
+        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech && l.commentaireTechPar ? `<small class="dps-com-auteur">✍️ ${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}</small>` : ""}${phrasesHTML("commentaires", perms.isEditor)}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
       </div>
       <div class="dps-actions">
         ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>${perms.isEditor ? "✓ Réalisé aujourd'hui" : "✓ Intervention terminée"}</button>` : ""}
@@ -373,6 +417,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     }));
     c.querySelectorAll("[data-dps-champ]").forEach(inp => inp.addEventListener("input", () => poser(c, inp.dataset.dpsChamp, inp.value)));
     c.querySelectorAll("select[data-dps-champ]").forEach(inp => inp.addEventListener("change", () => poser(c, inp.dataset.dpsChamp, inp.value)));
+    brancherPhrases(c.querySelector(".dps-com") || c, () => c.querySelector('[data-dps-champ="commentaireTech"]'), "ajout", (ta) => poser(c, "commentaireTech", ta.value));
     c.querySelector("[data-dps-ia]")?.addEventListener("click", async (e) => {
       e.preventDefault();
       const ta = c.querySelector('[data-dps-champ="commentaireTech"]'), l = ligneDe(c.dataset.id), btn = e.currentTarget;
