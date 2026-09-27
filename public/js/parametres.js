@@ -188,6 +188,7 @@ function renderUtilisateurs(container) {
                   <td style="white-space:nowrap;font-size:12px">
                     <label style="margin-right:8px"><input type="checkbox" data-user-zone="${u.uid}:ecole" ${(u.stockMenageZones || []).includes("ecole") ? "checked" : ""}> École</label>
                     <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
+                    <label style="display:block;margin-top:4px" title="Compte utilisé par plusieurs techniciens (ex. PC fixe) : chacun choisit son nom dans Suivi des demandes"><input type="checkbox" data-user-poste="${u.uid}" ${u.postePartage ? "checked" : ""}> 🖥️ Poste partagé</label>
                   </td>
                   <td>
                     ${ROLES_ACCES_CAS_PAR_CAS.includes(u.role)
@@ -315,6 +316,11 @@ function renderUtilisateurs(container) {
       const zones = new Set(u?.stockMenageZones || []);
       if (cb.checked) zones.add(zone); else zones.delete(zone);
       await enregistrerChamp(cb.parentElement, uid, { stockMenageZones: [...zones] });
+    });
+  });
+  container.querySelectorAll("[data-user-poste]").forEach(cb => {
+    cb.addEventListener("change", async () => {
+      await enregistrerChamp(cb.parentElement, cb.dataset.userPoste, { postePartage: cb.checked });
     });
   });
   container.querySelectorAll("[data-user-onglet]").forEach(cb => {

@@ -178,12 +178,12 @@ function badgeAge(j) {
   return `<span class="dps-age ${cls}" title="Ancienneté de la demande">${j === 0 ? "aujourd'hui" : `il y a ${j} j`}</span>`;
 }
 
-export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null }) {
+export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false }) {
   suivreFavoris(uid);
   suivreAffectations();
   suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
-  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres });
+  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
   phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
@@ -271,7 +271,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
             ${!s.ouvertes && !s.aValider ? `<span class="dps-pastille ok">✓ À jour</span>` : ""}
           </div>
         </button>
-        ${uid ? `<button type="button" class="dps-etoile ${estFavori(s.nom) ? "on" : ""}" data-dps-fav="${esc(s.nom)}" title="${estFavori(s.nom) ? "Retirer de mes sites" : "Ajouter à mes sites"}">${estFavori(s.nom) ? "★" : "☆"}</button>` : ""}
+        ${uid && !favLectureSeule ? `<button type="button" class="dps-etoile ${estFavori(s.nom) ? "on" : ""}" data-dps-fav="${esc(s.nom)}" title="${estFavori(s.nom) ? "Retirer de mes sites" : "Ajouter à mes sites"}">${estFavori(s.nom) ? "★" : "☆"}</button>` : ""}
         </div>`;
     const totFav = favoris.reduce((t, s) => t + s.ouvertes, 0);
     const affiches = filtreTech ? sites : tous.filter(s => s.ouvertes > 0 || s.aValider > 0);

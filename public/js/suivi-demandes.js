@@ -180,7 +180,7 @@ export function mountSuiviDemandesTab(container, user) {
 
 // Bloc « 📌 Mes actions » en tête de l'onglet, quelle que soit la vue.
 function injecterMesActions(container) {
-  const uid = mountedUser?.uid;
+  const uid = identite().uid;
   if (!uid || !state.demandes) return;
   const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe)
     .sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
@@ -199,7 +199,7 @@ function injecterMesActions(container) {
   const cible = container.querySelector(".stack") || container;
   const apres = cible.querySelector(".demandes-vue-toggle");
   if (apres) apres.after(bloc); else cible.prepend(bloc);
-  brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: mountedUser?.nom || mountedUser?.email || "", utilisateurs });
+  brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: identite().nom, utilisateurs });
   bloc.querySelectorAll("[data-ma-site]").forEach(b => b.addEventListener("click", () => {
     ouvrirSite(b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
     container.scrollIntoView({ block: "start" });
@@ -216,12 +216,44 @@ function planifierDepotAuto() {
   }, 8000);
 }
 
+// ---------- Poste partagé (ex. compte service maintenance sur le PC fixe) ----------
+// Plusieurs techniciens utilisent le même compte : chacun choisit « qui il
+// est » (mémorisé 4 h sur ce poste). Ses sites attribués, ses actions et son
+// nom (commentaires, « déclaré par »…) sont alors ceux de la personne choisie.
+const CLE_POSTE = "etablieres-poste-identite";
+function lireIdentitePoste() {
+  try { const i = JSON.parse(localStorage.getItem(CLE_POSTE) || "null"); return i && Date.now() - i.t < 4 * 3600000 ? i : null; } catch { return null; }
+}
+function identite() {
+  if (!mountedUser?.postePartage) return { uid: mountedUser?.uid || null, nom: mountedUser?.nom || mountedUser?.email || "" };
+  const i = lireIdentitePoste();
+  return i ? { uid: i.uid, nom: i.nom } : { uid: null, nom: "" };
+}
+const personnesPoste = () => utilisateurs.filter(u => u.uid !== mountedUser?.uid && (u.role === "technicien" || (["menage", "mi_temps"].includes(u.role) && (u.permissions || {})["suivi-demandes"] === "write") || u.role === "n1"))
+  .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
+function injecterBandeauPoste(container) {
+  if (!mountedUser?.postePartage) return;
+  container.querySelector(".poste-bandeau")?.remove();
+  const id = identite();
+  const el = document.createElement("div");
+  el.className = "poste-bandeau" + (id.uid ? "" : " a-choisir");
+  el.innerHTML = `<span>🖥️ <b>Poste partagé</b> — ${id.uid ? "tu travailles en tant que" : "choisis ton nom pour traiter les demandes :"}</span>
+    <select id="poste-qui"><option value="">— Qui es-tu ? —</option>${personnesPoste().map(u => `<option value="${esc(u.uid)}" ${u.uid === id.uid ? "selected" : ""}>${esc(u.nom || u.email)}</option>`).join("")}</select>`;
+  const cible = container.querySelector(".stack") || container;
+  cible.prepend(el);
+  el.querySelector("#poste-qui").addEventListener("change", (e) => {
+    const u = utilisateurs.find(x => x.uid === e.target.value);
+    try { if (u) localStorage.setItem(CLE_POSTE, JSON.stringify({ uid: u.uid, nom: u.nom || u.email, t: Date.now() })); else localStorage.removeItem(CLE_POSTE); } catch {}
+    render(container);
+  });
+}
+
 function permsUtilisateur() {
   const role = mountedUser?.role;
   const isEditor = role === "super_admin" || role === "admin" || role === "n1";
   // Agents d'entretien / mi-temps avec « Modification » sur la tuile : traitent comme un technicien.
   const isTech = role === "technicien" || (["menage", "mi_temps"].includes(role) && (mountedUser?.permissions || {})["suivi-demandes"] === "write");
-  const lectureSeule = !!mountedUser?.lectureSeule; // "Lecture" (cas par cas) : voit le tableau mais ne peut pas traiter
+  const lectureSeule = !!mountedUser?.lectureSeule || (!!mountedUser?.postePartage && !identite().uid); // poste partagé : choisir son nom d'abord // "Lecture" (cas par cas) : voit le tableau mais ne peut pas traiter
   return { isEditor, isTech, lectureSeule, peutTraiter: (isEditor || isTech) && !lectureSeule };
 }
 
@@ -282,6 +314,7 @@ function render(container) {
   const r = renderVue(container);
   // (la vue Par site l'injecte elle-même à chaque ré-affichage via « apres »)
   if (ui.vue !== "sites") { try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); } }
+  try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
   return r;
 }
 
@@ -293,10 +326,11 @@ function renderVue(container) {
     return renderParSite(container, state.demandes === null ? null : toutesLesLignes(), {
       toggleHTML: toggleVueHTML(), onToggle: () => attacherToggleVue(container), perms,
       maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); },
-      utilisateur: mountedUser?.nom || mountedUser?.email || "",
-      uid: mountedUser?.uid || null,
+      utilisateur: identite().nom,
+      uid: identite().uid || null,
+      favLectureSeule: !!mountedUser?.postePartage,
       utilisateurs,
-      apres: () => { try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); } },
+      apres: () => { try { injecterMesActions(container); injecterBandeauPoste(container); } catch (e) { console.error("Mes actions / poste :", e); } },
     });
   }
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
@@ -618,7 +652,7 @@ function renderTableau(container) {
       inp.addEventListener(evt, async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        const auteur = champ === "commentaireTech" ? { commentaireTechPar: mountedUser?.nom || mountedUser?.email || "", commentaireTechLe: new Date().toISOString().slice(0, 10) } : {};
+        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date().toISOString().slice(0, 10) } : {};
         try { await updateDemande(id, { [champ]: e.target.value.trim(), ...auteur }); planifierDepotAuto(); }
         catch (err) { console.error("updateDemande " + champ, err); alert(`Échec de l'enregistrement (${libelle}) — réessaie.`); e.target.disabled = false; }
       });
