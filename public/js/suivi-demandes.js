@@ -240,7 +240,11 @@ function fmtDateFR(iso) {
   return `${d}/${m}/${y}`;
 }
 
+// Les techniciens n'ont que la vue « Par site » (ni tableau, ni statistiques).
+const vueTechSeule = () => mountedUser?.role === "technicien";
+
 function render(container) {
+  if (vueTechSeule()) ui.vue = "sites";
   if (ui.vue === "tableau") return renderTableau(container);
   if (ui.vue === "sites") {
     const perms = permsUtilisateur();
@@ -248,6 +252,7 @@ function render(container) {
       toggleHTML: toggleVueHTML(), onToggle: () => attacherToggleVue(container), perms,
       maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); },
       utilisateur: mountedUser?.nom || mountedUser?.email || "",
+      uid: mountedUser?.uid || null,
     });
   }
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
@@ -281,6 +286,7 @@ function render(container) {
 }
 
 function toggleVueHTML() {
+  if (vueTechSeule()) return "";
   return `
     <div class="demandes-vue-toggle">
       <button type="button" class="demandes-vue-btn ${ui.vue === "sites" ? "active" : ""}" data-vue="sites">🏠 Par site</button>

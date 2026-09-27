@@ -3,6 +3,48 @@
 // voit ses demandes en cartes, et on les traite en un geste (statut, date
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
 import { esc } from "./astreinte-logic.js";
+import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
+import { watchSitesDossiers } from "./site-dossier-data.js";
+
+// ---------- Sites favoris ----------
+// Mêmes favoris que l'accueil / les compteurs (fiches sites), rapprochés
+// des noms de sites du fichier des demandes par mots significatifs
+// (ex. « Résidence Le Mail » ↔ « RS - Le Mail »).
+const MOTS_VIDES = new Set(["rs", "lot", "mna", "maison", "site", "residence", "de", "du", "des", "la", "le", "les", "l", "d", "et", "a", "au", "sur", "1", "2", "3", "4"]);
+const motsSite = (nom) => String(nom || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  .replace(/\bst\b/g, "saint").replace(/[^a-z0-9]+/g, " ").split(" ").filter(m => m && !MOTS_VIDES.has(m));
+export function memeSite(nomDemande, nomFiche) {
+  const a = motsSite(nomDemande), b = motsSite(nomFiche);
+  if (!a.length || !b.length) return false;
+  const [petit, grand] = a.length <= b.length ? [a, b] : [b, a];
+  return petit.join(" ").length >= 3 && petit.every(m => grand.includes(m));
+}
+const fav = { uid: null, unsubs: [], ficheIds: [], fiches: [], ajout: [], retrait: [], pret: false, rerender: null };
+function suivreFavoris(uid) {
+  if (fav.uid === uid) return;
+  fav.unsubs.forEach(u => u && u()); fav.unsubs = [];
+  Object.assign(fav, { uid, ficheIds: [], fiches: [], ajout: [], retrait: [], pret: false });
+  if (!uid) return;
+  const maj = () => { fav.pret = true; fav.rerender?.(); };
+  fav.unsubs.push(watchFavoris(uid, (ids, data = {}) => { fav.ficheIds = ids || []; fav.ajout = data.demandesAjout || []; fav.retrait = data.demandesRetrait || []; maj(); }));
+  fav.unsubs.push(watchSitesDossiers((l) => { fav.fiches = l; maj(); }));
+}
+function estFavori(nomSite) {
+  if (fav.retrait.includes(nomSite)) return false;
+  if (fav.ajout.includes(nomSite)) return true;
+  const noms = fav.ficheIds.map(id => fav.fiches.find(f => f.id === id)?.nom).filter(Boolean);
+  return noms.some(n => memeSite(nomSite, n));
+}
+async function basculerFavori(nomSite) {
+  if (!fav.uid) return;
+  const etait = estFavori(nomSite);
+  const ajout = fav.ajout.filter(n => n !== nomSite), retrait = fav.retrait.filter(n => n !== nomSite);
+  if (etait) retrait.push(nomSite); else ajout.push(nomSite);
+  fav.ajout = ajout; fav.retrait = retrait;
+  fav.rerender?.();
+  try { await saveFavorisDemandes(fav.uid, ajout, retrait); }
+  catch (e) { console.error("saveFavorisDemandes:", e); window.toast?.("Favori non enregistré."); }
+}
 
 const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "Planifié", "Commande en cours", "Réalisé", "Annulé"];
 const ORDRE_URG = { "Critique": 0, "Urgent": 1, "À planifier": 2, "Normal": 3, "Non renseignée": 4 };
@@ -34,9 +76,11 @@ function badgeAge(j) {
   return `<span class="dps-age ${cls}" title="Ancienneté de la demande">${j === 0 ? "aujourd'hui" : `il y a ${j} j`}</span>`;
 }
 
-export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "" }) {
+export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null }) {
+  suivreFavoris(uid);
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
-  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur });
+  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid });
+  fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   const q = sa(st.q.trim());
   const carteValidation = (l) => `
     <article class="dps-carte a-valider" data-id="${esc(l.id)}">
@@ -85,9 +129,26 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         const j = joursDepuis(l.date); if (j !== null && j > s.plusVieille) s.plusVieille = j;
       } else if (l.statut === "Réalisé" && (l.dateIntervention || l.dateStatut || "").slice(0, 7) === aujourdhui().slice(0, 7)) s.realiseesMois++;
     });
-    const sites = Object.values(parSite)
-      .filter(s => (!q || sa(s.nom).includes(q)) && (st.voirTraitees || s.ouvertes > 0 || s.aValider > 0))
-      .sort((a, b) => (b.urgentes - a.urgentes) || (b.ouvertes - a.ouvertes) || a.nom.localeCompare(b.nom, "fr"));
+    const tri = (a, b) => (b.urgentes - a.urgentes) || (b.ouvertes - a.ouvertes) || a.nom.localeCompare(b.nom, "fr");
+    const tous = Object.values(parSite).filter(s => !q || sa(s.nom).includes(q));
+    const favoris = tous.filter(s => estFavori(s.nom)).sort(tri);
+    const sites = tous.filter(s => !estFavori(s.nom) && (st.voirTraitees || s.ouvertes > 0 || s.aValider > 0)).sort(tri);
+    const carteSite = (s) => `
+        <div class="dps-site-wrap">
+        <button class="dps-site ${s.urgentes ? "a-urg" : s.ouvertes ? "" : "vide"}" data-dps-site="${esc(s.nom)}">
+          <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small></div>
+          <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
+          <div class="dps-site-pied">
+            ${s.urgentes ? `<span class="dps-pastille urg">🔴 ${s.urgentes} urgente${s.urgentes > 1 ? "s" : ""}</span>` : ""}
+            ${s.plusVieille > 30 ? `<span class="dps-pastille vieux">⏳ ${s.plusVieille} j</span>` : ""}
+            ${s.realiseesMois ? `<span class="dps-pastille ok">✓ ${s.realiseesMois} ce mois</span>` : ""}
+            ${s.aValider ? `<span class="dps-pastille valid">⏳ ${s.aValider} à valider</span>` : ""}
+            ${!s.ouvertes && !s.aValider ? `<span class="dps-pastille ok">✓ À jour</span>` : ""}
+          </div>
+        </button>
+        ${uid ? `<button type="button" class="dps-etoile ${estFavori(s.nom) ? "on" : ""}" data-dps-fav="${esc(s.nom)}" title="${estFavori(s.nom) ? "Retirer de mes sites" : "Ajouter à mes sites"}">${estFavori(s.nom) ? "★" : "☆"}</button>` : ""}
+        </div>`;
+    const totFav = favoris.reduce((t, s) => t + s.ouvertes, 0);
     const totOuv = sites.reduce((t, s) => t + s.ouvertes, 0), totUrg = sites.reduce((t, s) => t + s.urgentes, 0);
     container.innerHTML = `
     <div class="stack dps">
@@ -107,19 +168,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
         <label class="dps-case"><input type="checkbox" id="dps-traitees" ${st.voirTraitees ? "checked" : ""}> Sites sans demande en attente</label>
       </div>
+      ${favoris.length ? `
+      <section class="dps-favoris">
+        <h3>⭐ Mes sites <small>${totFav} demande${totFav > 1 ? "s" : ""} à traiter</small></h3>
+        <div class="dps-sites">${favoris.map(carteSite).join("")}</div>
+      </section>
+      <h3 class="dps-autres-titre">Autres sites</h3>` : (uid && fav.pret ? `<p class="dps-astuce">⭐ Tes sites favoris de l'accueil apparaissent ici en premier. Tu peux aussi cliquer sur ☆ pour en ajouter.</p>` : "")}
       <div class="dps-sites">
-        ${sites.map(s => `
-        <button class="dps-site ${s.urgentes ? "a-urg" : s.ouvertes ? "" : "vide"}" data-dps-site="${esc(s.nom)}">
-          <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small></div>
-          <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
-          <div class="dps-site-pied">
-            ${s.urgentes ? `<span class="dps-pastille urg">🔴 ${s.urgentes} urgente${s.urgentes > 1 ? "s" : ""}</span>` : ""}
-            ${s.plusVieille > 30 ? `<span class="dps-pastille vieux">⏳ ${s.plusVieille} j</span>` : ""}
-            ${s.realiseesMois ? `<span class="dps-pastille ok">✓ ${s.realiseesMois} ce mois</span>` : ""}
-            ${s.aValider ? `<span class="dps-pastille valid">⏳ ${s.aValider} à valider</span>` : ""}
-            ${!s.ouvertes && !s.aValider ? `<span class="dps-pastille ok">✓ À jour</span>` : ""}
-          </div>
-        </button>`).join("") || `<div class="dps-vide">Aucun site${q ? " ne correspond à la recherche" : " avec des demandes en attente"}.</div>`}
+        ${sites.map(carteSite).join("") || `<div class="dps-vide">Aucun ${favoris.length ? "autre " : ""}site${q ? " ne correspond à la recherche" : " avec des demandes en attente"}.</div>`}
       </div>
     </div>`;
     onToggle();
@@ -127,6 +183,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelector("#dps-q")?.addEventListener("input", (e) => { st.q = e.target.value; clearTimeout(t); t = setTimeout(() => { rerender(); const el = container.querySelector("#dps-q"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); });
     container.querySelectorAll("[data-dps-asso]").forEach(b => b.addEventListener("click", () => { st.association = b.dataset.dpsAsso; rerender(); }));
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
+    container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
     container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; rerender(); container.scrollIntoView({ block: "start" }); }));
     brancherValidation();
     return;

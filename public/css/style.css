@@ -2352,3 +2352,13 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-champs{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .dps-enregistrer[hidden]{display:none}
 @media (max-width:700px){.dps-cartes{grid-template-columns:1fr}}
+/* Suivi des demandes — sites favoris */
+.dps-site-wrap{position:relative;display:flex}
+.dps-site-wrap .dps-site{flex:1;padding-right:44px}
+.dps-etoile{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:#b8a24a;font-size:19px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.dps-etoile.on{color:#e0a800;background:#fff7d6;border-color:#f0d67a}
+.dps-favoris{background:linear-gradient(180deg,#fffaf0,transparent);border:1px solid #f3e2b0;border-radius:20px;padding:14px}
+.dps-favoris h3,.dps-autres-titre{margin:0 0 10px;font:800 16px "Montserrat",system-ui,sans-serif;display:flex;align-items:baseline;gap:10px}
+.dps-favoris h3 small{font:600 12.5px system-ui,sans-serif;color:var(--text-dim)}
+.dps-autres-titre{margin-top:4px;color:var(--text-dim)}
+.dps-astuce{margin:0;font-size:13px;color:var(--text-dim)}
