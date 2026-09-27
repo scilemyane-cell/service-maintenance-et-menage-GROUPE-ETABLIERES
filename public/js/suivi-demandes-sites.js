@@ -201,8 +201,13 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const attribues = estTech && uid ? tous.filter(s => techsDuSite(s.nom).includes(uid)).sort(tri) : [];
     const dejaVu = new Set(attribues.map(s => s.nom));
     const filtreTech = !estTech && st.tech ? (s) => techsDuSite(s.nom).includes(st.tech) : null;
-    const favoris = filtreTech ? [] : tous.filter(s => !dejaVu.has(s.nom) && estFavori(s.nom)).sort(tri);
+    // Superviseur (sans filtre) : sites rangés par technicien, puis les non attribués.
+    const groupes = !estTech && !st.tech ? techs.map(t => ({ t, sites: tous.filter(s => techsDuSite(s.nom).includes(t.uid)).sort(tri) })).filter(g => g.sites.length) : [];
+    const parTech = groupes.length > 0;
+    const attribueAQuelquun = (s) => techsDuSite(s.nom).some(id => techs.some(t => t.uid === id));
+    const favoris = filtreTech || parTech ? [] : tous.filter(s => !dejaVu.has(s.nom) && estFavori(s.nom)).sort(tri);
     const sites = filtreTech ? tous.filter(filtreTech).sort(tri)
+      : parTech ? tous.filter(s => !attribueAQuelquun(s) && (st.voirTraitees || s.ouvertes > 0 || s.aValider > 0)).sort(tri)
       : tous.filter(s => !dejaVu.has(s.nom) && !estFavori(s.nom) && (st.voirTraitees || s.ouvertes > 0 || s.aValider > 0)).sort(tri);
     const carteSite = (s) => `
         <div class="dps-site-wrap">
@@ -221,14 +226,15 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${uid ? `<button type="button" class="dps-etoile ${estFavori(s.nom) ? "on" : ""}" data-dps-fav="${esc(s.nom)}" title="${estFavori(s.nom) ? "Retirer de mes sites" : "Ajouter à mes sites"}">${estFavori(s.nom) ? "★" : "☆"}</button>` : ""}
         </div>`;
     const totFav = favoris.reduce((t, s) => t + s.ouvertes, 0);
-    const totOuv = sites.reduce((t, s) => t + s.ouvertes, 0), totUrg = sites.reduce((t, s) => t + s.urgentes, 0);
+    const affiches = filtreTech ? sites : tous.filter(s => s.ouvertes > 0 || s.aValider > 0);
+    const totOuv = affiches.reduce((t, s) => t + s.ouvertes, 0), totUrg = affiches.reduce((t, s) => t + s.urgentes, 0);
     container.innerHTML = `
     <div class="stack dps">
       ${toggleHTML}
       <section class="dps-hero">
         <div><span class="dps-sur">Traitement sur le terrain</span><h2>Demandes <em>par site</em></h2>
           <p>Choisis un site pour voir et traiter ses demandes.</p></div>
-        <div class="dps-hero-chiffres"><div><b>${totOuv}</b><span>à traiter</span></div><div class="urg"><b>${totUrg}</b><span>urgentes</span></div><div><b>${sites.length}</b><span>sites</span></div></div>
+        <div class="dps-hero-chiffres"><div><b>${totOuv}</b><span>à traiter</span></div><div class="urg"><b>${totUrg}</b><span>urgentes</span></div><div><b>${affiches.length}</b><span>sites</span></div></div>
       </section>
       ${perms.isEditor ? (() => { const av = lignes.filter(l => EN_ATTENTE_VALID(l.statut)).sort((a, b) => (a.dateIntervention || "").localeCompare(b.dateIntervention || "")); return av.length ? `
       <section class="dps-valid-bloc">
@@ -247,12 +253,19 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div class="dps-sites">${attribues.map(carteSite).join("")}</div>
       </section>` : ""}
       ${filtreTech ? `<h3 class="dps-autres-titre">👷 Sites de ${esc(nomDe(st.tech))} (${sites.length})</h3>` : ""}
+      ${groupes.map(g => { const aTraiter = g.sites.reduce((t, s) => t + s.ouvertes, 0), urg = g.sites.reduce((t, s) => t + s.urgentes, 0); return `
+      <section class="dps-groupe-tech">
+        <h3><span class="dps-avatar">${esc((g.t.nom || g.t.email || "?").slice(0, 1).toUpperCase())}</span>${esc(g.t.nom || g.t.email)}
+          <small>${g.sites.length} site${g.sites.length > 1 ? "s" : ""} · ${aTraiter} à traiter${urg ? ` · <b class="urg">${urg} urgente${urg > 1 ? "s" : ""}</b>` : ""}</small></h3>
+        <div class="dps-sites">${g.sites.map(carteSite).join("")}</div>
+      </section>`; }).join("")}
+      ${parTech ? `<h3 class="dps-autres-titre">Sites sans technicien attribué</h3>` : ""}
       ${favoris.length ? `
       <section class="dps-favoris">
         <h3>⭐ Mes sites <small>${totFav} demande${totFav > 1 ? "s" : ""} à traiter</small></h3>
         <div class="dps-sites">${favoris.map(carteSite).join("")}</div>
       </section>
-      <h3 class="dps-autres-titre">Autres sites</h3>` : attribues.length ? `<h3 class="dps-autres-titre">Autres sites</h3>` : (uid && fav.pret && !filtreTech ? `<p class="dps-astuce">⭐ Tes sites favoris de l'accueil apparaissent ici en premier. Tu peux aussi cliquer sur ☆ pour en ajouter.</p>` : "")}
+      <h3 class="dps-autres-titre">Autres sites</h3>` : attribues.length ? `<h3 class="dps-autres-titre">Autres sites</h3>` : (uid && fav.pret && !filtreTech && !parTech ? `<p class="dps-astuce">⭐ Tes sites favoris de l'accueil apparaissent ici en premier. Tu peux aussi cliquer sur ☆ pour en ajouter.</p>` : "")}
       <div class="dps-sites">
         ${sites.map(carteSite).join("") || `<div class="dps-vide">Aucun ${favoris.length ? "autre " : ""}site${q ? " ne correspond à la recherche" : " avec des demandes en attente"}.</div>`}
       </div>
