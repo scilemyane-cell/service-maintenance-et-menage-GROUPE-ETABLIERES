@@ -12,7 +12,12 @@ const joursDepuis = (iso) => { if (!iso) return null; const d = new Date(iso + "
 const fr = (iso) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
 const sa = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-const st = { site: null, q: "", association: "", voirTraitees: false };
+const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {} };
+// Brouillon par demande : rien n'est enregistré tant que « Enregistrer » /
+// « Valider » n'est pas cliqué (on garde la saisie même si l'écran se
+// rafraîchit à cause d'une autre modification).
+const val = (l, k) => (st.brouillons[l.id] && k in st.brouillons[l.id] ? st.brouillons[l.id][k] : (l[k] || ""));
+const aChange = (l) => { const b = st.brouillons[l.id]; return !!b && Object.keys(b).some(k => (b[k] || "") !== (l[k] || "")); };
 
 function badgeUrg(u) {
   const cls = u === "Critique" ? "crit" : u === "Urgent" ? "urg" : u === "À planifier" ? "plan" : u === "Normal" ? "norm" : "nr";
@@ -99,15 +104,20 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
-        ${STATUTS_RAPIDES.map(s => `<button type="button" class="dps-st ${l.statut === s ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}">${esc(s)}</button>`).join("")}
+        ${STATUTS_RAPIDES.map(s => `<button type="button" class="dps-st ${val(l, "statut") === s ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}">${esc(s)}</button>`).join("")}
       </div>
       <div class="dps-champs">
-        ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === (l.categorieIntervenant || "") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
-        <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(l.intervenant || "")}" placeholder="ex. Ronald, Écol'eau…"></label>
-        <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(l.dateIntervention || "")}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
-        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(l.commentaireTech || "")}</textarea></label>
+        ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
+        <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
+        <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
+        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea></label>
       </div>
-      ${!TRAITE(l.statut) ? `<button type="button" class="dps-realise" data-dps-realise>✓ Réalisé aujourd'hui</button>` : ""}
+      <div class="dps-actions">
+        ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>✓ Réalisé aujourd'hui</button>` : ""}
+        <button type="button" class="dps-enregistrer ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? "valider" : ""}" data-dps-enregistrer ${aChange(l) ? "" : "disabled"}>${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? "✓ Valider la réalisation" : "💾 Enregistrer"}</button>
+        ${aChange(l) ? `<button type="button" class="dps-annuler" data-dps-annuler>Annuler</button>` : ""}
+      </div>
+      ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">Vérifie la date, le contact et le commentaire, puis valide.</p>` : ""}
       ` : `
       <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}</span>` : ""}</div>`}
       <div class="dps-etat" aria-live="polite"></div>
@@ -126,33 +136,59 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   onToggle();
   container.querySelector("#dps-retour").addEventListener("click", () => { st.site = null; rerender(); });
 
-  const enregistrer = async (carteEl, champs, message) => {
-    const etat = carteEl.querySelector(".dps-etat");
-    etat.textContent = "⏳ Enregistrement…"; etat.className = "dps-etat";
-    try { await maj(carteEl.dataset.id, champs); etat.textContent = message || "✓ Enregistré"; etat.className = "dps-etat ok"; }
-    catch (err) { console.error("Demande :", err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; }
+  const ligneDe = (id) => duSite.find(x => x.id === id);
+  const majBoutons = (c) => {
+    const l = ligneDe(c.dataset.id); if (!l) return;
+    const changee = aChange(l), realise = val(l, "statut") === "Réalisé" && !TRAITE(l.statut);
+    const btn = c.querySelector("[data-dps-enregistrer]");
+    btn.disabled = !changee; btn.classList.toggle("valider", realise);
+    btn.textContent = realise ? "✓ Valider la réalisation" : "💾 Enregistrer";
+    let ann = c.querySelector("[data-dps-annuler]");
+    if (changee && !ann) { ann = document.createElement("button"); ann.type = "button"; ann.className = "dps-annuler"; ann.dataset.dpsAnnuler = ""; ann.textContent = "Annuler"; btn.after(ann); ann.addEventListener("click", () => { delete st.brouillons[c.dataset.id]; rerender(); }); }
+    if (!changee && ann) ann.remove();
+    c.querySelector("[data-dps-realise]")?.toggleAttribute("hidden", realise);
+    c.classList.toggle("modifiee", changee);
   };
+  const poser = (c, k, v) => { (st.brouillons[c.dataset.id] ||= {})[k] = v; majBoutons(c); };
   container.querySelectorAll(".dps-carte").forEach(c => {
     c.querySelectorAll("[data-dps-statut]").forEach(b => b.addEventListener("click", () => {
       c.querySelectorAll("[data-dps-statut]").forEach(x => x.classList.toggle("on", x === b));
-      const champs = { statut: b.dataset.dpsStatut };
-      if (perms.isEditor) champs.dateStatut = aujourdhui();
-      enregistrer(c, champs, `✓ Statut : ${b.dataset.dpsStatut}`);
+      poser(c, "statut", b.dataset.dpsStatut);
+      if (b.dataset.dpsStatut === "Réalisé") {
+        const d = c.querySelector('[data-dps-champ="dateIntervention"]');
+        if (d && !d.value) { d.value = aujourdhui(); poser(c, "dateIntervention", d.value); }
+        c.querySelector('[data-dps-champ="commentaireTech"]')?.focus();
+      }
     }));
-    c.querySelectorAll("[data-dps-champ]").forEach(inp => inp.addEventListener("change", () => enregistrer(c, { [inp.dataset.dpsChamp]: inp.value.trim() })));
+    c.querySelectorAll("[data-dps-champ]").forEach(inp => inp.addEventListener("input", () => poser(c, inp.dataset.dpsChamp, inp.value)));
+    c.querySelectorAll("select[data-dps-champ]").forEach(inp => inp.addEventListener("change", () => poser(c, inp.dataset.dpsChamp, inp.value)));
     c.querySelector("[data-dps-auj]")?.addEventListener("click", () => {
-      const inp = c.querySelector('[data-dps-champ="dateIntervention"]'); inp.value = aujourdhui();
-      enregistrer(c, { dateIntervention: inp.value });
+      const inp = c.querySelector('[data-dps-champ="dateIntervention"]'); inp.value = aujourdhui(); poser(c, "dateIntervention", inp.value);
     });
-    c.querySelector("[data-dps-realise]")?.addEventListener("click", (e) => {
-      e.target.disabled = true;
-      const champs = { statut: "Réalisé" };
+    // « Réalisé aujourd'hui » prépare seulement : statut + date du jour, puis on complète et on valide.
+    c.querySelector("[data-dps-realise]")?.addEventListener("click", () => {
+      c.querySelector('[data-dps-statut="Réalisé"]')?.click();
       const d = c.querySelector('[data-dps-champ="dateIntervention"]');
-      if (!d.value) champs.dateIntervention = aujourdhui();
-      if (perms.isEditor) champs.dateStatut = aujourdhui();
-      const com = c.querySelector('[data-dps-champ="commentaireTech"]')?.value.trim();
-      if (com) champs.commentaireTech = com;
-      enregistrer(c, champs, "✓ Marquée réalisée");
+      if (d && !d.value) { d.value = aujourdhui(); poser(c, "dateIntervention", d.value); }
+      c.querySelector('[data-dps-champ="intervenant"]')?.focus();
+    });
+    c.querySelector("[data-dps-annuler]")?.addEventListener("click", () => { delete st.brouillons[c.dataset.id]; rerender(); });
+    c.querySelector("[data-dps-enregistrer]")?.addEventListener("click", async (e) => {
+      const l = ligneDe(c.dataset.id), br = st.brouillons[c.dataset.id] || {};
+      const champs = {};
+      Object.keys(br).forEach(k => { const v = String(br[k] ?? "").trim(); if (v !== (l[k] || "")) champs[k] = v; });
+      if (!Object.keys(champs).length) return;
+      if (champs.statut === "Réalisé" && !(champs.dateIntervention || l.dateIntervention)) champs.dateIntervention = aujourdhui();
+      if (champs.statut && perms.isEditor) champs.dateStatut = aujourdhui();
+      e.target.disabled = true;
+      const etat = c.querySelector(".dps-etat"); etat.textContent = "⏳ Enregistrement…"; etat.className = "dps-etat";
+      try {
+        await maj(c.dataset.id, champs);
+        delete st.brouillons[c.dataset.id];
+        etat.textContent = champs.statut === "Réalisé" ? "✓ Demande réalisée" : "✓ Enregistré"; etat.className = "dps-etat ok";
+      } catch (err) {
+        console.error("Demande :", err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; e.target.disabled = false;
+      }
     });
   });
 }

@@ -2332,3 +2332,12 @@ html:not([data-theme="clair"]) .dps-st.on{background:#d9b24c;color:#1A1305;borde
   .dps-cartes{grid-template-columns:1fr}
   .dps-champs{grid-template-columns:1fr}
 }
+.dps-actions{display:flex;gap:8px;flex-wrap:wrap}
+.dps-realise-prep{flex:1 1 180px;border:2px solid #0ca30c;background:transparent;color:#0a7f0a;border-radius:14px;padding:11px;font:800 14px "Montserrat",system-ui,sans-serif;cursor:pointer}
+html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
+.dps-enregistrer{flex:1 1 180px;border:0;border-radius:14px;padding:12px;background:linear-gradient(135deg,#0b2140,#1d3a66);color:#fff;font:800 14px "Montserrat",system-ui,sans-serif;cursor:pointer}
+.dps-enregistrer.valider{background:linear-gradient(135deg,#0ca30c,#0a7f0a);font-size:15px}
+.dps-enregistrer:disabled{opacity:.35;cursor:default}
+.dps-annuler{border:1px solid var(--border);background:var(--panel);color:var(--text-dim);border-radius:14px;padding:0 14px;font:700 13px "Montserrat",system-ui,sans-serif;cursor:pointer}
+.dps-carte.modifiee{box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 60%,transparent),0 6px 18px rgba(20,30,50,.1)}
+.dps-aide{margin:0;font-size:12px;font-weight:700;color:#0a7f0a}
