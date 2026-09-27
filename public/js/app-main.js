@@ -11,6 +11,7 @@
   import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS, getThemeModules, basculerThemeModules } from "./theme.js";
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
   import { watchUsers } from "./users-data.js";
+  import { watchOrdreOnglets, saveOrdreOnglets } from "./ordre-onglets-data.js";
 
   initTheme();
 
@@ -407,6 +408,10 @@
       // Microsoft n'est déjà active.
       runDailyExportIfNeeded();
     }
+    if (!ordreOngletsAbonne) {
+      ordreOngletsAbonne = true;
+      watchOrdreOnglets((o) => { const avant = JSON.stringify(ordreOnglets); ordreOnglets = o || {}; if (avant !== JSON.stringify(ordreOnglets) && currentCategory && !reorgOnglets) render(); });
+    }
     if (!homeOrderSubscribed) {
       homeOrderSubscribed = true;
       // homeOrder ne sert qu'à classer les tuiles de l'écran d'accueil :
@@ -453,7 +458,18 @@
   // Direction : voit tout comme le Super Admin, en consultation seule —
   // sauf l'Administration (comptes, corbeille…) et le Suivi des tâches.
   const TUILES_INTERDITES_DIRECTION = ["administration", "taches"];
+  // Ordre des onglets choisi par le Super Admin (glisser-déposer), appliqué à tous.
+  let ordreOnglets = {};
+  let ordreOngletsAbonne = false;
+  let reorgOnglets = false;
   function categorySubtabsFor(category, user) {
+    const liste = categorySubtabsBrut(category, user);
+    const ordre = ordreOnglets[category?.id];
+    if (!Array.isArray(ordre) || !ordre.length) return liste;
+    const rang = (id) => { const i = ordre.indexOf(id); return i < 0 ? 1000 : i; };
+    return liste.map((s, i) => ({ s, i })).sort((a, b) => (rang(a.s.id) - rang(b.s.id)) || (a.i - b.i)).map(x => x.s);
+  }
+  function categorySubtabsBrut(category, user) {
     if (user.role === "direction") {
       if (TUILES_INTERDITES_DIRECTION.includes(category.id)) return [];
       return category.subtabs;
@@ -576,8 +592,9 @@
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
       ${category && modulesConstruction.includes(category.id) && !eff.apercu && eff.role === "super_admin" ? `<div class="construction-bandeau">🚧 Module en construction — visible uniquement par le Super Admin (masqué pour tous les autres, y compris dans Statistiques).</div>` : ""}
       ${category ? `
-      <nav class="tabs" style="--nb-onglets:${Math.min(3, categorySubtabsFor(category, eff).length)}" data-nb="${categorySubtabsFor(category, eff).length}">
+      <nav class="tabs ${reorgOnglets ? "tabs-reorg" : ""}" id="tabs-nav" style="--nb-onglets:${Math.min(3, categorySubtabsFor(category, eff).length)}" data-nb="${categorySubtabsFor(category, eff).length}">
         ${categorySubtabsFor(category, eff).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}"><span class="tab-ico">${s.icon}</span><span class="tab-lib">${s.label}</span></button>`).join("")}
+      ${eff.role === "super_admin" && !eff.apercu && categorySubtabsFor(category, eff).length > 1 ? `<button type="button" class="tab-reorg-btn ${reorgOnglets ? "on" : ""}" id="tab-reorg-btn" title="Réorganiser les onglets">${reorgOnglets ? "✓ Terminé" : "↕️"}</button>` : ""}
       </nav>` : ""}
       <main class="content" id="content"></main>
     `;
@@ -610,10 +627,47 @@
     if (backBtn) backBtn.addEventListener("click", () => { currentCategory = null; currentSubtab = null; render(); });
 
     document.querySelectorAll("[data-subtab]").forEach(btn => {
-      btn.addEventListener("click", () => { currentSubtab = btn.dataset.subtab; render(); });
+      btn.addEventListener("click", () => { if (reorgOnglets) return; currentSubtab = btn.dataset.subtab; render(); });
+    });
+    document.getElementById("tab-reorg-btn")?.addEventListener("click", () => { reorgOnglets = !reorgOnglets; render(); if (reorgOnglets) window.toast?.("↔️ Fais glisser les onglets pour les ranger, puis « Terminé »"); });
+    const navOnglets = document.getElementById("tabs-nav");
+    if (reorgOnglets && navOnglets && category) activerGlisserOnglets(navOnglets, (ids) => {
+      ordreOnglets = { ...ordreOnglets, [category.id]: ids };
+      saveOrdreOnglets(category.id, ids).then(() => window.toast?.("✓ Ordre des onglets enregistré pour tout le monde"))
+        .catch(err => { console.error("saveOrdreOnglets:", err); alert("Échec de l'enregistrement de l'ordre : " + (err?.message || err)); });
     });
 
     renderContent(category);
+  }
+
+  // Glisser-déposer des onglets (souris et tactile), en ligne ou en grille.
+  function activerGlisserOnglets(nav, onFin) {
+    nav.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.style.touchAction = "none";
+      btn.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        btn.classList.add("tab-glisse");
+        const avant = [...nav.querySelectorAll(".tab-btn")].map(b => b.dataset.subtab).join();
+        const bouger = (ev) => {
+          const cible = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.(".tab-btn");
+          if (!cible || cible === btn || cible.parentNode !== nav) return;
+          const r = cible.getBoundingClientRect();
+          const apres = ev.clientX > r.left + r.width / 2;
+          nav.insertBefore(btn, apres ? cible.nextSibling : cible);
+        };
+        const lacher = () => {
+          document.removeEventListener("pointermove", bouger);
+          document.removeEventListener("pointerup", lacher);
+          document.removeEventListener("pointercancel", lacher);
+          btn.classList.remove("tab-glisse");
+          const ids = [...nav.querySelectorAll(".tab-btn")].map(b => b.dataset.subtab);
+          if (ids.join() !== avant) onFin(ids);
+        };
+        document.addEventListener("pointermove", bouger);
+        document.addEventListener("pointerup", lacher);
+        document.addEventListener("pointercancel", lacher);
+      });
+    });
   }
 
   function optionsApercu() {

@@ -2225,3 +2225,11 @@ html:not([data-theme="clair"]) .dst-pill.ok{color:#5fd35f}html:not([data-theme="
 
 .pied-version{color:inherit;opacity:.85;font-size:inherit;font-weight:700}
 @media (max-width:700px){ body.accueil-gmao .gh-pied-texte{ display:block; left:0; right:0; top:-22px; text-align:center; font-size:10.5px; } body.accueil-gmao .gh-pied{ margin-top:30px; } }
+
+/* ===== Réorganisation des onglets (Super Admin) ===== */
+.tab-reorg-btn{border:1px dashed var(--border);background:transparent;color:var(--text-dim);border-radius:99px;padding:7px 12px;font:700 12.5px "Montserrat",system-ui,sans-serif;cursor:pointer;white-space:nowrap;align-self:center}
+.tab-reorg-btn.on{background:var(--gold);color:#1A1305;border-style:solid;border-color:transparent}
+.tabs-reorg .tab-btn{cursor:grab;outline:2px dashed color-mix(in srgb,var(--gold) 70%,transparent);outline-offset:-2px;animation:tab-frisson .35s ease-in-out infinite alternate}
+.tabs-reorg .tab-btn.tab-glisse{cursor:grabbing;opacity:.75;transform:scale(1.05);animation:none;z-index:2;box-shadow:0 10px 24px rgba(0,0,0,.25)}
+@keyframes tab-frisson{from{transform:rotate(-.6deg)}to{transform:rotate(.6deg)}}
+@media (max-width:700px){ body:not(.accueil-gmao) .tabs .tab-reorg-btn{grid-column:1/-1;justify-self:center} }
