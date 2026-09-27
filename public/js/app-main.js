@@ -10,7 +10,9 @@
   import { watchAccess, hasAccess } from "./access-data.js";
   import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS, getThemeModules, basculerThemeModules } from "./theme.js";
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
-  import { watchUsers } from "./users-data.js";
+  import { watchUsers, updateUser } from "./users-data.js";
+  import { db as dbMig } from "./firebase-init.js";
+  import { doc as docMig, getDoc as getDocMig, setDoc as setDocMig } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
   import { watchOrdreOnglets, saveOrdreOnglets } from "./ordre-onglets-data.js";
 
   initTheme();
@@ -434,7 +436,8 @@
     }
     if (!usersSubscribed && user.role === "super_admin") {
       usersSubscribed = true;
-      watchUsers((l) => { usersList = l; if (apercuUid) render(); else majSelectApercu(); });
+      let migFaite = false;
+      watchUsers((l) => { usersList = l; if (!migFaite && l.length) { migFaite = true; migrationAccesTechSuivi(l); } if (apercuUid) render(); else majSelectApercu(); });
     }
     if (!compteursAlertSubscribed) {
       compteursAlertSubscribed = true;
@@ -453,6 +456,25 @@
   // accessibles à ces rôles de toute façon. Les autres rôles (admin, n1,
   // super_admin) et les tuiles dispositif ménage ("disp-...",
   // via extraOnglets) ne sont pas concernés par ce mécanisme.
+  // Migration unique (Super Admin) : donne aux techniciens l'accès
+  // "Modification" sur Suivi des demandes, nécessaire pour l'envoi en
+  // validation. Exécutée une seule fois (drapeau config/migrations), les
+  // réglages faits ensuite à la main dans "Gérer l'accès" sont respectés.
+  async function migrationAccesTechSuivi(liste) {
+    try {
+      const ref = docMig(dbMig, "config", "migrations");
+      const snap = await getDocMig(ref);
+      if (snap.exists() && snap.data().techSuiviDemandesWrite) return;
+      let n = 0;
+      for (const u of liste) {
+        if (u.role !== "technicien" || (u.permissions || {})["suivi-demandes"] === "write") continue;
+        await updateUser(u.uid, { ["permissions.suivi-demandes"]: "write" });
+        n++;
+      }
+      await setDocMig(ref, { techSuiviDemandesWrite: new Date().toISOString(), techSuiviDemandesNb: n }, { merge: true });
+      if (n) console.info(`Accès Suivi des demandes (modification) donné à ${n} technicien(s).`);
+    } catch (e) { console.error("migrationAccesTechSuivi:", e); }
+  }
   const TUILES_GEREES_PAR_UTILISATEUR = ["statistiques", "astreinte", "sites", "compteurs", "masterlock", "previsionnel", "planning-individuel", "suivi-demandes", "stock-menage", "stock"];
   const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
   // Direction : voit tout comme le Super Admin, en consultation seule —

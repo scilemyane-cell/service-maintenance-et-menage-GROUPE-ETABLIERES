@@ -27,3 +27,11 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SERVICE_MAINTENANCE_ET_MENAGE }}
           channelId: live
           projectId: service-maintenance-et-menage
+      - name: Publier les règles Firestore
+        continue-on-error: true
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SERVICE_MAINTENANCE_ET_MENAGE }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@13 deploy --only firestore:rules --project service-maintenance-et-menage --non-interactive
