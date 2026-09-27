@@ -172,7 +172,7 @@ export function mountSuiviDemandesTab(container, user) {
   if (unsub) { unsub(); unsub = null; }
   mountedUser = user;
   state = { demandes: null };
-  if (!ui.vueChoisie) ui.vue = user?.role === "technicien" ? "sites" : ui.vue; // les techniciens arrivent sur « Par site »
+  if (!ui.vueChoisie) ui.vue = permsUtilisateur().isTech ? "sites" : ui.vue; // les techniciens arrivent sur « Par site »
   render(container);
   unsub = watchDemandes((liste) => { state.demandes = liste; render(container); });
   if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });
@@ -219,7 +219,8 @@ function planifierDepotAuto() {
 function permsUtilisateur() {
   const role = mountedUser?.role;
   const isEditor = role === "super_admin" || role === "admin" || role === "n1";
-  const isTech = role === "technicien";
+  // Agents d'entretien / mi-temps avec « Modification » sur la tuile : traitent comme un technicien.
+  const isTech = role === "technicien" || (["menage", "mi_temps"].includes(role) && (mountedUser?.permissions || {})["suivi-demandes"] === "write");
   const lectureSeule = !!mountedUser?.lectureSeule; // "Lecture" (cas par cas) : voit le tableau mais ne peut pas traiter
   return { isEditor, isTech, lectureSeule, peutTraiter: (isEditor || isTech) && !lectureSeule };
 }
@@ -275,7 +276,7 @@ function fmtDateFR(iso) {
 }
 
 // Les techniciens n'ont que la vue « Par site » (ni tableau, ni statistiques).
-const vueTechSeule = () => mountedUser?.role === "technicien";
+const vueTechSeule = () => permsUtilisateur().isTech;
 
 function render(container) {
   const r = renderVue(container);

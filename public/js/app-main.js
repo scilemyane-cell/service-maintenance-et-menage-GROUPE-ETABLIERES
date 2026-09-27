@@ -314,7 +314,7 @@
       {
         id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: mesActionsCount > 0 ? mesActionsCount : null, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
-          { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien"], mount: mountSuiviDemandesTab },
+          { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien","menage","mi_temps"], mount: mountSuiviDemandesTab },
         ],
       },
       {

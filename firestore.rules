@@ -10,6 +10,11 @@ service cloud.firestore {
     function myRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
+    // Agent d'entretien / mi-temps avec « Modification » sur Suivi des demandes.
+    function ecritDemandesTerrain() {
+      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return u.role in ['menage', 'mi_temps'] && u.get('permissions', {}).get('suivi-demandes', '') == 'write';
+    }
 
     // Zones Stock Menage assignees a l'utilisateur (ex. ["ecole"],
     // ["agropolis"], ou les deux) - le personnel n'est pas le meme d'une
@@ -127,7 +132,7 @@ service cloud.firestore {
       allow create: if isEditor();
       allow delete: if isEditor();
       allow update: if isEditor()
-        || (isSignedIn() && myRole() == 'technicien'
+        || (isSignedIn() && (myRole() == 'technicien' || ecritDemandesTerrain())
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj', 'declarePar', 'declareLe', 'commentaireTechPar', 'commentaireTechLe',
                  'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar']))
         // La personne à qui une action est attribuée peut la marquer faite.

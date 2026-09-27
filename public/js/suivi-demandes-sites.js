@@ -189,8 +189,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
   // Personnes à qui l'on peut confier un site : techniciens d'abord, puis superviseurs / admins.
   const ORDRE_ROLE = { technicien: 0, n1: 1, admin: 2, super_admin: 3 };
-  const techs = utilisateurs.filter(u => u.role in ORDRE_ROLE)
-    .sort((a, b) => (ORDRE_ROLE[a.role] - ORDRE_ROLE[b.role]) || String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
+  const accesTerrain = (u) => ["menage", "mi_temps"].includes(u.role) && (u.permissions || {})["suivi-demandes"] === "write";
+  const techs = utilisateurs.filter(u => u.role in ORDRE_ROLE || accesTerrain(u))
+    .sort((a, b) => ((ORDRE_ROLE[a.role] ?? 0) - (ORDRE_ROLE[b.role] ?? 0)) || String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
   const nomDe = (id) => { const u = utilisateurs.find(x => x.uid === id); return u ? (u.nom || u.email) : ""; };
   const estTech = perms.isTech && !perms.isEditor;
   const q = sa(st.q.trim());
