@@ -244,7 +244,9 @@ function identite() {
   const i = lireIdentitePoste();
   return i ? { uid: i.uid, nom: i.nom } : { uid: null, nom: "" };
 }
-const personnesPoste = () => utilisateurs.filter(u => u.uid !== mountedUser?.uid && (u.role === "technicien" || (["menage", "mi_temps"].includes(u.role) && (u.permissions || {})["suivi-demandes"] === "write") || u.role === "n1"))
+// Le compte du poste lui-même (ex. « Tony et Anthony ») est proposé en premier.
+const personnesPoste = () => [...(mountedUser?.uid ? [{ uid: mountedUser.uid, nom: mountedUser.nom || mountedUser.email }] : []), ...personnesPosteAutres()];
+const personnesPosteAutres = () => utilisateurs.filter(u => u.uid !== mountedUser?.uid && (u.role === "technicien" || (["menage", "mi_temps"].includes(u.role) && (u.permissions || {})["suivi-demandes"] === "write") || u.role === "n1"))
   .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
 function injecterBandeauPoste(container) {
   if (!mountedUser?.postePartage) return;
@@ -257,7 +259,7 @@ function injecterBandeauPoste(container) {
   const cible = container.querySelector(".stack") || container;
   cible.prepend(el);
   el.querySelector("#poste-qui").addEventListener("change", (e) => {
-    const u = utilisateurs.find(x => x.uid === e.target.value);
+    const u = personnesPoste().find(x => x.uid === e.target.value);
     try { if (u) localStorage.setItem(CLE_POSTE, JSON.stringify({ uid: u.uid, nom: u.nom || u.email, t: Date.now() })); else localStorage.removeItem(CLE_POSTE); } catch {}
     render(container);
   });
