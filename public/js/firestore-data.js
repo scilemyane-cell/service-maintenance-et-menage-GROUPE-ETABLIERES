@@ -140,11 +140,15 @@ export async function importerDemandes(lignes) {
 }
 // Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
 export function watchMesActionsDemandes(uid, callback) {
-  return onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
-    let n = 0;
-    snap.forEach((d) => { if (!d.data().actionFaiteLe) n++; });
-    callback(n);
-  }, (err) => { console.error("watchMesActionsDemandes:", err); callback(0); });
+  let a = 0, r = 0;
+  const u1 = onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
+    a = 0; snap.forEach((d) => { if (!d.data().actionFaiteLe) a++; }); callback(a + r);
+  }, (err) => { console.error("watchMesActionsDemandes:", err); });
+  // Réponses / actions faites sur les actions que j'ai attribuées, pas encore vues.
+  const u2 = onSnapshot(query(collection(db, "demandes"), where("actionParUid", "==", uid)), (snap) => {
+    r = 0; snap.forEach((d) => { if (d.data().actionReponseNonLue) r++; }); callback(a + r);
+  }, (err) => { console.error("watchMesActionsDemandes (retours):", err); });
+  return () => { u1(); u2(); };
 }
 export async function updateDemande(id, fields) {
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });

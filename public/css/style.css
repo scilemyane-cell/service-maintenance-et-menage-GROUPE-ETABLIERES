@@ -2432,3 +2432,21 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .poste-bandeau{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:#eef5ff;border:1px solid #bcd6f5;border-left:5px solid #2a78d6;border-radius:14px;padding:10px 14px;font-size:14px}
 .poste-bandeau.a-choisir{background:#fff6e0;border-color:#f1d58a;border-left-color:#e0a800}
 .poste-bandeau select{padding:8px 10px;border:1px solid var(--border);border-radius:10px;font:700 14px system-ui,sans-serif;background:var(--panel);color:var(--text);min-width:200px}
+/* Fil de réponses sur les actions */
+.dps-action{flex-direction:column;align-items:stretch}
+.dps-action-haut{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.dps-fil{display:flex;flex-direction:column;gap:6px;margin-top:4px;border-top:1px dashed #e8cf86;padding-top:8px}
+.dps-fil-msg{background:#fff;border:1px solid #efe2b8;border-radius:10px;padding:6px 10px;font-size:13px}
+.dps-fil-msg small{color:var(--text-dim);font-size:11px}
+.dps-fil-msg span{display:block;margin-top:2px}
+.dps-fil-msg.fait{border-color:#b9e2b9;background:#f2fbf2}
+.dps-repondre>summary{cursor:pointer;font:700 12.5px system-ui,sans-serif;color:#2a78d6;margin-top:4px}
+.dps-repondre-champs{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.dps-repondre-champs textarea{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:10px;font:inherit;background:var(--panel);color:var(--text)}
+.dps-repondre-btns{display:flex;flex-wrap:wrap;gap:6px}
+.dps-rep-envoyer{border:0;background:#2a78d6;color:#fff;font-weight:800;border-radius:999px;padding:7px 14px;cursor:pointer}
+.dps-rep-vu{border:1px solid var(--border);background:var(--panel);color:var(--text);font-weight:700;border-radius:999px;padding:7px 12px;cursor:pointer}
+.dps-action.faite .dps-fil{border-top-color:#b9e2b9}
+.dps-ia-mini{margin-top:6px;align-self:flex-start;width:max-content}
+.dps-action-edit{background:#fff;border:1px dashed #e8cf86;border-radius:12px;padding:10px;margin-top:4px}
+.dps-action-edit[hidden]{display:none !important}

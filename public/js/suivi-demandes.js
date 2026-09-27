@@ -27,7 +27,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
-import { renderParSite, blocActionHTML, brancherActions, ouvrirSite } from "./suivi-demandes-sites.js";
+import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
@@ -185,21 +185,29 @@ function injecterMesActions(container) {
   const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe)
     .sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
   container.querySelector(".dps-mes-actions")?.remove();
-  if (!mes.length) return;
+  const retours = toutesLesLignes().filter(l => l.actionParUid === uid && l.actionReponseNonLue);
+  if (!mes.length && !retours.length) return;
   const perms = permsUtilisateur();
   const bloc = document.createElement("section");
   bloc.className = "dps-mes-actions";
-  bloc.innerHTML = `<h3>📌 Mes actions <small>${mes.length} à faire</small></h3>
+  bloc.innerHTML = `${retours.length ? `<h3>💬 Retours sur mes actions <small>${retours.length} nouveau${retours.length > 1 ? "x" : ""}</small></h3>
+    <div class="dps-mes-actions-liste">${retours.map(l => `
+      <article class="dps-ma" data-id="${esc(l.id)}">
+        <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b><button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}">Voir la demande →</button></div>
+        <p class="dps-ma-descr">${esc(l.descr)}</p>
+        ${blocRetourHTML(l, { perms, uid })}
+      </article>`).join("")}</div>` : ""}
+    ${mes.length ? `<h3>📌 Mes actions <small>${mes.length} à faire</small></h3>
     <div class="dps-mes-actions-liste">${mes.map(l => `
-      <article class="dps-ma">
+      <article class="dps-ma" data-id="${esc(l.id)}">
         <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}<button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}">Voir la demande →</button></div>
         <p class="dps-ma-descr">${esc(l.descr)}</p>
-        ${blocActionHTML(l, { perms: { ...perms, peutTraiter: false }, uid })}
-      </article>`).join("")}</div>`;
+        ${blocActionHTML(l, { perms: { ...perms, peutTraiter: false }, uid, utilisateurs })}
+      </article>`).join("")}</div>` : ""}`;
   const cible = container.querySelector(".stack") || container;
   const apres = cible.querySelector(".demandes-vue-toggle");
   if (apres) apres.after(bloc); else cible.prepend(bloc);
-  brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: identite().nom, utilisateurs });
+  brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: identite().nom, utilisateurs, uid });
   bloc.querySelectorAll("[data-ma-site]").forEach(b => b.addEventListener("click", () => {
     ouvrirSite(b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
     container.scrollIntoView({ block: "start" });
@@ -398,7 +406,7 @@ function ligneDepuisDoc(d) {
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "",
     commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "",
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
-    actionPar: d.actionPar || "", actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
+    actionPar: d.actionPar || "", actionParUid: d.actionParUid || "", actionFil: Array.isArray(d.actionFil) ? d.actionFil : [], actionReponseNonLue: !!d.actionReponseNonLue, actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
   };
 }
 

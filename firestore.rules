@@ -134,10 +134,14 @@ service cloud.firestore {
       allow update: if isEditor()
         || (isSignedIn() && (myRole() == 'technicien' || ecritDemandesTerrain())
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj', 'declarePar', 'declareLe', 'commentaireTechPar', 'commentaireTechLe',
-                 'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar']))
+                 'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar',
+                 'actionParUid', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour']))
         // La personne à qui une action est attribuée peut la marquer faite.
         || (isSignedIn() && resource.data.get('actionPour', '') == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFaiteLe', 'actionFaitePar', 'dateMaj']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFaiteLe', 'actionFaitePar', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'dateMaj']))
+        // L'auteur d'une action peut répondre / marquer le retour comme vu.
+        || (isSignedIn() && resource.data.get('actionParUid', '') == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'dateMaj']));
     }
 
     // ---- Interventions ----
