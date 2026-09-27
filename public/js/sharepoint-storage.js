@@ -444,3 +444,14 @@ export async function telechargerFichierDrive(chemin, token) {
   if (!res.ok) throw new Error(`Lecture du fichier SharePoint impossible (${res.status})`);
   return res.arrayBuffer();
 }
+
+// Métadonnées d'un fichier du drive appsmm (empreinte du contenu, date) —
+// sert à ne relire la copie des demandes que si elle a vraiment changé.
+export async function metadonneesFichierDrive(chemin, token) {
+  const driveId = await resolveDriveId(token);
+  const enc = chemin.split("/").map(encodeURIComponent).join("/");
+  const res = await fetchWithTimeout(`${GRAPH_ROOT}/drives/${driveId}/root:/${enc}?$select=id,size,lastModifiedDateTime,file`, { headers: { Authorization: `Bearer ${token}` } }, 20000);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Lecture des infos du fichier SharePoint impossible (${res.status})`);
+  return res.json();
+}

@@ -2453,3 +2453,18 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .vue-badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#d03b3b;color:#fff;font:800 11.5px system-ui,sans-serif;margin-left:4px}
 .demandes-vue-toggle{grid-template-columns:repeat(auto-fit,minmax(140px,1fr)) !important}
 .dps-pastille.nouv{background:#e6f0ff;color:#1f5fbf;font-weight:800}.dps-favoris h3 .dps-pastille.nouv{font:800 12px system-ui,sans-serif;padding:3px 9px;border-radius:999px}
+/* Nouvelle demande */
+.dps-nouvelle{margin-top:10px;border:0;background:#e0a800;color:#1b2330;font:800 13.5px system-ui,sans-serif;border-radius:999px;padding:9px 16px;cursor:pointer}
+.dps-nouvelle.petit{margin:0 0 0 auto;order:3;padding:7px 12px;font-size:12.5px}
+.dps-site-entete{flex-wrap:wrap}
+.ndm-fond{position:fixed;inset:0;background:rgba(10,16,30,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto}
+.ndm{background:var(--panel,#fff);color:var(--text);border-radius:20px;padding:18px;width:100%;max-width:560px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.ndm-tete{display:flex;justify-content:space-between;align-items:center}
+.ndm-tete h3{margin:0;font:800 18px "Montserrat",system-ui,sans-serif}
+.ndm-x{border:0;background:transparent;font-size:20px;cursor:pointer;color:var(--text)}
+.ndm label{display:flex;flex-direction:column;gap:4px;font:700 12.5px system-ui,sans-serif}
+.ndm input,.ndm select,.ndm textarea{padding:10px;border:1px solid var(--border);border-radius:10px;font:500 14px system-ui,sans-serif;background:var(--panel,#fff);color:var(--text)}
+.ndm-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ndm-btns{display:flex;justify-content:flex-end;gap:8px}
+.ndm-etat{font-size:13px}
+@media (max-width:520px){.ndm-2{grid-template-columns:1fr}}

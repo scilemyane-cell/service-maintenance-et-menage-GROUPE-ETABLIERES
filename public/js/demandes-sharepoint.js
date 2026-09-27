@@ -113,6 +113,7 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
     if (!a) { nouvelles.push(f); continue; }
     if (vus[f.numero] > 1 || appVus[f.numero] > 1) continue; // N° en double dans le fichier : ambigu, on ne touche pas
     const diff = {};
+    if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
     const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
     champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
     if (Object.keys(diff).length) majs.push([a.id, diff]);
@@ -132,8 +133,9 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
 
 // 2) Dépôt du fichier des mises à jour (demandes modifiées dans l'appli)
 // pour le flux Power Automate n° 2.
-export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } = {}) {
-  const token = await getGraphToken();
+export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
+  const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
+  if (!token) return { envoyees: 0 };
   const fr = (isoDate) => (isoDate ? isoDate.slice(0, 10).split("-").reverse().join("/") : "");
   // Seulement les demandes modifiées dans l'appli ces 7 derniers jours : le
   // flux Power Automate reste léger (quota d'actions quotidien) tout en
@@ -150,8 +152,14 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } =
     dateStatut: fr(d.dateStatut),
     commentaire: [d.commentaireTech ? d.commentaireTech + (d.commentaireTechPar ? ` (${d.commentaireTechPar}${d.commentaireTechLe ? ", " + fr(d.commentaireTechLe) : ""})` : "") : "", d.actionPour && !d.actionFaiteLe && d.actionTexte ? `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${fr(d.actionEcheance)})` : ""} : ${d.actionTexte}` : ""].filter(Boolean).join("\n"),
   }));
-  onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)…`);
-  const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
+  // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
+  const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
+    numero: d.numero, dateDemande: fr(d.dateDemande), association: d.association === "École" ? "Ecole" : (d.association || ""), site: d.site || "",
+    demandeur: d.demandeur || "", type: d.type || "", descriptif: d.descriptif || "", local: d.local || "", urgence: d.urgence || "",
+    logementOccupe: d.logementOccupe || "", statut: (d.statut || "").toUpperCase(),
+  }));
+  onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)${nouvelles.length ? ` et ${nouvelles.length} nouvelle(s)` : ""}…`);
+  const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
   await uploadToDrive(fichier, token, [], DOSSIER, { conflictBehavior: "replace", fixedFilename: FICHIER_MAJ });
   await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length }, { merge: true });
   return { envoyees: lignes.length };

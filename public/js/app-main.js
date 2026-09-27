@@ -446,6 +446,10 @@
       modulesConstructionSubscribed = true;
       watchModulesConstruction((ids) => { modulesConstruction = ids; if (currentCategory === null || estMasqueConstruction(currentCategory, utilisateurEffectif())) render(); });
     }
+    if (!window.__synchroDemandesAuto && ["super_admin", "admin", "n1"].includes(user.role)) {
+      window.__synchroDemandesAuto = true;
+      import("./demandes-auto.js").then(m => m.demarrerSynchroAutoDemandes()).catch(e => console.warn("Synchro auto demandes :", e));
+    }
     if (!usersSubscribed && user.role === "super_admin") {
       usersSubscribed = true;
       let migFaite = false;

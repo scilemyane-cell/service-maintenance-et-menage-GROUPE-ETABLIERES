@@ -352,6 +352,7 @@ function renderVue(container) {
       utilisateur: identite().nom,
       uid: identite().uid || null,
       favLectureSeule: !!mountedUser?.postePartage,
+      rafraichir: () => render(container),
       utilisateurs,
       apres: () => { try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); } },
     });
@@ -652,14 +653,8 @@ function renderTableau(container) {
     } catch (err) { console.error("Dépôt demandes :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
-  // Automatique (responsables, session Microsoft déjà ouverte) : lecture de
-  // la copie une fois par ouverture du module.
-  if (perms.isEditor && !window.__demandesLuesAuto) {
-    window.__demandesLuesAuto = true;
-    recupererDepuisCopie(state.demandes || [], { interactif: false }).then(r => {
-      if (r && (r.nouvelles || r.misesAJour)) window.toast?.(`📥 ${r.nouvelles} nouvelle(s) demande(s), ${r.misesAJour} mise(s) à jour depuis le fichier SharePoint`);
-    }).catch(err => console.warn("Lecture auto de la copie des demandes :", err));
-  }
+  // (La lecture automatique de la copie se fait désormais en arrière-plan,
+  // toutes les 5 min, voir demandes-auto.js.)
 
   if (perms.peutTraiter) {
     container.querySelectorAll(".demandes-cell-select").forEach(sel => {

@@ -101,6 +101,10 @@ service cloud.firestore {
     match /config/compteur-interventions {
       allow read, write: if isSignedIn();
     }
+    // Numérotation des demandes créées dans l'appli (SMM-001…).
+    match /config/compteur-demandes-app {
+      allow read, write: if isSignedIn();
+    }
 
     // ---- Absences ----
     match /absences/{docId} {
@@ -129,7 +133,8 @@ service cloud.firestore {
     // d'origine (qui viennent du fichier source).
     match /demandes/{docId} {
       allow read: if isSignedIn();
-      allow create: if isEditor();
+      allow create: if isEditor()
+        || (isSignedIn() && (myRole() == 'technicien' || ecritDemandesTerrain()) && request.resource.data.creeDansApp == true);
       allow delete: if isEditor();
       allow update: if isEditor()
         || (isSignedIn() && (myRole() == 'technicien' || ecritDemandesTerrain())

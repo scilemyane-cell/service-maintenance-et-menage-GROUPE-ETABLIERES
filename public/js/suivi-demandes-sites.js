@@ -283,12 +283,12 @@ function badgeAge(j) {
   return `<span class="dps-age ${cls}" title="Ancienneté de la demande">${j === 0 ? "aujourd'hui" : `il y a ${j} j`}</span>`;
 }
 
-export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false }) {
+export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null }) {
   suivreFavoris(uid);
   suivreAffectations();
   suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
-  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule });
+  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
   phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
@@ -332,6 +332,10 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; }
     });
   });
+  const brancherNouvelle = () => container.querySelectorAll("[data-nouvelle-demande]").forEach(b => b.addEventListener("click", async () => {
+    const { ouvrirNouvelleDemande } = await import("./demandes-creation.js");
+    ouvrirNouvelleDemande({ lignes, siteDefaut: b.dataset.nouvelleDemande || "", utilisateur, onCree: (n, site) => { st.site = site; st.vuAvant = null; if (container.isConnected) (rafraichir || rerender)(); } });
+  }));
   const filtreAssoc = (l) => !st.association || l.association === st.association;
 
   // ---------- Liste des sites ----------
@@ -389,7 +393,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${toggleHTML}
       <section class="dps-hero">
         <div><span class="dps-sur">Traitement sur le terrain</span><h2>Demandes <em>par site</em></h2>
-          <p>Choisis un site pour voir et traiter ses demandes.</p></div>
+          <p>Choisis un site pour voir et traiter ses demandes.</p>${perms.peutTraiter ? `<button type="button" class="dps-nouvelle" data-nouvelle-demande>➕ Nouvelle demande</button>` : ""}</div>
         <div class="dps-hero-chiffres"><div><b>${totOuv}</b><span>à traiter</span></div><div class="urg"><b>${totUrg}</b><span>urgentes</span></div><div><b>${affiches.length}</b><span>sites</span></div></div>
       </section>
       ${perms.isEditor ? (() => { const av = lignes.filter(l => EN_ATTENTE_VALID(l.statut)).sort((a, b) => (a.dateIntervention || "").localeCompare(b.dateIntervention || "")); return av.length ? `
@@ -435,6 +439,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
     container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" }); }));
     brancherValidation();
+    brancherNouvelle();
     apres?.();
     return;
   }
@@ -485,6 +490,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ${toggleHTML}
     <div class="dps-site-entete">
       <button class="dps-retour" id="dps-retour">← Tous les sites</button>
+      ${perms.peutTraiter ? `<button type="button" class="dps-nouvelle petit" data-nouvelle-demande="${esc(st.site)}">➕ Nouvelle demande ici</button>` : ""}
       <div><h2>${esc(st.site)}</h2><p>${ouvertes.length} à traiter${enValidation.length ? ` · ${enValidation.length} à valider` : ""} · ${traitees.length} traitée${traitees.length > 1 ? "s" : ""}</p></div>
     </div>
     ${perms.isEditor && techs.length ? `<div class="dps-affect"><span>👷 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}</div>`
@@ -497,6 +503,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   container.querySelector("#dps-retour").addEventListener("click", () => { st.site = null; rerender(); });
   brancherValidation();
   brancherActions(container, { lignes, maj, utilisateur, utilisateurs, uid });
+  brancherNouvelle();
   apres?.();
   container.querySelectorAll("[data-affect]").forEach(b => b.addEventListener("click", async () => {
     const actuels = techsDuSite(st.site), id = b.dataset.affect;
