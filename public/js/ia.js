@@ -92,3 +92,18 @@ export async function reformulerDecision(f) {
 Corrige l'orthographe, garde exactement le sens, n'ajoute aucun fait, pas de guillemets, pas de Markdown.
 ${f.motifAppelN1 ? `Motif de l'appel : ${f.motifAppelN1}\n` : ""}Décision / consigne notée : ${f.decisionN1}`);
 }
+
+// Commentaire intervenant d'une demande (Suivi des demandes) : met au propre
+// les notes du technicien, sans rien inventer.
+export async function redigerCommentaireDemande(f) {
+  return genererTexte(`Tu es l'assistant du service maintenance d'un organisme de formation (Groupe Établières, Vendée).
+Un technicien remplit le commentaire de suivi d'une demande d'intervention. Mets SES notes au propre, en français, clair et professionnel, comme s'il l'écrivait lui-même.
+Règles :
+- 1 à 3 phrases courtes, style factuel (ex. « Remplacement du mitigeur effectué. Fuite résolue. »).
+- Garde uniquement les faits présents dans les notes : n'invente AUCUNE cause, pièce, test, résultat ou chiffre. Si les notes ne disent pas que c'est réglé, ne le dis pas.
+- Garde les éventuelles suites à donner (pièce à commander, devis, repasser…).
+- Ne répète pas le site, le numéro ni la date. Corrige l'orthographe. Pas de titre, pas de guillemets, pas de Markdown.
+
+Demande d'origine (contexte, à ne pas recopier) : ${f.descr || "—"}${f.local ? ` (local : ${f.local})` : ""}
+${f.statut ? `Statut choisi : ${f.statut}\n` : ""}Notes du technicien : ${f.notes}`);
+}

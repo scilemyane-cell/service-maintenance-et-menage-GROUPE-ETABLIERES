@@ -2362,3 +2362,6 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-favoris h3 small{font:600 12.5px system-ui,sans-serif;color:var(--text-dim)}
 .dps-autres-titre{margin-top:4px;color:var(--text-dim)}
 .dps-astuce{margin:0;font-size:13px;color:var(--text-dim)}
+.dps-com{position:relative}
+.dps-ia{align-self:flex-start;margin-top:6px;border:1px solid #d9c8ff;background:linear-gradient(135deg,#f5efff,#eef4ff);color:#5b3fb8;font:700 12.5px system-ui,sans-serif;border-radius:999px;padding:6px 12px;cursor:pointer}
+.dps-ia:disabled{opacity:.6;cursor:wait}

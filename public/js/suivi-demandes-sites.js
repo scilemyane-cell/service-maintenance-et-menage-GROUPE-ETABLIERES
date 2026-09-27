@@ -213,7 +213,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
         <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
         <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
-        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea></label>
+        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea><button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
       </div>
       <div class="dps-actions">
         ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>${perms.isEditor ? "✓ Réalisé aujourd'hui" : "✓ Intervention terminée"}</button>` : ""}
@@ -267,6 +267,19 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     }));
     c.querySelectorAll("[data-dps-champ]").forEach(inp => inp.addEventListener("input", () => poser(c, inp.dataset.dpsChamp, inp.value)));
     c.querySelectorAll("select[data-dps-champ]").forEach(inp => inp.addEventListener("change", () => poser(c, inp.dataset.dpsChamp, inp.value)));
+    c.querySelector("[data-dps-ia]")?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const ta = c.querySelector('[data-dps-champ="commentaireTech"]'), l = ligneDe(c.dataset.id), btn = e.currentTarget;
+      const notes = ta.value.trim();
+      if (!notes) { window.toast?.("Écris d'abord quelques mots (ce qui a été fait), l'IA les mettra au propre."); ta.focus(); return; }
+      btn.disabled = true; const avant = btn.textContent; btn.textContent = "⏳ IA…";
+      try {
+        const { redigerCommentaireDemande } = await import("./ia.js");
+        const texte = (await redigerCommentaireDemande({ descr: l?.descr, local: l?.local, statut: val(l, "statut"), notes })).replace(/\*\*/g, "").trim();
+        if (texte) { ta.value = texte; poser(c, "commentaireTech", texte); }
+      } catch (err) { console.error(err); alert("IA indisponible : " + (err?.message || err)); }
+      finally { btn.disabled = false; btn.textContent = avant; }
+    });
     c.querySelector("[data-dps-auj]")?.addEventListener("click", () => {
       const inp = c.querySelector('[data-dps-champ="dateIntervention"]'); inp.value = aujourdhui(); poser(c, "dateIntervention", inp.value);
     });
