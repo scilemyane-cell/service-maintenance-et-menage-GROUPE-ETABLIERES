@@ -159,11 +159,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea></label>
       </div>
       <div class="dps-actions">
-        ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>✓ Réalisé aujourd'hui</button>` : ""}
-        <button type="button" class="dps-enregistrer ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? "valider" : ""}" data-dps-enregistrer ${aChange(l) ? "" : "disabled"}>${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? (perms.isEditor ? "✓ Valider la réalisation" : "✓ Envoyer pour validation") : "💾 Enregistrer"}</button>
+        ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>${perms.isEditor ? "✓ Réalisé aujourd'hui" : "✓ Intervention terminée"}</button>` : ""}
+        <button type="button" class="dps-enregistrer ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? "valider" : ""}" data-dps-enregistrer ${aChange(l) ? "" : "hidden"}>${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? (perms.isEditor ? "✓ Valider la réalisation" : "📨 Envoyer pour validation") : "💾 Enregistrer"}</button>
         ${aChange(l) ? `<button type="button" class="dps-annuler" data-dps-annuler>Annuler</button>` : ""}
       </div>
-      ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">Vérifie la date, le contact et le commentaire, puis valide.</p>` : ""}
+      ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">${perms.isEditor ? "Vérifie la date, le contact et le commentaire, puis valide." : "Complète le contact et le commentaire, puis envoie au superviseur."}</p>` : ""}
       ` : `
       <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}</span>` : ""}</div>`}
       <div class="dps-etat" aria-live="polite"></div>
@@ -189,8 +189,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const l = ligneDe(c.dataset.id); if (!l) return;
     const changee = aChange(l), realise = val(l, "statut") === "Réalisé" && !TRAITE(l.statut);
     const btn = c.querySelector("[data-dps-enregistrer]");
-    btn.disabled = !changee; btn.classList.toggle("valider", realise);
-    btn.textContent = realise ? (perms.isEditor ? "✓ Valider la réalisation" : "✓ Envoyer pour validation") : "💾 Enregistrer";
+    btn.hidden = !changee; btn.disabled = false; btn.classList.toggle("valider", realise);
+    btn.textContent = realise ? (perms.isEditor ? "✓ Valider la réalisation" : "📨 Envoyer pour validation") : "💾 Enregistrer";
     let ann = c.querySelector("[data-dps-annuler]");
     if (changee && !ann) { ann = document.createElement("button"); ann.type = "button"; ann.className = "dps-annuler"; ann.dataset.dpsAnnuler = ""; ann.textContent = "Annuler"; btn.after(ann); ann.addEventListener("click", () => { delete st.brouillons[c.dataset.id]; rerender(); }); }
     if (!changee && ann) ann.remove();

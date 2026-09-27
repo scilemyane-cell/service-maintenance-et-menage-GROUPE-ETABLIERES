@@ -2348,3 +2348,7 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-carte.a-valider{border-left-color:#8B7CF0}
 .dps-pastille.valid{background:rgba(139,124,240,.16);color:#5b4cc4}
 .dps-com-lu{font-style:italic;color:var(--text)}.dps-com-lu.vide{color:var(--text-dim)}
+.dps-cartes{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
+.dps-champs{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.dps-enregistrer[hidden]{display:none}
+@media (max-width:700px){.dps-cartes{grid-template-columns:1fr}}
