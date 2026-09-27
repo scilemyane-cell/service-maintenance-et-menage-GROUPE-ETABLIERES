@@ -2365,3 +2365,40 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-com{position:relative}
 .dps-ia{align-self:flex-start;margin-top:6px;border:1px solid #d9c8ff;background:linear-gradient(135deg,#f5efff,#eef4ff);color:#5b3fb8;font:700 12.5px system-ui,sans-serif;border-radius:999px;padding:6px 12px;cursor:pointer}
 .dps-ia:disabled{opacity:.6;cursor:wait}
+/* Actions attribuées */
+.dps-action{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;background:#fff6e0;border:1px solid #f1d58a;border-left:4px solid #e0a800;border-radius:12px;padding:10px 12px;margin-top:8px}
+.dps-action.retard{background:#fdecec;border-color:#f0b4b4;border-left-color:#d03b3b}
+.dps-action.faite{display:block;background:#eaf7ea;border-color:#b9e2b9;border-left-color:#0ca30c;font-size:13px}
+.dps-action-txt{display:block;font-size:13.5px;line-height:1.45}.dps-action-txt>span,.dps-action-txt>small{display:block}
+.dps-action-txt small{color:var(--text-dim)}
+.dps-action-ech{font-size:12.5px;color:#9a6a00;font-weight:700}
+.dps-action.retard .dps-action-ech{color:#c02b2b}
+.dps-action-detail{font-weight:600}
+.dps-action-btns{display:flex;gap:6px;flex-shrink:0}
+.dps-action-fait{border:0;background:#0ca30c;color:#fff;font-weight:800;border-radius:999px;padding:7px 12px;cursor:pointer}
+.dps-action-suppr{border:1px solid var(--border);background:var(--panel);border-radius:50%;width:32px;height:32px;cursor:pointer}
+.dps-action-form{margin-top:8px}
+.dps-action-form summary{cursor:pointer;font-weight:700;font-size:13px;color:#9a6a00}
+.dps-action-champs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;align-items:end}
+.dps-action-champs label{display:flex;flex-direction:column;font-size:12px;font-weight:700;gap:3px}
+.dps-action-champs .large{grid-column:1/-1}
+.dps-action-champs select,.dps-action-champs input{padding:8px;border:1px solid var(--border);border-radius:10px;font:inherit;background:var(--panel);color:var(--text)}
+.dps-action-ok{grid-column:1/-1;border:0;background:#e0a800;color:#fff;font-weight:800;border-radius:12px;padding:10px;cursor:pointer}
+.dps-pastille.act{background:#fff3cd;color:#8a6100}
+.dps-mes-actions{background:linear-gradient(180deg,#fff8e6,transparent);border:1px solid #f1d58a;border-radius:20px;padding:14px;margin-bottom:12px}
+.dps-mes-actions h3{margin:0 0 10px;font:800 17px "Montserrat",system-ui,sans-serif;display:flex;gap:10px;align-items:baseline}
+.dps-mes-actions h3 small{font:600 12.5px system-ui,sans-serif;color:var(--text-dim)}
+.dps-mes-actions-liste{display:grid;gap:10px}
+.dps-ma{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px 12px}
+.dps-ma-tete{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dps-ma-voir{margin-left:auto;border:1px solid var(--border);background:transparent;border-radius:999px;padding:5px 10px;font-weight:700;cursor:pointer;color:var(--text)}
+.dps-ma-descr{margin:6px 0 0;font-size:13.5px}
+/* Sites attribués aux techniciens */
+.dps-site-techs{color:#2a78d6 !important}
+.dps-attribues{background:linear-gradient(180deg,#eef5ff,transparent);border-color:#bcd6f5}
+.dps-tech-filtre{display:flex;align-items:center;gap:6px;font-weight:700}
+.dps-tech-filtre select{padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);font:inherit}
+.dps-affect{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px 12px;font-weight:700;font-size:13.5px}
+.dps-affect-tech{border:1px solid var(--border);background:transparent;border-radius:999px;padding:6px 12px;font-weight:700;cursor:pointer;color:var(--text)}
+.dps-affect-tech.on{background:#2a78d6;border-color:#2a78d6;color:#fff}
+@media (max-width:600px){.dps-action-champs{grid-template-columns:1fr}}

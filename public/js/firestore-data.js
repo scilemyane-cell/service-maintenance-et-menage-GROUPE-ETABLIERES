@@ -2,7 +2,7 @@ import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
   collection, addDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, deleteField,
-  writeBatch, Timestamp
+  writeBatch, Timestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
@@ -137,6 +137,14 @@ export async function importerDemandes(lignes) {
     await batch.commit();
   }
   return aAjouter.length;
+}
+// Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
+export function watchMesActionsDemandes(uid, callback) {
+  return onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
+    let n = 0;
+    snap.forEach((d) => { if (!d.data().actionFaiteLe) n++; });
+    callback(n);
+  }, (err) => { console.error("watchMesActionsDemandes:", err); callback(0); });
 }
 export async function updateDemande(id, fields) {
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });

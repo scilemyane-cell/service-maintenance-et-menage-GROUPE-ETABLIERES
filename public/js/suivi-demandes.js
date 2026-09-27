@@ -27,7 +27,8 @@
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
-import { renderParSite } from "./suivi-demandes-sites.js";
+import { renderParSite, blocActionHTML, brancherActions, ouvrirSite } from "./suivi-demandes-sites.js";
+import { watchUsers } from "./users-data.js";
 import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
@@ -161,6 +162,10 @@ let ui = {
 
 let state = { demandes: null }; // null = pas encore chargé
 let unsub = null;
+// Personnes à qui l'on peut attribuer une action : celles qui voient la tuile.
+let utilisateurs = [];
+let unsubUsers = null;
+const voitSuivi = (u) => ["super_admin", "admin", "n1", "direction", "technicien"].includes(u.role) || ["read", "write"].includes((u.permissions || {})["suivi-demandes"]);
 let mountedUser = null;
 
 export function mountSuiviDemandesTab(container, user) {
@@ -170,6 +175,35 @@ export function mountSuiviDemandesTab(container, user) {
   if (!ui.vueChoisie) ui.vue = user?.role === "technicien" ? "sites" : ui.vue; // les techniciens arrivent sur « Par site »
   render(container);
   unsub = watchDemandes((liste) => { state.demandes = liste; render(container); });
+  if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });
+}
+
+// Bloc « 📌 Mes actions » en tête de l'onglet, quelle que soit la vue.
+function injecterMesActions(container) {
+  const uid = mountedUser?.uid;
+  if (!uid || !state.demandes) return;
+  const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe)
+    .sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
+  container.querySelector(".dps-mes-actions")?.remove();
+  if (!mes.length) return;
+  const perms = permsUtilisateur();
+  const bloc = document.createElement("section");
+  bloc.className = "dps-mes-actions";
+  bloc.innerHTML = `<h3>📌 Mes actions <small>${mes.length} à faire</small></h3>
+    <div class="dps-mes-actions-liste">${mes.map(l => `
+      <article class="dps-ma">
+        <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}<button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}">Voir la demande →</button></div>
+        <p class="dps-ma-descr">${esc(l.descr)}</p>
+        ${blocActionHTML(l, { perms: { ...perms, peutTraiter: false }, uid })}
+      </article>`).join("")}</div>`;
+  const cible = container.querySelector(".stack") || container;
+  const apres = cible.querySelector(".demandes-vue-toggle");
+  if (apres) apres.after(bloc); else cible.prepend(bloc);
+  brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: mountedUser?.nom || mountedUser?.email || "", utilisateurs });
+  bloc.querySelectorAll("[data-ma-site]").forEach(b => b.addEventListener("click", () => {
+    ouvrirSite(b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
+    container.scrollIntoView({ block: "start" });
+  }));
 }
 
 let depotAutoTimer = null;
@@ -244,6 +278,13 @@ function fmtDateFR(iso) {
 const vueTechSeule = () => mountedUser?.role === "technicien";
 
 function render(container) {
+  const r = renderVue(container);
+  // (la vue Par site l'injecte elle-même à chaque ré-affichage via « apres »)
+  if (ui.vue !== "sites") { try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); } }
+  return r;
+}
+
+function renderVue(container) {
   if (vueTechSeule()) ui.vue = "sites";
   if (ui.vue === "tableau") return renderTableau(container);
   if (ui.vue === "sites") {
@@ -253,6 +294,8 @@ function render(container) {
       maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); },
       utilisateur: mountedUser?.nom || mountedUser?.email || "",
       uid: mountedUser?.uid || null,
+      utilisateurs,
+      apres: () => { try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); } },
     });
   }
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
@@ -318,6 +361,8 @@ function ligneDepuisDoc(d) {
     dateIntervention: d.dateIntervention || "", dateStatut: d.dateStatut || "", contact: d.contact || "", categorieIntervenant: d.categorieIntervenant || "",
     local: d.local || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "",
+    actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
+    actionPar: d.actionPar || "", actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
   };
 }
 

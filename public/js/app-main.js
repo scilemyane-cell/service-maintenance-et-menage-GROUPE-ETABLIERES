@@ -161,6 +161,7 @@
   let stockAlertCount = { central: 0, deporte: 0, total: 0 };
   let stockAlertSubscribed = false;
   let compteursAlertCount = 0;
+  let mesActionsCount = 0, mesActionsAbonne = false;
   let compteursAlertSubscribed = false;
   let backButtonGuardSetup = false;
   let modulesConstruction = [];
@@ -300,7 +301,7 @@
         ],
       },
       {
-        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
+        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: mesActionsCount > 0 ? mesActionsCount : null, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
           { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien"], mount: mountSuiviDemandesTab },
         ],
@@ -438,6 +439,10 @@
       usersSubscribed = true;
       let migFaite = false;
       watchUsers((l) => { usersList = l; if (!migFaite && l.length) { migFaite = true; migrationAccesTechSuivi(l); } if (apercuUid) render(); else majSelectApercu(); });
+    }
+    if (!mesActionsAbonne && user.uid) {
+      mesActionsAbonne = true;
+      import("./firestore-data.js").then(({ watchMesActionsDemandes }) => watchMesActionsDemandes(user.uid, (n) => { const avant = mesActionsCount; mesActionsCount = n; if (avant !== n && currentCategory === null) render(); }));
     }
     if (!compteursAlertSubscribed) {
       compteursAlertSubscribed = true;

@@ -128,7 +128,11 @@ service cloud.firestore {
       allow delete: if isEditor();
       allow update: if isEditor()
         || (isSignedIn() && myRole() == 'technicien'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj', 'declarePar', 'declareLe']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj', 'declarePar', 'declareLe',
+                 'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar']))
+        // La personne à qui une action est attribuée peut la marquer faite.
+        || (isSignedIn() && resource.data.get('actionPour', '') == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFaiteLe', 'actionFaitePar', 'dateMaj']));
     }
 
     // ---- Interventions ----

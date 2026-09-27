@@ -5,6 +5,15 @@
 import { esc } from "./astreinte-logic.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
+import { watchAffectationsSites, saveAffectationSite } from "./affectations-sites-data.js";
+
+// ---------- Sites attribués aux techniciens (par le superviseur) ----------
+const aff = { data: {}, abonne: false, rerender: null };
+function suivreAffectations() {
+  if (aff.abonne) return; aff.abonne = true;
+  watchAffectationsSites((d) => { aff.data = d || {}; aff.rerender?.(); });
+}
+const techsDuSite = (nom) => aff.data[nom] || [];
 
 // ---------- Sites favoris ----------
 // Mêmes favoris que l'accueil / les compteurs (fiches sites), rapprochés
@@ -59,7 +68,58 @@ const joursDepuis = (iso) => { if (!iso) return null; const d = new Date(iso + "
 const fr = (iso) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
 const sa = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {} };
+// ---------- Actions attribuées ----------
+// Une action (« commander le mitigeur », « appeler le fournisseur »…) peut
+// être confiée à une personne de l'appli ; elle la retrouve dans « Mes
+// actions » et la marque faite.
+export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = false }) {
+  const peutAttribuer = perms.peutTraiter;
+  if (l.actionPour && !l.actionFaiteLe) {
+    const retard = l.actionEcheance && l.actionEcheance < aujourdhui();
+    const peutFaire = l.actionPour === uid || perms.isEditor;
+    return `<div class="dps-action ${retard ? "retard" : ""}">
+      <div class="dps-action-txt">📌 <b>Action pour ${esc(l.actionPourNom || "?")}</b>${l.actionEcheance ? ` <span class="dps-action-ech">${retard ? "⚠️ en retard — " : ""}avant le ${fr(l.actionEcheance)}</span>` : ""}
+        ${l.actionTexte ? `<span class="dps-action-detail">${esc(l.actionTexte)}</span>` : ""}
+        <small>Attribuée${l.actionPar ? ` par ${esc(l.actionPar)}` : ""}${l.actionLe ? ` le ${fr(l.actionLe)}` : ""}</small></div>
+      <div class="dps-action-btns">
+        ${peutFaire ? `<button type="button" class="dps-action-fait" data-act-fait="${esc(l.id)}">✓ Fait</button>` : ""}
+        ${peutAttribuer ? `<button type="button" class="dps-action-suppr" data-act-retirer="${esc(l.id)}" title="Retirer l'action">✕</button>` : ""}
+      </div></div>`;
+  }
+  const faite = l.actionPour && l.actionFaiteLe ? `<div class="dps-action faite">✓ Action faite par ${esc(l.actionFaitePar || l.actionPourNom || "")} le ${fr(l.actionFaiteLe)}${l.actionTexte ? ` — ${esc(l.actionTexte)}` : ""}</div>` : "";
+  if (!peutAttribuer) return faite;
+  return `${faite}<details class="dps-action-form" ${ouvert ? "open" : ""}><summary>📌 Attribuer une action à quelqu'un</summary>
+    <div class="dps-action-champs">
+      <label>Pour<select data-act-pour><option value="">— choisir —</option>${utilisateurs.map(u => `<option value="${esc(u.uid)}">${esc(u.nom || u.email)}</option>`).join("")}</select></label>
+      <label>Avant le<input type="date" data-act-ech></label>
+      <label class="large">Action à faire<input data-act-texte placeholder="ex. Commander le mitigeur, rappeler le fournisseur…"></label>
+      <button type="button" class="dps-action-ok" data-act-attribuer="${esc(l.id)}">📌 Attribuer</button>
+    </div></details>`;
+}
+export function brancherActions(container, { lignes, maj, utilisateur, utilisateurs = [] }) {
+  container.querySelectorAll("[data-act-fait]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "⏳";
+    try { await maj(b.dataset.actFait, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur }); }
+    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "✓ Fait"; }
+  }));
+  container.querySelectorAll("[data-act-retirer]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Retirer cette action ?")) return;
+    try { await maj(b.dataset.actRetirer, { actionPour: "", actionPourNom: "", actionTexte: "", actionEcheance: "", actionPar: "", actionLe: "", actionFaiteLe: "", actionFaitePar: "" }); }
+    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); }
+  }));
+  container.querySelectorAll("[data-act-attribuer]").forEach(b => b.addEventListener("click", async () => {
+    const f = b.closest(".dps-action-form");
+    const pour = f.querySelector("[data-act-pour]").value, texte = f.querySelector("[data-act-texte]").value.trim(), ech = f.querySelector("[data-act-ech]").value;
+    if (!pour) { alert("Choisis la personne."); return; }
+    if (!texte) { alert("Décris l'action à faire."); f.querySelector("[data-act-texte]").focus(); return; }
+    const u = utilisateurs.find(x => x.uid === pour);
+    b.disabled = true; b.textContent = "⏳";
+    try { await maj(b.dataset.actAttribuer, { actionPour: pour, actionPourNom: u?.nom || u?.email || "", actionTexte: texte, actionEcheance: ech, actionPar: utilisateur, actionLe: aujourdhui(), actionFaiteLe: "", actionFaitePar: "" }); }
+    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "📌 Attribuer"; }
+  }));
+}
+
+const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {}, tech: "" };
 // Brouillon par demande : rien n'est enregistré tant que « Enregistrer » /
 // « Valider » n'est pas cliqué (on garde la saisie même si l'écran se
 // rafraîchit à cause d'une autre modification).
@@ -76,11 +136,16 @@ function badgeAge(j) {
   return `<span class="dps-age ${cls}" title="Ancienneté de la demande">${j === 0 ? "aujourd'hui" : `il y a ${j} j`}</span>`;
 }
 
-export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null }) {
+export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null }) {
   suivreFavoris(uid);
+  suivreAffectations();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
-  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid });
+  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
+  aff.rerender = () => { if (container.isConnected) rerender(); };
+  const techs = utilisateurs.filter(u => u.role === "technicien");
+  const nomDe = (id) => { const u = utilisateurs.find(x => x.uid === id); return u ? (u.nom || u.email) : ""; };
+  const estTech = perms.isTech && !perms.isEditor;
   const q = sa(st.q.trim());
   const carteValidation = (l) => `
     <article class="dps-carte a-valider" data-id="${esc(l.id)}">
@@ -120,8 +185,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   if (!st.site) {
     const parSite = {};
     lignes.filter(filtreAssoc).forEach(l => {
-      const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0 });
+      const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0 });
       s.total++;
+      if (l.actionPour && !l.actionFaiteLe) s.actions++;
       if (EN_ATTENTE_VALID(l.statut)) s.aValider++;
       else if (!TRAITE(l.statut)) {
         s.ouvertes++;
@@ -131,18 +197,24 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     });
     const tri = (a, b) => (b.urgentes - a.urgentes) || (b.ouvertes - a.ouvertes) || a.nom.localeCompare(b.nom, "fr");
     const tous = Object.values(parSite).filter(s => !q || sa(s.nom).includes(q));
-    const favoris = tous.filter(s => estFavori(s.nom)).sort(tri);
-    const sites = tous.filter(s => !estFavori(s.nom) && (st.voirTraitees || s.ouvertes > 0 || s.aValider > 0)).sort(tri);
+    // Technicien : ses sites attribués d'abord. Superviseur : filtre par technicien.
+    const attribues = estTech && uid ? tous.filter(s => techsDuSite(s.nom).includes(uid)).sort(tri) : [];
+    const dejaVu = new Set(attribues.map(s => s.nom));
+    const filtreTech = !estTech && st.tech ? (s) => techsDuSite(s.nom).includes(st.tech) : null;
+    const favoris = filtreTech ? [] : tous.filter(s => !dejaVu.has(s.nom) && estFavori(s.nom)).sort(tri);
+    const sites = filtreTech ? tous.filter(filtreTech).sort(tri)
+      : tous.filter(s => !dejaVu.has(s.nom) && !estFavori(s.nom) && (st.voirTraitees || s.ouvertes > 0 || s.aValider > 0)).sort(tri);
     const carteSite = (s) => `
         <div class="dps-site-wrap">
         <button class="dps-site ${s.urgentes ? "a-urg" : s.ouvertes ? "" : "vide"}" data-dps-site="${esc(s.nom)}">
-          <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small></div>
+          <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small>${techsDuSite(s.nom).length ? `<small class="dps-site-techs">👷 ${esc(techsDuSite(s.nom).map(nomDe).filter(Boolean).join(", "))}</small>` : ""}</div>
           <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
           <div class="dps-site-pied">
             ${s.urgentes ? `<span class="dps-pastille urg">🔴 ${s.urgentes} urgente${s.urgentes > 1 ? "s" : ""}</span>` : ""}
             ${s.plusVieille > 30 ? `<span class="dps-pastille vieux">⏳ ${s.plusVieille} j</span>` : ""}
             ${s.realiseesMois ? `<span class="dps-pastille ok">✓ ${s.realiseesMois} ce mois</span>` : ""}
             ${s.aValider ? `<span class="dps-pastille valid">⏳ ${s.aValider} à valider</span>` : ""}
+            ${s.actions ? `<span class="dps-pastille act">📌 ${s.actions} action${s.actions > 1 ? "s" : ""}</span>` : ""}
             ${!s.ouvertes && !s.aValider ? `<span class="dps-pastille ok">✓ À jour</span>` : ""}
           </div>
         </button>
@@ -166,14 +238,21 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-barre">
         <label class="dps-recherche"><span>🔎</span><input id="dps-q" type="search" placeholder="Rechercher un site…" value="${esc(st.q)}"></label>
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
+        ${!estTech && techs.length ? `<label class="dps-tech-filtre">👷<select id="dps-tech"><option value="">Tous les techniciens</option>${techs.map(t => `<option value="${esc(t.uid)}" ${st.tech === t.uid ? "selected" : ""}>${esc(t.nom || t.email)} (${(n => `${n} site${n > 1 ? "s" : ""}`)(Object.values(aff.data).filter(l => l.includes(t.uid)).length)})</option>`).join("")}</select></label>` : ""}
         <label class="dps-case"><input type="checkbox" id="dps-traitees" ${st.voirTraitees ? "checked" : ""}> Sites sans demande en attente</label>
       </div>
+      ${attribues.length ? `
+      <section class="dps-favoris dps-attribues">
+        <h3>👷 Mes sites attribués <small>${attribues.reduce((t, s) => t + s.ouvertes, 0)} demande(s) à traiter</small></h3>
+        <div class="dps-sites">${attribues.map(carteSite).join("")}</div>
+      </section>` : ""}
+      ${filtreTech ? `<h3 class="dps-autres-titre">👷 Sites de ${esc(nomDe(st.tech))} (${sites.length})</h3>` : ""}
       ${favoris.length ? `
       <section class="dps-favoris">
         <h3>⭐ Mes sites <small>${totFav} demande${totFav > 1 ? "s" : ""} à traiter</small></h3>
         <div class="dps-sites">${favoris.map(carteSite).join("")}</div>
       </section>
-      <h3 class="dps-autres-titre">Autres sites</h3>` : (uid && fav.pret ? `<p class="dps-astuce">⭐ Tes sites favoris de l'accueil apparaissent ici en premier. Tu peux aussi cliquer sur ☆ pour en ajouter.</p>` : "")}
+      <h3 class="dps-autres-titre">Autres sites</h3>` : attribues.length ? `<h3 class="dps-autres-titre">Autres sites</h3>` : (uid && fav.pret && !filtreTech ? `<p class="dps-astuce">⭐ Tes sites favoris de l'accueil apparaissent ici en premier. Tu peux aussi cliquer sur ☆ pour en ajouter.</p>` : "")}
       <div class="dps-sites">
         ${sites.map(carteSite).join("") || `<div class="dps-vide">Aucun ${favoris.length ? "autre " : ""}site${q ? " ne correspond à la recherche" : " avec des demandes en attente"}.</div>`}
       </div>
@@ -182,10 +261,12 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     let t = null;
     container.querySelector("#dps-q")?.addEventListener("input", (e) => { st.q = e.target.value; clearTimeout(t); t = setTimeout(() => { rerender(); const el = container.querySelector("#dps-q"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); });
     container.querySelectorAll("[data-dps-asso]").forEach(b => b.addEventListener("click", () => { st.association = b.dataset.dpsAsso; rerender(); }));
+    container.querySelector("#dps-tech")?.addEventListener("change", (e) => { st.tech = e.target.value; rerender(); });
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
     container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; rerender(); container.scrollIntoView({ block: "start" }); }));
     brancherValidation();
+    apres?.();
     return;
   }
 
@@ -223,6 +304,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">${perms.isEditor ? "Vérifie la date, le contact et le commentaire, puis valide." : "Complète le contact et le commentaire, puis envoie au superviseur."}</p>` : ""}
       ` : `
       <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}</span>` : ""}</div>`}
+      ${blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
     </article>`;
   };
@@ -233,6 +315,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <button class="dps-retour" id="dps-retour">← Tous les sites</button>
       <div><h2>${esc(st.site)}</h2><p>${ouvertes.length} à traiter${enValidation.length ? ` · ${enValidation.length} à valider` : ""} · ${traitees.length} traitée${traitees.length > 1 ? "s" : ""}</p></div>
     </div>
+    ${perms.isEditor && techs.length ? `<div class="dps-affect"><span>👷 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}</div>`
+      : techsDuSite(st.site).length ? `<div class="dps-affect"><span>👷 ${esc(techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "))}</span></div>` : ""}
     ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Déclarées réalisées par les techniciens — vérifie et valide." : "Envoyées au superviseur pour validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
     ${ouvertes.length ? `<div class="dps-cartes">${ouvertes.map(carte).join("")}</div>` : `<div class="dps-vide">✓ Aucune demande à traiter sur ce site.</div>`}
     ${traitees.length ? `<details class="dps-historique"><summary>Historique : ${traitees.length} demande${traitees.length > 1 ? "s" : ""} traitée${traitees.length > 1 ? "s" : ""}</summary><div class="dps-cartes">${traitees.slice(0, 40).map(carte).join("")}</div></details>` : ""}
@@ -240,6 +324,15 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   onToggle();
   container.querySelector("#dps-retour").addEventListener("click", () => { st.site = null; rerender(); });
   brancherValidation();
+  brancherActions(container, { lignes, maj, utilisateur, utilisateurs });
+  apres?.();
+  container.querySelectorAll("[data-affect]").forEach(b => b.addEventListener("click", async () => {
+    const actuels = techsDuSite(st.site), id = b.dataset.affect;
+    const nouveaux = actuels.includes(id) ? actuels.filter(x => x !== id) : [...actuels, id];
+    b.disabled = true;
+    try { await saveAffectationSite(st.site, nouveaux); }
+    catch (e) { console.error(e); alert("Échec de l'attribution : " + (e?.message || e)); b.disabled = false; }
+  }));
 
   const ligneDe = (id) => duSite.find(x => x.id === id);
   const majBoutons = (c) => {
@@ -322,3 +415,4 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
 }
 
 export function resetVueSites() { st.site = null; }
+export function ouvrirSite(nom) { st.site = nom; st.q = ""; }

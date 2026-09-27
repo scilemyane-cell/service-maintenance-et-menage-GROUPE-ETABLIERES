@@ -148,7 +148,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } =
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
     dateStatut: fr(d.dateStatut),
-    commentaire: d.commentaireTech || "",
+    commentaire: [d.commentaireTech || "", d.actionPour && !d.actionFaiteLe && d.actionTexte ? `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${fr(d.actionEcheance)})` : ""} : ${d.actionTexte}` : ""].filter(Boolean).join("\n"),
   }));
   onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)…`);
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
