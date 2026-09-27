@@ -26,6 +26,7 @@
 //    Claude à chaque envoi du fichier Excel par Valentin.
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
+import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
 const COULEUR_ASSOCIATION = { "Agropolis": "var(--gold)", "École": "var(--teal)", "Armonia": "var(--violet)", "Autres": "var(--text-dim)" };
@@ -225,6 +226,22 @@ function fmtDateFR(iso) {
 
 function render(container) {
   if (ui.vue === "tableau") return renderTableau(container);
+  // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
+  // photo figée ne sert plus que si aucune demande n'a encore été importée.
+  if (state.demandes === null || state.demandes.length > 0) {
+    return renderStatsDemandes(container, state.demandes === null ? null : toutesLesLignes(), {
+      toggleHTML: toggleVueHTML(),
+      onToggle: () => attacherToggleVue(container),
+      ouvrirTableau: ({ site, mode, association } = {}) => {
+        ui.vue = "tableau"; ui.recherche = ""; ui.filtreUrgence = "";
+        ui.filtreSites = site ? [site] : [];
+        ui.filtreAssociation = association || "";
+        ui.filtreStatut = site ? "tous" : "a-traiter";
+        render(container);
+        container.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+    });
+  }
   const cle = ui.moisOuvert;
   const mois = cle ? DONNEES_DEMANDES.mois.find(m => m.cle === cle) : null;
   if (mois) return renderPageMois(container, mois);

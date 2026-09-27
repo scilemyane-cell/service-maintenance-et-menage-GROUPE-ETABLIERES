@@ -2071,3 +2071,144 @@ html[data-theme="sombre"] .ivc-appel > span{color:#f48fb1}
   body:not(.accueil-gmao) .tab-btn .tab-lib{display:block;overflow-wrap:anywhere;hyphens:auto}
   body:not(.accueil-gmao) .tab-btn.active{border-color:transparent;transform:none}
 }
+
+/* =====================================================================
+   SUIVI DES DEMANDES — tableau de bord statistiques (haut de gamme)
+   ===================================================================== */
+.dst{
+  --dst-good:#0ca30c; --dst-warn:#eda100; --dst-crit:#d03b3b;
+  --dst-s1:#2a78d6; --dst-s2:#eb6834; --dst-s3:#1baf7a; --dst-autre:#9a9a9e;
+  --dst-q1:#86b6ef; --dst-q2:#3987e5; --dst-q3:#1c5cab; --dst-q4:#0d366b;
+  --dst-track:#eef0f4; --dst-card:var(--panel); --dst-ink:var(--text); --dst-mute:var(--text-dim);
+}
+html:not([data-theme="clair"]) .dst{
+  --dst-s1:#3987e5; --dst-s2:#d95926; --dst-s3:#199e70; --dst-warn:#fab219;
+  --dst-q1:#184f95; --dst-q2:#256abf; --dst-q3:#3987e5; --dst-q4:#86b6ef;
+  --dst-track:rgba(255,255,255,.07);
+}
+.dst h2,.dst h3{margin:0}
+/* Bandeau d'en-tête */
+.dst-hero{position:relative;overflow:hidden;border-radius:24px;padding:26px 26px 22px;color:#fff;
+  background:radial-gradient(1200px 400px at 110% -20%,rgba(236,4,64,.28),transparent 60%),radial-gradient(900px 380px at -10% 120%,rgba(57,135,229,.35),transparent 60%),linear-gradient(135deg,#0b1d3a 0%,#0e2a52 55%,#10233f 100%);
+  box-shadow:0 18px 40px rgba(11,29,58,.28)}
+.dst-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.06),transparent 40%);pointer-events:none}
+.dst-hero-tete{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:flex-start;position:relative;z-index:1}
+.dst-sur{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f3c565;font-weight:800}
+.dst-hero h2{font:800 28px/1.15 "Montserrat",system-ui,sans-serif;letter-spacing:-.02em;margin-top:6px;color:#fff}
+.dst-hero h2 em{font-style:normal;background:linear-gradient(90deg,#f3c565,#ff7a59);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dst-hero p{margin:6px 0 0;color:rgba(255,255,255,.72);font-size:13px;max-width:520px}
+.dst-filtres{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.dst-seg{display:inline-flex;gap:2px;padding:4px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(6px);flex-wrap:wrap}
+.dst-seg button{border:0;background:transparent;color:rgba(255,255,255,.75);font:700 12px "Montserrat",system-ui,sans-serif;padding:7px 12px;border-radius:99px;cursor:pointer;white-space:nowrap}
+.dst-seg button:hover{color:#fff}
+.dst-seg button.on{background:#fff;color:#0b1d3a;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.dst-kpis{position:relative;z-index:1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:22px}
+.dst-kpi{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.dst-kpi span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.66);font-weight:700}
+.dst-kpi b{font:800 30px/1.1 "Montserrat",system-ui,sans-serif;letter-spacing:-.02em;color:#fff}
+.dst-kpi b.warn{color:#fbd06a}
+.dst-kpi b.petit{font-size:22px}
+.dst-kpi-anneau{gap:10px !important}
+.dst-kpi small{font-size:11.5px;color:rgba(255,255,255,.62);font-weight:600}
+.dst-kpi small.up{color:#ffb199}.dst-kpi small.down{color:#8fe3b0}
+.dst-kpi-anneau{flex-direction:row;align-items:center;gap:12px}
+.dst-kpi-anneau > div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dst-anneau{flex-shrink:0}
+.dst-anneau-txt{font:800 15px "Montserrat",system-ui,sans-serif;fill:#fff}
+/* Alertes cliquables */
+.dst-alertes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.dst-alerte{display:flex;align-items:center;gap:14px;text-align:left;border-radius:18px;padding:14px 16px;cursor:pointer;background:var(--panel);border:1px solid var(--border);font-family:inherit;color:var(--text);box-shadow:0 2px 10px rgba(20,30,50,.06);transition:transform .15s,box-shadow .15s}
+.dst-alerte:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(20,30,50,.12)}
+.dst-alerte b{display:block;font-size:14px}.dst-alerte small{color:var(--text-dim);font-weight:700;font-size:12px}
+.dst-al-ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-weight:900;font-size:18px;flex-shrink:0}
+.dst-alerte.crit{border-left:5px solid var(--dst-crit)}.dst-alerte.crit .dst-al-ico{background:color-mix(in srgb,var(--dst-crit) 14%,transparent);color:var(--dst-crit)}
+.dst-alerte.warn{border-left:5px solid var(--dst-warn)}.dst-alerte.warn .dst-al-ico{background:color-mix(in srgb,var(--dst-warn) 18%,transparent)}
+/* Cartes */
+.dst-carte{background:var(--dst-card);border:1px solid var(--border);border-radius:22px;padding:20px 22px;box-shadow:0 2px 12px rgba(20,30,50,.06);min-width:0}
+.dst-carte-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.dst-carte h3{font:800 16px "Montserrat",system-ui,sans-serif;color:var(--text);letter-spacing:-.01em}
+.dst-carte-tete p{margin:3px 0 0;font-size:12px;color:var(--text-dim);font-weight:600}
+.dst-grille{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.dst-grille-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.dst-vide{padding:24px;text-align:center;color:var(--text-dim);font-weight:600}
+/* Histogramme */
+.dst-svg{width:100%;height:auto;display:block}
+.dst-grid{stroke:var(--border);stroke-width:1;stroke-dasharray:3 4}
+.dst-axe{font:600 11px "Montserrat",system-ui,sans-serif;fill:var(--text-dim)}
+.dst-val{font:800 11.5px "Montserrat",system-ui,sans-serif;fill:var(--text)}
+.dst-col{cursor:pointer}.dst-col:hover rect[fill^="var"]{filter:brightness(1.08)}
+/* Légendes & donuts */
+.dst-leg{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;min-width:0;flex:1}
+.dst-leg li{display:grid;grid-template-columns:12px 1fr auto auto;align-items:center;gap:8px;font-size:13px;color:var(--text)}
+.dst-leg li i{width:12px;height:12px;border-radius:4px}
+.dst-leg li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.dst-leg li b{font-weight:800}.dst-leg li em{font-style:normal;color:var(--text-dim);font-weight:700;font-size:12px;min-width:40px;text-align:right}
+.dst-leg-h{flex-direction:row;flex:0 0 auto;gap:14px;flex-wrap:wrap}
+.dst-leg-h li{grid-template-columns:12px auto;font-size:12px}
+.dst-donut{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.dst-donut svg{flex-shrink:0}
+.dst-donut-v{font:800 26px "Montserrat",system-ui,sans-serif;fill:var(--text)}
+.dst-donut-l{font:700 10px "Montserrat",system-ui,sans-serif;fill:var(--text-dim);text-transform:uppercase;letter-spacing:.1em}
+.dst-hit{cursor:pointer;transition:stroke-width .15s}.dst-hit:hover{stroke-width:24}
+/* Barres horizontales */
+.dst-bh{display:flex;flex-direction:column;gap:10px}
+.dst-bh-l{display:grid;grid-template-columns:22px minmax(0,1.1fr) minmax(0,1.4fr) 40px;align-items:center;gap:10px;font-size:13px}
+.dst-bh-rang{font-weight:800;color:var(--text-dim);font-size:11.5px;text-align:center}
+.dst-bh-nom{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dst-bh-piste{height:10px;border-radius:99px;background:var(--dst-track);overflow:hidden}
+.dst-bh-piste span{display:block;height:100%;border-radius:99px}
+.dst-bh-v{text-align:right;font-weight:800;color:var(--text)}
+/* Urgence */
+.dst-urg{display:flex;flex-direction:column;gap:14px}
+.dst-urg-l{display:grid;grid-template-columns:128px 1fr 46px 36px;align-items:center;gap:10px;font-size:13px}
+.dst-urg-n{font-weight:700;color:var(--text)}
+.dst-urg-piste{display:flex;gap:2px;height:14px;border-radius:99px;background:var(--dst-track);overflow:hidden}
+.dst-urg-piste .r{background:var(--dst-good)}.dst-urg-piste .o{background:var(--dst-warn)}
+.dst-urg-l b{text-align:right;font-weight:800;color:var(--text)}.dst-urg-l small{color:var(--text-dim);font-weight:700;text-align:right}
+/* Sites */
+.dst-sites{display:flex;flex-direction:column}
+.dst-sites-l{display:grid;grid-template-columns:34px minmax(0,1.3fr) minmax(0,1.5fr) 80px 80px;align-items:center;gap:12px;padding:10px 8px;border:0;border-bottom:1px solid var(--border);background:transparent;font:600 13px "Montserrat",system-ui,sans-serif;color:var(--text);text-align:left;cursor:pointer;border-radius:10px}
+button.dst-sites-l:hover{background:var(--panel-alt)}
+.dst-sites-t{cursor:default;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:800;padding-top:0}
+.dst-sites-l:last-child{border-bottom:0}
+.dst-rang{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;background:var(--panel-alt);font-weight:800;font-size:12px;color:var(--text-dim)}
+.dst-sites-l:nth-child(2) .dst-rang{background:linear-gradient(135deg,#f3c565,#d9a13a);color:#1A1305}
+.dst-sites-l:nth-child(3) .dst-rang{background:linear-gradient(135deg,#dfe3ea,#b7bfcc);color:#1b2330}
+.dst-sites-l:nth-child(4) .dst-rang{background:linear-gradient(135deg,#e6b58f,#c1875c);color:#2a1606}
+.dst-site-n{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dst-site-b{display:flex;align-items:center;gap:8px}
+.dst-site-b i{height:10px;border-radius:99px;background:linear-gradient(90deg,var(--dst-s1),color-mix(in srgb,var(--dst-s1) 60%,#fff));min-width:3px}
+.dst-site-b b{font-weight:800}
+.dst-att{color:var(--text);font-weight:800}.dst-muet{color:var(--text-dim)}
+.dst-pill{font-style:normal;font-weight:800;font-size:12px;padding:3px 9px;border-radius:99px}
+.dst-pill.ok{background:color-mix(in srgb,var(--dst-good) 16%,transparent);color:#0a7f0a}
+.dst-pill.moy{background:color-mix(in srgb,var(--dst-warn) 22%,transparent);color:#8a5a00}
+.dst-pill.bas{background:color-mix(in srgb,var(--dst-crit) 15%,transparent);color:var(--dst-crit)}
+html:not([data-theme="clair"]) .dst-pill.ok{color:#5fd35f}html:not([data-theme="clair"]) .dst-pill.moy{color:#fbd06a}
+/* Jours de la semaine */
+.dst-jours{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:170px}
+.dst-jour{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;cursor:default}
+.dst-jour span{width:100%;max-width:30px;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--dst-q3),var(--dst-q2))}
+.dst-jour b{font-size:11.5px;font-weight:800;color:var(--text);order:-1}
+.dst-jour small{font-size:11px;color:var(--text-dim);font-weight:700}
+.dst-note{font-size:12px;color:var(--text-dim);margin:0 4px}
+/* Infobulle */
+.dst-tip{position:fixed;left:0;top:0;z-index:3000;pointer-events:none;opacity:0;transition:opacity .12s;background:#0b1d3a;color:#fff;font:600 12.5px/1.5 "Montserrat",system-ui,sans-serif;padding:9px 12px;border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.3);max-width:260px}
+.dst-tip b{font-weight:800}.dst-dot{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:6px}
+@media (max-width:1100px){.dst-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.dst-grille-3{grid-template-columns:1fr 1fr}}
+@media (max-width:760px){
+  .dst-hero{padding:20px 16px 16px;border-radius:20px}
+  .dst-hero h2{font-size:22px}
+  .dst-filtres{align-items:stretch;width:100%}
+  .dst-seg{justify-content:space-between}
+  .dst-seg button{flex:1;padding:7px 6px;font-size:11.5px}
+  .dst-kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .dst-kpi b{font-size:24px}
+  .dst-grille,.dst-grille-3{grid-template-columns:1fr}
+  .dst-carte{padding:16px 14px;border-radius:18px}
+  .dst-donut{justify-content:center}
+  .dst-sites-l{grid-template-columns:28px minmax(0,1fr) 40px 50px 56px;gap:6px;padding:10px 4px;font-size:12.5px}
+  .dst-site-b i{display:none}
+  .dst-sites-t span{font-size:9.5px;letter-spacing:.04em}
+  .dst-urg-l{grid-template-columns:90px 1fr 42px 30px}
+}
