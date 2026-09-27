@@ -137,7 +137,8 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } =
   const fr = (isoDate) => (isoDate ? isoDate.slice(0, 10).split("-").reverse().join("/") : "");
   const lignes = (demandesApp || []).filter(d => d.dateMaj && !String(d.numero).startsWith("SN-")).map(d => ({
     numero: d.numero,
-    statut: d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
+    statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
+    validation: d.validation || "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
     categorieIntervenant: d.categorieIntervenant || "",
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),

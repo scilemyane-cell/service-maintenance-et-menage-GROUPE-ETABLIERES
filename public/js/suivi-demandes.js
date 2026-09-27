@@ -247,6 +247,7 @@ function render(container) {
     return renderParSite(container, state.demandes === null ? null : toutesLesLignes(), {
       toggleHTML: toggleVueHTML(), onToggle: () => attacherToggleVue(container), perms,
       maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); },
+      utilisateur: mountedUser?.nom || mountedUser?.email || "",
     });
   }
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
@@ -310,6 +311,7 @@ function ligneDepuisDoc(d) {
     intervenant: d.intervenant && d.intervenant !== d.categorieIntervenant ? d.intervenant : "", commentaireTech: d.commentaireTech || "",
     dateIntervention: d.dateIntervention || "", dateStatut: d.dateStatut || "", contact: d.contact || "", categorieIntervenant: d.categorieIntervenant || "",
     local: d.local || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
+    declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "",
   };
 }
 
@@ -360,7 +362,7 @@ function selectHTML(id, label, options, valeur) {
 
 function statutSelectHTML(id, valeur) {
   return `<select class="demandes-cell-select" id="${id}">
-    ${DEMANDES_SEED.statuts.map(s => `<option value="${esc(s)}" ${s === valeur ? "selected" : ""}>${esc(s)}</option>`).join("")}
+    ${[...new Set([...DEMANDES_SEED.statuts, "Réalisé – à valider", valeur].filter(Boolean))].map(s => `<option value="${esc(s)}" ${s === valeur ? "selected" : ""}>${esc(s)}</option>`).join("")}
   </select>`;
 }
 

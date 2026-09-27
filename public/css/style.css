@@ -2341,3 +2341,10 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-annuler{border:1px solid var(--border);background:var(--panel);color:var(--text-dim);border-radius:14px;padding:0 14px;font:700 13px "Montserrat",system-ui,sans-serif;cursor:pointer}
 .dps-carte.modifiee{box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 60%,transparent),0 6px 18px rgba(20,30,50,.1)}
 .dps-aide{margin:0;font-size:12px;font-weight:700;color:#0a7f0a}
+/* Circuit de validation des demandes */
+.dps-valid-bloc{background:color-mix(in srgb,#8B7CF0 8%,var(--panel));border:1px solid color-mix(in srgb,#8B7CF0 35%,var(--border));border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.dps-valid-tete h3{margin:0;font:800 16px "Montserrat",system-ui,sans-serif;color:var(--text)}
+.dps-valid-tete p{margin:2px 0 0;font-size:12.5px;color:var(--text-dim);font-weight:600}
+.dps-carte.a-valider{border-left-color:#8B7CF0}
+.dps-pastille.valid{background:rgba(139,124,240,.16);color:#5b4cc4}
+.dps-com-lu{font-style:italic;color:var(--text)}.dps-com-lu.vide{color:var(--text-dim)}
