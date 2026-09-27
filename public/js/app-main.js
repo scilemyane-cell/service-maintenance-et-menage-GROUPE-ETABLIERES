@@ -542,8 +542,8 @@
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
       ${category && modulesConstruction.includes(category.id) && !eff.apercu && eff.role === "super_admin" ? `<div class="construction-bandeau">🚧 Module en construction — visible uniquement par le Super Admin (masqué pour tous les autres, y compris dans Statistiques).</div>` : ""}
       ${category ? `
-      <nav class="tabs">
-        ${categorySubtabsFor(category, eff).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}">${s.icon} ${s.label}</button>`).join("")}
+      <nav class="tabs" style="--nb-onglets:${Math.min(3, categorySubtabsFor(category, eff).length)}" data-nb="${categorySubtabsFor(category, eff).length}">
+        ${categorySubtabsFor(category, eff).map(s => `<button class="tab-btn ${s.id===currentSubtab?'active':''}" data-subtab="${s.id}"><span class="tab-ico">${s.icon}</span><span class="tab-lib">${s.label}</span></button>`).join("")}
       </nav>` : ""}
       <main class="content" id="content"></main>
     `;

@@ -2061,3 +2061,13 @@ html[data-theme="sombre"] .ivc-appel > span{color:#f48fb1}
   .ivf-p{flex:1;padding:7px 6px}
   .ivc{padding:12px 13px}
 }
+
+/* ===== Onglets sur téléphone : grille de tuiles, tous visibles d'un coup ===== */
+@media (max-width:700px){
+  body:not(.accueil-gmao) .tabs{display:grid;grid-template-columns:repeat(var(--nb-onglets,3),minmax(0,1fr));gap:8px;padding:10px 12px 12px;overflow:visible}
+  body:not(.accueil-gmao) .tabs[data-nb="1"]{display:none}
+  body:not(.accueil-gmao) .tab-btn{flex-direction:column;justify-content:center;gap:4px;min-height:64px;padding:8px 4px;border-radius:14px;border:1px solid var(--border);background:var(--panel-alt);white-space:normal;text-align:center;line-height:1.15;font-size:12px}
+  body:not(.accueil-gmao) .tab-btn .tab-ico{font-size:21px;line-height:1}
+  body:not(.accueil-gmao) .tab-btn .tab-lib{display:block;overflow-wrap:anywhere;hyphens:auto}
+  body:not(.accueil-gmao) .tab-btn.active{border-color:transparent;transform:none}
+}
