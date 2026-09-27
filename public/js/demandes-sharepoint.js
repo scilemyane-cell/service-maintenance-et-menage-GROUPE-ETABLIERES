@@ -135,7 +135,12 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } = {}) {
   const token = await getGraphToken();
   const fr = (isoDate) => (isoDate ? isoDate.slice(0, 10).split("-").reverse().join("/") : "");
-  const lignes = (demandesApp || []).filter(d => d.dateMaj && !String(d.numero).startsWith("SN-")).map(d => ({
+  // Seulement les demandes modifiées dans l'appli ces 7 derniers jours : le
+  // flux Power Automate reste léger (quota d'actions quotidien) tout en
+  // rattrapant largement un envoi manqué.
+  const depuis = Date.now() - 7 * 86400000;
+  const ms = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds ? d.dateMaj.seconds * 1000 : 0);
+  const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-")).map(d => ({
     numero: d.numero,
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation || "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
