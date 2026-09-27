@@ -1,122 +1,148 @@
-// demandes-sharepoint.js — Renvoie vers le fichier Excel SharePoint des
-// demandeurs (SG_Suivi_Demandes_GroupeEtablieres.xlsx) le traitement fait
-// dans l'appli : Contact (intervenant), Date d'intervention, Statut, Date
-// statut, Commentaire. Chaque demande est retrouvée par son N° ; seules
-// ces 5 colonnes (L à P) sont écrites, jamais celles des demandeurs, et
-// seulement pour les demandes modifiées dans l'appli depuis la dernière
-// synchronisation.
-import { getGraphToken } from "./graph-auth.js";
+// demandes-sharepoint.js — Échange avec le fichier Excel des demandeurs
+// (SG_Suivi_Demandes_GroupeEtablieres.xlsx) via le site SharePoint appsmm,
+// grâce à deux flux Power Automate (le fichier original est sur un autre
+// site, où l'appli n'a pas de droits) :
+//
+//  1) ORIGINAL → appsmm : un flux copie le fichier original dans
+//     appsmm/Demandes/ à chaque modification. L'appli lit cette copie :
+//     nouvelles demandes ajoutées, et demandes non encore traitées dans
+//     l'appli mises à jour depuis le fichier.
+//  2) appli → ORIGINAL : l'appli dépose appsmm/Demandes/
+//     mises-a-jour-demandes.json (demandes modifiées dans l'appli) ; un
+//     second flux reporte ces lignes dans le fichier original (par N°).
+import { getGraphToken, getGraphTokenSilentOnly } from "./graph-auth.js";
+import { uploadToDrive, telechargerFichierDrive } from "./sharepoint-storage.js";
 import { db } from "./firebase-init.js";
-import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, getDoc, setDoc, collection, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-const GRAPH = "https://graph.microsoft.com/v1.0";
-const HOTE = "etablieresfr.sharepoint.com";
-const SITE = "/sites/Sharepoint";
-const NOM_FICHIER = "SG_Suivi_Demandes_GroupeEtablieres.xlsx";
-const ID_UNIQUE = "eca7f67e-e644-43be-a4ff-436c65c14dd3"; // sourcedoc du lien partagé
-const FEUILLE = "📋 Suivi des demandes";
-const FEUILLE_LISTES = "Listes";
+const DOSSIER = "Demandes";
+const COPIE = "SG_Suivi_Demandes_GroupeEtablieres.xlsx";
+const FICHIER_MAJ = "mises-a-jour-demandes.json";
 const REF_SYNCHRO = doc(db, "config", "demandes-synchro");
 
-export class ErreurDroitsSharePoint extends Error {}
+const sa = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const txt = (v) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
+const MOIS = { janv: 1, fevr: 2, mars: 3, avr: 4, mai: 5, juin: 6, juil: 7, aout: 8, sept: 9, oct: 10, nov: 11, dec: 12 };
+const iso = (y, m, d) => { const dt = new Date(Date.UTC(y, m - 1, d)); return isNaN(dt) || dt.getUTCMonth() !== m - 1 || y < 2020 || y > new Date().getFullYear() + 1 ? "" : dt.toISOString().slice(0, 10); };
 
-const sansAccent = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-const lettre = (n) => String.fromCharCode(65 + n); // 0 → A (colonnes A..Z suffisent)
-const serieExcel = (iso) => {
-  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return "";
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
-};
-
-async function appel(token, url, options = {}) {
-  const res = await fetch(url.startsWith("http") ? url : GRAPH + url, {
-    ...options, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) },
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new ErreurDroitsSharePoint(`Accès refusé par SharePoint (${res.status}) sur le site ${SITE}.`);
+// Dates du fichier : vraies dates Excel, "18082026", "210926", "21/09/2026", "MARDI 4 AOUT"…
+function versIso(v, anneeRef) {
+  if (v == null || v === "") return "";
+  if (v instanceof Date) return iso(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  if (typeof v === "number") {
+    if (v > 20000 && v < 80000) { const d = new Date(Math.round((v - 25569) * 86400000)); return iso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+    const s = String(Math.trunc(v));
+    if (s.length === 7 || s.length === 8) { const p = s.padStart(8, "0"); return iso(+p.slice(4), +p.slice(2, 4), +p.slice(0, 2)); }
+    if (s.length === 6) return iso(2000 + +s.slice(4), +s.slice(2, 4), +s.slice(0, 2));
+    return "";
   }
-  if (!res.ok) throw new Error(`SharePoint ${res.status} : ${(await res.text()).slice(0, 200)}`);
-  return res.status === 204 ? null : res.json();
+  const t = sa(v);
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return iso(+m[1], +m[2], +m[3]);
+  m = t.match(/(\d{1,2})[/.\-*](\d{1,2})[/.\-*]?(\d{2,4})/); if (m) { let y = +m[3].slice(0, 4); if (y < 100) y += 2000; return iso(y, +m[2], +m[1]); }
+  if (/^\d{6,8}$/.test(t)) return versIso(+t, anneeRef);
+  m = t.match(/(\d{1,2})\D.*?(janv|fevr|mars|avr|mai|juin|juil|aout|sept|oct|nov|dec)/);
+  if (m) return iso(anneeRef || new Date().getFullYear(), MOIS[m[2]], +m[1]);
+  return "";
+}
+function statut(v) {
+  const t = sa(v); if (!t) return "Non renseigné";
+  if (t.startsWith("realis")) return "Réalisé";
+  if (t.startsWith("annul")) return "Annulé";
+  return { "pris en compte": "Pris en compte", "demande de devis": "Demande de devis", "planifie": "Planifié", "intervenant sollicite": "Intervenant sollicité", "commande en cours": "Commande en cours", "autre": "Autre" }[t] || txt(v);
+}
+const urgence = (v) => ({ normal: "Normal", urgent: "Urgent", "a planifier": "À planifier", critique: "Critique" }[sa(v)] || "Non renseignée");
+const association = (v) => { const t = sa(v); return t === "ecole" || t === "lycee" ? "École" : t === "agropolis" ? "Agropolis" : t === "armonia" ? "Armonia" : "Autres"; };
+const ALIAS = { ronald: "Ronald", rnld: "Ronald", ecoleau: "Écol'eau", saisonnier: "Saisonnier", arnaudelec: "Arnaud Élec", vendeehabitat: "Vendée Habitat", vendeehabita: "Vendée Habitat",
+  mickaelfouet: "Mickaël Fouet", mfouet: "Mickaël Fouet", yann: "Yann", bamenuiserie: "BA Menuiserie", fsb: "FSB", richards: "Richards", lionel: "Lionel", kevin: "Kevin",
+  anthonytony: "Anthony / Tony", tonyouanthony: "Anthony / Tony", tke: "TKE", tkeharmonie: "TKE", sm: "SM", atemis: "Atemis", net: "Net 85", suny: "Suny", wendy: "Wendy",
+  shubb: "Shubb", aba: "ABA", entgautier: "Ent. Gautier", servicemaintenance: "Service maintenance", mmegandon: "Mme Gandon" };
+const contact = (v) => { const t = txt(v); return ALIAS[sa(t).replace(/[^a-z]/g, "")] || t; };
+
+// Demande saisie sans N° : identifiant stable tiré de la date et du début du descriptif.
+export const numeroSansNumero = (dateIso, descr) => `SN-${dateIso || "sansdate"}-${sa(descr).replace(/[^a-z0-9]/g, "").slice(0, 12)}`;
+
+// Classeur SheetJS → demandes (même forme que l'import initial).
+export async function demandesDepuisClasseur(wb, XLSX) {
+  const nomFeuille = wb.SheetNames.find(n => sa(n).includes("suivi des demandes")) || wb.SheetNames[0];
+  const lignes = XLSX.utils.sheet_to_json(wb.Sheets[nomFeuille], { header: 1, raw: true, defval: null });
+  const iEntete = lignes.findIndex(r => /^n.{0,2}demande/.test(sa(r?.[0])));
+  if (iEntete < 0) throw new Error("En-tête « N° demande » introuvable dans la copie du fichier.");
+  const feuilleListes = wb.Sheets[wb.SheetNames.find(n => sa(n) === "listes")];
+  const typesRef = feuilleListes ? XLSX.utils.sheet_to_json(feuilleListes, { header: 1, defval: null }).slice(1).map(r => r[5]).filter(Boolean) : [];
+  const typeNorm = (v) => { const t = sa(v); if (!t) return ""; return typesRef.find(x => sa(x) === t || sa(x).startsWith(t)) || txt(v); };
+  const out = [];
+  for (const r of lignes.slice(iEntete + 1)) {
+    if (!r || !(r[0] || r[6])) continue;
+    const dDem = versIso(r[1]);
+    const annee = dDem ? +dDem.slice(0, 4) : undefined;
+    const intervenantCat = txt(r[10]), cont = contact(r[11]);
+    out.push({
+      numero: txt(r[0]) || numeroSansNumero(dDem, r[6]),
+      dateDemande: dDem, association: association(r[2]), site: txt(r[3]) || "Non renseigné",
+      type: typeNorm(r[5]), descriptif: txt(r[6]), urgence: urgence(r[8]), statut: statut(r[13]),
+      intervenant: cont || intervenantCat, categorieIntervenant: intervenantCat, contact: cont,
+      dateIntervention: versIso(r[12], annee), dateStatut: versIso(r[14], annee), commentaireTech: txt(r[15]),
+    });
+  }
+  return out;
 }
 
-async function trouverFichier(token) {
-  const site = await appel(token, `/sites/${HOTE}:${SITE}`);
-  const drives = await appel(token, `/sites/${site.id}/drives?$select=id,name`);
-  for (const d of drives.value || []) {
-    const r = await appel(token, `/drives/${d.id}/root/search(q='${encodeURIComponent(NOM_FICHIER.replace(".xlsx", ""))}')?$select=id,name,sharepointIds,webUrl`).catch(() => ({ value: [] }));
-    const exact = (r.value || []).find(x => (x.sharepointIds?.listItemUniqueId || "").toLowerCase() === ID_UNIQUE)
-      || (r.value || []).find(x => x.name === NOM_FICHIER);
-    if (exact) return { driveId: d.id, itemId: exact.id, webUrl: exact.webUrl };
+const CHAMPS_FICHIER = ["statut", "intervenant", "contact", "dateIntervention", "dateStatut", "commentaireTech", "urgence", "descriptif", "site", "association", "type", "dateDemande"];
+
+// 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
+// des demandes que personne n'a encore touchées dans l'appli.
+export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {} } = {}) {
+  const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
+  if (!token) return null;
+  onProgress("Lecture de la copie SharePoint…");
+  const buf = await telechargerFichierDrive(`${DOSSIER}/${COPIE}`, token);
+  if (!buf) throw new Error(`Copie introuvable : appsmm › ${DOSSIER} › ${COPIE}. Vérifie le flux Power Automate n° 1.`);
+  const XLSX = await window.chargerLib("XLSX");
+  const fichier = await demandesDepuisClasseur(XLSX.read(buf, { type: "array" }), XLSX);
+  const parNumero = new Map((demandesApp || []).map(d => [d.numero, d]));
+  const vus = {}; fichier.forEach(f => { vus[f.numero] = (vus[f.numero] || 0) + 1; });
+  const appVus = {}; (demandesApp || []).forEach(d => { appVus[d.numero] = (appVus[d.numero] || 0) + 1; });
+  const nouvelles = [], majs = [];
+  for (const f of fichier) {
+    const a = parNumero.get(f.numero);
+    if (!a) { nouvelles.push(f); continue; }
+    if (a.dateMaj) continue; // déjà traitée dans l'appli : l'appli fait foi
+    if (vus[f.numero] > 1 || appVus[f.numero] > 1) continue; // N° en double dans le fichier : ambigu, on ne touche pas
+    const diff = {};
+    CHAMPS_FICHIER.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+    if (Object.keys(diff).length) majs.push([a.id, diff]);
   }
-  throw new Error(`Fichier ${NOM_FICHIER} introuvable sur le site ${SITE}.`);
+  const ops = [...nouvelles.map(n => ["set", n]), ...majs.map(([id, d]) => ["update", id, d])];
+  for (let i = 0; i < ops.length; i += 400) {
+    onProgress(`Enregistrement ${Math.min(i + 400, ops.length)} / ${ops.length}…`);
+    const batch = writeBatch(db);
+    ops.slice(i, i + 400).forEach(o => o[0] === "set"
+      ? batch.set(doc(collection(db, "demandes")), { ...o[1], importeLe: serverTimestamp() })
+      : batch.update(doc(db, "demandes", o[1]), o[2]));
+    await batch.commit();
+  }
+  await setDoc(REF_SYNCHRO, { derniereLecture: Date.now() }, { merge: true });
+  return { nouvelles: nouvelles.length, misesAJour: majs.length, total: fichier.length };
 }
 
-// lignesApp : demandes Firestore ({ numero, statut, intervenant, contact,
-// dateIntervention, dateStatut, commentaireTech, dateMaj }).
-export async function synchroniserDemandesVersSharePoint(lignesApp, { onProgress = () => {}, tout = false } = {}) {
+// 2) Dépôt du fichier des mises à jour (demandes modifiées dans l'appli)
+// pour le flux Power Automate n° 2.
+export async function deposerMisesAJour(demandesApp, { onProgress = () => {} } = {}) {
   const token = await getGraphToken();
-  onProgress("Recherche du fichier sur SharePoint…");
-  const f = await trouverFichier(token);
-  const base = `/drives/${f.driveId}/items/${f.itemId}/workbook`;
-  const feuille = `${base}/worksheets('${encodeURIComponent(FEUILLE)}')`;
-
-  onProgress("Lecture du fichier…");
-  const plage = await appel(token, `${feuille}/usedRange(valuesOnly=true)?$select=address,values`);
-  const valeurs = plage.values || [];
-  const debut = parseInt(String(plage.address).split("!")[1].match(/\d+/)[0], 10); // 1re ligne de la plage
-  const iEntete = valeurs.findIndex(r => sansAccent(r[0]).startsWith("n° demande") || sansAccent(r[0]).startsWith("n demande"));
-  if (iEntete < 0) throw new Error("En-tête « N° demande » introuvable dans le fichier.");
-  const entete = valeurs[iEntete].map(sansAccent);
-  const col = (debutNom) => entete.findIndex(h => h.startsWith(debutNom));
-  const C = { contact: col("contact"), dateInterv: col("date d'intervention"), statut: col("statut"), dateStatut: col("date statut"), commentaire: col("commentaire") };
-  if (Object.values(C).some(v => v < 0)) throw new Error("Colonnes attendues introuvables (Contact, Date d'intervention, Statut, Date statut, Commentaire).");
-
-  // Libellés de statut autorisés par la liste déroulante du fichier.
-  let statutsFichier = [];
-  try {
-    const l = await appel(token, `${base}/worksheets('${encodeURIComponent(FEUILLE_LISTES)}')/usedRange(valuesOnly=true)?$select=values`);
-    const iCol = (l.values?.[0] || []).findIndex(h => sansAccent(h) === "statut");
-    if (iCol >= 0) statutsFichier = l.values.slice(1).map(r => r[iCol]).filter(Boolean);
-  } catch { /* liste absente : on écrit le libellé en majuscules */ }
-  const statutPourFichier = (s) => {
-    if (!s || s === "Non renseigné") return "";
-    return statutsFichier.find(x => sansAccent(x) === sansAccent(s)) || String(s).toUpperCase();
-  };
-
-  const ligneDuNumero = {};
-  valeurs.forEach((r, i) => { if (i > iEntete && r[0]) ligneDuNumero[String(r[0]).trim()] = debut + i; });
-
-  const synchro = await getDoc(REF_SYNCHRO).catch(() => null);
-  const derniere = !tout && synchro?.exists() ? synchro.data().derniereSynchro || 0 : 0;
-  const msMaj = (l) => l.dateMaj?.toMillis ? l.dateMaj.toMillis() : (l.dateMaj?.seconds ? l.dateMaj.seconds * 1000 : 0);
-  const aEnvoyer = lignesApp.filter(l => ligneDuNumero[l.numero] && msMaj(l) > derniere);
-  const introuvables = lignesApp.filter(l => msMaj(l) > derniere && !ligneDuNumero[l.numero]).length;
-
-  const cMin = Math.min(...Object.values(C)), cMax = Math.max(...Object.values(C));
-  const requetes = aEnvoyer.map((l, k) => {
-    const n = ligneDuNumero[l.numero];
-    const actuel = valeurs[n - debut] || [];
-    const ligne = actuel.slice(cMin, cMax + 1).map(v => v ?? "");
-    const poser = (c, v) => { ligne[c - cMin] = v; };
-    poser(C.contact, l.intervenant || l.contact || actuel[C.contact] || "");
-    poser(C.dateInterv, serieExcel(l.dateIntervention) || actuel[C.dateInterv] || "");
-    poser(C.statut, statutPourFichier(l.statut));
-    poser(C.dateStatut, serieExcel(l.dateStatut) || actuel[C.dateStatut] || "");
-    poser(C.commentaire, l.commentaireTech || actuel[C.commentaire] || "");
-    return { id: String(k + 1), method: "PATCH", url: `${feuille.replace(GRAPH, "")}/range(address='${lettre(cMin)}${n}:${lettre(cMax)}${n}')`.replace(/^\/?/, "/"), headers: { "Content-Type": "application/json" }, body: { values: [ligne] } };
-  });
-
-  for (let i = 0; i < requetes.length; i += 20) {
-    onProgress(`Envoi ${Math.min(i + 20, requetes.length)} / ${requetes.length}…`);
-    const r = await appel(token, "/$batch", { method: "POST", body: JSON.stringify({ requests: requetes.slice(i, i + 20) }) });
-    const echec = (r.responses || []).find(x => x.status >= 400);
-    if (echec) {
-      if (echec.status === 403 || echec.status === 401) throw new ErreurDroitsSharePoint("SharePoint refuse l'écriture dans le fichier.");
-      throw new Error(`SharePoint ${echec.status} : ${JSON.stringify(echec.body).slice(0, 200)}`);
-    }
-  }
-  await setDoc(REF_SYNCHRO, { derniereSynchro: Date.now(), derniereSynchroLignes: requetes.length }, { merge: true });
-  return { envoyees: requetes.length, introuvables, webUrl: f.webUrl };
+  const fr = (isoDate) => (isoDate ? isoDate.slice(0, 10).split("-").reverse().join("/") : "");
+  const lignes = (demandesApp || []).filter(d => d.dateMaj && !String(d.numero).startsWith("SN-")).map(d => ({
+    numero: d.numero,
+    statut: d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
+    intervenant: d.intervenant || d.contact || "",
+    dateIntervention: fr(d.dateIntervention),
+    dateStatut: fr(d.dateStatut),
+    commentaire: d.commentaireTech || "",
+  }));
+  onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)…`);
+  const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
+  await uploadToDrive(fichier, token, [], DOSSIER, { conflictBehavior: "replace", fixedFilename: FICHIER_MAJ });
+  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length }, { merge: true });
+  return { envoyees: lignes.length };
 }
 
 export async function lireDerniereSynchro() {

@@ -432,3 +432,15 @@ export async function getAnonymousViewLink(itemId) {
   const data = await res.json();
   return data.link?.webUrl || null;
 }
+
+// Télécharge le contenu d'un fichier du site appsmm (chemin depuis la
+// racine de la bibliothèque, ex. "Demandes/fichier.xlsx") — null s'il
+// n'existe pas.
+export async function telechargerFichierDrive(chemin, token) {
+  const driveId = await resolveDriveId(token);
+  const enc = chemin.split("/").map(encodeURIComponent).join("/");
+  const res = await fetchWithTimeout(`${GRAPH_ROOT}/drives/${driveId}/root:/${enc}:/content`, { headers: { Authorization: `Bearer ${token}` } }, 30000);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Lecture du fichier SharePoint impossible (${res.status})`);
+  return res.arrayBuffer();
+}
