@@ -530,7 +530,7 @@ function renderTableau(container) {
     e.target.disabled = true;
     try {
       const r = await deposerMisesAJour(state.demandes || [], { onProgress: (t) => msg(esc(t)) });
-      msg(`✓ Fichier des mises à jour déposé : il contient les ${r.envoyees} demande(s) modifiée(s) dans l'appli (toujours la liste complète). Power Automate les reporte dans le fichier Excel.`);
+      msg(`✓ Fichier des mises à jour déposé : il contient les ${r.envoyees} demande(s) modifiée(s) dans l'appli ces 7 derniers jours. Power Automate les reporte dans le fichier Excel.`);
     } catch (err) { console.error("Dépôt demandes :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
