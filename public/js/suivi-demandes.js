@@ -49,7 +49,7 @@ function seedLignes() {
     numero: r[0], dateDemande: r[1] || null, site: d.sites[r[2]] || "Non renseigné",
     association: d.assocs[r[3]] || "Autres", type: d.types[r[4]] || "",
     descriptif: r[5], urgence: d.urgences[r[6]] || "Non renseignée",
-    statut: d.statuts[r[7]] || "Non renseigné", intervenant: d.intervenants[r[8]] || "",
+    statut: d.statuts[r[7]] || "Non renseigné", intervenant: r[11] || d.intervenants[r[8]] || "", categorieIntervenant: d.intervenants[r[8]] || "",
     dateIntervention: r[9] || "", dateStatut: r[10] || "", contact: r[11] || "",
     commentaireTech: r[12] || "",
   }));
