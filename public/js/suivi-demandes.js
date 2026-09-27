@@ -179,6 +179,10 @@ export function mountSuiviDemandesTab(container, user) {
 }
 
 // Bloc « 📌 Mes actions » en tête de l'onglet, quelle que soit la vue.
+function nbMesActions() {
+  const uid = identite().uid; if (!uid || !state.demandes) return 0;
+  return (state.demandes || []).filter(d => (d.actionPour === uid && !d.actionFaiteLe) || (d.actionParUid === uid && d.actionReponseNonLue)).length;
+}
 function injecterMesActions(container) {
   const uid = identite().uid;
   if (!uid || !state.demandes) return;
@@ -186,7 +190,11 @@ function injecterMesActions(container) {
     .sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
   container.querySelector(".dps-mes-actions")?.remove();
   const retours = toutesLesLignes().filter(l => l.actionParUid === uid && l.actionReponseNonLue);
-  if (!mes.length && !retours.length) return;
+  if (!mes.length && !retours.length) {
+    const vide = document.createElement("div"); vide.className = "dps-vide dps-mes-actions";
+    vide.textContent = "✓ Aucune action à faire ni retour en attente.";
+    (container.querySelector(".stack") || container).append(vide); return;
+  }
   const perms = permsUtilisateur();
   const bloc = document.createElement("section");
   bloc.className = "dps-mes-actions";
@@ -205,8 +213,7 @@ function injecterMesActions(container) {
         ${blocActionHTML(l, { perms: { ...perms, peutTraiter: false }, uid, utilisateurs })}
       </article>`).join("")}</div>` : ""}`;
   const cible = container.querySelector(".stack") || container;
-  const apres = cible.querySelector(".demandes-vue-toggle");
-  if (apres) apres.after(bloc); else cible.prepend(bloc);
+  cible.append(bloc);
   brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: identite().nom, utilisateurs, uid });
   bloc.querySelectorAll("[data-ma-site]").forEach(b => b.addEventListener("click", () => {
     ouvrirSite(b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
@@ -320,14 +327,20 @@ const vueTechSeule = () => permsUtilisateur().isTech;
 
 function render(container) {
   const r = renderVue(container);
-  // (la vue Par site l'injecte elle-même à chaque ré-affichage via « apres »)
-  if (ui.vue !== "sites") { try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); } }
   try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
   return r;
 }
 
 function renderVue(container) {
-  if (vueTechSeule()) ui.vue = "sites";
+  if (vueTechSeule() && ui.vue !== "actions") ui.vue = "sites";
+  // Onglet « 📌 Mes actions » : actions à faire + retours sur mes actions.
+  if (ui.vue === "actions") {
+    container.innerHTML = `<div class="stack">${toggleVueHTML()}</div>`;
+    attacherToggleVue(container);
+    if (state.demandes === null) { container.querySelector(".stack").insertAdjacentHTML("beforeend", `<div class="hint">Chargement…</div>`); return; }
+    try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); }
+    return;
+  }
   if (ui.vue === "tableau") return renderTableau(container);
   if (ui.vue === "sites") {
     const perms = permsUtilisateur();
@@ -338,7 +351,7 @@ function renderVue(container) {
       uid: identite().uid || null,
       favLectureSeule: !!mountedUser?.postePartage,
       utilisateurs,
-      apres: () => { try { injecterMesActions(container); injecterBandeauPoste(container); } catch (e) { console.error("Mes actions / poste :", e); } },
+      apres: () => { try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); } },
     });
   }
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
@@ -372,12 +385,19 @@ function renderVue(container) {
 }
 
 function toggleVueHTML() {
-  if (vueTechSeule()) return "";
+  const n = nbMesActions();
+  const btnActions = `<button type="button" class="demandes-vue-btn ${ui.vue === "actions" ? "active" : ""}" data-vue="actions">📌 Mes actions${n ? ` <span class="vue-badge">${n}</span>` : ""}</button>`;
+  if (vueTechSeule()) return `
+    <div class="demandes-vue-toggle">
+      <button type="button" class="demandes-vue-btn ${ui.vue === "sites" ? "active" : ""}" data-vue="sites">🏠 Par site</button>
+      ${btnActions}
+    </div>`;
   return `
     <div class="demandes-vue-toggle">
       <button type="button" class="demandes-vue-btn ${ui.vue === "sites" ? "active" : ""}" data-vue="sites">🏠 Par site</button>
       <button type="button" class="demandes-vue-btn ${ui.vue === "tableau" ? "active" : ""}" data-vue="tableau">📋 Tableau des demandes</button>
       <button type="button" class="demandes-vue-btn ${ui.vue === "stats" ? "active" : ""}" data-vue="stats">📊 Statistiques</button>
+      ${btnActions}
     </div>`;
 }
 

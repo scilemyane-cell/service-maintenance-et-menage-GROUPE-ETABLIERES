@@ -2450,3 +2450,5 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-ia-mini{margin-top:6px;align-self:flex-start;width:max-content}
 .dps-action-edit{background:#fff;border:1px dashed #e8cf86;border-radius:12px;padding:10px;margin-top:4px}
 .dps-action-edit[hidden]{display:none !important}
+.vue-badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#d03b3b;color:#fff;font:800 11.5px system-ui,sans-serif;margin-left:4px}
+.demandes-vue-toggle{grid-template-columns:repeat(auto-fit,minmax(140px,1fr)) !important}
