@@ -2222,3 +2222,6 @@ html:not([data-theme="clair"]) .dst-pill.ok{color:#5fd35f}html:not([data-theme="
 .maj-bandeau #maj-recharger{border:0;border-radius:10px;padding:9px 14px;background:linear-gradient(135deg,#f3c565,#e6a100);color:#1A1305;font:800 13px "Montserrat",system-ui,sans-serif;cursor:pointer;white-space:nowrap}
 .maj-bandeau .maj-fermer{border:0;background:transparent;color:rgba(255,255,255,.6);font-size:16px;cursor:pointer;padding:4px 6px}
 @media (max-width:700px){.maj-bandeau{left:12px;right:12px;transform:none;max-width:none;font-size:13px}.maj-bandeau > span{flex:1;min-width:0}}
+
+.pied-version{color:inherit;opacity:.85;font-size:inherit;font-weight:700}
+@media (max-width:700px){ body.accueil-gmao .gh-pied-texte{ display:block; left:0; right:0; top:-22px; text-align:center; font-size:10.5px; } body.accueil-gmao .gh-pied{ margin-top:30px; } }

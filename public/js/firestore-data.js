@@ -2,7 +2,7 @@ import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
   collection, addDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, deleteField,
-  writeBatch,
+  writeBatch, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
@@ -91,7 +91,7 @@ export async function updateIntervention(id, fields) {
 // suppression directe et définitive, à l'origine d'une perte de données
 // accidentelle sans aucun moyen de rattrapage.
 export async function envoyerInterventionCorbeille(id) {
-  await updateDoc(doc(db, "interventions", id), { supprimeLe: serverTimestamp() });
+  await updateDoc(doc(db, "interventions", id), { supprimeLe: Timestamp.now() });
 }
 export async function restaurerIntervention(id) {
   await updateDoc(doc(db, "interventions", id), { supprimeLe: deleteField() });

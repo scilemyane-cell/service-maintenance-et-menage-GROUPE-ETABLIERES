@@ -537,7 +537,6 @@
           <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><svg class="gh-user-ico" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16" cy="12.5" r="5" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 26c2-5 5.5-7 9-7s7 2 9 7" fill="none" stroke="#fff" stroke-width="2"/></svg> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <svg class="gh-user-chev" viewBox="0 0 16 10" aria-hidden="true"><path d="M1 1l7 7 7-7" fill="none" stroke="#fff" stroke-width="1.8"/></svg></button>
           <div class="gh-user-pop" id="gh-user-pop" hidden>
             <p class="gh-user-role">${escapeHtml(roleLabel(currentUser.role))}</p>
-            ${currentUser.role === "super_admin" ? `<p class="app-version gh-version">${versionTexte()}</p>` : ""}
             ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
             ${voitAdministration ? `<button class="nav-btn" id="admin-btn">⚙️ Administration</button>` : ""}
             <button class="logout-btn" id="logout-btn">Se déconnecter</button>
@@ -550,7 +549,7 @@
       ${eff.apercu ? `
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
       <main class="content" id="content"></main>
-      <footer class="gh-pied"><span class="gh-pied-texte">Service Maintenance et Ménage · Groupe Établières</span></footer>
+      <footer class="gh-pied"><span class="gh-pied-texte">Service Maintenance et Ménage · Groupe Établières${currentUser.role === "super_admin" ? ` · <span class="app-version pied-version">${versionTexte()}</span>` : ""}</span></footer>
     ` : `
       <header class="topbar">
         <div class="topbar-title">

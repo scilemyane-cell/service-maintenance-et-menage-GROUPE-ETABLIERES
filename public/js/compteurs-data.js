@@ -10,7 +10,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
-  collection, query, where,
+  collection, query, where, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
 
@@ -219,7 +219,7 @@ export async function modifierCompteur(id, fields) {
 }
 
 export async function envoyerCompteurCorbeille(id) {
-  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: serverTimestamp() });
+  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: Timestamp.now() });
 }
 
 // Liste ponctuelle des compteurs actuellement à la corbeille — utilisée

@@ -8,7 +8,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, setDoc, deleteField, serverTimestamp,
-  collection, query, where,
+  collection, query, where, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const PRODUITS = "stock-menage-produits";
@@ -53,7 +53,7 @@ export async function modifierProduit(id, patch) {
 }
 
 export async function supprimerProduit(id) {
-  await updateDoc(doc(db, PRODUITS, id), { supprimeLe: serverTimestamp() });
+  await updateDoc(doc(db, PRODUITS, id), { supprimeLe: Timestamp.now() });
 }
 
 // Enregistre une sortie de stock, attribuée à un centre (dossierId d'un

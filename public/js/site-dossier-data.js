@@ -1,7 +1,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc, getDocs, deleteField, serverTimestamp,
-  collection, onSnapshot,
+  collection, onSnapshot, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 // Les 16 catégories standard reprises de la fiche index papier — servent
@@ -133,7 +133,7 @@ export async function saveDossierGeo(id, geo) {
 // qu'après le délai de rétention ou via purgerDossierDefinitivement
 // (réservé Super Admin, voir corbeille.js).
 export async function envoyerDossierCorbeille(id) {
-  await updateDoc(doc(db, "sites-dossiers", id), { supprimeLe: serverTimestamp() });
+  await updateDoc(doc(db, "sites-dossiers", id), { supprimeLe: Timestamp.now() });
 }
 
 export async function restaurerDossier(id) {
