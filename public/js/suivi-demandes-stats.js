@@ -151,7 +151,7 @@ function calculer(toutes) {
 }
 
 // ---------- rendu ----------
-export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau }) {
+export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau, source = "direct" }) {
   if (!toutes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
   const s = calculer(toutes);
   const libPeriode = { mois: "ce mois-ci", "3m": "sur 3 mois", "12m": "sur 12 mois", scolaire: "depuis la rentrée", tout: "depuis le début" }[st.periode];
@@ -167,8 +167,8 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
     ${toggleHTML}
     <section class="dst-hero">
       <div class="dst-hero-tete">
-        <div><span class="dst-sur">Suivi des demandes · en direct</span><h2>Tableau de bord <em>des demandes</em></h2>
-          <p>Calculé à partir des ${fmt(toutes.length)} demandes enregistrées — se met à jour dès qu'un statut change.</p></div>
+        <div><span class="dst-sur">Suivi des demandes · ${source === "fichier" ? "fichier Excel" : "en direct"}</span><h2>Tableau de bord <em>des demandes</em></h2>
+          <p>${source === "fichier" ? `Calculé à partir des ${fmt(toutes.length)} demandes du fichier Excel (22/09). Importe-les dans l'onglet Tableau pour passer en direct.` : `Calculé à partir des ${fmt(toutes.length)} demandes enregistrées — se met à jour dès qu'un statut change.`}</p></div>
         <div class="dst-filtres">
           <div class="dst-seg">${[["mois", "Mois"], ["3m", "3 mois"], ["12m", "12 mois"], ["scolaire", "Année scol."], ["tout", "Tout"]].map(([k, l]) => `<button data-dst-per="${k}" class="${st.periode === k ? "on" : ""}">${l}</button>`).join("")}</div>
           <div class="dst-seg dst-seg-a">${[["", "Toutes"], ...ASSOS.map(a => [a, a])].map(([k, l]) => `<button data-dst-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${esc(l)}</button>`).join("")}</div>
@@ -242,7 +242,7 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
   </div>`;
 
   onToggle();
-  const rerender = () => renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau });
+  const rerender = () => renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau, source });
   container.querySelectorAll("[data-dst-per]").forEach(b => b.addEventListener("click", () => { st.periode = b.dataset.dstPer; rerender(); }));
   container.querySelectorAll("[data-dst-asso]").forEach(b => b.addEventListener("click", () => { st.association = b.dataset.dstAsso; rerender(); }));
   container.querySelectorAll("[data-dst-site]").forEach(b => b.addEventListener("click", () => ouvrirTableau({ site: b.dataset.dstSite, association: st.association })));

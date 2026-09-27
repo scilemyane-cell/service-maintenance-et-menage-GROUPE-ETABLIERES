@@ -228,8 +228,15 @@ function render(container) {
   if (ui.vue === "tableau") return renderTableau(container);
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
   // photo figée ne sert plus que si aucune demande n'a encore été importée.
-  if (state.demandes === null || state.demandes.length > 0) {
-    return renderStatsDemandes(container, state.demandes === null ? null : toutesLesLignes(), {
+  {
+    // Demandes en base si elles existent ; sinon le fichier Excel embarqué
+    // (même contenu que l'import) pour que les statistiques s'affichent.
+    const depuisFichier = state.demandes !== null && state.demandes.length === 0;
+    const lignes = state.demandes === null ? null
+      : depuisFichier ? seedLignes().map((d, i) => ligneDepuisDoc({ id: "seed" + i, ...d }))
+      : toutesLesLignes();
+    return renderStatsDemandes(container, lignes, {
+      source: depuisFichier ? "fichier" : "direct",
       toggleHTML: toggleVueHTML(),
       onToggle: () => attacherToggleVue(container),
       ouvrirTableau: ({ site, mode, association } = {}) => {
