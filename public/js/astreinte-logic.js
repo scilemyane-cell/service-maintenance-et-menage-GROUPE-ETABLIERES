@@ -107,6 +107,7 @@ export function indisponible(people, absences, person, date) {
 // comptent 1,5x, fériés 2x), parmi ceux dispo toute la semaine ; si
 // personne ne l'est, on retient qui a le moins de jours d'absence cette
 // semaine-là (au pire, l'interruption reste inévitable ce cas précis).
+const DEBUT_ALTERNANCE_N2 = "2026-10-05";
 export function computeWeeklyTitulaires(people, absences) {
   const scoresN1 = {}, scoresN2 = {};
   // Charge globale par personne (union N1/N2) : cumule le poids des
@@ -152,7 +153,15 @@ export function computeWeeklyTitulaires(people, absences) {
     let chosenN2;
     if (availN2.length > 0) {
       const taux = (p) => (chargeGlobale[p] || 0) / (semainesEligiblesN2[p] || 1);
-      const sorted = [...availN2].sort((a, b) => taux(a) - taux(b));
+      // Depuis le 05/10/2026 : une semaine sur deux autant que possible — la
+      // personne d'astreinte N2 la semaine précédente n'enchaîne pas, sauf si
+      // personne d'autre n'est disponible (l'équilibrage annuel se fait
+      // ensuite sur les semaines suivantes). Les semaines d'avant gardent
+      // l'ancien calcul pour ne pas modifier l'historique.
+      const precedent = idx > 0 ? titN2[idx - 1] : undefined;
+      const alternance = dateKey(w.start) >= DEBUT_ALTERNANCE_N2;
+      const candidats = alternance && precedent !== undefined && availN2.some(p => p !== precedent) ? availN2.filter(p => p !== precedent) : availN2;
+      const sorted = [...candidats].sort((a, b) => taux(a) - taux(b));
       chosenN2 = sorted[0];
       scoresN2[chosenN2] += weight;
     } else { chosenN2 = meilleurSiPersonneDispo(people.n2); }
