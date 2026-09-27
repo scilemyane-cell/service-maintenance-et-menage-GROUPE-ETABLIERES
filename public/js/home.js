@@ -442,7 +442,9 @@ function render() {
   catsRef.forEach(c => {
     if (c.badgeAtelier) notifs.push({ cat: c.id, icone: "🔧", texte: `${c.badgeAtelier} alerte(s) stock atelier`, niveau: "rouge" });
     if (c.badgeSites) notifs.push({ cat: c.id, icone: "🏢", texte: `${c.badgeSites} alerte(s) stock déporté (sites)`, niveau: "orange" });
-    if (!c.badgeAtelier && !c.badgeSites && c.badge) notifs.push({ cat: c.id, icone: c.icon, texte: `${c.badge} élément(s) à traiter — ${c.label}`, niveau: "rouge" });
+    if (!c.badgeAtelier && !c.badgeSites && c.badge) notifs.push(c.id === "suivi-demandes"
+      ? { cat: c.id, icone: "📌", texte: `${c.badge} action${c.badge > 1 ? "s" : ""} qui t'${c.badge > 1 ? "ont" : "a"} été attribuée${c.badge > 1 ? "s" : ""} — Suivi des demandes`, niveau: "orange" }
+      : { cat: c.id, icone: c.icon, texte: `${c.badge} élément(s) à traiter — ${c.label}`, niveau: "rouge" });
   });
   if (next && !debugForce) notifs.push({ cat: "astreinte", icone: "📞", texte: `Transfert d'astreinte ${next.daysUntil === 0 ? "aujourd'hui" : next.daysUntil === 1 ? "demain" : `dans ${next.daysUntil} j`} : ${next.from} → ${next.to}`, niveau: confirmedRecord ? "vert" : "orange" });
   if (sitesMenage && fichesMenage) {
