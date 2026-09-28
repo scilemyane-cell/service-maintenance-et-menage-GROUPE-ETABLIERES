@@ -577,7 +577,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   <div class="stack dps">
     ${toggleHTML}
     <div class="dps-site-entete">
-      <button class="dps-retour" id="dps-retour">← Tous les sites</button>
+      <button class="dps-retour" id="dps-retour">← 🏠 Tous les sites</button>
       ${perms.peutTraiter ? `<button type="button" class="dps-nouvelle petit" data-nouvelle-demande="${esc(st.site)}">➕ Nouvelle demande ici</button>` : ""}
       <div><h2>${esc(st.site)}</h2><p>${ouvertes.length} à traiter${enValidation.length ? ` · ${enValidation.length} à valider` : ""} · ${traitees.length} traitée${traitees.length > 1 ? "s" : ""}</p></div>
     </div>
@@ -601,6 +601,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     if (st.focusId) { st.focusId = null; if (quitterFocus) { st.site = null; quitterFocus(); } else rerender(); return; }
     st.site = null; st.qSite = ""; rerender();
   });
+  { const f = document.createElement("button"); f.type = "button"; f.id = "dps-retour-flottant"; f.className = "dps-retour-flottant"; f.textContent = st.focusId && quitterFocus ? "← 📌 Mes actions" : st.focusId ? "← Retour au site" : "← 🏠 Tous les sites"; (container.querySelector(".stack") || container).append(f); }
+  container.querySelector("#dps-retour-flottant")?.addEventListener("click", () => { container.querySelector("#dps-retour")?.click(); window.scrollTo({ top: 0 }); });
   container.querySelector("#dps-voir-site")?.addEventListener("click", () => { st.focusId = null; rerender(); });
   container.querySelector("#dps-tri")?.addEventListener("change", (e) => { st.tri = e.target.value; try { localStorage.setItem("etablieres-dps-tri", st.tri); } catch {} rerender(); });
   let tq = null;
@@ -725,6 +727,6 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   });
 }
 
-export function resetVueSites() { st.site = null; }
+export function resetVueSites() { st.site = null; st.focusId = null; st.qSite = ""; }
 export function ouvrirSite(nom) { st.site = nom; st.q = ""; st.vuAvant = null; st.focusId = null; }
 export function ouvrirDemandeSeule(id, site) { st.site = site; st.q = ""; st.vuAvant = null; st.focusId = id; }

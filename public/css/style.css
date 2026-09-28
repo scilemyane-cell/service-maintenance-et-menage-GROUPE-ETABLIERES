@@ -2520,3 +2520,9 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-sugg-ligne{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #f1e2b8;border-radius:10px;padding:6px 8px;color:var(--text);font-size:12.5px}
 .dps-sugg-ligne .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dps-sugg-ligne button{border:0;background:#2a78d6;color:#fff;font:800 11.5px system-ui,sans-serif;border-radius:999px;padding:5px 10px;cursor:pointer;flex-shrink:0}
+/* Retour à la liste des sites : bien visible et toujours accessible */
+.dps-retour{background:#2a78d6 !important;color:#fff !important;border-color:#2a78d6 !important;padding:11px 18px !important;font-size:14.5px !important;box-shadow:0 4px 12px rgba(42,120,214,.3)}
+.dps-retour:hover{filter:brightness(1.08)}
+.dps-retour-flottant{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:50;border:0;background:#2a78d6;color:#fff;font:800 14px "Montserrat",system-ui,sans-serif;border-radius:999px;padding:12px 22px;box-shadow:0 8px 24px rgba(20,40,80,.35);cursor:pointer}
+.dps-flash{animation:dpsFlash 1.6s ease 2}
+@keyframes dpsFlash{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 4px #e0a800}}

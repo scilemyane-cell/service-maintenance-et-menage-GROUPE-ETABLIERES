@@ -139,6 +139,12 @@ export async function importerDemandes(lignes) {
   return aAjouter.length;
 }
 // Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
+// Demandes déclarées réalisées par les techniciens, en attente de validation.
+export function watchDemandesAValider(callback) {
+  return onSnapshot(query(collection(db, "demandes"), where("statut", "==", "Réalisé – à valider")), (snap) => {
+    let n = 0; snap.forEach((d) => { if (!d.data().lieeA) n++; }); callback(n);
+  }, (err) => { console.error("watchDemandesAValider:", err); callback(0); });
+}
 export function watchMesActionsDemandes(uid, callback) {
   let a = 0, r = 0;
   const u1 = onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {

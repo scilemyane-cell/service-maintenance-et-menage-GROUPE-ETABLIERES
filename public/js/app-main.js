@@ -164,6 +164,13 @@
   // Badge « actions attribuées » : suit l'utilisateur affiché (y compris en
   // « Aperçu en tant que… », pour voir ce que voit la personne).
   let mesActionsCount = 0, mesActionsUid = null, mesActionsUnsub = null;
+  // Demandes à valider (superviseurs) : notification avec raccourci.
+  let aValiderCount = 0, aValiderAbonne = false;
+  function suivreAValider(role) {
+    if (aValiderAbonne || !["super_admin", "admin", "n1"].includes(role)) return;
+    aValiderAbonne = true;
+    import("./firestore-data.js").then(({ watchDemandesAValider }) => watchDemandesAValider((n) => { const avant = aValiderCount; aValiderCount = n; if (avant !== n && currentCategory === null) render(); }));
+  }
   function suivreMesActions(uid) {
     if (!uid || uid === mesActionsUid) return;
     mesActionsUid = uid; mesActionsCount = 0;
@@ -312,7 +319,7 @@
         ],
       },
       {
-        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: mesActionsCount > 0 ? mesActionsCount : null, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
+        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: (mesActionsCount + (["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0)) || null, badgeActions: mesActionsCount, badgeValider: ["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
           { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien","menage","mi_temps"], mount: mountSuiviDemandesTab },
         ],
@@ -543,7 +550,7 @@
 
   function render() {
     const app = document.getElementById("app");
-    try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); } catch (e) { console.error(e); }
+    try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); suivreAValider(currentUser?.role); } catch (e) { console.error(e); }
 
     if (currentUser.role === null) {
       app.innerHTML = `

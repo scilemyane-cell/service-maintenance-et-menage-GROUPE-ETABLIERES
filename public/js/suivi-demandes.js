@@ -27,7 +27,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
-import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule } from "./suivi-demandes-sites.js";
+import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro } from "./demandes-sharepoint.js";
@@ -173,7 +173,11 @@ export function mountSuiviDemandesTab(container, user) {
   if (unsub) { unsub(); unsub = null; }
   mountedUser = user;
   state = { demandes: null };
-  if (!ui.vueChoisie) ui.vue = permsUtilisateur().isTech ? "sites" : ui.vue; // les techniciens arrivent sur « Par site »
+  // À chaque ouverture de la tuile : vue « Par site », liste de tous les sites.
+  ui.vue = "sites"; ui.retourActions = false; resetVueSites();
+  const raccourci = window.__suiviRaccourci; window.__suiviRaccourci = null;
+  if (raccourci === "actions") ui.vue = "actions";
+  if (raccourci === "valider") ui.allerValidation = true;
   render(container);
   unsub = watchDemandes((liste) => { state.demandes = liste; render(container); });
   if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });
@@ -360,7 +364,12 @@ function renderVue(container) {
       rafraichir: () => render(container),
       quitterFocus: ui.retourActions ? () => { ui.retourActions = false; ui.vue = "actions"; render(container); } : null,
       utilisateurs,
-      apres: () => { try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); } },
+      apres: () => {
+        try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
+        const b = container.querySelector(".dps-valid-bloc");
+        if (ui.allerValidation && state.demandes && b) { ui.allerValidation = false; ui.flashValidJusqua = Date.now() + 4000; setTimeout(() => container.querySelector(".dps-valid-bloc")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }
+        if (b && Date.now() < (ui.flashValidJusqua || 0)) b.classList.add("dps-flash");
+      },
     });
   }
   // Statistiques EN DIRECT (calculées sur les demandes Firestore). L'ancienne
@@ -415,6 +424,7 @@ function toggleVueHTML() {
 function attacherToggleVue(container) {
   container.querySelectorAll("[data-vue]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (btn.dataset.vue === "sites") resetVueSites(); // « Par site » ramène toujours à la liste des sites
       ui.vue = btn.dataset.vue; ui.vueChoisie = true; ui.retourActions = false;
       if (ui.vue === "stats") ui.moisOuvert = null;
       render(container);

@@ -446,9 +446,12 @@ function render() {
   catsRef.forEach(c => {
     if (c.badgeAtelier) notifs.push({ cat: c.id, icone: "🔧", texte: `${c.badgeAtelier} alerte(s) stock atelier`, niveau: "rouge" });
     if (c.badgeSites) notifs.push({ cat: c.id, icone: "🏢", texte: `${c.badgeSites} alerte(s) stock déporté (sites)`, niveau: "orange" });
-    if (!c.badgeAtelier && !c.badgeSites && c.badge) notifs.push(c.id === "suivi-demandes"
-      ? { cat: c.id, icone: "📌", texte: `${c.badge} action${c.badge > 1 ? "s" : ""} / retour${c.badge > 1 ? "s" : ""} à voir — Suivi des demandes`, niveau: "orange" }
-      : { cat: c.id, icone: c.icon, texte: `${c.badge} élément(s) à traiter — ${c.label}`, niveau: "rouge" });
+    if (c.id === "suivi-demandes") {
+      if (c.badgeValider) notifs.push({ cat: c.id, sub: "valider", icone: "⏳", texte: `${c.badgeValider} demande${c.badgeValider > 1 ? "s" : ""} à valider — réalisée${c.badgeValider > 1 ? "s" : ""} par les techniciens`, niveau: "orange" });
+      if (c.badgeActions) notifs.push({ cat: c.id, sub: "actions", icone: "📌", texte: `${c.badgeActions} action${c.badgeActions > 1 ? "s" : ""} / retour${c.badgeActions > 1 ? "s" : ""} à voir — Suivi des demandes`, niveau: "orange" });
+      return;
+    }
+    if (!c.badgeAtelier && !c.badgeSites && c.badge) notifs.push({ cat: c.id, icone: c.icon, texte: `${c.badge} élément(s) à traiter — ${c.label}`, niveau: "rouge" });
   });
   if (next && !debugForce) notifs.push({ cat: "astreinte", icone: "📞", texte: `Transfert d'astreinte ${next.daysUntil === 0 ? "aujourd'hui" : next.daysUntil === 1 ? "demain" : `dans ${next.daysUntil} j`} : ${next.from} → ${next.to}`, niveau: confirmedRecord ? "vert" : "orange" });
   if (sitesMenage && fichesMenage) {
@@ -563,7 +566,12 @@ function render() {
     onSelectRef("astreinte");
   });
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
-    btn.addEventListener("click", () => { if (btn.dataset.notifSub) window.ouvrirSousOnglet = btn.dataset.notifSub; onSelectRef(btn.dataset.notifCat); });
+    btn.addEventListener("click", () => {
+      // Raccourcis Suivi des demandes : « valider » → bloc des demandes à valider, « actions » → onglet Mes actions.
+      if (btn.dataset.notifCat === "suivi-demandes" && btn.dataset.notifSub) window.__suiviRaccourci = btn.dataset.notifSub;
+      else if (btn.dataset.notifSub) window.ouvrirSousOnglet = btn.dataset.notifSub;
+      onSelectRef(btn.dataset.notifCat);
+    });
   });
   if (horlogeTimer) clearInterval(horlogeTimer);
   horlogeTimer = setInterval(() => {
