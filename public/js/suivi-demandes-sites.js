@@ -338,7 +338,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const etat = c.querySelector(".dps-etat");
     c.querySelector("[data-dps-valider]")?.addEventListener("click", async (e) => {
       e.target.disabled = true; etat.textContent = "⏳ Validation…";
-      try { await maj(c.dataset.id, { statut: "Réalisé", validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur, dateStatut: aujourdhui() }); etat.textContent = "✓ Validée"; etat.className = "dps-etat ok"; }
+      try { await majP(c.dataset.id, { statut: "Réalisé", validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur, dateStatut: aujourdhui() }); etat.textContent = "✓ Validée"; etat.className = "dps-etat ok"; }
       catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; e.target.disabled = false; }
     });
     c.querySelector("[data-dps-refuser]")?.addEventListener("click", async () => {
@@ -347,7 +347,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       const l = lignes.find(x => x.id === c.dataset.id);
       const com = [l?.commentaireTech, `[Refusé le ${fr(aujourdhui())}${utilisateur ? " par " + utilisateur : ""}${motif.trim() ? " : " + motif.trim() : ""}]`].filter(Boolean).join("\n");
       etat.textContent = "⏳ …";
-      try { await maj(c.dataset.id, { statut: "Pris en compte", commentaireTech: com, dateStatut: aujourdhui() }); etat.textContent = "↩ Renvoyée au technicien"; etat.className = "dps-etat ok"; }
+      try { await majP(c.dataset.id, { statut: "Pris en compte", commentaireTech: com, dateStatut: aujourdhui() }); etat.textContent = "↩ Renvoyée au technicien"; etat.className = "dps-etat ok"; }
       catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; }
     });
   });
@@ -356,12 +356,24 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ouvrirNouvelleDemande({ lignes, siteDefaut: b.dataset.nouvelleDemande || "", utilisateur, onCree: (n, site) => { st.site = site; st.vuAvant = null; if (container.isConnected) (rafraichir || rerender)(); } });
   }));
   const filtreAssoc = (l) => !st.association || l.association === st.association;
+  // ---------- Demandes reliées (doublons) ----------
+  // Une demande « liée » suit la principale : ce qui est enregistré sur la
+  // principale (statut, date, intervenant, commentaire, validation) est
+  // recopié sur ses doublons, pour que chaque ligne de l'Excel soit à jour.
+  const CHAMPS_PROPAGES = ["statut", "dateIntervention", "intervenant", "categorieIntervenant", "commentaireTech", "commentaireTechPar", "commentaireTechLe", "dateStatut", "validation", "dateValidation", "validePar", "declarePar", "declareLe"];
+  const lieesDe = (id) => lignes.filter(x => x.lieeA === id);
+  const majP = async (id, champs) => {
+    await maj(id, champs);
+    const sub = Object.fromEntries(Object.entries(champs).filter(([k]) => CHAMPS_PROPAGES.includes(k)));
+    if (!Object.keys(sub).length) return;
+    for (const x of lieesDe(id)) { try { await maj(x.id, sub); } catch (e) { console.warn("Propagation doublon", x.n, e); } }
+  };
 
   // ---------- Liste des sites ----------
   if (!st.site) {
     const vu = lireVu(uid);
     const parSite = {};
-    lignes.filter(filtreAssoc).forEach(l => {
+    lignes.filter(l => filtreAssoc(l) && !l.lieeA).forEach(l => {
       const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0 });
       s.total++;
       if (l.actionPour && !l.actionFaiteLe) s.actions++;
@@ -415,7 +427,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <p>Choisis un site pour voir et traiter ses demandes.</p>${perms.peutTraiter ? `<button type="button" class="dps-nouvelle" data-nouvelle-demande>➕ Nouvelle demande</button>` : ""}</div>
         <div class="dps-hero-chiffres"><div><b>${totOuv}</b><span>à traiter</span></div><div class="urg"><b>${totUrg}</b><span>urgentes</span></div><div><b>${affiches.length}</b><span>sites</span></div></div>
       </section>
-      ${perms.isEditor ? (() => { const av = lignes.filter(l => EN_ATTENTE_VALID(l.statut)).sort((a, b) => (a.dateIntervention || "").localeCompare(b.dateIntervention || "")); return av.length ? `
+      ${perms.isEditor ? (() => { const av = lignes.filter(l => EN_ATTENTE_VALID(l.statut) && !l.lieeA).sort((a, b) => (a.dateIntervention || "").localeCompare(b.dateIntervention || "")); return av.length ? `
       <section class="dps-valid-bloc">
         <div class="dps-valid-tete"><h3>⏳ ${av.length} demande${av.length > 1 ? "s" : ""} à valider</h3><p>Déclarées réalisées par les techniciens — vérifie et valide.</p></div>
         <div class="dps-cartes">${av.map(l => carteValidation(l)).join("")}</div>
@@ -468,7 +480,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   // À l'ouverture du site : on garde l'ancienne date de consultation pour
   // afficher les « 🆕 », puis on note le site comme vu.
   if (st.vuAvant == null || st.vuSite !== st.site) { const v = lireVu(uid); st.vuAvant = v.sites[st.site] || v.base; st.vuSite = st.site; marquerSiteVu(uid, st.site); }
-  const duSite = lignes.filter(l => l.site === st.site);
+  const duSite = lignes.filter(l => l.site === st.site && !l.lieeA);
+  const tousDuSite = lignes.filter(l => l.site === st.site);
   const enValidation = duSite.filter(l => EN_ATTENTE_VALID(l.statut));
   const qS = sa(st.qSite.trim());
   const filtreQ = (l) => !qS || sa(`${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type}`).includes(qS);
@@ -503,6 +516,16 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">${perms.isEditor ? "Vérifie la date, le contact et le commentaire, puis valide." : "Complète le contact et le commentaire, puis envoie au superviseur."}</p>` : ""}
       ` : `
       <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : ""}</div>`}
+      ${(() => {
+        const liees = lieesDe(l.id);
+        const candidats = tousDuSite.filter(x => x.id !== l.id && !x.lieeA && !lieesDe(x.id).length && !TRAITE(x.statut));
+        return `${liees.length ? `<div class="dps-liees"><b>🔗 ${liees.length} demande${liees.length > 1 ? "s" : ""} liée${liees.length > 1 ? "s" : ""} (même problème)</b>
+          ${liees.map(x => `<div class="dps-liee"><span class="dps-num">${esc(x.n)}</span><span>${x.date ? fr(x.date) : ""}${x.demandeur ? ` · ${esc(x.demandeur)}` : ""}${x.local ? ` · 📍 ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 90))}</span>${perms.peutTraiter ? `<button type="button" class="dps-delier" data-delier="${esc(x.id)}" title="Détacher cette demande">✂ Délier</button>` : ""}</div>`).join("")}
+          <small>Tout ce qui est enregistré ici est recopié sur les demandes liées.</small></div>` : ""}
+        ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
+          <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
+          <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}`;
+      })()}
       ${blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
     </article>`;
@@ -538,6 +561,21 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   brancherValidation();
   brancherActions(container, { lignes, maj, utilisateur, utilisateurs, uid });
   brancherNouvelle();
+  container.querySelectorAll("[data-lier]").forEach(b => b.addEventListener("click", async () => {
+    const sel = b.parentElement.querySelector("[data-lier-choix]"), idDoublon = sel.value;
+    if (!idDoublon) { sel.focus(); return; }
+    const principale = lignes.find(x => x.id === b.dataset.lier), doublon = lignes.find(x => x.id === idDoublon);
+    if (!confirm(`Relier ${doublon?.n} à ${principale?.n} ?\n${doublon?.n} suivra le traitement de ${principale?.n} (statut, date, commentaire…).`)) return;
+    b.disabled = true;
+    const champs = { lieeA: principale.id, lieeANumero: principale.n };
+    CHAMPS_PROPAGES.forEach(k => { if (principale[k]) champs[k] = principale[k]; });
+    try { await maj(idDoublon, champs); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
+  container.querySelectorAll("[data-delier]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Détacher cette demande ? Elle redeviendra une demande à part.")) return;
+    b.disabled = true;
+    try { await maj(b.dataset.delier, { lieeA: "", lieeANumero: "" }); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
   restaurerSaisies(container, saisies);
   apres?.();
   container.querySelectorAll("[data-affect]").forEach(b => b.addEventListener("click", async () => {
@@ -615,12 +653,12 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       e.target.disabled = true;
       const etat = c.querySelector(".dps-etat"); etat.textContent = "⏳ Enregistrement…"; etat.className = "dps-etat";
       try {
-        try { await maj(c.dataset.id, champs); }
+        try { await majP(c.dataset.id, champs); }
         catch (err) {
           // Règles Firestore pas encore publiées pour « déclaré par » : on enregistre sans.
           if (!("declarePar" in champs || "commentaireTechPar" in champs) || !/permission/i.test(String(err?.message || err))) throw err;
           delete champs.declarePar; delete champs.declareLe; delete champs.commentaireTechPar; delete champs.commentaireTechLe;
-          await maj(c.dataset.id, champs);
+          await majP(c.dataset.id, champs);
         }
         delete st.brouillons[c.dataset.id];
         etat.textContent = champs.statut === "Réalisé" ? "✓ Demande réalisée et validée" : champs.statut === A_VALIDER ? "✓ Envoyée au superviseur pour validation" : "✓ Enregistré"; etat.className = "dps-etat ok";

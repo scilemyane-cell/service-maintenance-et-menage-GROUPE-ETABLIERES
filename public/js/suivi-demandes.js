@@ -433,6 +433,7 @@ function ligneDepuisDoc(d) {
     local: d.local || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "",
     importeMs: d.importeLe?.toMillis ? d.importeLe.toMillis() : (d.importeLe?.seconds ? d.importeLe.seconds * 1000 : 0),
+    lieeA: d.lieeA || "", lieeANumero: d.lieeANumero || "",
     commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "",
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
     actionPar: d.actionPar || "", actionParUid: d.actionParUid || "", actionFil: Array.isArray(d.actionFil) ? d.actionFil : [], actionReponseNonLue: !!d.actionReponseNonLue, actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",

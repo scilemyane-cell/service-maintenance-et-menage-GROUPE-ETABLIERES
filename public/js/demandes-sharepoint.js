@@ -150,7 +150,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
     dateStatut: fr(d.dateStatut),
-    commentaire: [d.commentaireTech ? d.commentaireTech + (d.commentaireTechPar ? ` (${d.commentaireTechPar}${d.commentaireTechLe ? ", " + fr(d.commentaireTechLe) : ""})` : "") : "", d.actionPour && !d.actionFaiteLe && d.actionTexte ? `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${fr(d.actionEcheance)})` : ""} : ${d.actionTexte}` : ""].filter(Boolean).join("\n"),
+    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.commentaireTech ? d.commentaireTech + (d.commentaireTechPar ? ` (${d.commentaireTechPar}${d.commentaireTechLe ? ", " + fr(d.commentaireTechLe) : ""})` : "") : "", d.actionPour && !d.actionFaiteLe && d.actionTexte ? `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${fr(d.actionEcheance)})` : ""} : ${d.actionTexte}` : ""].filter(Boolean).join("\n"),
   }));
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
