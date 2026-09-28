@@ -489,17 +489,37 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const filtreQ = (l) => !qS || sa(`${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type}`).includes(qS);
   const ouvertes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l)).sort((TRIS[st.tri] || TRIS.urgence)[1]);
   const traitees = duSite.filter(l => TRAITE(l.statut)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
+  // Bloc des demandes liées, affiché en haut de la carte principale.
+  const lieesHTML = (l) => {
+    const liees = lieesDe(l.id); if (!liees.length) return "";
+    return `<div class="dps-liees"><b>🔗 Regroupe ${liees.length + 1} demandes (même problème)</b>
+      ${liees.map(x => `<div class="dps-liee"><span class="dps-num">${esc(x.n)}</span><span>${x.date ? fr(x.date) : ""}${x.demandeur ? ` · ${esc(x.demandeur)}` : ""}${x.local ? ` · 📍 ${esc(x.local)}` : ""}<br><i>${esc((x.descr || "").slice(0, 110))}</i></span>${perms.peutTraiter ? `<button type="button" class="dps-delier" data-delier="${esc(x.id)}" title="Détacher cette demande">✂ Délier</button>` : ""}</div>`).join("")}
+      <small>Ce qui est enregistré sur ${esc(l.n)} est recopié sur ${liees.length > 1 ? "ces demandes" : "cette demande"}.</small></div>`;
+  };
+  // Doublon possible : même logement / local, demandé à quelques jours d'écart.
+  const jours = (a, b) => (a && b ? Math.abs((new Date(a) - new Date(b)) / 86400000) : 99);
+  // La suggestion s'affiche sur la future principale : celle qui regroupe déjà
+  // des doublons, sinon celle au plus petit N°.
+  const doublonsPossibles = (l) => (!perms.peutTraiter || l.lieeA || TRAITE(l.statut) || !l.local) ? [] : tousDuSite.filter(x => {
+    if (x.id === l.id || x.lieeA || TRAITE(x.statut) || sa(x.local) !== sa(l.local) || jours(x.date, l.date) > 7) return false;
+    const pl = lieesDe(l.id).length > 0, px = lieesDe(x.id).length > 0;
+    if (px) return false; // x regroupe déjà : c'est sur x que la suggestion s'affichera
+    return pl || String(l.n).localeCompare(String(x.n), "fr", { numeric: true }) < 0 || false;
+  });
+  const suggestionHTML = (l) => doublonsPossibles(l).map(x => `<div class="dps-sugg-doublon">⚠️ Doublon possible : <b>${esc(x.n)}</b> (même local ${esc(x.local)}, ${fr(x.date)}) — <i>${esc((x.descr || "").slice(0, 60))}</i>
+      <button type="button" data-lier-direct="${esc(l.id)}|${esc(x.id)}">🔗 Relier ici</button></div>`).join("");
   const carte = (l, opts = {}) => {
     const j = joursDepuis(l.date);
     return `
-    <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
+    <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} ${lieesDe(l.id).length ? "a-liees" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 +${lieesDe(l.id).length} doublon${lieesDe(l.id).length > 1 ? "s" : ""}</span>` : ""}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>
       <p class="dps-descr">${esc(l.descr) || "<i>Sans descriptif</i>"}</p>
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
+      ${lieesHTML(l)}${suggestionHTML(l)}
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
         ${STATUTS_RAPIDES.map(s => `<button type="button" class="dps-st ${val(l, "statut") === s ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}">${esc(s)}</button>`).join("")}
@@ -521,10 +541,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${(() => {
         const liees = lieesDe(l.id);
         const candidats = tousDuSite.filter(x => x.id !== l.id && !x.lieeA && !lieesDe(x.id).length && !TRAITE(x.statut));
-        return `${liees.length ? `<div class="dps-liees"><b>🔗 ${liees.length} demande${liees.length > 1 ? "s" : ""} liée${liees.length > 1 ? "s" : ""} (même problème)</b>
-          ${liees.map(x => `<div class="dps-liee"><span class="dps-num">${esc(x.n)}</span><span>${x.date ? fr(x.date) : ""}${x.demandeur ? ` · ${esc(x.demandeur)}` : ""}${x.local ? ` · 📍 ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 90))}</span>${perms.peutTraiter ? `<button type="button" class="dps-delier" data-delier="${esc(x.id)}" title="Détacher cette demande">✂ Délier</button>` : ""}</div>`).join("")}
-          <small>Tout ce qui est enregistré ici est recopié sur les demandes liées.</small></div>` : ""}
-        ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
+        return `${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
           <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}`;
       })()}
@@ -599,6 +616,15 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const champs = { lieeA: principale.id, lieeANumero: principale.n };
     CHAMPS_PROPAGES.forEach(k => { if (principale[k]) champs[k] = principale[k]; });
     try { await maj(idDoublon, champs); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
+  container.querySelectorAll("[data-lier-direct]").forEach(b => b.addEventListener("click", async () => {
+    const [idP, idD] = b.dataset.lierDirect.split("|");
+    const principale = lignes.find(x => x.id === idP), doublon = lignes.find(x => x.id === idD);
+    if (!confirm(`Relier ${doublon?.n} à ${principale?.n} ?\n${doublon?.n} suivra le traitement de ${principale?.n}.`)) return;
+    b.disabled = true;
+    const champs = { lieeA: principale.id, lieeANumero: principale.n };
+    CHAMPS_PROPAGES.forEach(k => { if (principale[k]) champs[k] = principale[k]; });
+    try { await maj(idD, champs); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
   }));
   container.querySelectorAll("[data-delier]").forEach(b => b.addEventListener("click", async () => {
     if (!confirm("Détacher cette demande ? Elle redeviendra une demande à part.")) return;

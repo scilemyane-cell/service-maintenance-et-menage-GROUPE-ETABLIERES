@@ -2503,3 +2503,11 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-voir-site{margin-left:auto;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 12px;font:700 12.5px system-ui,sans-serif;cursor:pointer}
 @media (max-width:860px){.dps-focus{grid-template-columns:1fr}.dps-focus-d{position:static;max-height:none}}
 .dps-focus-d .dps-action-haut{flex-direction:column}.dps-focus-d .dps-action-btns{flex-wrap:wrap}
+/* Demandes regroupées : effet « pile » + suggestion de doublon */
+.dps-carte.a-liees{border-left-color:#2a78d6 !important;box-shadow:6px 6px 0 -1px #d7e6fa,12px 12px 0 -2px #e9f1fc,0 2px 10px rgba(20,30,50,.06);margin:0 12px 12px 0}
+.dps-liees{border-left:4px solid #2a78d6}
+.dps-liee i{color:var(--text-dim)}
+.dps-sugg-doublon{background:#fff6e0;border:1px dashed #e0a800;border-radius:12px;padding:8px 10px;font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.dps-sugg-doublon i{color:var(--text-dim)}
+.dps-sugg-doublon button{margin-left:auto;border:0;background:#2a78d6;color:#fff;font:800 12px system-ui,sans-serif;border-radius:999px;padding:6px 12px;cursor:pointer}
+.dps-pastille.sugg{background:#fff3cd;color:#8a6100;font-weight:800}
