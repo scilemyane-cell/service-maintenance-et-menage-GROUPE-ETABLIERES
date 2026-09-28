@@ -5,9 +5,11 @@
 // puis on le remet.
 const CHAMPS = "[data-lier-choix],[data-act-pour],[data-act-ech],[data-act-texte],[data-rep-texte],[data-edit-pour],[data-edit-ech],[data-edit-texte],#dps-qsite";
 
+export function cleChamp(el) { return cle(el); }
 function cle(el) {
   const porteur = el.closest("[data-id]");
-  const attr = [...el.attributes].map(a => a.name).find(n => n.startsWith("data-act-") || n.startsWith("data-rep-") || n.startsWith("data-edit-") || n.startsWith("data-lier")) || el.id || el.className;
+  const nom = [...el.attributes].map(a => a.name).find(n => n.startsWith("data-act-") || n.startsWith("data-rep-") || n.startsWith("data-edit-") || n.startsWith("data-lier") || n === "data-dps-champ" || n === "name");
+  const attr = nom ? (nom === "data-dps-champ" || nom === "name" ? `${nom}=${el.getAttribute(nom)}` : nom) : (el.id || el.className);
   return `${porteur?.dataset.id || ""}|${attr}`;
 }
 
@@ -27,6 +29,7 @@ export function restaurerSaisies(racine, s) {
   racine.querySelectorAll("details.dps-action-form, details.dps-repondre, details.dps-phrases-wrap, details.dps-lier, details.dps-liees, details.dps-sugg-wrap").forEach(d => { if (s.ouverts.includes(cle(d))) d.open = true; });
   racine.querySelectorAll(".dps-action-edit").forEach(d => { if (s.editions.includes(cle(d))) d.hidden = false; });
   racine.querySelectorAll(CHAMPS).forEach(el => { const v = s.valeurs[cle(el)]; if (v != null && el.value !== v) el.value = v; });
+  import("./ia-suggestion.js").then(m => m.restaurerSuggestions(racine)).catch(() => {});
   if (s.focus) {
     const el = [...racine.querySelectorAll(CHAMPS)].find(x => cle(x) === s.focus.k);
     if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(s.focus.d, s.focus.f); } catch {} }
