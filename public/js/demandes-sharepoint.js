@@ -163,7 +163,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   // rattrapant largement un envoi manqué.
   const depuis = Date.now() - 7 * 86400000;
   const ms = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds ? d.dateMaj.seconds * 1000 : 0);
-  const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-")).map(d => ({
+  const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier)).map(d => ({
     numero: d.numero,
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation || "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
