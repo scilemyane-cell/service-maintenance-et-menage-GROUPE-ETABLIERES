@@ -14,3 +14,8 @@ export function watchAffectationsSites(callback) {
 export async function saveAffectationSite(site, uids) {
   await setDoc(REF, { affectations: { [site]: uids }, majLe: Date.now() }, { merge: true });
 }
+
+// Enregistre plusieurs sites d'un coup ({ "<site>": [uid, …], … }).
+export async function saveAffectationsSites(map) {
+  await setDoc(REF, { affectations: map, majLe: Date.now() }, { merge: true });
+}

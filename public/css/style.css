@@ -2526,3 +2526,13 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-retour-flottant{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:50;border:0;background:#2a78d6;color:#fff;font:800 14px "Montserrat",system-ui,sans-serif;border-radius:999px;padding:12px 22px;box-shadow:0 8px 24px rgba(20,40,80,.35);cursor:pointer}
 .dps-flash{animation:dpsFlash 1.6s ease 2}
 @keyframes dpsFlash{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 4px #e0a800}}
+/* Attribution des sites en masse */
+.dps-gerer-affect{border:0;background:#2a78d6;color:#fff;font:800 13px system-ui,sans-serif;border-radius:999px;padding:9px 14px;cursor:pointer}
+.gaf{max-width:720px}
+.gaf-aide{margin:0;font-size:12.5px;color:var(--text-dim)}
+.gaf-listes{display:flex;flex-direction:column;gap:10px;max-height:55vh;overflow-y:auto;padding-right:4px}
+.gaf-asso{border:1px solid var(--border);border-radius:12px;padding:8px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 12px}
+.gaf-asso legend{font:800 13px system-ui,sans-serif;padding:0 6px;display:flex;gap:6px;align-items:center}
+.gaf-asso legend button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:2px 8px;font:700 11px system-ui,sans-serif;cursor:pointer}
+.ndm .gaf-site{flex-direction:row;align-items:flex-start;gap:6px;font:600 13px system-ui,sans-serif;padding:3px 0}
+.gaf-site small{color:var(--text-dim);font-weight:500}

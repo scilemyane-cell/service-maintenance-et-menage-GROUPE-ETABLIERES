@@ -6,7 +6,7 @@ import { esc } from "./astreinte-logic.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
-import { watchAffectationsSites, saveAffectationSite } from "./affectations-sites-data.js";
+import { watchAffectationsSites, saveAffectationSite, saveAffectationsSites } from "./affectations-sites-data.js";
 import { watchPhrasesDemandes, savePhrasesDemandes, PHRASES_DEFAUT } from "./phrases-demandes-data.js";
 
 // ---------- Phrases types (commentaires / actions) ----------
@@ -257,6 +257,50 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
   }));
 }
 
+// ---------- Attribution des sites en masse ----------
+// Fenêtre : on choisit un technicien et on coche tous ses sites d'un coup.
+function ouvrirGestionAffectations(sites, techs) {
+  const parAsso = {}; sites.forEach(s => (parAsso[s.association || "Autres"] ||= []).push(s.nom));
+  Object.values(parAsso).forEach(l => l.sort((a, b) => a.localeCompare(b, "fr")));
+  const fond = document.createElement("div");
+  fond.className = "ndm-fond";
+  let tech = techs[0]?.uid || "";
+  const coches = () => new Set(Object.entries(aff.data).filter(([, l]) => (l || []).includes(tech)).map(([s]) => s));
+  let sel = coches();
+  const dessiner = () => {
+    fond.innerHTML = `<div class="ndm gaf">
+      <div class="ndm-tete"><h3>👷 Attribuer des sites</h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
+      <label>Technicien<select id="gaf-tech">${techs.map(t => `<option value="${esc(t.uid)}" ${t.uid === tech ? "selected" : ""}>${esc(t.nom || t.email)} (${Object.values(aff.data).filter(l => (l || []).includes(t.uid)).length} sites)</option>`).join("")}</select></label>
+      <p class="gaf-aide">Coche tous les sites de cette personne, puis enregistre. Un site peut avoir plusieurs techniciens.</p>
+      <div class="gaf-listes">${Object.keys(parAsso).sort().map(a => `
+        <fieldset class="gaf-asso"><legend>${esc(a)} <button type="button" data-gaf-tout="${esc(a)}">Tout</button><button type="button" data-gaf-rien="${esc(a)}">Aucun</button></legend>
+          ${parAsso[a].map(nom => { const autres = (aff.data[nom] || []).filter(u => u !== tech).map(u => techs.find(t => t.uid === u)?.nom).filter(Boolean); return `<label class="gaf-site"><input type="checkbox" value="${esc(nom)}" ${sel.has(nom) ? "checked" : ""}> <span>${esc(nom)}${autres.length ? ` <small>(aussi : ${esc(autres.join(", "))})</small>` : ""}</span></label>`; }).join("")}
+        </fieldset>`).join("")}</div>
+      <div class="ndm-etat"></div>
+      <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Fermer</button><button type="button" class="dps-enregistrer" id="gaf-ok">💾 Enregistrer (${sel.size} sites)</button></div>
+    </div>`;
+    fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", () => fond.remove()));
+    fond.querySelector("#gaf-tech").addEventListener("change", (e) => { tech = e.target.value; sel = coches(); dessiner(); });
+    fond.querySelectorAll(".gaf-site input").forEach(cb => cb.addEventListener("change", () => { cb.checked ? sel.add(cb.value) : sel.delete(cb.value); fond.querySelector("#gaf-ok").textContent = `💾 Enregistrer (${sel.size} sites)`; }));
+    fond.querySelectorAll("[data-gaf-tout]").forEach(b => b.addEventListener("click", () => { parAsso[b.dataset.gafTout].forEach(n => sel.add(n)); dessiner(); }));
+    fond.querySelectorAll("[data-gaf-rien]").forEach(b => b.addEventListener("click", () => { parAsso[b.dataset.gafRien].forEach(n => sel.delete(n)); dessiner(); }));
+    fond.querySelector("#gaf-ok").addEventListener("click", async (e) => {
+      const map = {};
+      sites.forEach(({ nom }) => {
+        const actuel = aff.data[nom] || [], a = actuel.includes(tech), b = sel.has(nom);
+        if (a !== b) map[nom] = b ? [...actuel, tech] : actuel.filter(u => u !== tech);
+      });
+      if (!Object.keys(map).length) { fond.remove(); return; }
+      e.target.disabled = true; fond.querySelector(".ndm-etat").textContent = "⏳ Enregistrement…";
+      try { await saveAffectationsSites(map); window.toast?.("✓ Sites attribués"); fond.remove(); }
+      catch (err) { console.error(err); fond.querySelector(".ndm-etat").textContent = "❌ " + (err?.message || err); e.target.disabled = false; }
+    });
+  };
+  dessiner();
+  document.body.appendChild(fond);
+  fond.addEventListener("click", (e) => { if (e.target === fond) fond.remove(); });
+}
+
 // ---------- Nouvelles demandes ----------
 // Mémorisé sur l'appareil, par personne : date de dernière consultation de
 // chaque site. Une demande importée après cette date est « 🆕 nouvelle ».
@@ -372,6 +416,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   // ---------- Liste des sites ----------
   if (!st.site) {
     const vu = lireVu(uid);
+    const parSiteTous = {}; lignes.forEach(l => { if (!l.lieeA && l.site && !parSiteTous[l.site]) parSiteTous[l.site] = { nom: l.site, association: l.association }; });
     const parSite = {};
     const doublonsParSite = {}; lignes.forEach(l => { if (l.lieeA && filtreAssoc(l)) doublonsParSite[l.site] = (doublonsParSite[l.site] || 0) + 1; });
     lignes.filter(l => filtreAssoc(l) && !l.lieeA).forEach(l => {
@@ -437,6 +482,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-barre">
         <label class="dps-recherche"><span>🔎</span><input id="dps-q" type="search" placeholder="Rechercher un site…" value="${esc(st.q)}"></label>
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
+        ${perms.isEditor && techs.length ? `<button type="button" class="dps-gerer-affect" id="dps-gerer-affect">👷 Attribuer des sites…</button>` : ""}
         ${!estTech && techs.length ? `<label class="dps-tech-filtre">👷<select id="dps-tech"><option value="">Tous les techniciens</option>${techs.map(t => `<option value="${esc(t.uid)}" ${st.tech === t.uid ? "selected" : ""}>${esc(t.nom || t.email)} (${(n => `${n} site${n > 1 ? "s" : ""}`)(Object.values(aff.data).filter(l => l.includes(t.uid)).length)})</option>`).join("")}</select></label>` : ""}
         <label class="dps-case"><input type="checkbox" id="dps-traitees" ${st.voirTraitees ? "checked" : ""}> Sites sans demande en attente</label>
       </div>
@@ -467,6 +513,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     let t = null;
     container.querySelector("#dps-q")?.addEventListener("input", (e) => { st.q = e.target.value; clearTimeout(t); t = setTimeout(() => { rerender(); const el = container.querySelector("#dps-q"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 250); });
     container.querySelectorAll("[data-dps-asso]").forEach(b => b.addEventListener("click", () => { st.association = b.dataset.dpsAsso; rerender(); }));
+    container.querySelector("#dps-gerer-affect")?.addEventListener("click", () => ouvrirGestionAffectations(Object.values(parSiteTous), techs));
     container.querySelector("#dps-tech")?.addEventListener("change", (e) => { st.tech = e.target.value; rerender(); });
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
