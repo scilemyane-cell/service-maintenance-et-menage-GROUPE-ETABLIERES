@@ -5,7 +5,7 @@
 // séparée pour ne pas interférer avec le reste de l'appli.
 import { firebaseConfig } from "./firebase-config.js";
 
-const VERSION = "12.0.0";
+const VERSION = "12.19.0"; // SDK récent : nécessaire pour les modèles Gemini 3.x
 // Google retire régulièrement des modèles : on essaie les plus récents d'abord,
 // et si Google en recommande un autre dans son message d'erreur, on l'essaie
 // aussitôt (mémorisé sur l'appareil).
@@ -21,8 +21,17 @@ let sansThinking = memo0("etablieres-ia-sans-thinking") === "1";
 
 async function modele() {
   if (modeleMemo) return modeleMemo;
-  const { initializeApp, getApps } = await import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-app.js`);
-  const { getAI, getGenerativeModel, GoogleAIBackend } = await import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-ai.js`);
+  // Version récente du SDK, avec repli sur l'ancienne si elle ne se charge pas.
+  let libApp, libAI;
+  for (const v of [VERSION, "12.0.0"]) {
+    try {
+      libApp = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-app.js`);
+      libAI = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-ai.js`);
+      break;
+    } catch (e) { if (v === "12.0.0") throw e; console.warn("SDK IA", v, "indisponible, repli :", e); }
+  }
+  const { initializeApp, getApps } = libApp;
+  const { getAI, getGenerativeModel, GoogleAIBackend } = libAI;
   const app = getApps().find(a => a.name === "ia") || initializeApp(firebaseConfig, "ia");
   const ai = getAI(app, { backend: new GoogleAIBackend() });
   modeleMemo = { ai, getGenerativeModel };
@@ -36,7 +45,7 @@ export function prechargerIA() { modele().catch(() => {}); }
 export async function genererTexte(prompt, { rapide = false } = {}) {
   const { ai, getGenerativeModel } = await modele();
   let derniereErreur = null;
-  const essais = [];
+  const essais = [], erreurs = {};
   const dejaBon = rapide ? modeleRapideQuiMarche : modeleQuiMarche;
   const base = rapide ? [...MODELES_RAPIDES, ...MODELES] : MODELES;
   const ordre = dejaBon ? [dejaBon, ...base.filter(m => m !== dejaBon)] : [...new Set(base)];
@@ -48,7 +57,7 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
       const nom = ordre[k];
       try {
         // Sans « réflexion » (thinking) : réponse beaucoup plus rapide pour ces textes courts.
-        const m = getGenerativeModel(ai, { model: nom, generationConfig: { maxOutputTokens: rapide ? 400 : 1200, temperature: 0.3, ...(ordre.__sansThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } });
+        const m = getGenerativeModel(ai, { model: nom, generationConfig: { maxOutputTokens: rapide ? 400 : 1200, temperature: 0.3, ...(ordre.__sansThinking ? {} : { thinkingConfig: /gemini-3|latest/.test(nom) ? { thinkingLevel: "MINIMAL" } : { thinkingBudget: 0 } }) } });
         essais.push(nom);
         // 15 s max par modèle : un modèle saturé ne fait pas attendre indéfiniment.
         const r = await Promise.race([m.generateContent(prompt), new Promise((_, rej) => setTimeout(() => rej(new Error("[503] délai dépassé (15 s)")), 15000))]);
@@ -61,6 +70,7 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
       } catch (e) {
         derniereErreur = e;
         const msg = String(e?.message || e);
+        if (!erreurs[nom]) erreurs[nom] = (msg.match(/\[\d{3}[^\]]*\][^.]*/) || [msg])[0].slice(0, 90);
         // Réglage « sans réflexion » refusé (400 / invalid argument) : on réessaie sans, et on s'en souvient.
         if ((/thinking|\[400|invalid argument/i.test(msg)) && !ordre.__sansThinking) { ordre.__sansThinking = true; sansThinking = true; try { localStorage.setItem("etablieres-ia-sans-thinking", "1"); } catch {} k--; continue; }
         const conseille = msg.match(/use (?:models\/)?(gemini-[\w.\-]+)/i)?.[1];
@@ -79,7 +89,7 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
   else if (/has not been used|not.*enabled|SERVICE_DISABLED/i.test(msg)) conseil = "Service pas encore actif (l'activation peut prendre quelques minutes) — réessaie dans 5 min.";
   else if (/PERMISSION_DENIED|403/i.test(msg)) conseil = "Accès refusé par Google — vérifie AI Logic → Paramètres (fournisseur « Gemini Developer API »).";
   else if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg)) conseil = "Le module IA n'a pas pu être chargé (réseau ou version).";
-  const e = new Error((conseil ? conseil + " " : "") + `Modèles essayés : ${[...new Set(essais)].join(", ") || "aucun"}. Détail : ` + msg.slice(0, 300));
+  const e = new Error((conseil ? conseil + " " : "") + `Modèles essayés : ${Object.entries(erreurs).slice(0, 4).map(([n, m]) => `${n} → ${m}`).join(" | ") || "aucun"}. Détail : ` + msg.slice(0, 200));
   throw e;
 }
 
