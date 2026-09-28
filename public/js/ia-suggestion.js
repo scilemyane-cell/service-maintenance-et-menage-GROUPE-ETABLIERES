@@ -26,12 +26,16 @@ function placer(champ, cle, texte) {
 }
 
 export function proposerIA(apres, texte, onUtiliser, champ = null) {
-  champ = champ || apres.parentElement.querySelector("textarea, [data-ia-cible]");
-  if (!champ) { apres.after(boite("", texte)); return; }
-  if (texte.trim() === champ.value.trim()) { window.toast?.("✨ L'IA n'a rien trouvé à corriger."); return; }
+  champ = champ || apres?.parentElement?.querySelector("textarea, [data-ia-cible]");
+  if (!champ) { apres?.after(boite("", texte)); return; }
   const cle = cleChamp(champ);
+  // L'écran a pu se redessiner pendant que l'IA réfléchissait : on retrouve le
+  // champ actuellement affiché (sinon la proposition partait dans le vide).
+  const vivant = champ.isConnected ? champ : trouverChamp(cle);
+  if (texte.trim() === (vivant || champ).value.trim()) { window.toast?.("✨ L'IA n'a rien trouvé à corriger."); return; }
   SUGG.set(cle, texte);
-  placer(champ, cle, texte);
+  if (vivant) placer(vivant, cle, texte);
+  else window.toast?.("✨ Proposition prête — rouvre la demande pour la voir.");
 }
 
 // Après un ré-affichage : remettre les propositions en attente.
