@@ -133,6 +133,18 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
 
 // 2) Dépôt du fichier des mises à jour (demandes modifiées dans l'appli)
 // pour le flux Power Automate n° 2.
+// Action (en cours ou traitée) + dernière réponse, pour la colonne commentaire.
+function texteAction(d) {
+  if (!d.actionPour || !d.actionTexte) return "";
+  const frd = (x) => (x ? String(x).slice(0, 10).split("-").reverse().join("/") : "");
+  const fil = Array.isArray(d.actionFil) ? d.actionFil : [];
+  const reponse = [...fil].reverse().find(m => m.texte && !m.fait && !/^Action modifiée|^📌 Nouvelle action/.test(m.texte) && m.de !== d.actionPar);
+  const rep = reponse ? `\n   ↳ ${reponse.de} : ${reponse.texte}` : "";
+  return d.actionFaiteLe
+    ? `✓ Action « ${d.actionTexte} » faite par ${d.actionFaitePar || d.actionPourNom || "?"} le ${frd(d.actionFaiteLe)}${rep}`
+    : `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${frd(d.actionEcheance)})` : ""} : ${d.actionTexte}${rep}`;
+}
+
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return { envoyees: 0 };
@@ -150,7 +162,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
     dateStatut: fr(d.dateStatut),
-    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.commentaireTech ? d.commentaireTech + (d.commentaireTechPar ? ` (${d.commentaireTechPar}${d.commentaireTechLe ? ", " + fr(d.commentaireTechLe) : ""})` : "") : "", d.actionPour && !d.actionFaiteLe && d.actionTexte ? `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${fr(d.actionEcheance)})` : ""} : ${d.actionTexte}` : ""].filter(Boolean).join("\n"),
+    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.commentaireTech ? d.commentaireTech + (d.commentaireTechPar ? ` (${d.commentaireTechPar}${d.commentaireTechLe ? ", " + fr(d.commentaireTechLe) : ""})` : "") : "", texteAction(d)].filter(Boolean).join("\n"),
   }));
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
