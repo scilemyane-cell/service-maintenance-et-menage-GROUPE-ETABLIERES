@@ -6,7 +6,11 @@
 import { firebaseConfig } from "./firebase-config.js";
 
 const VERSION = "12.0.0";
-const MODELES = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash"];
+// Google retire régulièrement des modèles : on essaie les plus récents d'abord,
+// et si Google en recommande un autre dans son message d'erreur, on l'essaie
+// aussitôt (mémorisé sur l'appareil).
+let MODELES = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.8-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+try { const m = localStorage.getItem("etablieres-ia-modele"); if (m && !MODELES.includes(m)) MODELES = [m, ...MODELES]; } catch {}
 let modeleQuiMarche = null; // mémorisé pour la session
 let modeleMemo = null;
 
@@ -23,19 +27,22 @@ async function modele() {
 export async function genererTexte(prompt) {
   const { ai, getGenerativeModel } = await modele();
   let derniereErreur = null;
-  const ordre = modeleQuiMarche ? [modeleQuiMarche, ...MODELES.filter(m => m !== modeleQuiMarche)] : MODELES;
+  const ordre = modeleQuiMarche ? [modeleQuiMarche, ...MODELES.filter(m => m !== modeleQuiMarche)] : [...MODELES];
   // 2 passages : un modèle momentanément surchargé (500/503/429) ou absent
   // (404) → on essaie le suivant ; on repasse une fois après une pause.
   for (let passage = 0; passage < 2; passage++) {
-    for (const nom of ordre) {
+    for (let k = 0; k < ordre.length; k++) {
+      const nom = ordre[k];
       try {
         const m = getGenerativeModel(ai, { model: nom });
         const r = await m.generateContent(prompt);
         const t = r.response.text();
-        if (t && t.trim()) { modeleQuiMarche = nom; return t.trim(); }
+        if (t && t.trim()) { modeleQuiMarche = nom; try { localStorage.setItem("etablieres-ia-modele", nom); } catch {} return t.trim(); }
       } catch (e) {
         derniereErreur = e;
         const msg = String(e?.message || e);
+        const conseille = msg.match(/use (?:models\/)?(gemini-[\w.\-]+)/i)?.[1];
+        if (conseille && !ordre.includes(conseille)) ordre.splice(k + 1, 0, conseille);
         const passager = /\[(500|502|503|504|429)|high demand|overloaded|unavailable|RESOURCE_EXHAUSTED|try again/i.test(msg);
         const absent = /not found|404|unsupported|is not supported/i.test(msg);
         if (!passager && !absent) { passage = 2; break; } // autre erreur : inutile d'insister
