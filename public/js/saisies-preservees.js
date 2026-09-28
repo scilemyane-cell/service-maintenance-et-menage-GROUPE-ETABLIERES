@@ -15,7 +15,7 @@ export function capturerSaisies(racine) {
   if (!racine) return null;
   const s = { valeurs: {}, ouverts: [], editions: [], focus: null };
   racine.querySelectorAll(CHAMPS).forEach(el => { if (el.value) s.valeurs[cle(el)] = el.value; });
-  racine.querySelectorAll("details[open].dps-action-form, details[open].dps-repondre, details[open].dps-phrases-wrap, details[open].dps-lier").forEach(d => s.ouverts.push(cle(d)));
+  racine.querySelectorAll("details[open].dps-action-form, details[open].dps-repondre, details[open].dps-phrases-wrap, details[open].dps-lier, details[open].dps-liees, details[open].dps-sugg-wrap").forEach(d => s.ouverts.push(cle(d)));
   racine.querySelectorAll(".dps-action-edit:not([hidden])").forEach(d => s.editions.push(cle(d)));
   const a = document.activeElement;
   if (a && racine.contains(a) && a.matches(CHAMPS)) s.focus = { k: cle(a), d: a.selectionStart, f: a.selectionEnd };
@@ -24,7 +24,7 @@ export function capturerSaisies(racine) {
 
 export function restaurerSaisies(racine, s) {
   if (!racine || !s) return;
-  racine.querySelectorAll("details.dps-action-form, details.dps-repondre, details.dps-phrases-wrap, details.dps-lier").forEach(d => { if (s.ouverts.includes(cle(d))) d.open = true; });
+  racine.querySelectorAll("details.dps-action-form, details.dps-repondre, details.dps-phrases-wrap, details.dps-lier, details.dps-liees, details.dps-sugg-wrap").forEach(d => { if (s.ouverts.includes(cle(d))) d.open = true; });
   racine.querySelectorAll(".dps-action-edit").forEach(d => { if (s.editions.includes(cle(d))) d.hidden = false; });
   racine.querySelectorAll(CHAMPS).forEach(el => { const v = s.valeurs[cle(el)]; if (v != null && el.value !== v) el.value = v; });
   if (s.focus) {

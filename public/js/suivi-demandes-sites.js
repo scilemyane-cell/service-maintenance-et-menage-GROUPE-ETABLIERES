@@ -492,9 +492,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   // Bloc des demandes liées, affiché en haut de la carte principale.
   const lieesHTML = (l) => {
     const liees = lieesDe(l.id); if (!liees.length) return "";
-    return `<div class="dps-liees"><b>🔗 Regroupe ${liees.length + 1} demandes (même problème)</b>
+    return `<details class="dps-liees"><summary>🔗 Regroupe ${liees.length + 1} demandes <small>${liees.map(x => esc(x.n)).join(", ")}</small></summary>
       ${liees.map(x => `<div class="dps-liee"><span class="dps-num">${esc(x.n)}</span><span>${x.date ? fr(x.date) : ""}${x.demandeur ? ` · ${esc(x.demandeur)}` : ""}${x.local ? ` · 📍 ${esc(x.local)}` : ""}<br><i>${esc((x.descr || "").slice(0, 110))}</i></span>${perms.peutTraiter ? `<button type="button" class="dps-delier" data-delier="${esc(x.id)}" title="Détacher cette demande">✂ Délier</button>` : ""}</div>`).join("")}
-      <small>Ce qui est enregistré sur ${esc(l.n)} est recopié sur ${liees.length > 1 ? "ces demandes" : "cette demande"}.</small></div>`;
+      <small>Ce qui est enregistré sur ${esc(l.n)} est recopié sur ${liees.length > 1 ? "ces demandes" : "cette demande"}.</small></details>`;
   };
   // Doublon possible : même logement / local, demandé à quelques jours d'écart.
   const jours = (a, b) => (a && b ? Math.abs((new Date(a) - new Date(b)) / 86400000) : 99);
@@ -506,8 +506,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     if (px) return false; // x regroupe déjà : c'est sur x que la suggestion s'affichera
     return pl || String(l.n).localeCompare(String(x.n), "fr", { numeric: true }) < 0 || false;
   });
-  const suggestionHTML = (l) => doublonsPossibles(l).map(x => `<div class="dps-sugg-doublon">⚠️ Doublon possible : <b>${esc(x.n)}</b> (même local ${esc(x.local)}, ${fr(x.date)}) — <i>${esc((x.descr || "").slice(0, 60))}</i>
-      <button type="button" data-lier-direct="${esc(l.id)}|${esc(x.id)}">🔗 Relier ici</button></div>`).join("");
+  const suggerePar = (l) => tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id));
+  const suggestionHTML = (l) => { const d = suggerePar(l) ? [] : doublonsPossibles(l); return d.length ? `<details class="dps-sugg-wrap"><summary>⚠️ ${d.length} doublon${d.length > 1 ? "s" : ""} possible${d.length > 1 ? "s" : ""} <small>(même local ${esc(l.local)}, à quelques jours)</small></summary>
+      <div class="dps-sugg-liste">${d.map(x => `<div class="dps-sugg-ligne"><span class="dps-num">${esc(x.n)}</span><span class="t">${esc(x.descr || "")}</span><button type="button" data-lier-direct="${esc(l.id)}|${esc(x.id)}">🔗 Relier</button></div>`).join("")}</div></details>` : ""; };
   const carte = (l, opts = {}) => {
     const j = joursDepuis(l.date);
     return `

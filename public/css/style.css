@@ -2511,3 +2511,12 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-sugg-doublon i{color:var(--text-dim)}
 .dps-sugg-doublon button{margin-left:auto;border:0;background:#2a78d6;color:#fff;font:800 12px system-ui,sans-serif;border-radius:999px;padding:6px 12px;cursor:pointer}
 .dps-pastille.sugg{background:#fff3cd;color:#8a6100;font-weight:800}
+/* Doublons repliables */
+.dps-liees>summary,.dps-sugg-wrap>summary{cursor:pointer;font:800 13px system-ui,sans-serif;list-style:revert}
+.dps-liees>summary small,.dps-sugg-wrap>summary small{font-weight:600;color:var(--text-dim);margin-left:4px}
+.dps-liees[open]>summary{margin-bottom:6px}
+.dps-sugg-wrap{background:#fff8e8;border:1px dashed #e0a800;border-radius:12px;padding:8px 10px;color:#7a5600}
+.dps-sugg-liste{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.dps-sugg-ligne{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #f1e2b8;border-radius:10px;padding:6px 8px;color:var(--text);font-size:12.5px}
+.dps-sugg-ligne .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dps-sugg-ligne button{border:0;background:#2a78d6;color:#fff;font:800 11.5px system-ui,sans-serif;border-radius:999px;padding:5px 10px;cursor:pointer;flex-shrink:0}
