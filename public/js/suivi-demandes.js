@@ -371,7 +371,9 @@ function renderVue(container) {
     const lignes = state.demandes === null ? null
       : depuisFichier ? seedLignes().map((d, i) => ligneDepuisDoc({ id: "seed" + i, ...d }))
       : toutesLesLignes();
-    return renderStatsDemandes(container, lignes, {
+    const nbDoublons = lignes ? lignes.filter(l => l.lieeA).length : 0;
+    return renderStatsDemandes(container, lignes ? lignes.filter(l => !l.lieeA) : lignes, {
+      doublons: nbDoublons,
       source: depuisFichier ? "fichier" : "direct",
       extrait: DEMANDES_SEED.extrait || "",
       toggleHTML: toggleVueHTML(),
@@ -446,6 +448,7 @@ function toutesLesLignes() {
 
 function lignesFiltrees() {
   return toutesLesLignes().filter(l => {
+    if (l.lieeA && !ui.voirDoublons) return false;
     if (ui.filtreStatut === "a-traiter" ? STATUTS_TRAITES.includes(l.statut) : (ui.filtreStatut && ui.filtreStatut !== "tous" && l.statut !== ui.filtreStatut)) return false;
     if (ui.filtreUrgence && l.urgence !== ui.filtreUrgence) return false;
     if (ui.filtreSites.length > 0 && !ui.filtreSites.includes(l.site)) return false;
@@ -560,6 +563,7 @@ function renderTableau(container) {
       </div>
 
       <div class="form-card demandes-filtres">
+        <label class="demandes-filtre" style="flex-direction:row;align-items:center;gap:6px;align-self:end"><input type="checkbox" id="demandes-voir-doublons" ${ui.voirDoublons ? "checked" : ""}> <span>Afficher les doublons reliés 🔗</span></label>
         <label class="demandes-filtre demandes-filtre-recherche">
           <span>🔎 Recherche</span>
           <input type="text" id="demandes-recherche" placeholder="N°, site, description, intervenant…" value="${esc(ui.recherche)}">
@@ -592,7 +596,7 @@ function renderTableau(container) {
           <tbody>
             ${lignes.length === 0 ? `<tr><td colspan="12" class="demandes-table-empty">Aucune demande ne correspond à ces filtres.</td></tr>` : lignes.map(l => `
               <tr data-id="${esc(l.id)}">
-                <td class="mono">${esc(l.n)}</td>
+                <td class="mono">${esc(l.n)}${l.lieeANumero ? `<br><small class="badge-lien">🔗 doublon de ${esc(l.lieeANumero)}</small>` : ""}${(n => n ? `<br><small class="badge-lien">🔗 +${n} doublon${n > 1 ? "s" : ""}</small>` : "")((state.demandes || []).filter(d => d.lieeA === l.id).length)}</td>
                 <td class="mono">${fmtDateFR(l.date)}</td>
                 <td>${esc(l.site)}</td>
                 <td>${esc(l.association)}</td>
@@ -614,6 +618,7 @@ function renderTableau(container) {
   `;
 
   attacherToggleVue(container);
+  document.getElementById("demandes-voir-doublons")?.addEventListener("change", e => { ui.voirDoublons = e.target.checked; render(container); });
   document.getElementById("demandes-recherche").addEventListener("input", e => {
     ui.recherche = e.target.value;
     const curseur = e.target.selectionStart;

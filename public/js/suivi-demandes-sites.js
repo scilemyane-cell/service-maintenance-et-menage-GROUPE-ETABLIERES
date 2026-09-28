@@ -373,6 +373,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   if (!st.site) {
     const vu = lireVu(uid);
     const parSite = {};
+    const doublonsParSite = {}; lignes.forEach(l => { if (l.lieeA && filtreAssoc(l)) doublonsParSite[l.site] = (doublonsParSite[l.site] || 0) + 1; });
     lignes.filter(l => filtreAssoc(l) && !l.lieeA).forEach(l => {
       const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0 });
       s.total++;
@@ -405,6 +406,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small>${techsDuSite(s.nom).length ? `<small class="dps-site-techs">👷 ${esc(techsDuSite(s.nom).map(nomDe).filter(Boolean).join(", "))}</small>` : ""}</div>
           <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
           <div class="dps-site-pied">
+            ${doublonsParSite[s.nom] ? `<span class="dps-pastille lien">🔗 ${doublonsParSite[s.nom]} doublon${doublonsParSite[s.nom] > 1 ? "s" : ""} regroupé${doublonsParSite[s.nom] > 1 ? "s" : ""}</span>` : ""}
             ${s.nouvelles ? `<span class="dps-pastille nouv">🆕 ${s.nouvelles} nouvelle${s.nouvelles > 1 ? "s" : ""}</span>` : ""}
             ${s.urgentes ? `<span class="dps-pastille urg">🔴 ${s.urgentes} urgente${s.urgentes > 1 ? "s" : ""}</span>` : ""}
             ${s.plusVieille > 30 ? `<span class="dps-pastille vieux">⏳ ${s.plusVieille} j</span>` : ""}
@@ -492,7 +494,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 +${lieesDe(l.id).length} doublon${lieesDe(l.id).length > 1 ? "s" : ""}</span>` : ""}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>

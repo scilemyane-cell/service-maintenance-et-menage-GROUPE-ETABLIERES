@@ -151,7 +151,7 @@ function calculer(toutes) {
 }
 
 // ---------- rendu ----------
-export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau, source = "direct", extrait = "" }) {
+export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau, source = "direct", extrait = "", doublons = 0 }) {
   if (!toutes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
   const s = calculer(toutes);
   const libPeriode = { mois: "ce mois-ci", "3m": "sur 3 mois", "12m": "sur 12 mois", scolaire: "depuis la rentrée", tout: "depuis le début" }[st.periode];
@@ -168,7 +168,7 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
     <section class="dst-hero">
       <div class="dst-hero-tete">
         <div><span class="dst-sur">Suivi des demandes · ${source === "fichier" ? "fichier Excel" : "en direct"}</span><h2>Tableau de bord <em>des demandes</em></h2>
-          <p>${source === "fichier" ? `Calculé à partir des ${fmt(toutes.length)} demandes du fichier Excel extrait le ${esc(extrait || "—")}. Importe-les dans l'onglet Tableau pour passer en direct.` : `Calculé à partir des ${fmt(toutes.length)} demandes enregistrées — se met à jour dès qu'un statut change.`}</p></div>
+          <p>${source === "fichier" ? `Calculé à partir des ${fmt(toutes.length)} demandes du fichier Excel extrait le ${esc(extrait || "—")}. Importe-les dans l'onglet Tableau pour passer en direct.` : `Calculé à partir des ${fmt(toutes.length)} demandes enregistrées — se met à jour dès qu'un statut change.${doublons ? ` <b>🔗 ${fmt(doublons)} doublon${doublons > 1 ? "s" : ""} relié${doublons > 1 ? "s" : ""} non compté${doublons > 1 ? "s" : ""}.</b>` : ""}`}</p></div>
         <div class="dst-filtres">
           <div class="dst-seg">${[["mois", "Mois"], ["3m", "3 mois"], ["12m", "12 mois"], ["scolaire", "Année scol."], ["tout", "Tout"]].map(([k, l]) => `<button data-dst-per="${k}" class="${st.periode === k ? "on" : ""}">${l}</button>`).join("")}</div>
           <div class="dst-seg dst-seg-a">${[["", "Toutes"], ...ASSOS.map(a => [a, a])].map(([k, l]) => `<button data-dst-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${esc(l)}</button>`).join("")}</div>

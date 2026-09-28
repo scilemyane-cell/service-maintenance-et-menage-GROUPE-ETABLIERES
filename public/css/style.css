@@ -2493,3 +2493,5 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-lier-champs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .dps-lier-champs select{flex:1;min-width:200px;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);font:inherit}
 .dps-lier-champs .dps-action-ok{grid-column:auto;padding:8px 14px}
+.dps-pastille.lien{background:#e6f0ff;color:#2a5caa;font-weight:800}
+.badge-lien{display:inline-block;margin-top:3px;background:#e6f0ff;color:#2a5caa;border-radius:999px;padding:1px 7px;font:700 10.5px system-ui,sans-serif;white-space:nowrap}
