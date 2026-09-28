@@ -178,6 +178,8 @@ export function mountSuiviDemandesTab(container, user) {
   const raccourci = window.__suiviRaccourci; window.__suiviRaccourci = null;
   if (raccourci === "actions") ui.vue = "actions";
   if (raccourci === "valider") ui.allerValidation = true;
+  const ouvrir = window.__suiviOuvrir; window.__suiviOuvrir = null;
+  if (ouvrir?.id) ouvrirDemandeSeule(ouvrir.id, ouvrir.site);
   render(container);
   unsub = watchDemandes((liste) => { state.demandes = liste; render(container); });
   if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });

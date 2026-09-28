@@ -1,5 +1,5 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
-import { watchPeople, watchAbsences, watchInterventions, watchRecurrences } from "./firestore-data.js";
+import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes } from "./firestore-data.js";
 import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -92,6 +92,8 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
+  urgences = [];
+  unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; scheduleRender(); }));
   // Tâches ménage du mois en retard (agents ménage + encadrement)
   sitesMenage = null; fichesMenage = null;
   if (["menage", "mi_temps", "super_admin", "admin", "n1"].includes(user.role)) {
@@ -297,6 +299,36 @@ function blocCarteHTML() {
 // La croix « retirer » n'apparaît qu'en mode « ✏️ Modifier » : sur téléphone,
 // on appuyait dessus par erreur en voulant ouvrir les compteurs.
 let modeEditionFavoris = false;
+// ---- Bandeau « urgences » (tout le monde) ----
+// Demandes Critiques encore ouvertes + Urgentes arrivées depuis 3 jours.
+// Chacun peut masquer une alerte (« Vu ») sur son appareil.
+let urgences = [];
+const CLE_URG_VUES = "etablieres-urgences-vues";
+const urgVues = () => { try { return new Set(JSON.parse(localStorage.getItem(CLE_URG_VUES) || "[]")); } catch { return new Set(); } };
+function urgencesAAfficher() {
+  const vues = urgVues(), limite = Date.now() - 3 * 86400000;
+  const recente = (u) => (u.importeMs && u.importeMs >= limite) || (u.dateDemande && new Date(u.dateDemande + "T00:00:00").getTime() >= limite);
+  return urgences.filter(u => !vues.has(u.id) && (u.urgence === "Critique" || recente(u)))
+    .sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
+}
+function bandeauUrgencesHTML() {
+  const l = urgencesAAfficher(); if (!l.length) return "";
+  const cliquable = catsRef.some(c => c.id === "suivi-demandes");
+  return `<section class="gh-urgences">
+    <div class="gh-urg-tete">🚨 <b>${l.length} demande${l.length > 1 ? "s" : ""} urgente${l.length > 1 ? "s" : ""}</b><span>à traiter en priorité</span></div>
+    <div class="gh-urg-liste">${l.slice(0, 4).map(u => `
+      <div class="gh-urg ${u.urgence === "Critique" ? "crit" : ""}">
+        <${cliquable ? `button type="button" data-urg-ouvrir="${esc(u.id)}" data-urg-site="${esc(u.site || "")}"` : "div"} class="gh-urg-corps">
+          <span class="gh-urg-badge">${u.urgence === "Critique" ? "CRITIQUE" : "URGENT"}</span>
+          <span class="gh-urg-txt"><b>${esc(u.numero || "")} · ${esc(u.site || "")}${u.local ? ` · 📍 ${esc(u.local)}` : ""}</b><small>${esc((u.descriptif || "").slice(0, 110))}</small></span>
+          ${cliquable ? `<span class="gh-urg-go">Voir →</span>` : ""}
+        </${cliquable ? "button" : "div"}>
+        <button type="button" class="gh-urg-vu" data-urg-vu="${esc(u.id)}" title="Masquer cette alerte">✓ Vu</button>
+      </div>`).join("")}
+      ${l.length > 4 ? `<div class="gh-urg-plus">+ ${l.length - 4} autre${l.length - 4 > 1 ? "s" : ""} urgence${l.length - 4 > 1 ? "s" : ""}</div>` : ""}
+    </div></section>`;
+}
+
 function blocCompteursEtFavorisHTML() {
   const favorisIds = chargerFavoris();
   const favorisDossiers = favorisIds.map(id => dossiers.find(d => d.id === id)).filter(Boolean);
@@ -487,6 +519,7 @@ function render() {
         <span class="gh-bc-go">Compléter →</span>
       </button>` : ""}
       ${transfertBannerHTML(next, confirmedRecord)}
+      ${bandeauUrgencesHTML()}
 
       <div class="gh-entete">
         <img src="img/logo-etablieres-transparent.png" alt="Groupe Établières" class="gh-logo">
@@ -565,6 +598,15 @@ function render() {
     window.ouvrirCompleterId = e.currentTarget.dataset.completerAccueil;
     onSelectRef("astreinte");
   });
+  mountedContainer.querySelectorAll("[data-urg-ouvrir]").forEach(b => b.addEventListener("click", () => {
+    window.__suiviOuvrir = { id: b.dataset.urgOuvrir, site: b.dataset.urgSite };
+    onSelectRef("suivi-demandes");
+  }));
+  mountedContainer.querySelectorAll("[data-urg-vu]").forEach(b => b.addEventListener("click", () => {
+    const v = urgVues(); v.add(b.dataset.urgVu);
+    try { localStorage.setItem(CLE_URG_VUES, JSON.stringify([...v].slice(-300))); } catch {}
+    render();
+  }));
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
     btn.addEventListener("click", () => {
       // Raccourcis Suivi des demandes : « valider » → bloc des demandes à valider, « actions » → onglet Mes actions.

@@ -139,6 +139,19 @@ export async function importerDemandes(lignes) {
   return aAjouter.length;
 }
 // Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
+// Demandes Urgentes / Critiques encore ouvertes (bandeau d'accueil).
+export function watchUrgencesOuvertes(callback) {
+  return onSnapshot(query(collection(db, "demandes"), where("urgence", "in", ["Urgent", "Critique"])), (snap) => {
+    const list = [];
+    snap.forEach((d) => {
+      const x = d.data();
+      if (x.lieeA || ["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut)) return;
+      const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
+      list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgence, dateDemande: x.dateDemande, importeMs: t });
+    });
+    callback(list);
+  }, (err) => { console.error("watchUrgencesOuvertes:", err); callback([]); });
+}
 // Demandes déclarées réalisées par les techniciens, en attente de validation.
 export function watchDemandesAValider(callback) {
   return onSnapshot(query(collection(db, "demandes"), where("statut", "==", "Réalisé – à valider")), (snap) => {

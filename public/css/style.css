@@ -2536,3 +2536,20 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .gaf-asso legend button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:2px 8px;font:700 11px system-ui,sans-serif;cursor:pointer}
 .ndm .gaf-site{flex-direction:row;align-items:flex-start;gap:6px;font:600 13px system-ui,sans-serif;padding:3px 0}
 .gaf-site small{color:var(--text-dim);font-weight:500}
+/* Bandeau urgences (accueil) */
+.gh-urgences{background:linear-gradient(135deg,#b3121f,#e0302f);color:#fff;border-radius:18px;padding:12px 14px;margin-bottom:14px;box-shadow:0 8px 24px rgba(179,18,31,.3)}
+.gh-urg-tete{display:flex;align-items:baseline;gap:10px;font-size:16px;margin-bottom:8px}
+.gh-urg-tete span{opacity:.85;font-size:13px}
+.gh-urg-liste{display:flex;flex-direction:column;gap:6px}
+.gh-urg{display:flex;gap:6px;align-items:stretch}
+.gh-urg-corps{flex:1;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:8px 10px;color:#fff;text-align:left;font:inherit;cursor:pointer;min-width:0}
+div.gh-urg-corps{cursor:default}
+.gh-urg.crit .gh-urg-corps{background:rgba(0,0,0,.22);border-color:#ffd2d2}
+.gh-urg-badge{background:#fff;color:#b3121f;font:900 10.5px system-ui,sans-serif;border-radius:6px;padding:3px 6px;flex-shrink:0}
+.gh-urg.crit .gh-urg-badge{background:#1b0000;color:#ffd2d2}
+.gh-urg-txt{display:flex;flex-direction:column;min-width:0}
+.gh-urg-txt b{font-size:13.5px}
+.gh-urg-txt small{opacity:.9;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gh-urg-go{margin-left:auto;font:800 12.5px system-ui,sans-serif;white-space:nowrap}
+.gh-urg-vu{border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;border-radius:12px;padding:0 10px;font:700 12px system-ui,sans-serif;cursor:pointer;flex-shrink:0}
+.gh-urg-plus{font-size:12.5px;opacity:.9;padding-left:4px}
