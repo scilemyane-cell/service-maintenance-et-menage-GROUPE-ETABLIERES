@@ -12,3 +12,10 @@ export function proposerIA(apres, texte, onUtiliser) {
   box.querySelector(".ia-ok").addEventListener("click", (e) => { e.preventDefault(); onUtiliser(texte); box.remove(); });
   box.querySelector(".ia-non").addEventListener("click", (e) => { e.preventDefault(); box.remove(); });
 }
+
+// Message court quand l'IA gratuite de Google est saturée (le texte saisi est gardé).
+export function signalerErreurIA(err) {
+  const m = String(err?.message || err);
+  if (/high demand|satur|\[50\d|429|RESOURCE_EXHAUSTED|délai dépassé/i.test(m)) window.toast ? window.toast("⏳ IA de Google saturée pour le moment — ton texte est gardé, réessaie dans quelques minutes.") : alert("IA de Google saturée pour le moment — réessaie dans quelques minutes.");
+  else alert("IA indisponible : " + m);
+}

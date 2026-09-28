@@ -196,7 +196,7 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
       const t = (await redigerCommentaireDemande({ descr: l.descr, notes })).replace(/\*\*/g, "").trim();
       const { proposerIA } = await import("./ia-suggestion.js");
       if (t) proposerIA(b, t, (v) => { champ.value = v; champ.dispatchEvent(new Event("input", { bubbles: true })); });
-    } catch (err) { console.error(err); alert("IA indisponible : " + (err?.message || err)); }
+    } catch (err) { console.error(err); import("./ia-suggestion.js").then(m => m.signalerErreurIA(err)); }
     finally { b.disabled = false; b.textContent = avant; }
   }));
   container.querySelectorAll("[data-act-modif]").forEach(b => b.addEventListener("click", () => {
@@ -738,7 +738,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         const texte = (await redigerCommentaireDemande({ descr: l?.descr, local: l?.local, statut: val(l, "statut"), notes })).replace(/\*\*/g, "").trim();
         const { proposerIA } = await import("./ia-suggestion.js");
         if (texte) proposerIA(btn, texte, (v) => { ta.value = v; poser(c, "commentaireTech", v); });
-      } catch (err) { console.error(err); alert("IA indisponible : " + (err?.message || err)); }
+      } catch (err) { console.error(err); import("./ia-suggestion.js").then(m => m.signalerErreurIA(err)); }
       finally { btn.disabled = false; btn.textContent = avant; }
     });
     c.querySelector("[data-dps-auj]")?.addEventListener("click", () => {
