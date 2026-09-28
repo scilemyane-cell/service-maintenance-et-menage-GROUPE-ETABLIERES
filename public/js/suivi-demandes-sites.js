@@ -301,13 +301,13 @@ function badgeAge(j) {
   return `<span class="dps-age ${cls}" title="Ancienneté de la demande">${j === 0 ? "aujourd'hui" : `il y a ${j} j`}</span>`;
 }
 
-export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null }) {
+export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null, quitterFocus = null }) {
   const saisies = capturerSaisies(container);
   suivreFavoris(uid);
   suivreAffectations();
   suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
-  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir });
+  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir, quitterFocus });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
   phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
@@ -489,7 +489,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const filtreQ = (l) => !qS || sa(`${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type}`).includes(qS);
   const ouvertes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l)).sort((TRIS[st.tri] || TRIS.urgence)[1]);
   const traitees = duSite.filter(l => TRAITE(l.statut)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
-  const carte = (l) => {
+  const carte = (l, opts = {}) => {
     const j = joursDepuis(l.date);
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
@@ -528,11 +528,34 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}`;
       })()}
-      ${blocActionHTML(l, { perms, uid, utilisateurs })}
+      ${opts.sansAction ? "" : blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
     </article>`;
   };
-  container.innerHTML = `
+  // Vue « demande seule » (ouverte depuis une action) : la demande à gauche,
+  // l'action et ses échanges à droite.
+  let focusRendu = false;
+  if (st.focusId) {
+    const lf = duSite.find(x => x.id === st.focusId) || tousDuSite.find(x => x.id === st.focusId);
+    if (!lf) st.focusId = null;
+    else {
+      focusRendu = true;
+      container.innerHTML = `
+  <div class="stack dps">
+    ${toggleHTML}
+    <div class="dps-site-entete">
+      <button class="dps-retour" id="dps-retour">← ${quitterFocus ? "Retour à mes actions" : "Retour au site"}</button>
+      <div><h2>${esc(lf.n)} · ${esc(st.site)}</h2><p>${lf.local ? `📍 ${esc(lf.local)} · ` : ""}${esc(lf.statut)}</p></div>
+      <button type="button" class="dps-voir-site" id="dps-voir-site">Voir tout le site →</button>
+    </div>
+    <div class="dps-focus">
+      <div class="dps-focus-g"><div class="dps-cartes un">${carte(lf, { sansAction: true })}</div></div>
+      <aside class="dps-focus-d" data-id="${esc(lf.id)}"><h3>📌 Action & échanges</h3>${blocActionHTML(lf, { perms, uid, utilisateurs, ouvert: !lf.actionPour })}</aside>
+    </div>
+  </div>`;
+    }
+  }
+  if (!focusRendu) container.innerHTML = `
   <div class="stack dps">
     ${toggleHTML}
     <div class="dps-site-entete">
@@ -556,7 +579,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ${traitees.length ? `<details class="dps-historique"><summary>Historique : ${traitees.length} demande${traitees.length > 1 ? "s" : ""} traitée${traitees.length > 1 ? "s" : ""}</summary><div class="dps-cartes">${traitees.slice(0, 40).map(carte).join("")}</div></details>` : ""}
   </div>`;
   onToggle();
-  container.querySelector("#dps-retour").addEventListener("click", () => { st.site = null; st.qSite = ""; rerender(); });
+  container.querySelector("#dps-retour").addEventListener("click", () => {
+    if (st.focusId) { st.focusId = null; if (quitterFocus) { st.site = null; quitterFocus(); } else rerender(); return; }
+    st.site = null; st.qSite = ""; rerender();
+  });
+  container.querySelector("#dps-voir-site")?.addEventListener("click", () => { st.focusId = null; rerender(); });
   container.querySelector("#dps-tri")?.addEventListener("change", (e) => { st.tri = e.target.value; try { localStorage.setItem("etablieres-dps-tri", st.tri); } catch {} rerender(); });
   let tq = null;
   container.querySelector("#dps-qsite")?.addEventListener("input", (e) => { st.qSite = e.target.value; clearTimeout(tq); tq = setTimeout(() => { rerender(); const el = container.querySelector("#dps-qsite"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 300); });
@@ -672,4 +699,5 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
 }
 
 export function resetVueSites() { st.site = null; }
-export function ouvrirSite(nom) { st.site = nom; st.q = ""; st.vuAvant = null; }
+export function ouvrirSite(nom) { st.site = nom; st.q = ""; st.vuAvant = null; st.focusId = null; }
+export function ouvrirDemandeSeule(id, site) { st.site = site; st.q = ""; st.vuAvant = null; st.focusId = id; }

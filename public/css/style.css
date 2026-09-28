@@ -2495,3 +2495,11 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .dps-lier-champs .dps-action-ok{grid-column:auto;padding:8px 14px}
 .dps-pastille.lien{background:#e6f0ff;color:#2a5caa;font-weight:800}
 .badge-lien{display:inline-block;margin-top:3px;background:#e6f0ff;color:#2a5caa;border-radius:999px;padding:1px 7px;font:700 10.5px system-ui,sans-serif;white-space:nowrap}
+/* Demande seule + action à droite */
+.dps-focus{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start}
+.dps-focus .dps-cartes.un{grid-template-columns:1fr}
+.dps-focus-d{position:sticky;top:12px;background:var(--panel);border:1px solid var(--border);border-left:5px solid #e0a800;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 40px);overflow-y:auto}
+.dps-focus-d h3{margin:0;font:800 16px "Montserrat",system-ui,sans-serif}
+.dps-voir-site{margin-left:auto;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 12px;font:700 12.5px system-ui,sans-serif;cursor:pointer}
+@media (max-width:860px){.dps-focus{grid-template-columns:1fr}.dps-focus-d{position:static;max-height:none}}
+.dps-focus-d .dps-action-haut{flex-direction:column}.dps-focus-d .dps-action-btns{flex-wrap:wrap}

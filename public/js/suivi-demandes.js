@@ -27,7 +27,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
-import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite } from "./suivi-demandes-sites.js";
+import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro } from "./demandes-sharepoint.js";
@@ -204,14 +204,14 @@ function injecterMesActions(container) {
   bloc.innerHTML = `${retours.length ? `<h3>💬 Retours sur mes actions <small>${retours.length} nouveau${retours.length > 1 ? "x" : ""}</small></h3>
     <div class="dps-mes-actions-liste">${retours.map(l => `
       <article class="dps-ma" data-id="${esc(l.id)}">
-        <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b><button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}">Voir la demande →</button></div>
+        <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b><button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}" data-ma-id="${esc(l.id)}">Ouvrir la demande →</button></div>
         <p class="dps-ma-descr">${esc(l.descr)}</p>
         ${blocRetourHTML(l, { perms, uid })}
       </article>`).join("")}</div>` : ""}
     ${mes.length ? `<h3>📌 Mes actions <small>${mes.length} à faire</small></h3>
     <div class="dps-mes-actions-liste">${mes.map(l => `
       <article class="dps-ma" data-id="${esc(l.id)}">
-        <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}<button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}">Voir la demande →</button></div>
+        <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}<button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}" data-ma-id="${esc(l.id)}">Ouvrir la demande →</button></div>
         <p class="dps-ma-descr">${esc(l.descr)}</p>
         ${blocActionHTML(l, { perms: { ...perms, peutTraiter: false }, uid, utilisateurs })}
       </article>`).join("")}</div>` : ""}`;
@@ -219,7 +219,7 @@ function injecterMesActions(container) {
   cible.append(bloc);
   brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: identite().nom, utilisateurs, uid });
   bloc.querySelectorAll("[data-ma-site]").forEach(b => b.addEventListener("click", () => {
-    ouvrirSite(b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
+    ouvrirDemandeSeule(b.dataset.maId, b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; ui.retourActions = true; render(container);
     container.scrollIntoView({ block: "start" });
   }));
 }
@@ -358,6 +358,7 @@ function renderVue(container) {
       uid: identite().uid || null,
       favLectureSeule: !!mountedUser?.postePartage,
       rafraichir: () => render(container),
+      quitterFocus: ui.retourActions ? () => { ui.retourActions = false; ui.vue = "actions"; render(container); } : null,
       utilisateurs,
       apres: () => { try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); } },
     });
@@ -414,7 +415,7 @@ function toggleVueHTML() {
 function attacherToggleVue(container) {
   container.querySelectorAll("[data-vue]").forEach(btn => {
     btn.addEventListener("click", () => {
-      ui.vue = btn.dataset.vue; ui.vueChoisie = true;
+      ui.vue = btn.dataset.vue; ui.vueChoisie = true; ui.retourActions = false;
       if (ui.vue === "stats") ui.moisOuvert = null;
       render(container);
     });
