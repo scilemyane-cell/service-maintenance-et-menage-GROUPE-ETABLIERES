@@ -42,7 +42,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       <label>Type<input name="type" list="ndm-types" placeholder="ex. Plomberie"><datalist id="ndm-types">${types.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
       <label>Urgence<select name="urgence">${URGENCES.map(u => `<option>${u}</option>`).join("")}</select></label>
     </div>
-    <label>Descriptif<textarea name="descriptif" rows="3" required placeholder="Ce qui ne va pas, où, depuis quand…"></textarea><button type="button" class="dps-ia dps-ia-mini" data-ndm-ia>✨ Mettre au propre</button></label>
+    <label>Descriptif<textarea spellcheck="true" lang="fr" name="descriptif" rows="3" required placeholder="Ce qui ne va pas, où, depuis quand…"></textarea><button type="button" class="dps-ia dps-ia-mini" data-ndm-ia>✨ Mettre au propre</button></label>
     <div class="ndm-2">
       <label>Demandeur<input name="demandeur" value="${esc(utilisateur)}"></label>
       <label>Logement occupé<select name="logementOccupe"><option value="">—</option><option>OUI</option><option>NON</option></select></label>

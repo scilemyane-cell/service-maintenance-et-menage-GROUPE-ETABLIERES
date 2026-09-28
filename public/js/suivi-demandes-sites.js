@@ -124,7 +124,7 @@ function filHTML(l) {
 const btnIA = () => `<button type="button" class="dps-ia dps-ia-mini" data-ia-champ title="L'IA corrige et met au propre, sans changer le sens">✨ Mettre au propre</button>`;
 function formReponseHTML(l, { avecFait }) {
   return `<details class="dps-repondre"><summary>💬 Répondre</summary>
-    <div class="dps-repondre-champs"><textarea data-rep-texte data-ia-cible rows="2" placeholder="Ta réponse (question, info, avancement…)"></textarea>${btnIA()}
+    <div class="dps-repondre-champs"><textarea spellcheck="true" lang="fr" data-rep-texte data-ia-cible rows="2" placeholder="Ta réponse (question, info, avancement…)"></textarea>${btnIA()}
       <div class="dps-repondre-btns"><button type="button" class="dps-rep-envoyer" data-rep-envoyer="${esc(l.id)}">📨 Envoyer</button>${avecFait ? `<button type="button" class="dps-action-fait" data-rep-fait="${esc(l.id)}">✓ Envoyer et marquer fait</button>` : ""}</div></div></details>`;
 }
 export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = false }) {
@@ -147,7 +147,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
       ${peutAttribuer || estAuteur ? `<div class="dps-action-champs dps-action-edit" hidden>
         <label>Pour<select data-edit-pour>${utilisateurs.map(u => `<option value="${esc(u.uid)}" ${u.uid === l.actionPour ? "selected" : ""}>${esc(u.nom || u.email)}</option>`).join("")}${utilisateurs.some(u => u.uid === l.actionPour) ? "" : `<option value="${esc(l.actionPour)}" selected>${esc(l.actionPourNom || "?")}</option>`}</select></label>
         <label>Avant le<input type="date" data-edit-ech value="${esc(l.actionEcheance || "")}"></label>
-        <label class="large">Action à faire<input data-edit-texte data-ia-cible value="${esc(l.actionTexte || "")}">${btnIA()}</label>
+        <label class="large">Action à faire<input spellcheck="true" lang="fr" data-edit-texte data-ia-cible value="${esc(l.actionTexte || "")}">${btnIA()}</label>
         <button type="button" class="dps-action-ok" data-act-enregistrer="${esc(l.id)}">💾 Enregistrer la modification</button>
       </div>` : ""}
       ${filHTML(l)}
@@ -160,7 +160,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
     <div class="dps-action-champs">
       <label>Pour<select data-act-pour><option value="">— choisir —</option>${utilisateurs.map(u => `<option value="${esc(u.uid)}">${esc(u.nom || u.email)}</option>`).join("")}</select></label>
       <label>Avant le<input type="date" data-act-ech></label>
-      <label class="large">Action à faire<input data-act-texte data-ia-cible placeholder="ex. Commander le mitigeur, rappeler le fournisseur…">${btnIA()}</label>
+      <label class="large">Action à faire<input spellcheck="true" lang="fr" data-act-texte data-ia-cible placeholder="ex. Commander le mitigeur, rappeler le fournisseur…">${btnIA()}</label>
       <div class="large">${phrasesHTML("actions", perms.isEditor)}</div>
       <button type="button" class="dps-action-ok" data-act-attribuer="${esc(l.id)}">📌 Attribuer</button>
     </div></details>`;
@@ -578,7 +578,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
         <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
         <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
-        <label class="dps-com">Commentaire<textarea data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech && l.commentaireTechPar ? `<small class="dps-com-auteur">✍️ ${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}</small>` : ""}${phrasesHTML("commentaires", perms.isEditor)}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
+        <label class="dps-com">Commentaire<textarea spellcheck="true" lang="fr" data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech && l.commentaireTechPar ? `<small class="dps-com-auteur">✍️ ${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}</small>` : ""}${phrasesHTML("commentaires", perms.isEditor)}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
       </div>
       <div class="dps-actions">
         ${!TRAITE(l.statut) && val(l, "statut") !== "Réalisé" ? `<button type="button" class="dps-realise-prep" data-dps-realise>${perms.isEditor ? "✓ Réalisé aujourd'hui" : "✓ Intervention terminée"}</button>` : ""}

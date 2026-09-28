@@ -134,7 +134,36 @@ ${f.motifAppelN1 ? `Motif de l'appel : ${f.motifAppelN1}\n` : ""}Décision / con
 
 // Commentaire intervenant d'une demande (Suivi des demandes) : met au propre
 // les notes du technicien, sans rien inventer.
+// Correction orthographe / grammaire GRATUITE et rapide (LanguageTool,
+// serveurs européens, sans compte) : corrige les fautes sans changer le
+// sens ni reformuler. Utilisée en priorité pour les commentaires, actions et
+// réponses ; l'IA Gemini ne sert plus qu'en secours.
+export async function corrigerOrthographe(texte) {
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch("https://api.languagetool.org/v2/check", {
+      method: "POST", signal: ctrl.signal,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ text: texte, language: "fr", level: "picky" }),
+    });
+    if (!res.ok) throw new Error(`LanguageTool ${res.status}`);
+    const { matches = [] } = await res.json();
+    let out = texte;
+    // On applique la première suggestion de chaque faute, de la fin vers le début.
+    [...matches].sort((a, b) => b.offset - a.offset).forEach(m => {
+      const r = m.replacements?.[0]?.value;
+      if (r == null) return;
+      out = out.slice(0, m.offset) + r + out.slice(m.offset + m.length);
+    });
+    out = out.replace(/\s+([,.])/g, "$1").replace(/^\s*(\p{Ll})/u, (x, c) => c.toUpperCase()).trim();
+    if (out && !/[.!?…]$/.test(out)) out += ".";
+    return out;
+  } finally { clearTimeout(t); }
+}
+
 export async function redigerCommentaireDemande(f) {
+  try { return await corrigerOrthographe(f.notes); }
+  catch (e) { console.warn("Correcteur indisponible, repli sur l'IA Gemini :", e); }
   return genererTexte(`Corrige et reformule légèrement le texte ci-dessous, écrit dans le champ « commentaire » d'une demande d'intervention (service maintenance, Groupe Établières).
 RÈGLE ABSOLUE : garde EXACTEMENT le sens et la nature du texte.
 - Si c'est une question ou un message adressé à quelqu'un (ex. « Bonjour Julie, as-tu fait… ? »), rends une question / un message, avec le même destinataire et la même signature. Ne le transforme JAMAIS en constat ou en action réalisée.
