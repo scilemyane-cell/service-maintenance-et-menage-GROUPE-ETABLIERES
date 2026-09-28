@@ -108,10 +108,19 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
   const vus = {}; fichier.forEach(f => { vus[f.numero] = (vus[f.numero] || 0) + 1; });
   const appVus = {}; (demandesApp || []).forEach(d => { appVus[d.numero] = (appVus[d.numero] || 0) + 1; });
   const nouvelles = [], majs = [];
+  // N° en double (le même N° utilisé pour deux demandes différentes dans le
+  // fichier) : on rapproche alors par N° + début du descriptif, sinon par
+  // N° + date de demande.
+  const empreinte = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const parCle = new Map(), parNumDate = new Map();
+  (demandesApp || []).forEach(d => { parCle.set(`${d.numero}|${empreinte(d)}`, d); const k = `${d.numero}|${d.dateDemande || ""}`; parNumDate.set(k, parNumDate.has(k) ? null : d); });
+  const dejaPris = new Set();
   for (const f of fichier) {
-    const a = parNumero.get(f.numero);
-    if (!a) { nouvelles.push(f); continue; }
-    if (vus[f.numero] > 1 || appVus[f.numero] > 1) continue; // N° en double dans le fichier : ambigu, on ne touche pas
+    const ambigu = vus[f.numero] > 1 || appVus[f.numero] > 1;
+    const a = !ambigu ? parNumero.get(f.numero) : (parCle.get(`${f.numero}|${empreinte(f)}`) || parNumDate.get(`${f.numero}|${f.dateDemande || ""}`) || null);
+    if (!a) { if (!ambigu || !(demandesApp || []).some(d => d.numero === f.numero && empreinte(d) === empreinte(f))) nouvelles.push(f); continue; }
+    if (dejaPris.has(a.id)) continue; // même demande de l'appli déjà rapprochée
+    dejaPris.add(a.id);
     const diff = {};
     if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
     const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
