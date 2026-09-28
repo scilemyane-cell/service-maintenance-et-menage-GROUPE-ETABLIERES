@@ -29,6 +29,7 @@ import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
+import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
@@ -339,10 +340,12 @@ function renderVue(container) {
   if (vueTechSeule() && ui.vue !== "actions") ui.vue = "sites";
   // Onglet « 📌 Mes actions » : actions à faire + retours sur mes actions.
   if (ui.vue === "actions") {
+    const saisies = capturerSaisies(container);
     container.innerHTML = `<div class="stack">${toggleVueHTML()}</div>`;
     attacherToggleVue(container);
     if (state.demandes === null) { container.querySelector(".stack").insertAdjacentHTML("beforeend", `<div class="hint">Chargement…</div>`); return; }
     try { injecterMesActions(container); } catch (e) { console.error("Mes actions :", e); }
+    restaurerSaisies(container, saisies);
     return;
   }
   if (ui.vue === "tableau") return renderTableau(container);

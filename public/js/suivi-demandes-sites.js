@@ -3,6 +3,7 @@
 // voit ses demandes en cartes, et on les traite en un geste (statut, date
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
 import { esc } from "./astreinte-logic.js";
+import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAffectationsSites, saveAffectationSite } from "./affectations-sites-data.js";
@@ -301,6 +302,7 @@ function badgeAge(j) {
 }
 
 export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null }) {
+  const saisies = capturerSaisies(container);
   suivreFavoris(uid);
   suivreAffectations();
   suivrePhrases();
@@ -457,6 +459,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" }); }));
     brancherValidation();
     brancherNouvelle();
+    restaurerSaisies(container, saisies);
     apres?.();
     return;
   }
@@ -535,6 +538,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   brancherValidation();
   brancherActions(container, { lignes, maj, utilisateur, utilisateurs, uid });
   brancherNouvelle();
+  restaurerSaisies(container, saisies);
   apres?.();
   container.querySelectorAll("[data-affect]").forEach(b => b.addEventListener("click", async () => {
     const actuels = techsDuSite(st.site), id = b.dataset.affect;
