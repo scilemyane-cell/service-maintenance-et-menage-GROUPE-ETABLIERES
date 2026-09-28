@@ -141,16 +141,23 @@ export async function importerDemandes(lignes) {
 // Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
 // Demandes Urgentes / Critiques encore ouvertes (bandeau d'accueil).
 export function watchUrgencesOuvertes(callback) {
-  return onSnapshot(query(collection(db, "demandes"), where("urgence", "in", ["Urgent", "Critique"])), (snap) => {
-    const list = [];
-    snap.forEach((d) => {
-      const x = d.data();
-      if (x.lieeA || ["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut)) return;
+  // Urgence de la demande, ou urgence requalifiée par un superviseur (urgenceCorrigee).
+  const parId = { a: new Map(), b: new Map() };
+  const emettre = () => {
+    const tout = new Map([...parId.a, ...parId.b]), list = [];
+    tout.forEach((x, id) => {
+      const urg = x.urgenceCorrigee || x.urgence;
+      if (!["Urgent", "Critique"].includes(urg) || x.lieeA || ["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut)) return;
       const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
-      list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgence, dateDemande: x.dateDemande, importeMs: t });
+      list.push({ id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: urg, dateDemande: x.dateDemande, importeMs: t });
     });
     callback(list);
-  }, (err) => { console.error("watchUrgencesOuvertes:", err); callback([]); });
+  };
+  const ecoute = (champ, cible) => onSnapshot(query(collection(db, "demandes"), where(champ, "in", ["Urgent", "Critique"])), (snap) => {
+    cible.clear(); snap.forEach((d) => cible.set(d.id, d.data())); emettre();
+  }, (err) => { console.error("watchUrgencesOuvertes:", err); emettre(); });
+  const u1 = ecoute("urgence", parId.a), u2 = ecoute("urgenceCorrigee", parId.b);
+  return () => { u1(); u2(); };
 }
 // Demandes déclarées réalisées par les techniciens, en attente de validation.
 export function watchDemandesAValider(callback) {

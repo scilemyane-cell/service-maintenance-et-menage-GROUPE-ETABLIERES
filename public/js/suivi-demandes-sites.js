@@ -569,6 +569,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       <p class="dps-descr">${esc(l.descr) || "<i>Sans descriptif</i>"}</p>
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
+      ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
+        : l.urgenceCorrigee ? `<div class="dps-urg-edit"><small>Urgence requalifiée (demandée « ${esc(l.urgenceDemandee)} »)</small></div>` : ""}
       ${lieesHTML(l)}${suggestionHTML(l)}
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
@@ -675,6 +677,15 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   container.querySelectorAll("[data-mail]").forEach(b => b.addEventListener("click", async () => {
     const { ouvrirEnvoiMail } = await import("./demandes-mail.js");
     ouvrirEnvoiMail({ ligne: lignes.find(x => x.id === b.dataset.mail), utilisateur, peutMemoriser: perms.isEditor, maj });
+  }));
+  container.querySelectorAll("[data-urgence]").forEach(sel => sel.addEventListener("change", async () => {
+    const l = lignes.find(x => x.id === sel.dataset.urgence), v = sel.value;
+    const champs = v === l.urgenceDemandee ? { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" } : { urgenceCorrigee: v, urgenceCorrigeePar: utilisateur, urgenceCorrigeeLe: aujourdhui() };
+    sel.disabled = true;
+    try { await maj(l.id, champs); window.toast?.(`Urgence ${v === l.urgenceDemandee ? "remise comme demandée" : `requalifiée : ${v}`}`); } catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; }
+  }));
+  container.querySelectorAll("[data-urgence-reset]").forEach(b => b.addEventListener("click", async () => {
+    try { await maj(b.dataset.urgenceReset, { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" }); } catch (e) { alert("Échec : " + (e?.message || e)); }
   }));
   container.querySelectorAll("[data-lier-direct]").forEach(b => b.addEventListener("click", async () => {
     const [idP, idD] = b.dataset.lierDirect.split("|");
