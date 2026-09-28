@@ -347,6 +347,8 @@ function badgeAge(j) {
 
 export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null, quitterFocus = null }) {
   const saisies = capturerSaisies(container);
+  // Préchargement de l'IA dès qu'on commence à écrire (✨ plus rapide ensuite).
+  if (!container.__iaPrechargee) { container.__iaPrechargee = true; container.addEventListener("focusin", (e) => { if (e.target.matches("textarea, [data-act-texte], [data-edit-texte]") && !window.__iaPrete) { window.__iaPrete = true; import("./ia.js").then(m => m.prechargerIA()).catch(() => {}); } }); }
   suivreFavoris(uid);
   suivreAffectations();
   suivrePhrases();
