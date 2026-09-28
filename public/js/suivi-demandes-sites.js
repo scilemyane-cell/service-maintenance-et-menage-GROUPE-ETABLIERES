@@ -589,7 +589,10 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${(() => {
         const liees = lieesDe(l.id);
         const candidats = tousDuSite.filter(x => x.id !== l.id && !x.lieeA && !lieesDe(x.id).length && !TRAITE(x.statut));
-        return `${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
+        const mails = Array.isArray(l.mailsEnvoyes) ? l.mailsEnvoyes : [];
+        return `${mails.length ? `<div class="dps-mails">${mails.slice(-3).map(m => `<span>📧 Mail à <b>${esc(m.a)}</b> le ${fr(m.le)}${m.par ? ` par ${esc(m.par)}` : ""}</span>`).join("")}</div>` : ""}
+        ${perms.peutTraiter ? `<button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail (gestionnaire / artisan)</button>` : ""}
+        ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
           <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}`;
       })()}
@@ -666,6 +669,10 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const champs = { lieeA: principale.id, lieeANumero: principale.n };
     CHAMPS_PROPAGES.forEach(k => { if (principale[k]) champs[k] = principale[k]; });
     try { await maj(idDoublon, champs); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
+  container.querySelectorAll("[data-mail]").forEach(b => b.addEventListener("click", async () => {
+    const { ouvrirEnvoiMail } = await import("./demandes-mail.js");
+    ouvrirEnvoiMail({ ligne: lignes.find(x => x.id === b.dataset.mail), utilisateur, peutMemoriser: perms.isEditor, maj });
   }));
   container.querySelectorAll("[data-lier-direct]").forEach(b => b.addEventListener("click", async () => {
     const [idP, idD] = b.dataset.lierDirect.split("|");
