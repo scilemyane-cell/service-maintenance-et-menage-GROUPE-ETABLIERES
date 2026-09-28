@@ -143,7 +143,7 @@ service cloud.firestore {
                  'actionParUid', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour']))
         // La personne à qui une action est attribuée peut la marquer faite.
         || (isSignedIn() && resource.data.get('actionPour', '') == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFaiteLe', 'actionFaitePar', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'dateMaj']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFaiteLe', 'actionFaitePar', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'actionParUid', 'dateMaj']))
         // L'auteur d'une action peut répondre / marquer le retour comme vu.
         || (isSignedIn() && resource.data.get('actionParUid', '') == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'dateMaj']));

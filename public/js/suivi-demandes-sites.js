@@ -140,7 +140,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
         <small>Attribuée${l.actionPar ? ` par ${esc(l.actionPar)}` : ""}${l.actionLe ? ` le ${fr(l.actionLe)}` : ""}</small></div>
       <div class="dps-action-btns">
         ${peutFaire ? `<button type="button" class="dps-action-fait" data-act-fait="${esc(l.id)}">✓ Fait</button>` : ""}
-        ${peutAttribuer || estAuteur ? `<button type="button" class="dps-action-suppr" data-act-modif title="Modifier l'action">✏️</button>` : ""}
+        ${peutAttribuer || estAuteur ? `<button type="button" class="dps-action-modif" data-act-modif title="Modifier ou transférer l'action à quelqu'un d'autre">✏️ Modifier / transférer</button>` : ""}
         ${peutAttribuer ? `<button type="button" class="dps-action-suppr" data-act-retirer="${esc(l.id)}" title="Retirer l'action">✕</button>` : ""}
       </div></div>
       ${peutAttribuer || estAuteur ? `<div class="dps-action-champs dps-action-edit" hidden>
@@ -155,7 +155,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
   }
   const faite = l.actionPour && l.actionFaiteLe ? `<div class="dps-action faite">✓ Action faite par ${esc(l.actionFaitePar || l.actionPourNom || "")} le ${fr(l.actionFaiteLe)}${l.actionTexte ? ` — ${esc(l.actionTexte)}` : ""}${filHTML(l)}</div>` : "";
   if (!peutAttribuer) return faite;
-  return `${faite}<details class="dps-action-form" ${ouvert ? "open" : ""}><summary>📌 Attribuer une action à quelqu'un</summary>
+  return `${faite}<details class="dps-action-form" ${ouvert ? "open" : ""}><summary>${l.actionPour ? "↪ Nouvelle action / réattribuer (l'historique est conservé)" : "📌 Attribuer une action à quelqu'un"}</summary>
     <div class="dps-action-champs">
       <label>Pour<select data-act-pour><option value="">— choisir —</option>${utilisateurs.map(u => `<option value="${esc(u.uid)}">${esc(u.nom || u.email)}</option>`).join("")}</select></label>
       <label>Avant le<input type="date" data-act-ech></label>
@@ -178,7 +178,9 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
   const ligne = (id) => lignes.find(x => x.id === id) || {};
   const ajoutFil = (id, texte, fait) => [...(Array.isArray(ligne(id).actionFil) ? ligne(id).actionFil : []), { de: utilisateur, texte, le: new Date().toISOString(), ...(fait ? { fait: true } : {}) }];
   // Qui doit être prévenu : l'auteur si c'est la personne chargée qui écrit, sinon la personne chargée.
-  const notif = (id) => ligne(id).actionParUid && ligne(id).actionParUid !== uid ? { actionReponseNonLue: true } : { actionNonLuPour: true };
+  // Auteur de l'action : son uid (ou, pour les actions plus anciennes, retrouvé par son nom).
+  const auteurUid = (id) => ligne(id).actionParUid || utilisateurs.find(u => (u.nom || u.email) === ligne(id).actionPar)?.uid || "";
+  const notif = (id) => { const a = auteurUid(id); return a && a !== uid ? { actionReponseNonLue: true, actionParUid: a } : { actionNonLuPour: true }; };
   container.querySelectorAll(".dps-action-form").forEach(f => brancherPhrases(f, () => f.querySelector("[data-act-texte]"), "remplace"));
   // ✨ IA sur les champs d'action / de réponse
   container.querySelectorAll("[data-ia-champ]").forEach(b => b.addEventListener("click", async (e) => {
@@ -191,7 +193,8 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     try {
       const { redigerCommentaireDemande } = await import("./ia.js");
       const t = (await redigerCommentaireDemande({ descr: l.descr, notes })).replace(/\*\*/g, "").trim();
-      if (t) champ.value = t;
+      const { proposerIA } = await import("./ia-suggestion.js");
+      if (t) proposerIA(b, t, (v) => { champ.value = v; champ.dispatchEvent(new Event("input", { bubbles: true })); });
     } catch (err) { console.error(err); alert("IA indisponible : " + (err?.message || err)); }
     finally { b.disabled = false; b.textContent = avant; }
   }));
@@ -214,7 +217,7 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
   container.querySelectorAll("[data-act-fait]").forEach(b => b.addEventListener("click", async () => {
     b.disabled = true; b.textContent = "⏳";
     const id = b.dataset.actFait;
-    try { await maj(id, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur, actionFil: ajoutFil(id, "Action faite", true), actionReponseNonLue: true }); }
+    try { await maj(id, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur, actionFil: ajoutFil(id, "Action faite", true), actionReponseNonLue: true, ...(auteurUid(id) ? { actionParUid: auteurUid(id) } : {}) }); }
     catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "✓ Fait"; }
   }));
   const envoyer = async (b, fait) => {
@@ -223,7 +226,7 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     if (!texte && !fait) { ta.focus(); return; }
     b.disabled = true;
     const champs = { actionFil: ajoutFil(id, texte || "Action faite", fait), ...notif(id) };
-    if (fait) Object.assign(champs, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur, actionReponseNonLue: true });
+    if (fait) Object.assign(champs, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur, actionReponseNonLue: true, ...(auteurUid(id) ? { actionParUid: auteurUid(id) } : {}) });
     try { await maj(id, champs); }
     catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
   };
@@ -245,7 +248,10 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     if (!texte) { alert("Décris l'action à faire."); f.querySelector("[data-act-texte]").focus(); return; }
     const u = utilisateurs.find(x => x.uid === pour);
     b.disabled = true; b.textContent = "⏳";
-    try { await maj(b.dataset.actAttribuer, { actionPour: pour, actionPourNom: u?.nom || u?.email || "", actionTexte: texte, actionEcheance: ech, actionPar: utilisateur, actionParUid: uid || "", actionLe: aujourdhui(), actionFaiteLe: "", actionFaitePar: "", actionFil: [], actionReponseNonLue: false, actionNonLuPour: false }); }
+    // L'historique des échanges est conservé : la nouvelle action s'ajoute à la suite.
+    const nomPour = u?.nom || u?.email || "";
+    const fil = ajoutFil(b.dataset.actAttribuer, `📌 Nouvelle action pour ${nomPour} : ${texte}`);
+    try { await maj(b.dataset.actAttribuer, { actionPour: pour, actionPourNom: nomPour, actionTexte: texte, actionEcheance: ech, actionPar: utilisateur, actionParUid: uid || "", actionLe: aujourdhui(), actionFaiteLe: "", actionFaitePar: "", actionFil: fil, actionReponseNonLue: false, actionNonLuPour: true }); }
     catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "📌 Attribuer"; }
   }));
 }
@@ -549,7 +555,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       try {
         const { redigerCommentaireDemande } = await import("./ia.js");
         const texte = (await redigerCommentaireDemande({ descr: l?.descr, local: l?.local, statut: val(l, "statut"), notes })).replace(/\*\*/g, "").trim();
-        if (texte) { ta.value = texte; poser(c, "commentaireTech", texte); }
+        const { proposerIA } = await import("./ia-suggestion.js");
+        if (texte) proposerIA(btn, texte, (v) => { ta.value = v; poser(c, "commentaireTech", v); });
       } catch (err) { console.error(err); alert("IA indisponible : " + (err?.message || err)); }
       finally { btn.disabled = false; btn.textContent = avant; }
     });

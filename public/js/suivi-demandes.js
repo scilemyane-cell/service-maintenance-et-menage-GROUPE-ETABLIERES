@@ -181,7 +181,8 @@ export function mountSuiviDemandesTab(container, user) {
 // Bloc « 📌 Mes actions » en tête de l'onglet, quelle que soit la vue.
 function nbMesActions() {
   const uid = identite().uid; if (!uid || !state.demandes) return 0;
-  return (state.demandes || []).filter(d => (d.actionPour === uid && !d.actionFaiteLe) || (d.actionParUid === uid && d.actionReponseNonLue)).length;
+  const monNom = identite().nom;
+  return (state.demandes || []).filter(d => (d.actionPour === uid && !d.actionFaiteLe) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
 }
 function injecterMesActions(container) {
   const uid = identite().uid;
@@ -189,7 +190,8 @@ function injecterMesActions(container) {
   const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe)
     .sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
   container.querySelector(".dps-mes-actions")?.remove();
-  const retours = toutesLesLignes().filter(l => l.actionParUid === uid && l.actionReponseNonLue);
+  const monNom = identite().nom;
+  const retours = toutesLesLignes().filter(l => l.actionReponseNonLue && (l.actionParUid === uid || (!l.actionParUid && l.actionPar === monNom)));
   if (!mes.length && !retours.length) {
     const vide = document.createElement("div"); vide.className = "dps-vide dps-mes-actions";
     vide.textContent = "✓ Aucune action à faire ni retour en attente.";

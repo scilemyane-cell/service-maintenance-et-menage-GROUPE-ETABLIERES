@@ -59,7 +59,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   fond.querySelector("[data-ndm-ia]").addEventListener("click", async (e) => {
     const t = f.descriptif.value.trim(); if (!t) { f.descriptif.focus(); return; }
     const b = e.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = "⏳ IA…";
-    try { const { redigerCommentaireDemande } = await import("./ia.js"); const r = (await redigerCommentaireDemande({ descr: "", notes: t })).replace(/\*\*/g, "").trim(); if (r) f.descriptif.value = r; }
+    try { const { redigerCommentaireDemande } = await import("./ia.js"); const r = (await redigerCommentaireDemande({ descr: "", notes: t })).replace(/\*\*/g, "").trim(); const { proposerIA } = await import("./ia-suggestion.js"); if (r) proposerIA(b, r, (v) => { f.descriptif.value = v; }); }
     catch (err) { alert("IA indisponible : " + (err?.message || err)); }
     finally { b.disabled = false; b.textContent = avant; }
   });

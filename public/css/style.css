@@ -2468,3 +2468,11 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .ndm-btns{display:flex;justify-content:flex-end;gap:8px}
 .ndm-etat{font-size:13px}
 @media (max-width:520px){.ndm-2{grid-template-columns:1fr}}
+/* Proposition IA à valider */
+.ia-sugg{margin-top:8px;border:1px solid #d9c8ff;background:#f7f3ff;border-radius:12px;padding:10px 12px;font-size:13.5px;color:var(--text)}
+.ia-sugg-tete{font:800 12px system-ui,sans-serif;color:#5b3fb8;margin-bottom:4px}
+.ia-sugg-texte{white-space:pre-wrap;line-height:1.45}
+.ia-sugg-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.ia-sugg .ia-ok{border:0;background:#5b3fb8;color:#fff;font-weight:800;border-radius:999px;padding:6px 14px;cursor:pointer}
+.ia-sugg .ia-non{border:1px solid var(--border);background:transparent;color:var(--text);font-weight:700;border-radius:999px;padding:6px 12px;cursor:pointer}
+.dps-action-modif{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:6px 10px;font:700 12px system-ui,sans-serif;cursor:pointer}
