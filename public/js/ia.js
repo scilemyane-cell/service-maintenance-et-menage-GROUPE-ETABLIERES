@@ -17,6 +17,7 @@ let modeleRapideQuiMarche = memo("etablieres-ia-modele-rapide");
 let modeleQuiMarche = memo0("etablieres-ia-modele"); // mémorisé sur l'appareil
 function memo0(cle) { try { return localStorage.getItem(cle) || null; } catch { return null; } }
 let modeleMemo = null;
+let sansThinking = memo0("etablieres-ia-sans-thinking") === "1";
 
 async function modele() {
   if (modeleMemo) return modeleMemo;
@@ -38,6 +39,7 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
   const dejaBon = rapide ? modeleRapideQuiMarche : modeleQuiMarche;
   const base = rapide ? [...MODELES_RAPIDES, ...MODELES] : MODELES;
   const ordre = dejaBon ? [dejaBon, ...base.filter(m => m !== dejaBon)] : [...new Set(base)];
+  if (sansThinking) ordre.__sansThinking = true;
   // 2 passages : un modèle momentanément surchargé (500/503/429) ou absent
   // (404) → on essaie le suivant ; on repasse une fois après une pause.
   for (let passage = 0; passage < 2; passage++) {
@@ -56,11 +58,12 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
       } catch (e) {
         derniereErreur = e;
         const msg = String(e?.message || e);
-        if (/thinking/i.test(msg) && !ordre.__sansThinking) { ordre.__sansThinking = true; k--; continue; } // réglage refusé par ce modèle : on réessaie sans
+        // Réglage « sans réflexion » refusé (400 / invalid argument) : on réessaie sans, et on s'en souvient.
+        if ((/thinking|\[400|invalid argument/i.test(msg)) && !ordre.__sansThinking) { ordre.__sansThinking = true; sansThinking = true; try { localStorage.setItem("etablieres-ia-sans-thinking", "1"); } catch {} k--; continue; }
         const conseille = msg.match(/use (?:models\/)?(gemini-[\w.\-]+)/i)?.[1];
         if (conseille && !ordre.includes(conseille)) ordre.splice(k + 1, 0, conseille);
         const passager = /\[(500|502|503|504|429)|high demand|overloaded|unavailable|RESOURCE_EXHAUSTED|try again/i.test(msg);
-        const absent = /not found|404|unsupported|is not supported/i.test(msg);
+        const absent = /not found|404|unsupported|is not supported|\[400|invalid argument/i.test(msg);
         if (!passager && !absent) { passage = 2; break; } // autre erreur : inutile d'insister
       }
     }
