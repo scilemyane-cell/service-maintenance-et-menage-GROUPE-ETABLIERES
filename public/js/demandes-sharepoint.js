@@ -113,19 +113,28 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
   // N° + date de demande.
   const empreinte = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
   const parCle = new Map(), parNumDate = new Map();
-  (demandesApp || []).forEach(d => { parCle.set(`${d.numero}|${empreinte(d)}`, d); const k = `${d.numero}|${d.dateDemande || ""}`; parNumDate.set(k, parNumDate.has(k) ? null : d); });
+  (demandesApp || []).forEach(d => { const c = `${d.numero}|${empreinte(d)}`; parCle.set(c, [...(parCle.get(c) || []), d]); const k = `${d.numero}|${d.dateDemande || ""}`; parNumDate.set(k, parNumDate.has(k) ? null : d); });
   const dejaPris = new Set();
   for (const f of fichier) {
     const ambigu = vus[f.numero] > 1 || appVus[f.numero] > 1;
-    const a = !ambigu ? parNumero.get(f.numero) : (parCle.get(`${f.numero}|${empreinte(f)}`) || parNumDate.get(`${f.numero}|${f.dateDemande || ""}`) || null);
-    if (!a) { if (!ambigu || !(demandesApp || []).some(d => d.numero === f.numero && empreinte(d) === empreinte(f))) nouvelles.push(f); continue; }
-    if (dejaPris.has(a.id)) continue; // même demande de l'appli déjà rapprochée
-    dejaPris.add(a.id);
-    const diff = {};
-    if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
-    const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
-    champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
-    if (Object.keys(diff).length) majs.push([a.id, diff]);
+    // Toutes les demandes de l'appli qui correspondent à cette ligne (normalement
+    // une seule ; plusieurs si elle a été importée deux fois par le passé).
+    const cibles = !ambigu ? (parNumero.get(f.numero) ? [parNumero.get(f.numero)] : [])
+      : (parCle.get(`${f.numero}|${empreinte(f)}`) || (parNumDate.get(`${f.numero}|${f.dateDemande || ""}`) ? [parNumDate.get(`${f.numero}|${f.dateDemande || ""}`)] : []));
+    if (!cibles.length) {
+      // N° en double sans correspondance sûre : si une demande de l'appli a le même N° et la même date, on ne crée rien (prudence).
+      if (ambigu && (demandesApp || []).some(d => d.numero === f.numero && (d.dateDemande || "") === (f.dateDemande || ""))) continue;
+      nouvelles.push(f); continue;
+    }
+    for (const a of cibles) {
+      if (dejaPris.has(a.id)) continue; // même demande de l'appli déjà rapprochée
+      dejaPris.add(a.id);
+      const diff = {};
+      if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
+      const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
+      champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+      if (Object.keys(diff).length) majs.push([a.id, diff]);
+    }
   }
   const ops = [...nouvelles.map(n => ["set", n]), ...majs.map(([id, d]) => ["update", id, d])];
   for (let i = 0; i < ops.length; i += 400) {
@@ -152,6 +161,31 @@ function texteAction(d) {
   return d.actionFaiteLe
     ? `✓ Action « ${d.actionTexte} » faite par ${d.actionFaitePar || d.actionPourNom || "?"} le ${frd(d.actionFaiteLe)}${rep}`
     : `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${frd(d.actionEcheance)})` : ""} : ${d.actionTexte}${rep}`;
+}
+
+// Demandes importées deux fois par le passé (même N° + même descriptif) :
+// on garde la plus complète et on RELIE les autres comme doublons (masquées,
+// non comptées, réversible avec « Délier »).
+export async function regrouperDoublonsImport(demandesApp) {
+  const empreinte = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const groupes = new Map();
+  (demandesApp || []).filter(d => !d.lieeA && !d.creeDansApp).forEach(d => { const c = `${d.numero}|${empreinte(d)}`; groupes.set(c, [...(groupes.get(c) || []), d]); });
+  const score = (d) => (d.dateMaj ? 100 : 0) + (d.actionPour ? 50 : 0) + ["local", "demandeur", "logementOccupe", "commentaireTech", "intervenant", "dateIntervention"].filter(k => d[k]).length;
+  const ops = [];
+  for (const liste of groupes.values()) {
+    if (liste.length < 2) continue;
+    const [garde, ...autres] = [...liste].sort((a, b) => score(b) - score(a));
+    const complement = {};
+    ["local", "demandeur", "logementOccupe", "type", "dateDemande"].forEach(k => { if (!garde[k]) { const v = autres.find(x => x[k])?.[k]; if (v) complement[k] = v; } });
+    if (Object.keys(complement).length) ops.push([garde.id, complement]);
+    autres.forEach(x => ops.push([x.id, { lieeA: garde.id, lieeANumero: garde.numero, doublonImport: true }]));
+  }
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(db);
+    ops.slice(i, i + 400).forEach(([id, d]) => batch.update(doc(db, "demandes", id), d));
+    await batch.commit();
+  }
+  return ops.filter(o => o[1].doublonImport).length;
 }
 
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {

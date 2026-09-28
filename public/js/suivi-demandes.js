@@ -30,7 +30,7 @@ import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
-import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro } from "./demandes-sharepoint.js";
+import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
@@ -564,7 +564,7 @@ function renderTableau(container) {
     <div class="stack">
       <div class="demandes-source-note">
         📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
-        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -667,6 +667,13 @@ function renderTableau(container) {
       const r = await recupererDepuisCopie(state.demandes || [], { onProgress: (t) => msg(esc(t)) });
       msg(`✓ ${r.nouvelles} nouvelle(s) demande(s), ${r.misesAJour} mise(s) à jour depuis le fichier (${r.total} lignes lues).`);
     } catch (err) { console.error("Récupération demandes :", err); msg(erreurSp(err)); }
+    finally { e.target.disabled = false; }
+  });
+  document.getElementById("demandes-doublons-import")?.addEventListener("click", async (e) => {
+    if (!confirm("Regrouper les demandes importées deux fois (même N° et même descriptif) ?\nLa plus complète est gardée, les autres sont reliées comme doublons (réversible avec « Délier »).")) return;
+    e.target.disabled = true;
+    try { const n = await regrouperDoublonsImport(state.demandes || []); msg(n ? `✓ ${n} doublon(s) d'import regroupé(s).` : "✓ Aucun doublon d'import trouvé."); }
+    catch (err) { console.error(err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
   document.getElementById("demandes-deposer-sp")?.addEventListener("click", async (e) => {
