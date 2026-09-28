@@ -2476,3 +2476,10 @@ html:not([data-theme="clair"]) .dps-realise-prep{color:#5fd35f}
 .ia-sugg .ia-ok{border:0;background:#5b3fb8;color:#fff;font-weight:800;border-radius:999px;padding:6px 14px;cursor:pointer}
 .ia-sugg .ia-non{border:1px solid var(--border);background:transparent;color:var(--text);font-weight:700;border-radius:999px;padding:6px 12px;cursor:pointer}
 .dps-action-modif{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:6px 10px;font:700 12px system-ui,sans-serif;cursor:pointer}
+/* Tri des demandes d'un site */
+.dps-tri-barre{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:10px 12px}
+.dps-tri-barre .dps-recherche{flex:1;min-width:220px}
+.dps-tri{display:flex;align-items:center;gap:8px;font:700 13px system-ui,sans-serif}
+.dps-tri select{padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);font:700 13.5px system-ui,sans-serif}
+.dps-groupe-titre{margin:6px 0 -2px;font:800 15px "Montserrat",system-ui,sans-serif;display:flex;gap:8px;align-items:baseline}
+.dps-groupe-titre small{background:var(--border);border-radius:999px;padding:1px 8px;font-size:11.5px}

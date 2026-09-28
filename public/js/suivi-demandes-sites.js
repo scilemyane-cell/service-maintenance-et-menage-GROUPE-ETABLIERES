@@ -272,7 +272,18 @@ function marquerSiteVu(uid, site) {
 }
 const estNouvelle = (l, depuis) => !!l.importeMs && l.importeMs > depuis && !TRAITE(l.statut) && l.statut !== A_VALIDER;
 
-const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {}, tech: "" };
+const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {}, tech: "", tri: "urgence", qSite: "" };
+// Tri des demandes d'un site (mémorisé sur l'appareil).
+try { st.tri = localStorage.getItem("etablieres-dps-tri") || "urgence"; } catch {}
+const ORDRE_AVANCEMENT = { "Non renseigné": 0, "Pris en compte": 1, "Intervenant sollicité": 2, "Demande de devis": 3, "Planifié": 4, "Commande en cours": 5, "Autre": 6 };
+const TRIS = {
+  urgence: ["🔴 Urgence", (a, b) => ((ORDRE_URG[a.urgence] ?? 9) - (ORDRE_URG[b.urgence] ?? 9)) || (a.date || "").localeCompare(b.date || "")],
+  recentes: ["📅 Plus récentes", (a, b) => (b.date || "").localeCompare(a.date || "") || String(b.n).localeCompare(String(a.n), "fr", { numeric: true })],
+  anciennes: ["📅 Plus anciennes", (a, b) => (a.date || "9999").localeCompare(b.date || "9999") || String(a.n).localeCompare(String(b.n), "fr", { numeric: true })],
+  local: ["🚪 N° logement / local", (a, b) => (!a.local) - (!b.local) || String(a.local).localeCompare(String(b.local), "fr", { numeric: true, sensitivity: "base" }) || (a.date || "").localeCompare(b.date || "")],
+  numero: ["# N° demande", (a, b) => String(a.n).localeCompare(String(b.n), "fr", { numeric: true })],
+  avancement: ["⏩ Avancement", (a, b) => ((ORDRE_AVANCEMENT[a.statut] ?? 9) - (ORDRE_AVANCEMENT[b.statut] ?? 9)) || ((ORDRE_URG[a.urgence] ?? 9) - (ORDRE_URG[b.urgence] ?? 9))],
+};
 // Brouillon par demande : rien n'est enregistré tant que « Enregistrer » /
 // « Valider » n'est pas cliqué (on garde la saisie même si l'écran se
 // rafraîchit à cause d'une autre modification).
@@ -456,7 +467,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   if (st.vuAvant == null || st.vuSite !== st.site) { const v = lireVu(uid); st.vuAvant = v.sites[st.site] || v.base; st.vuSite = st.site; marquerSiteVu(uid, st.site); }
   const duSite = lignes.filter(l => l.site === st.site);
   const enValidation = duSite.filter(l => EN_ATTENTE_VALID(l.statut));
-  const ouvertes = duSite.filter(l => A_TRAITER(l.statut)).sort((a, b) => ((ORDRE_URG[a.urgence] ?? 9) - (ORDRE_URG[b.urgence] ?? 9)) || (a.date || "").localeCompare(b.date || ""));
+  const qS = sa(st.qSite.trim());
+  const filtreQ = (l) => !qS || sa(`${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type}`).includes(qS);
+  const ouvertes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l)).sort((TRIS[st.tri] || TRIS.urgence)[1]);
   const traitees = duSite.filter(l => TRAITE(l.statut)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
   const carte = (l) => {
     const j = joursDepuis(l.date);
@@ -502,11 +515,23 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ${perms.isEditor && techs.length ? `<div class="dps-affect"><span>👷 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}</div>`
       : techsDuSite(st.site).length ? `<div class="dps-affect"><span>👷 ${esc(techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "))}</span></div>` : ""}
     ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Déclarées réalisées par les techniciens — vérifie et valide." : "Envoyées au superviseur pour validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
-    ${ouvertes.length ? `<div class="dps-cartes">${ouvertes.map(carte).join("")}</div>` : `<div class="dps-vide">✓ Aucune demande à traiter sur ce site.</div>`}
+    <div class="dps-tri-barre">
+      <label class="dps-recherche"><span>🔎</span><input id="dps-qsite" type="search" placeholder="Logement, local, N°, mot du descriptif…" value="${esc(st.qSite)}"></label>
+      <label class="dps-tri">Trier par<select id="dps-tri">${Object.entries(TRIS).map(([k, [lib]]) => `<option value="${k}" ${st.tri === k ? "selected" : ""}>${lib}</option>`).join("")}</select></label>
+    </div>
+    ${st.tri === "local" || st.tri === "avancement" ? (() => {
+      // Regroupement visuel par logement / local ou par étape d'avancement.
+      const cle = (l) => st.tri === "local" ? (l.local || "Sans local précisé") : (l.statut || "Non renseigné");
+      const groupes = []; ouvertes.forEach(l => { const k = cle(l); let g = groupes.find(x => x.k === k); if (!g) groupes.push(g = { k, l: [] }); g.l.push(l); });
+      return groupes.length ? groupes.map(g => `<h4 class="dps-groupe-titre">${st.tri === "local" ? "🚪" : "⏩"} ${esc(g.k)} <small>${g.l.length}</small></h4><div class="dps-cartes">${g.l.map(carte).join("")}</div>`).join("") : `<div class="dps-vide">Aucune demande${qS ? " ne correspond" : " à traiter sur ce site"}.</div>`;
+    })() : ouvertes.length ? `<div class="dps-cartes">${ouvertes.map(carte).join("")}</div>` : `<div class="dps-vide">${qS ? "Aucune demande ne correspond à la recherche." : "✓ Aucune demande à traiter sur ce site."}</div>`}
     ${traitees.length ? `<details class="dps-historique"><summary>Historique : ${traitees.length} demande${traitees.length > 1 ? "s" : ""} traitée${traitees.length > 1 ? "s" : ""}</summary><div class="dps-cartes">${traitees.slice(0, 40).map(carte).join("")}</div></details>` : ""}
   </div>`;
   onToggle();
-  container.querySelector("#dps-retour").addEventListener("click", () => { st.site = null; rerender(); });
+  container.querySelector("#dps-retour").addEventListener("click", () => { st.site = null; st.qSite = ""; rerender(); });
+  container.querySelector("#dps-tri")?.addEventListener("change", (e) => { st.tri = e.target.value; try { localStorage.setItem("etablieres-dps-tri", st.tri); } catch {} rerender(); });
+  let tq = null;
+  container.querySelector("#dps-qsite")?.addEventListener("input", (e) => { st.qSite = e.target.value; clearTimeout(tq); tq = setTimeout(() => { rerender(); const el = container.querySelector("#dps-qsite"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 300); });
   brancherValidation();
   brancherActions(container, { lignes, maj, utilisateur, utilisateurs, uid });
   brancherNouvelle();
