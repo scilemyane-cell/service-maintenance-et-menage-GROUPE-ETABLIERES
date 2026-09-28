@@ -9,9 +9,9 @@ const VERSION = "12.19.0"; // SDK récent : nécessaire pour les modèles Gemini
 // Google retire régulièrement des modèles : on essaie les plus récents d'abord,
 // et si Google en recommande un autre dans son message d'erreur, on l'essaie
 // aussitôt (mémorisé sur l'appareil).
-let MODELES = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.8-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+let MODELES = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
 // Modèles « lite » : bien plus rapides, suffisants pour corriger un texte court.
-const MODELES_RAPIDES = ["gemini-3.8-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"];
+const MODELES_RAPIDES = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-flash-latest"];
 const memo = (cle) => { try { return localStorage.getItem(cle) || null; } catch { return null; } };
 let modeleRapideQuiMarche = memo("etablieres-ia-modele-rapide");
 let modeleQuiMarche = memo0("etablieres-ia-modele"); // mémorisé sur l'appareil
@@ -80,7 +80,7 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
         if (!passager && !absent) { passage = 2; break; } // autre erreur : inutile d'insister
       }
     }
-    if (passage < 1) await new Promise(r => setTimeout(r, 2000));
+    if (passage < 1) await new Promise(r => setTimeout(r, 4000));
   }
   const msg = String(derniereErreur?.message || derniereErreur || "Réponse vide");
   let conseil = "";
