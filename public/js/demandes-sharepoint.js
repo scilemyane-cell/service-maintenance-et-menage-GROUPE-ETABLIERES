@@ -158,9 +158,11 @@ function texteAction(d) {
   const fil = Array.isArray(d.actionFil) ? d.actionFil : [];
   const reponse = [...fil].reverse().find(m => m.texte && !m.fait && !/^Action modifiée|^📌 Nouvelle action/.test(m.texte) && m.de !== d.actionPar);
   const rep = reponse ? `\n   ↳ ${reponse.de} : ${reponse.texte}` : "";
+  const qui = `${d.actionPar ? `de ${d.actionPar} ` : ""}pour ${d.actionPourNom || "?"}`;
+  const faitPar = d.actionFaitePar && d.actionFaitePar !== d.actionPourNom ? ` par ${d.actionFaitePar}` : "";
   return d.actionFaiteLe
-    ? `✓ Action « ${d.actionTexte} » faite par ${d.actionFaitePar || d.actionPourNom || "?"} le ${frd(d.actionFaiteLe)}${rep}`
-    : `📌 Action pour ${d.actionPourNom || "?"}${d.actionEcheance ? ` (avant le ${frd(d.actionEcheance)})` : ""} : ${d.actionTexte}${rep}`;
+    ? `✓ Action ${qui} : « ${d.actionTexte} » — faite le ${frd(d.actionFaiteLe)}${faitPar}${rep}`
+    : `📌 Action ${qui}${d.actionEcheance ? ` (avant le ${frd(d.actionEcheance)})` : ""} : ${d.actionTexte}${rep}`;
 }
 
 // Demandes importées deux fois par le passé (même N° + même descriptif) :
