@@ -36,6 +36,7 @@ export function prechargerIA() { modele().catch(() => {}); }
 export async function genererTexte(prompt, { rapide = false } = {}) {
   const { ai, getGenerativeModel } = await modele();
   let derniereErreur = null;
+  const essais = [];
   const dejaBon = rapide ? modeleRapideQuiMarche : modeleQuiMarche;
   const base = rapide ? [...MODELES_RAPIDES, ...MODELES] : MODELES;
   const ordre = dejaBon ? [dejaBon, ...base.filter(m => m !== dejaBon)] : [...new Set(base)];
@@ -48,7 +49,9 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
       try {
         // Sans « réflexion » (thinking) : réponse beaucoup plus rapide pour ces textes courts.
         const m = getGenerativeModel(ai, { model: nom, generationConfig: { maxOutputTokens: rapide ? 400 : 1200, temperature: 0.3, ...(ordre.__sansThinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }) } });
-        const r = await m.generateContent(prompt);
+        essais.push(nom);
+        // 15 s max par modèle : un modèle saturé ne fait pas attendre indéfiniment.
+        const r = await Promise.race([m.generateContent(prompt), new Promise((_, rej) => setTimeout(() => rej(new Error("[503] délai dépassé (15 s)")), 15000))]);
         const t = r.response.text();
         if (t && t.trim()) {
           if (rapide) { modeleRapideQuiMarche = nom; try { localStorage.setItem("etablieres-ia-modele-rapide", nom); } catch {} }
@@ -76,7 +79,7 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
   else if (/has not been used|not.*enabled|SERVICE_DISABLED/i.test(msg)) conseil = "Service pas encore actif (l'activation peut prendre quelques minutes) — réessaie dans 5 min.";
   else if (/PERMISSION_DENIED|403/i.test(msg)) conseil = "Accès refusé par Google — vérifie AI Logic → Paramètres (fournisseur « Gemini Developer API »).";
   else if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg)) conseil = "Le module IA n'a pas pu être chargé (réseau ou version).";
-  const e = new Error((conseil ? conseil + " " : "") + "Détail : " + msg.slice(0, 400));
+  const e = new Error((conseil ? conseil + " " : "") + `Modèles essayés : ${[...new Set(essais)].join(", ") || "aucun"}. Détail : ` + msg.slice(0, 300));
   throw e;
 }
 
