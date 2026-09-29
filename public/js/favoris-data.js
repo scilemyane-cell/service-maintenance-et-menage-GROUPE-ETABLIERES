@@ -23,3 +23,10 @@ export async function saveFavoris(uid, ids) {
 export async function saveFavorisDemandes(uid, ajout, retrait) {
   await setDoc(doc(db, "favoris-sites", uid), { demandesAjout: ajout, demandesRetrait: retrait, majLe: Date.now() }, { merge: true });
 }
+
+// Alertes de l'accueil marquées « Vu » (urgences, nouvelles demandes) :
+// enregistrées dans Firestore pour ne pas réapparaître (téléphone qui vide
+// son stockage, changement d'appareil…).
+export async function saveVues(uid, champ, ids) {
+  await setDoc(doc(db, "favoris-sites", uid), { [champ]: ids.slice(-400), majLe: Date.now() }, { merge: true });
+}

@@ -2569,3 +2569,8 @@ div.gh-urg-corps{cursor:default}
 .dps-urg-edit label{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--text)}
 .dps-urg-edit select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font:700 12.5px system-ui,sans-serif}
 .dps-urg-edit small button{border:0;background:transparent;color:#2a78d6;font-weight:700;cursor:pointer;text-decoration:underline}
+
+/* Bandeau nouvelles demandes (superviseurs) */
+.gh-nouv{background:linear-gradient(135deg,#0b5cad,#2a86e0);color:#fff;border-radius:18px;padding:12px 14px;margin-bottom:14px;box-shadow:0 8px 24px rgba(11,92,173,.28)}
+.gh-nouv-tete{display:flex;align-items:center;gap:10px;font-size:16px;margin-bottom:8px}
+.gh-nouv-tout{margin-left:auto;background:#fff;color:#0b5cad;border:0;border-radius:10px;padding:6px 10px;font:700 13px system-ui,sans-serif;cursor:pointer}

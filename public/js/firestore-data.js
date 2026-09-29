@@ -159,6 +159,22 @@ export function watchUrgencesOuvertes(callback) {
   const u1 = ecoute("urgence", parId.a), u2 = ecoute("urgenceCorrigee", parId.b);
   return () => { u1(); u2(); };
 }
+// Nouvelles demandes (importées ou créées dans l'appli depuis 7 jours) — bandeau superviseur.
+export function watchNouvellesDemandes(callback) {
+  const depuis = new Date(Date.now() - 7 * 86400000);
+  return onSnapshot(query(collection(db, "demandes"), where("importeLe", ">=", depuis)), (snap) => {
+    const list = [], limiteDate = Date.now() - 10 * 86400000;
+    snap.forEach((d) => {
+      const x = d.data();
+      if (x.lieeA || ["Réalisé", "Annulé"].includes(x.statut)) return;
+      if (x.dateDemande && new Date(x.dateDemande + "T00:00:00").getTime() < limiteDate) return; // historique ré-importé
+      const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
+      list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: t, creeDansApp: !!x.creeDansApp });
+    });
+    list.sort((a, b) => b.importeMs - a.importeMs);
+    callback(list);
+  }, (err) => { console.error("watchNouvellesDemandes:", err); callback([]); });
+}
 // Demandes déclarées réalisées par les techniciens, en attente de validation.
 export function watchDemandesAValider(callback) {
   return onSnapshot(query(collection(db, "demandes"), where("statut", "==", "Réalisé – à valider")), (snap) => {

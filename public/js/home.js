@@ -1,5 +1,5 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
-import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes } from "./firestore-data.js";
+import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes } from "./firestore-data.js";
 import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -7,7 +7,7 @@ import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAssociations, rangGroupe } from "./associations-data.js";
 import { initCarteSites } from "./site-map.js";
 import { watchCompteursTotal } from "./compteurs-data.js";
-import { watchFavoris, saveFavoris } from "./favoris-data.js";
+import { watchFavoris, saveFavoris, saveVues } from "./favoris-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
 import { watchSites as watchSitesMenage } from "./sites-data.js";
 import { watchFiches } from "./fiches-data.js";
@@ -94,6 +94,8 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
   urgences = [];
   unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; scheduleRender(); }));
+  nouvelles = []; uidVues = user.uid || null;
+  if (["super_admin", "admin", "n1"].includes(user.role)) unsubs.push(watchNouvellesDemandes((l) => { nouvelles = l; scheduleRender(); }));
   // Tâches ménage du mois en retard (agents ménage + encadrement)
   sitesMenage = null; fichesMenage = null;
   if (["menage", "mi_temps", "super_admin", "admin", "n1"].includes(user.role)) {
@@ -101,7 +103,10 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
     unsubs.push(watchFiches((f) => { fichesMenage = f; scheduleRender(); }));
   }
   favoris = []; favorisErreur = null;
-  if (user.uid) unsubs.push(watchFavoris(user.uid, (ids) => {
+  if (user.uid) unsubs.push(watchFavoris(user.uid, (ids, data) => {
+    // « Vu » enregistrés dans Firestore, fusionnés avec le cache local.
+    fusionnerVues(CLE_URG_VUES, data?.urgencesVues);
+    fusionnerVues(CLE_NOUV_VUES, data?.nouvellesVues);
     if (ids === null) {
       // Jamais enregistré : reprise des favoris de l'ancienne version
       // (navigateur), uniquement pour son propre compte.
@@ -301,14 +306,35 @@ function blocCarteHTML() {
 let modeEditionFavoris = false;
 // ---- Bandeau « urgences » (tout le monde) ----
 // Demandes Critiques encore ouvertes + Urgentes arrivées depuis 3 jours.
-// Chacun peut masquer une alerte (« Vu ») sur son appareil.
+// Chacun peut masquer une alerte (« Vu ») — mémorisé dans Firestore
+// (favoris-sites/{uid}), avec le navigateur comme cache.
 let urgences = [];
+let nouvelles = [];
+let uidVues = null;
 const CLE_URG_VUES = "etablieres-urgences-vues";
-const urgVues = () => { try { return new Set(JSON.parse(localStorage.getItem(CLE_URG_VUES) || "[]")); } catch { return new Set(); } };
+const CLE_NOUV_VUES = "etablieres-nouvelles-vues";
+const lireVues = (cle) => { try { return new Set(JSON.parse(localStorage.getItem(cle) || "[]")); } catch { return new Set(); } };
+function fusionnerVues(cle, distantes) {
+  if (!Array.isArray(distantes) || !distantes.length) return;
+  const v = lireVues(cle); distantes.forEach(id => v.add(id));
+  try { localStorage.setItem(cle, JSON.stringify([...v].slice(-400))); } catch {}
+  memVues[cle] = new Set([...(memVues[cle] || []), ...v]);
+}
+// Copie en mémoire : si le navigateur refuse le stockage, le « Vu » tient quand même.
+const memVues = {};
+function vues(cle) { return new Set([...lireVues(cle), ...(memVues[cle] || [])]); }
+function marquerVus(cle, champ, ids) {
+  const v = vues(cle); ids.forEach(id => v.add(id));
+  const liste = [...v].slice(-400);
+  memVues[cle] = new Set(liste);
+  try { localStorage.setItem(cle, JSON.stringify(liste)); } catch {}
+  if (uidVues) saveVues(uidVues, champ, liste).catch(e => console.error("saveVues:", e));
+  render();
+}
 function urgencesAAfficher() {
-  const vues = urgVues(), limite = Date.now() - 3 * 86400000;
+  const vuesU = vues(CLE_URG_VUES), limite = Date.now() - 3 * 86400000;
   const recente = (u) => (u.importeMs && u.importeMs >= limite) || (u.dateDemande && new Date(u.dateDemande + "T00:00:00").getTime() >= limite);
-  return urgences.filter(u => !vues.has(u.id) && (u.urgence === "Critique" || recente(u)))
+  return urgences.filter(u => !vuesU.has(u.id) && (u.urgence === "Critique" || recente(u)))
     .sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
 }
 function bandeauUrgencesHTML() {
@@ -326,6 +352,27 @@ function bandeauUrgencesHTML() {
         <button type="button" class="gh-urg-vu" data-urg-vu="${esc(u.id)}" title="Masquer cette alerte">✓ Vu</button>
       </div>`).join("")}
       ${l.length > 4 ? `<div class="gh-urg-plus">+ ${l.length - 4} autre${l.length - 4 > 1 ? "s" : ""} urgence${l.length - 4 > 1 ? "s" : ""}</div>` : ""}
+    </div></section>`;
+}
+
+// ---- Bandeau « nouvelles demandes » (superviseurs) ----
+function bandeauNouvellesHTML() {
+  const v = vues(CLE_NOUV_VUES);
+  const l = nouvelles.filter(n => !v.has(n.id)); if (!l.length) return "";
+  const cliquable = catsRef.some(c => c.id === "suivi-demandes");
+  return `<section class="gh-nouv">
+    <div class="gh-nouv-tete">🆕 <b>${l.length} nouvelle${l.length > 1 ? "s" : ""} demande${l.length > 1 ? "s" : ""}</b>
+      <button type="button" class="gh-nouv-tout" data-nouv-toutvu>✓ Tout vu</button></div>
+    <div class="gh-urg-liste">${l.slice(0, 5).map(n => `
+      <div class="gh-urg">
+        <${cliquable ? `button type="button" data-urg-ouvrir="${esc(n.id)}" data-urg-site="${esc(n.site || "")}" data-nouv-id="${esc(n.id)}"` : "div"} class="gh-urg-corps gh-nouv-corps">
+          ${["Urgent", "Critique"].includes(n.urgence) ? `<span class="gh-urg-badge">${n.urgence === "Critique" ? "CRITIQUE" : "URGENT"}</span>` : ""}
+          <span class="gh-urg-txt"><b>${esc(n.numero || "")} · ${esc(n.site || "")}${n.local ? ` · 📍 ${esc(n.local)}` : ""}</b><small>${esc((n.descriptif || "").slice(0, 110))}</small></span>
+          ${cliquable ? `<span class="gh-urg-go">Voir →</span>` : ""}
+        </${cliquable ? "button" : "div"}>
+        <button type="button" class="gh-urg-vu" data-nouv-vu="${esc(n.id)}" title="Masquer">✓ Vu</button>
+      </div>`).join("")}
+      ${l.length > 5 ? `<div class="gh-urg-plus">+ ${l.length - 5} autre${l.length - 5 > 1 ? "s" : ""}</div>` : ""}
     </div></section>`;
 }
 
@@ -520,6 +567,7 @@ function render() {
       </button>` : ""}
       ${transfertBannerHTML(next, confirmedRecord)}
       ${bandeauUrgencesHTML()}
+      ${bandeauNouvellesHTML()}
 
       <div class="gh-entete">
         <img src="img/logo-etablieres-transparent.png" alt="Groupe Établières" class="gh-logo">
@@ -599,14 +647,19 @@ function render() {
     onSelectRef("astreinte");
   });
   mountedContainer.querySelectorAll("[data-urg-ouvrir]").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.nouvId) marquerVus(CLE_NOUV_VUES, "nouvellesVues", [b.dataset.nouvId]);
     window.__suiviOuvrir = { id: b.dataset.urgOuvrir, site: b.dataset.urgSite };
     onSelectRef("suivi-demandes");
   }));
   mountedContainer.querySelectorAll("[data-urg-vu]").forEach(b => b.addEventListener("click", () => {
-    const v = urgVues(); v.add(b.dataset.urgVu);
-    try { localStorage.setItem(CLE_URG_VUES, JSON.stringify([...v].slice(-300))); } catch {}
-    render();
+    marquerVus(CLE_URG_VUES, "urgencesVues", [b.dataset.urgVu]);
   }));
+  mountedContainer.querySelectorAll("[data-nouv-vu]").forEach(b => b.addEventListener("click", () => {
+    marquerVus(CLE_NOUV_VUES, "nouvellesVues", [b.dataset.nouvVu]);
+  }));
+  mountedContainer.querySelector("[data-nouv-toutvu]")?.addEventListener("click", () => {
+    marquerVus(CLE_NOUV_VUES, "nouvellesVues", nouvelles.map(n => n.id));
+  });
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
     btn.addEventListener("click", () => {
       // Raccourcis Suivi des demandes : « valider » → bloc des demandes à valider, « actions » → onglet Mes actions.
