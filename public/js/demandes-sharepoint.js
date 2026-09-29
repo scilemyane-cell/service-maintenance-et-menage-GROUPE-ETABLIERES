@@ -151,18 +151,27 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
 
 // 2) Dépôt du fichier des mises à jour (demandes modifiées dans l'appli)
 // pour le flux Power Automate n° 2.
-// Action (en cours ou traitée) + dernière réponse, pour la colonne commentaire.
+// Action (en cours ou traitée) + historique des échanges, pour la colonne
+// commentaire : lisible dans Excel, du plus ancien au plus récent.
+const nomPropre = (n) => String(n || "").trim().replace(/\S+/g, (m) => m.charAt(0).toUpperCase() + m.slice(1));
 function texteAction(d) {
   if (!d.actionPour || !d.actionTexte) return "";
   const frd = (x) => (x ? String(x).slice(0, 10).split("-").reverse().join("/") : "");
-  const fil = Array.isArray(d.actionFil) ? d.actionFil : [];
-  const reponse = [...fil].reverse().find(m => m.texte && !m.fait && !/^Action modifiée|^📌 Nouvelle action/.test(m.texte) && m.de !== d.actionPar);
-  const rep = reponse ? `\n   ↳ ${reponse.de} : ${reponse.texte}` : "";
-  const qui = `${d.actionPar ? `de ${d.actionPar} ` : ""}pour ${d.actionPourNom || "?"}`;
-  const faitPar = d.actionFaitePar && d.actionFaitePar !== d.actionPourNom ? ` par ${d.actionFaitePar}` : "";
-  return d.actionFaiteLe
-    ? `✓ Action ${qui} : « ${d.actionTexte} » — faite le ${frd(d.actionFaiteLe)}${faitPar}${rep}`
-    : `📌 Action ${qui}${d.actionEcheance ? ` (avant le ${frd(d.actionEcheance)})` : ""} : ${d.actionTexte}${rep}`;
+  const jm = (x) => frd(x).slice(0, 5);
+  const fil = (Array.isArray(d.actionFil) ? d.actionFil : []).filter(m => m.texte && !/^Action modifiée/.test(m.texte));
+  // La ligne « Nouvelle action » de l'action en cours est déjà le titre : on ne la répète pas.
+  const iCourante = fil.map(m => /^📌 Nouvelle action/.test(m.texte)).lastIndexOf(true);
+  const histo = fil.filter((m, i) => i !== iCourante).map(m => {
+    const t = m.fait ? `✓ ${m.texte === "Action faite" ? "action faite" : m.texte}`
+      : /^📌 Nouvelle action pour /.test(m.texte) ? m.texte.replace(/^📌 Nouvelle action pour ([^:]+):/, (x, qui) => `action donnée à ${nomPropre(qui.trim())} :`)
+      : m.texte;
+    return `• ${jm(m.le)} ${nomPropre(m.de)} : ${t}`;
+  }).slice(-5);
+  const par = d.actionPar ? ` (donnée par ${nomPropre(d.actionPar)}${d.actionLe ? ` le ${jm(d.actionLe)}` : ""})` : "";
+  const tete = d.actionFaiteLe
+    ? `✓ ACTION FAITE — ${nomPropre(d.actionPourNom) || "?"}${par} : ${d.actionTexte} — faite le ${jm(d.actionFaiteLe)}${d.actionFaitePar && d.actionFaitePar !== d.actionPourNom ? ` par ${nomPropre(d.actionFaitePar)}` : ""}`
+    : `📌 ACTION EN COURS — ${nomPropre(d.actionPourNom) || "?"}${par}${d.actionEcheance ? `, avant le ${jm(d.actionEcheance)}` : ""} : ${d.actionTexte}`;
+  return tete + (histo.length ? `\nÉchanges :\n${histo.join("\n")}` : "");
 }
 
 // Demandes importées deux fois par le passé (même N° + même descriptif) :
@@ -207,7 +216,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
     dateStatut: fr(d.dateStatut),
-    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.urgenceCorrigee ? `⚠️ Urgence requalifiée : ${d.urgenceCorrigee}${d.urgenceCorrigeePar ? ` (${d.urgenceCorrigeePar})` : ""}` : "", d.commentaireTech ? d.commentaireTech + (d.commentaireTechPar ? ` (${d.commentaireTechPar}${d.commentaireTechLe ? ", " + fr(d.commentaireTechLe) : ""})` : "") : "", texteAction(d)].filter(Boolean).join("\n"),
+    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.urgenceCorrigee ? `⚠️ Urgence requalifiée : ${d.urgenceCorrigee}${d.urgenceCorrigeePar ? ` (${d.urgenceCorrigeePar})` : ""}` : "", d.commentaireTech ? `💬 ${d.commentaireTechPar ? `${nomPropre(d.commentaireTechPar)}${d.commentaireTechLe ? " (" + fr(d.commentaireTechLe).slice(0, 5) + ")" : ""} : ` : ""}${d.commentaireTech}` : "", texteAction(d)].filter(Boolean).join("\n"),
   }));
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
