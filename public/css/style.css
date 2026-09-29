@@ -2574,3 +2574,10 @@ div.gh-urg-corps{cursor:default}
 .gh-nouv{background:linear-gradient(135deg,#0b5cad,#2a86e0);color:#fff;border-radius:18px;padding:12px 14px;margin-bottom:14px;box-shadow:0 8px 24px rgba(11,92,173,.28)}
 .gh-nouv-tete{display:flex;align-items:center;gap:10px;font-size:16px;margin-bottom:8px}
 .gh-nouv-tout{margin-left:auto;background:#fff;color:#0b5cad;border:0;border-radius:10px;padding:6px 10px;font:700 13px system-ui,sans-serif;cursor:pointer}
+
+/* Impression récapitulatif site */
+.dps-imprimer{background:#fff;color:#222;border:1px solid #ccc;border-radius:10px;padding:7px 12px;font:700 13px system-ui,sans-serif;cursor:pointer}
+.ndm.imp-modal label.imp-ch{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;text-align:left;gap:8px;margin:6px 0;font-size:15px}
+.ndm.imp-modal .ndm-tete{margin-bottom:6px}
+.imp-modal .imp-ch input{width:20px;height:20px}
+.imp-modal select{margin-left:6px;padding:5px;border-radius:8px}

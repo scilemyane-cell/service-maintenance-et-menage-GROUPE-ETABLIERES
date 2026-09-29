@@ -3,6 +3,7 @@
 // voit ses demandes en cartes, et on les traite en un geste (statut, date
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
 import { esc } from "./astreinte-logic.js";
+import { ouvrirImpressionSite } from "./demandes-impression.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -633,6 +634,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     <div class="dps-site-entete">
       <button class="dps-retour" id="dps-retour">← 🏠 Tous les sites</button>
       ${perms.peutTraiter ? `<button type="button" class="dps-nouvelle petit" data-nouvelle-demande="${esc(st.site)}">➕ Nouvelle demande ici</button>` : ""}
+      <button type="button" class="dps-imprimer" id="dps-imprimer" title="Imprimer le récapitulatif des demandes du site">🖨 Imprimer</button>
       <div><h2>${esc(st.site)}</h2><p>${ouvertes.length} à traiter${enValidation.length ? ` · ${enValidation.length} à valider` : ""} · ${traitees.length} traitée${traitees.length > 1 ? "s" : ""}</p></div>
     </div>
     ${perms.isEditor && techs.length ? `<div class="dps-affect"><span>👷 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}</div>`
@@ -657,6 +659,10 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   });
   { const f = document.createElement("button"); f.type = "button"; f.id = "dps-retour-flottant"; f.className = "dps-retour-flottant"; f.textContent = st.focusId && quitterFocus ? "← 📌 Mes actions" : st.focusId ? "← Retour au site" : "← 🏠 Tous les sites"; (container.querySelector(".stack") || container).append(f); }
   container.querySelector("#dps-retour-flottant")?.addEventListener("click", () => { container.querySelector("#dps-retour")?.click(); window.scrollTo({ top: 0 }); });
+  container.querySelector("#dps-imprimer")?.addEventListener("click", () => ouvrirImpressionSite({
+    site: st.site, techs: techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "),
+    ouvertes: duSite.filter(l => A_TRAITER(l.statut)), enValidation, traitees,
+  }));
   container.querySelector("#dps-voir-site")?.addEventListener("click", () => { st.focusId = null; rerender(); });
   container.querySelector("#dps-tri")?.addEventListener("change", (e) => { st.tri = e.target.value; try { localStorage.setItem("etablieres-dps-tri", st.tri); } catch {} rerender(); });
   let tq = null;
