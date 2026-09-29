@@ -199,12 +199,14 @@ function injecterMesActions(container) {
   container.querySelector(".dps-mes-actions")?.remove();
   const monNom = identite().nom;
   const retours = toutesLesLignes().filter(l => l.actionReponseNonLue && (l.actionParUid === uid || (!l.actionParUid && l.actionPar === monNom)));
-  if (!mes.length && !retours.length) {
+  const perms = permsUtilisateur();
+  // Superviseur : toutes les actions en cours, regroupées par personne.
+  const equipeHTML = perms.isEditor ? actionsParPersonneHTML() : "";
+  if (!mes.length && !retours.length && !equipeHTML) {
     const vide = document.createElement("div"); vide.className = "dps-vide dps-mes-actions";
     vide.textContent = "✓ Aucune action à faire ni retour en attente.";
     (container.querySelector(".stack") || container).append(vide); return;
   }
-  const perms = permsUtilisateur();
   const bloc = document.createElement("section");
   bloc.className = "dps-mes-actions";
   bloc.innerHTML = `${retours.length ? `<h3>💬 Retours sur mes actions <small>${retours.length} nouveau${retours.length > 1 ? "x" : ""}</small></h3>
@@ -220,7 +222,8 @@ function injecterMesActions(container) {
         <div class="dps-ma-tete"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}<button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}" data-ma-id="${esc(l.id)}">Ouvrir la demande →</button></div>
         <p class="dps-ma-descr">${esc(l.descr)}</p>
         ${blocActionHTML(l, { perms: { ...perms, peutTraiter: false }, uid, utilisateurs })}
-      </article>`).join("")}</div>` : ""}`;
+      </article>`).join("")}</div>` : `<div class="dps-vide">✓ Aucune action à faire pour toi.</div>`}
+    ${equipeHTML}`;
   const cible = container.querySelector(".stack") || container;
   cible.append(bloc);
   brancherActions(bloc, { lignes: toutesLesLignes(), maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); }, utilisateur: identite().nom, utilisateurs, uid });
@@ -228,6 +231,33 @@ function injecterMesActions(container) {
     ouvrirDemandeSeule(b.dataset.maId, b.dataset.maSite); ui.vue = "sites"; ui.vueChoisie = true; ui.retourActions = true; render(container);
     container.scrollIntoView({ block: "start" });
   }));
+}
+
+// Vue superviseur : actions en cours de chaque personne (échéance dépassée en rouge).
+function actionsParPersonneHTML() {
+  const auj = new Date().toISOString().slice(0, 10);
+  const fr = (x) => (x ? String(x).slice(0, 10).split("-").reverse().join("/") : "");
+  const enCours = toutesLesLignes().filter(l => l.actionPour && l.actionTexte && !l.actionFaiteLe && !l.lieeA);
+  if (!enCours.length) return "";
+  const parPers = new Map();
+  enCours.forEach(l => { const k = l.actionPour; if (!parPers.has(k)) parPers.set(k, { nom: utilisateurs.find(u => u.uid === k)?.nom || l.actionPourNom || "?", l: [] }); parPers.get(k).l.push(l); });
+  const retard = (l) => l.actionEcheance && l.actionEcheance < auj;
+  const groupes = [...parPers.values()].sort((a, b) => b.l.length - a.l.length || String(a.nom).localeCompare(String(b.nom), "fr"));
+  const derniereReponse = (l) => [...(l.actionFil || [])].reverse().find(m => m.texte && !m.fait && !/^Action modifiée|^📌 Nouvelle action/.test(m.texte) && m.de !== l.actionPar);
+  return `<h3 class="dps-equipe-titre">👥 Actions en cours par personne <small>${enCours.length} au total</small></h3>
+  <div class="dps-equipe">${groupes.map(g => {
+    const nbRetard = g.l.filter(retard).length;
+    const tri = [...g.l].sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999") || (a.actionLe || "").localeCompare(b.actionLe || ""));
+    return `<details class="dps-eq-pers"><summary><b>${esc(g.nom)}</b><span class="dps-eq-nb">${g.l.length}</span>${nbRetard ? `<span class="dps-eq-retard">⏰ ${nbRetard} en retard</span>` : ""}</summary>
+      <div class="dps-eq-liste">${tri.map(l => { const r = derniereReponse(l); return `
+        <div class="dps-eq-item ${retard(l) ? "retard" : ""}">
+          <div class="dps-eq-haut"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
+            <button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}" data-ma-id="${esc(l.id)}">Ouvrir →</button></div>
+          <div class="dps-eq-action">📌 ${esc(l.actionTexte)}</div>
+          <small>Donnée${l.actionPar ? ` par ${esc(l.actionPar)}` : ""}${l.actionLe ? ` le ${fr(l.actionLe)}` : ""}${l.actionEcheance ? ` · <span class="${retard(l) ? "dps-eq-rouge" : ""}">échéance ${fr(l.actionEcheance)}</span>` : ""}</small>
+          ${r ? `<small class="dps-eq-rep">↳ ${esc(r.de)} : ${esc(r.texte)}</small>` : ""}
+        </div>`; }).join("")}</div></details>`;
+  }).join("")}</div>`;
 }
 
 let depotAutoTimer = null;
@@ -408,7 +438,7 @@ function renderVue(container) {
 
 function toggleVueHTML() {
   const n = nbMesActions();
-  const btnActions = `<button type="button" class="demandes-vue-btn ${ui.vue === "actions" ? "active" : ""}" data-vue="actions">📌 Mes actions${n ? ` <span class="vue-badge">${n}</span>` : ""}</button>`;
+  const btnActions = `<button type="button" class="demandes-vue-btn ${ui.vue === "actions" ? "active" : ""}" data-vue="actions">📌 ${permsUtilisateur().isEditor ? "Actions / équipe" : "Mes actions"}${n ? ` <span class="vue-badge">${n}</span>` : ""}</button>`;
   if (vueTechSeule()) return `
     <div class="demandes-vue-toggle">
       <button type="button" class="demandes-vue-btn ${ui.vue === "sites" ? "active" : ""}" data-vue="sites">🏠 Par site</button>

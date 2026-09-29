@@ -2584,3 +2584,19 @@ div.gh-urg-corps{cursor:default}
 
 .dps-mail-ligne{display:flex;gap:6px;flex-wrap:wrap}
 .dps-mail-ligne .dps-mail-btn{flex:0 0 auto}
+
+/* Actions par personne (superviseur) */
+.dps-equipe-titre{margin-top:18px}
+.dps-equipe{display:flex;flex-direction:column;gap:8px}
+.dps-eq-pers{background:var(--card,#fff);border:1px solid #d9e0ea;border-radius:14px;padding:4px 12px}
+.dps-eq-pers summary{display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;font-size:15px}
+.dps-eq-nb{background:#1b2a41;color:#fff;border-radius:999px;padding:1px 9px;font:800 12.5px system-ui,sans-serif}
+.dps-eq-retard{background:#ffe1e1;color:#b3121f;border-radius:999px;padding:1px 9px;font:800 12px system-ui,sans-serif}
+.dps-eq-liste{display:flex;flex-direction:column;gap:6px;padding-bottom:10px}
+.dps-eq-item{border-left:4px solid #e0a800;background:rgba(224,168,0,.07);border-radius:8px;padding:7px 10px;display:flex;flex-direction:column;gap:2px}
+.dps-eq-item.retard{border-left-color:#b3121f;background:rgba(179,18,31,.07)}
+.dps-eq-haut{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dps-eq-haut .dps-ma-voir{margin-left:auto}
+.dps-eq-action{font-weight:600}
+.dps-eq-rouge{color:#b3121f;font-weight:800}
+.dps-eq-rep{font-style:italic}
