@@ -13,12 +13,16 @@
 import { getGraphToken, getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, telechargerFichierDrive } from "./sharepoint-storage.js";
 import { db } from "./firebase-init.js";
-import { doc, getDoc, setDoc, collection, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, getDoc, getDocs, query, where, setDoc, collection, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const DOSSIER = "Demandes";
 const COPIE = "SG_Suivi_Demandes_GroupeEtablieres.xlsx";
 const FICHIER_MAJ = "mises-a-jour-demandes.json";
 const REF_SYNCHRO = doc(db, "config", "demandes-synchro");
+// Empreinte de chaque ligne du fichier au dernier import : la synchro auto
+// ne relit dans Firestore que les demandes dont la ligne a changé (quota).
+const REF_EMPREINTES = doc(db, "config", "demandes-empreintes");
+function hashCourt(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 
 const sa = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const txt = (v) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
@@ -103,7 +107,29 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
   const buf = await telechargerFichierDrive(`${DOSSIER}/${COPIE}`, token);
   if (!buf) throw new Error(`Copie introuvable : appsmm › ${DOSSIER} › ${COPIE}. Vérifie le flux Power Automate n° 1.`);
   const XLSX = await window.chargerLib("XLSX");
-  const fichier = await demandesDepuisClasseur(XLSX.read(buf, { type: "array" }), XLSX);
+  let fichier = await demandesDepuisClasseur(XLSX.read(buf, { type: "array" }), XLSX);
+  // Empreintes des lignes (clé = N° + début du descriptif + rang en cas de doublon exact).
+  const rangs = {}, cleLigne = (f) => { const c = `${f.numero}|${sa(f.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25)}`; rangs[c] = (rangs[c] || 0) + 1; return `${c}|${rangs[c]}`; };
+  const empreintesNouvelles = {}, clesLignes = fichier.map(f => cleLigne(f).replace(/[.\/#$\[\]]/g, "_"));
+  fichier.forEach((f, i) => { empreintesNouvelles[clesLignes[i]] = hashCourt(JSON.stringify(f)); });
+  if (demandesApp === null) {
+    // Mode économe : seules les lignes nouvelles / modifiées depuis le dernier import.
+    const anciennes = (await getDoc(REF_EMPREINTES).catch(() => null))?.data()?.e || null;
+    if (!anciennes) {
+      const snap = await getDocs(collection(db, "demandes"));
+      demandesApp = []; snap.forEach(d => demandesApp.push({ id: d.id, ...d.data() }));
+    } else {
+      const changees = new Set(fichier.filter((f, i) => anciennes[clesLignes[i]] !== empreintesNouvelles[clesLignes[i]]).map(f => f.numero));
+      if (!changees.size) { await setDoc(REF_SYNCHRO, { derniereLecture: Date.now() }, { merge: true }); return { nouvelles: 0, misesAJour: 0, total: fichier.length }; }
+      fichier = fichier.filter(f => changees.has(f.numero));
+      demandesApp = [];
+      const nums = [...changees];
+      for (let i = 0; i < nums.length; i += 30) {
+        const snap = await getDocs(query(collection(db, "demandes"), where("numero", "in", nums.slice(i, i + 30))));
+        snap.forEach(d => demandesApp.push({ id: d.id, ...d.data() }));
+      }
+    }
+  }
   const parNumero = new Map((demandesApp || []).map(d => [d.numero, d]));
   const vus = {}; fichier.forEach(f => { vus[f.numero] = (vus[f.numero] || 0) + 1; });
   const appVus = {}; (demandesApp || []).forEach(d => { appVus[d.numero] = (appVus[d.numero] || 0) + 1; });
@@ -146,6 +172,7 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
     await batch.commit();
   }
   await setDoc(REF_SYNCHRO, { derniereLecture: Date.now() }, { merge: true });
+  try { await setDoc(REF_EMPREINTES, { e: empreintesNouvelles, le: Date.now() }); } catch (e) { console.warn("Empreintes demandes :", e); }
   return { nouvelles: nouvelles.length, misesAJour: majs.length, total: fichier.length };
 }
 

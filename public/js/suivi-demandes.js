@@ -181,7 +181,9 @@ export function mountSuiviDemandesTab(container, user) {
   const ouvrir = window.__suiviOuvrir; window.__suiviOuvrir = null;
   if (ouvrir?.id) ouvrirDemandeSeule(ouvrir.id, ouvrir.site);
   render(container);
-  unsub = watchDemandes((liste) => { state.demandes = liste; render(container); });
+  // Techniciens : seulement les demandes utiles (ouvertes + récentes) pour économiser le quota.
+  const p = permsUtilisateur();
+  unsub = watchDemandes((liste) => { state.demandes = liste; render(container); }, { mode: p.isEditor ? "complet" : "actif" });
   if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });
 }
 

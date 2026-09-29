@@ -41,9 +41,8 @@ async function tour() {
     const meta = await metadonneesFichierDrive(CHEMIN_COPIE, token);
     const empreinte = meta?.file?.hashes?.quickXorHash || `${meta?.size}-${meta?.lastModifiedDateTime}`;
     if (meta && empreinte !== synchro.derniereEmpreinte && await prendreVerrou("verrouImport")) {
-      const snap = await getDocs(collection(db, "demandes"));
-      const liste = []; snap.forEach(d => liste.push({ id: d.id, ...d.data() }));
-      const r = await recupererDepuisCopie(liste, { interactif: false });
+      // null = mode économe (ne relit que les demandes dont la ligne a changé)
+      const r = await recupererDepuisCopie(null, { interactif: false });
       if (r) {
         const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
         await setDoc(REF, { derniereEmpreinte: empreinte, verrouImport: 0 }, { merge: true });
@@ -55,7 +54,7 @@ async function tour() {
     const dernierDepot = synchro.dernierDepot || 0;
     const modif = await getDocs(query(collection(db, "demandes"), where("dateMaj", ">", Timestamp.fromMillis(dernierDepot)), limit(1)));
     if (!modif.empty && await prendreVerrou("verrouDepot")) {
-      const recents = await getDocs(query(collection(db, "demandes"), where("dateMaj", ">=", Timestamp.fromMillis(Date.now() - 7 * 86400000))));
+      const recents = await getDocs(query(collection(db, "demandes"), where("dateMaj", ">=", Timestamp.fromMillis(Math.min(dernierDepot - 6 * 3600000, Date.now() - 36 * 3600000)))));
       const liste = []; recents.forEach(d => liste.push({ id: d.id, ...d.data() }));
       await deposerMisesAJour(liste, { interactif: false });
     }

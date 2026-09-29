@@ -114,12 +114,41 @@ export async function listerInterventionsCorbeille() {
 // Firestore qui font foi pour le suivi/traitement par les techniciens ;
 // le champ `numero` (ex. "SG-001") sert de clé pour retrouver la ligne
 // correspondante dans le fichier Excel au moment de la resynchronisation.
-export function watchDemandes(callback) {
-  return onSnapshot(collection(db, "demandes"), (snap) => {
-    const list = [];
-    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-    callback(list);
-  }, (err) => { console.error("watchDemandes:", err); callback([]); });
+// ---- Écoutes partagées ----
+// Quota gratuit Firestore (50 000 lectures / jour) : chaque nouvelle écoute
+// relit TOUS les documents de la requête. On garde donc une seule écoute par
+// requête pour toute la session (ouvrir / fermer une tuile ne relit rien) :
+// seuls les documents modifiés sont ensuite facturés.
+const PARTAGES = new Map();
+function ecoutePartagee(cle, demarrer, callback) {
+  let p = PARTAGES.get(cle);
+  if (!p) {
+    p = { abonnes: new Set(), valeur: undefined };
+    PARTAGES.set(cle, p);
+    demarrer((v) => { p.valeur = v; p.abonnes.forEach(cb => { try { cb(v); } catch (e) { console.error(e); } }); });
+  }
+  p.abonnes.add(callback);
+  if (p.valeur !== undefined) setTimeout(() => { if (p.abonnes.has(callback)) callback(p.valeur); }, 0);
+  return () => { p.abonnes.delete(callback); };
+}
+
+// mode "complet" : toutes les demandes (superviseurs : tableau, stats, synchro).
+// mode "actif" (techniciens) : demandes non clôturées + celles modifiées depuis
+// 45 jours (historique récent des sites) — beaucoup moins de lectures.
+export function watchDemandes(callback, { mode = "complet" } = {}) {
+  return ecoutePartagee(`demandes:${mode}`, (emettre) => {
+    if (mode !== "actif") {
+      onSnapshot(collection(db, "demandes"), (snap) => {
+        const list = []; snap.forEach((d) => list.push({ id: d.id, ...d.data() })); emettre(list);
+      }, (err) => { console.error("watchDemandes:", err); emettre([]); });
+      return;
+    }
+    const a = new Map(), b = new Map(); let pret = 0;
+    const envoyer = () => { if (pret < 2) return; const m = new Map([...b, ...a]); emettre([...m.entries()].map(([id, x]) => ({ id, ...x }))); };
+    const ecoute = (q, cible) => { let premier = true; onSnapshot(q, (snap) => { cible.clear(); snap.forEach(d => cible.set(d.id, d.data())); if (premier) { premier = false; pret++; } envoyer(); }, (err) => { console.error("watchDemandes (actif):", err); if (premier) { premier = false; pret++; } envoyer(); }); };
+    ecoute(query(collection(db, "demandes"), where("statut", "not-in", ["Réalisé", "Annulé"])), a);
+    ecoute(query(collection(db, "demandes"), where("dateMaj", ">=", new Date(Date.now() - 45 * 86400000))), b);
+  }, callback);
 }
 // Import initial (ou réimport) en masse depuis le fichier Excel — n'écrase
 // pas les demandes déjà présentes (identifiées par leur `numero`) pour ne
@@ -141,6 +170,9 @@ export async function importerDemandes(lignes) {
 // Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
 // Demandes Urgentes / Critiques encore ouvertes (bandeau d'accueil).
 export function watchUrgencesOuvertes(callback) {
+  return ecoutePartagee("urgences", (emettre) => watchUrgencesOuvertesBrut(emettre), callback);
+}
+function watchUrgencesOuvertesBrut(callback) {
   // Urgence de la demande, ou urgence requalifiée par un superviseur (urgenceCorrigee).
   const parId = { a: new Map(), b: new Map() };
   const emettre = () => {
@@ -161,6 +193,9 @@ export function watchUrgencesOuvertes(callback) {
 }
 // Nouvelles demandes (importées ou créées dans l'appli depuis 7 jours) — bandeau superviseur.
 export function watchNouvellesDemandes(callback) {
+  return ecoutePartagee("nouvelles", (emettre) => watchNouvellesDemandesBrut(emettre), callback);
+}
+function watchNouvellesDemandesBrut(callback) {
   const depuis = new Date(Date.now() - 7 * 86400000);
   return onSnapshot(query(collection(db, "demandes"), where("importeLe", ">=", depuis)), (snap) => {
     const list = [], limiteDate = Date.now() - 10 * 86400000;
@@ -183,6 +218,9 @@ export function watchDemandesAValider(callback) {
 }
 // Actions IMMÉDIATES attribuées à une personne, pas encore faites (bandeau rouge de l'accueil).
 export function watchActionsImmediates(uid, callback) {
+  return ecoutePartagee(`immediates:${uid}`, (emettre) => watchActionsImmediatesBrut(uid, emettre), callback);
+}
+function watchActionsImmediatesBrut(uid, callback) {
   return onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
     const list = [];
     snap.forEach((d) => { const x = d.data(); if (x.actionImmediate && !x.actionFaiteLe && !x.lieeA) list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, actionTexte: x.actionTexte, actionPar: x.actionPar }); });
