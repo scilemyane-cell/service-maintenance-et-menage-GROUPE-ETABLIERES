@@ -25,7 +25,7 @@
 //    qui reste pour l'instant une photo figée mise à jour manuellement par
 //    Claude à chaque envoi du fichier Excel par Valentin.
 import { esc } from "./astreinte-logic.js";
-import { watchDemandes, importerDemandes, updateDemande } from "./firestore-data.js";
+import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
@@ -181,9 +181,11 @@ export function mountSuiviDemandesTab(container, user) {
   const ouvrir = window.__suiviOuvrir; window.__suiviOuvrir = null;
   if (ouvrir?.id) ouvrirDemandeSeule(ouvrir.id, ouvrir.site);
   render(container);
-  // Techniciens : seulement les demandes utiles (ouvertes + récentes) pour économiser le quota.
-  const p = permsUtilisateur();
-  unsub = watchDemandes((liste) => { state.demandes = liste; render(container); }, { mode: p.isEditor ? "complet" : "actif" });
+  // Quota : par défaut seulement les demandes utiles (ouvertes + modifiées
+  // depuis 45 j). L'historique complet est chargé à la demande (stats,
+  // tableau « tous les statuts », doublons) puis gardé pour la session.
+  mountedContainer = container;
+  unsub = watchDemandes((liste) => { state.demandes = liste; render(container); }, { mode: historiqueComplet ? "complet" : "actif" });
   if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });
 }
 
@@ -368,7 +370,22 @@ function fmtDateFR(iso) {
 // Les techniciens n'ont que la vue « Par site » (ni tableau, ni statistiques).
 const vueTechSeule = () => permsUtilisateur().isTech;
 
+let historiqueComplet = false, mountedContainer = null;
+function besoinHistorique() {
+  return permsUtilisateur().isEditor && (ui.vue === "stats" || (ui.vue === "tableau" && (ui.filtreStatut !== "a-traiter" || ui.voirDoublons)));
+}
+function chargerHistorique(container) {
+  if (historiqueComplet) return;
+  historiqueComplet = true;
+  if (unsub) unsub();
+  state.demandes = null; // « Chargement… » le temps de recevoir l'historique
+  unsub = watchDemandes((liste) => { state.demandes = liste; state.historique = true; render(container); }, { mode: "complet" });
+}
+async function toutesLesDemandesPourOutil() {
+  return historiqueComplet && state.demandes ? state.demandes : await lireToutesDemandes();
+}
 function render(container) {
+  if (besoinHistorique() && !historiqueComplet) chargerHistorique(container);
   const r = renderVue(container);
   try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
   try { injecterBandeauImmediat(container); } catch (e) { console.error("Actions immédiates :", e); }
@@ -716,7 +733,7 @@ function renderTableau(container) {
   document.getElementById("demandes-recuperer-sp")?.addEventListener("click", async (e) => {
     e.target.disabled = true;
     try {
-      const r = await recupererDepuisCopie(state.demandes || [], { onProgress: (t) => msg(esc(t)) });
+      const r = await recupererDepuisCopie(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg(esc(t)) });
       msg(`✓ ${r.nouvelles} nouvelle(s) demande(s), ${r.misesAJour} mise(s) à jour depuis le fichier (${r.total} lignes lues).`);
     } catch (err) { console.error("Récupération demandes :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
@@ -724,7 +741,7 @@ function renderTableau(container) {
   document.getElementById("demandes-doublons-import")?.addEventListener("click", async (e) => {
     if (!confirm("Regrouper les demandes importées deux fois (même N° et même descriptif) ?\nLa plus complète est gardée, les autres sont reliées comme doublons (réversible avec « Délier »).")) return;
     e.target.disabled = true;
-    try { const n = await regrouperDoublonsImport(state.demandes || []); msg(n ? `✓ ${n} doublon(s) d'import regroupé(s).` : "✓ Aucun doublon d'import trouvé."); }
+    try { const n = await regrouperDoublonsImport(await toutesLesDemandesPourOutil()); msg(n ? `✓ ${n} doublon(s) d'import regroupé(s).` : "✓ Aucun doublon d'import trouvé."); }
     catch (err) { console.error(err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });

@@ -7,6 +7,7 @@
 // — à relever ensemble à chaque passage, avec une seule photo du tableau.
 // Un compteur eau/gaz n'a qu'un seul index.
 
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
@@ -379,15 +380,13 @@ export function qrPayloadForCompteur(compteurId) {
 // Nombre de compteurs "en retard", tous sites confondus — flux temps
 // réel utilisé pour le badge de la tuile "Relevé compteur" sur l'écran
 // d'accueil, sans avoir à ouvrir l'onglet.
-export function watchCompteursAlertCount(callback) {
-  return onSnapshot(collection(db, COMPTEURS), (snap) => {
-    let n = 0;
-    snap.forEach((d) => {
-      const c = d.data();
-      if (!c.supprimeLe && estEnRetard(c)) n++;
-    });
-    callback(n);
-  }, (err) => { console.error("watchCompteursAlertCount:", err); callback(0); });
+export const watchCompteursAlertCount = partager("compteurs-alertes", watchCompteursAlertCountBrut);
+// Une seule écoute de la collection compteurs pour le total ET les alertes.
+const watchCompteursBruts = partager("compteurs-bruts", (callback) => onSnapshot(collection(db, COMPTEURS), (snap) => {
+  const l = []; snap.forEach((d) => l.push(d.data())); callback(l);
+}, (err) => { console.error("watchCompteurs:", err); callback(null); }));
+function watchCompteursAlertCountBrut(callback) {
+  return watchCompteursBruts((l) => callback(l ? l.filter(c => !c.supprimeLe && estEnRetard(c)).length : 0));
 }
 
 // Consommation par mois calendaire sur les N derniers mois (12 par
@@ -496,10 +495,7 @@ export function consommationRecente(compteur, tousReleves, jours) {
 
 // Nombre total de compteurs actifs (hors corbeille) — pour le compteur
 // "Compteurs" de l'écran d'accueil.
-export function watchCompteursTotal(callback) {
-  return onSnapshot(collection(db, COMPTEURS), (snap) => {
-    let n = 0;
-    snap.forEach((d) => { if (!d.data().supprimeLe) n++; });
-    callback(n);
-  }, (err) => { console.error("watchCompteursTotal:", err); callback(null); });
+export const watchCompteursTotal = partager("compteurs-total", watchCompteursTotalBrut);
+function watchCompteursTotalBrut(callback) {
+  return watchCompteursBruts((l) => callback(l ? l.filter(c => !c.supprimeLe).length : null));
 }

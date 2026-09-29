@@ -1,3 +1,4 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, collection, onSnapshot,
@@ -5,7 +6,8 @@ import {
 
 // Un document par jour de bascule N1 : transferts-ligne/{YYYY-MM-DD}
 // { date, fromPerson, toPerson, confirmedBy, confirmedByNom, confirmedAt }
-export function watchTransferts(callback) {
+export const watchTransferts = partager("transferts", watchTransfertsBrut);
+function watchTransfertsBrut(callback) {
   return onSnapshot(collection(db, "transferts-ligne"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));

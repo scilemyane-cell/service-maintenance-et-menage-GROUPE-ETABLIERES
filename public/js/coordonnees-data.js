@@ -1,10 +1,12 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import { doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const REF = () => doc(db, "config", "coordonnees");
 
 // Structure : { [nomPersonne]: { telephone: "...", email: "..." } }
-export function watchCoordonnees(callback) {
+export const watchCoordonnees = partager("coordonnees", watchCoordonneesBrut);
+function watchCoordonneesBrut(callback) {
   return onSnapshot(REF(), (snap) => {
     callback(snap.exists() ? snap.data() : {});
   }, (err) => { console.error("watchCoordonnees:", err); callback({}); });

@@ -1,3 +1,4 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc,
@@ -10,7 +11,8 @@ export function ficheId(siteId, weekStart, uid) {
   return `${siteId}_${weekStart}_${uid}`;
 }
 
-export function watchFiches(callback) {
+export const watchFiches = partager("fiches", watchFichesBrut);
+function watchFichesBrut(callback) {
   return onSnapshot(collection(db, "fiches"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));

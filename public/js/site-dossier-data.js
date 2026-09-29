@@ -1,3 +1,4 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc, getDocs, deleteField, serverTimestamp,
@@ -75,7 +76,8 @@ export async function appliquerOrdreAuxDossiersExistants(titres) {
   return n;
 }
 
-export function watchSitesDossiers(callback) {
+export const watchSitesDossiers = partager("sites-dossiers", watchSitesDossiersBrut);
+function watchSitesDossiersBrut(callback) {
   return onSnapshot(collection(db, "sites-dossiers"), (snap) => {
     const list = [];
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });

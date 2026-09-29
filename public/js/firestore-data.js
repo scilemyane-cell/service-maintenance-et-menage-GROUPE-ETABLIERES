@@ -1,3 +1,4 @@
+import { ecoutePartagee, partager } from "./ecoute-partagee.js";
 import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
@@ -8,7 +9,8 @@ import {
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
 
 // ---- Personnes (N1 / N2) ----
-export function watchPeople(callback) {
+export const watchPeople = partager("people", watchPeopleBrut);
+function watchPeopleBrut(callback) {
   const ref = doc(db, "config", "people");
   return onSnapshot(ref, (snap) => {
     callback(snap.exists() ? snap.data() : DEFAULT_PEOPLE);
@@ -19,7 +21,8 @@ export async function savePeople(people) {
 }
 
 // ---- Absences ----
-export function watchAbsences(callback) {
+export const watchAbsences = partager("absences", watchAbsencesBrut);
+function watchAbsencesBrut(callback) {
   return onSnapshot(collection(db, "absences"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
@@ -41,7 +44,8 @@ export async function deleteAbsence(id) {
 // à partir de laquelle de vraies interventions sont générées à l'avance
 // (voir genererOccurrencesRecurrence dans planning.js) — la récurrence
 // elle-même ne contient jamais d'heures travaillées.
-export function watchRecurrences(callback) {
+export const watchRecurrences = partager("recurrences", watchRecurrencesBrut);
+function watchRecurrencesBrut(callback) {
   return onSnapshot(collection(db, "recurrences"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
@@ -60,7 +64,8 @@ export async function deleteRecurrence(id) {
 }
 
 // ---- Interventions ----
-export function watchInterventions(callback) {
+export const watchInterventions = partager("interventions", watchInterventionsBrut);
+function watchInterventionsBrut(callback) {
   return onSnapshot(collection(db, "interventions"), (snap) => {
     const list = [];
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
@@ -119,19 +124,6 @@ export async function listerInterventionsCorbeille() {
 // relit TOUS les documents de la requête. On garde donc une seule écoute par
 // requête pour toute la session (ouvrir / fermer une tuile ne relit rien) :
 // seuls les documents modifiés sont ensuite facturés.
-const PARTAGES = new Map();
-function ecoutePartagee(cle, demarrer, callback) {
-  let p = PARTAGES.get(cle);
-  if (!p) {
-    p = { abonnes: new Set(), valeur: undefined };
-    PARTAGES.set(cle, p);
-    demarrer((v) => { p.valeur = v; p.abonnes.forEach(cb => { try { cb(v); } catch (e) { console.error(e); } }); });
-  }
-  p.abonnes.add(callback);
-  if (p.valeur !== undefined) setTimeout(() => { if (p.abonnes.has(callback)) callback(p.valeur); }, 0);
-  return () => { p.abonnes.delete(callback); };
-}
-
 // mode "complet" : toutes les demandes (superviseurs : tableau, stats, synchro).
 // mode "actif" (techniciens) : demandes non clôturées + celles modifiées depuis
 // 45 jours (historique récent des sites) — beaucoup moins de lectures.
@@ -154,6 +146,11 @@ export function watchDemandes(callback, { mode = "complet" } = {}) {
 // pas les demandes déjà présentes (identifiées par leur `numero`) pour ne
 // jamais perdre un traitement déjà fait par un technicien dans l'appli ;
 // n'ajoute que les numéros absents de la base.
+// Lecture ponctuelle de toutes les demandes (outils manuels : récupérer, doublons).
+export async function lireToutesDemandes() {
+  const snap = await getDocs(collection(db, "demandes"));
+  const l = []; snap.forEach(d => l.push({ id: d.id, ...d.data() })); return l;
+}
 export async function importerDemandes(lignes) {
   const existant = await getDocs(collection(db, "demandes"));
   const numerosConnus = new Set();
