@@ -181,6 +181,14 @@ export function watchDemandesAValider(callback) {
     let n = 0; snap.forEach((d) => { if (!d.data().lieeA) n++; }); callback(n);
   }, (err) => { console.error("watchDemandesAValider:", err); callback(0); });
 }
+// Actions IMMÉDIATES attribuées à une personne, pas encore faites (bandeau rouge de l'accueil).
+export function watchActionsImmediates(uid, callback) {
+  return onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
+    const list = [];
+    snap.forEach((d) => { const x = d.data(); if (x.actionImmediate && !x.actionFaiteLe && !x.lieeA) list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, actionTexte: x.actionTexte, actionPar: x.actionPar }); });
+    callback(list);
+  }, (err) => { console.error("watchActionsImmediates:", err); callback([]); });
+}
 export function watchMesActionsDemandes(uid, callback) {
   let a = 0, r = 0;
   const u1 = onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {

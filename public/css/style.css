@@ -2600,3 +2600,18 @@ div.gh-urg-corps{cursor:default}
 .dps-eq-action{font-weight:600}
 .dps-eq-rouge{color:#b3121f;font-weight:800}
 .dps-eq-rep{font-style:italic}
+
+/* Actions immédiates */
+.dps-action.immediat{border-color:#b3121f!important;background:#fff1f1!important;box-shadow:0 0 0 2px rgba(179,18,31,.25)}
+.dps-immediat-badge{display:inline-block;background:#b3121f;color:#fff;font:900 11px system-ui,sans-serif;border-radius:6px;padding:2px 7px;margin-right:6px;animation:dpsPulse 1.6s ease-in-out infinite}
+@keyframes dpsPulse{50%{opacity:.55}}
+.dps-act-immediat{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;font-weight:800;color:#b3121f}
+.dps-act-immediat input{width:20px;height:20px;accent-color:#b3121f}
+.dps-act-immediat small{font-weight:500;color:#777}
+.dps-eq-imm{background:#b3121f;color:#fff;border-radius:999px;padding:1px 9px;font:800 12px system-ui,sans-serif}
+.dps-imm-bandeau{background:linear-gradient(135deg,#b3121f,#e0302f);color:#fff;border-radius:16px;padding:10px 12px;margin-bottom:12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(179,18,31,.3)}
+.dps-imm-tete{font-size:16px}
+.dps-imm-item{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.3);border-radius:12px;padding:8px 10px;color:#fff;text-align:left;font:inherit;cursor:pointer}
+.dps-imm-item span:first-child{flex:1;display:flex;flex-direction:column;min-width:0}
+.dps-imm-go{font-weight:800;white-space:nowrap}
+.gh-immediat .gh-urg-tete b{animation:dpsPulse 1.6s ease-in-out infinite}

@@ -139,7 +139,7 @@ service cloud.firestore {
       allow update: if isEditor()
         || (isSignedIn() && (myRole() == 'technicien' || ecritDemandesTerrain())
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj', 'declarePar', 'declareLe', 'commentaireTechPar', 'commentaireTechLe',
-                 'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar',
+                 'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionImmediate', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar',
                  'actionParUid', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'lieeA', 'lieeANumero', 'mailsEnvoyes',
                  'categorieIntervenant', 'dateStatut', 'validation', 'dateValidation', 'validePar']))
         // La personne à qui une action est attribuée peut la marquer faite.

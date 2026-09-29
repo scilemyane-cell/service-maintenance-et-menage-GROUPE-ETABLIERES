@@ -195,7 +195,7 @@ function injecterMesActions(container) {
   const uid = identite().uid;
   if (!uid || !state.demandes) return;
   const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe)
-    .sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
+    .sort((a, b) => (b.actionImmediate ? 1 : 0) - (a.actionImmediate ? 1 : 0) || (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
   container.querySelector(".dps-mes-actions")?.remove();
   const monNom = identite().nom;
   const retours = toutesLesLignes().filter(l => l.actionReponseNonLue && (l.actionParUid === uid || (!l.actionParUid && l.actionPar === monNom)));
@@ -246,14 +246,14 @@ function actionsParPersonneHTML() {
   const derniereReponse = (l) => [...(l.actionFil || [])].reverse().find(m => m.texte && !m.fait && !/^Action modifiée|^📌 Nouvelle action/.test(m.texte) && m.de !== l.actionPar);
   return `<h3 class="dps-equipe-titre">👥 Actions en cours par personne <small>${enCours.length} au total</small></h3>
   <div class="dps-equipe">${groupes.map(g => {
-    const nbRetard = g.l.filter(retard).length;
-    const tri = [...g.l].sort((a, b) => (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999") || (a.actionLe || "").localeCompare(b.actionLe || ""));
-    return `<details class="dps-eq-pers"><summary><b>${esc(g.nom)}</b><span class="dps-eq-nb">${g.l.length}</span>${nbRetard ? `<span class="dps-eq-retard">⏰ ${nbRetard} en retard</span>` : ""}</summary>
+    const nbRetard = g.l.filter(retard).length, nbImm = g.l.filter(l => l.actionImmediate).length;
+    const tri = [...g.l].sort((a, b) => (b.actionImmediate ? 1 : 0) - (a.actionImmediate ? 1 : 0) || (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999") || (a.actionLe || "").localeCompare(b.actionLe || ""));
+    return `<details class="dps-eq-pers"><summary><b>${esc(g.nom)}</b><span class="dps-eq-nb">${g.l.length}</span>${nbImm ? `<span class="dps-eq-imm">🚨 ${nbImm} immédiate${nbImm > 1 ? "s" : ""}</span>` : ""}${nbRetard ? `<span class="dps-eq-retard">⏰ ${nbRetard} en retard</span>` : ""}</summary>
       <div class="dps-eq-liste">${tri.map(l => { const r = derniereReponse(l); return `
-        <div class="dps-eq-item ${retard(l) ? "retard" : ""}">
+        <div class="dps-eq-item ${retard(l) || l.actionImmediate ? "retard" : ""}">
           <div class="dps-eq-haut"><span class="dps-num">${esc(l.n)}</span><b>${esc(l.site)}</b>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
             <button type="button" class="dps-ma-voir" data-ma-site="${esc(l.site)}" data-ma-id="${esc(l.id)}">Ouvrir →</button></div>
-          <div class="dps-eq-action">📌 ${esc(l.actionTexte)}</div>
+          <div class="dps-eq-action">${l.actionImmediate ? "🚨 <b>IMMÉDIATE</b> — " : "📌 "}${esc(l.actionTexte)}</div>
           <small>Donnée${l.actionPar ? ` par ${esc(l.actionPar)}` : ""}${l.actionLe ? ` le ${fr(l.actionLe)}` : ""}${l.actionEcheance ? ` · <span class="${retard(l) ? "dps-eq-rouge" : ""}">échéance ${fr(l.actionEcheance)}</span>` : ""}</small>
           ${r ? `<small class="dps-eq-rep">↳ ${esc(r.de)} : ${esc(r.texte)}</small>` : ""}
         </div>`; }).join("")}</div></details>`;
@@ -369,7 +369,25 @@ const vueTechSeule = () => permsUtilisateur().isTech;
 function render(container) {
   const r = renderVue(container);
   try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
+  try { injecterBandeauImmediat(container); } catch (e) { console.error("Actions immédiates :", e); }
   return r;
+}
+
+// Bandeau rouge : actions IMMÉDIATES attribuées à la personne, jusqu'à ce qu'elles soient faites.
+function injecterBandeauImmediat(container) {
+  container.querySelector(".dps-imm-bandeau")?.remove();
+  const uid = identite().uid; if (!uid || !state.demandes) return;
+  const l = toutesLesLignes().filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !x.lieeA);
+  if (!l.length || (ui.vue === "sites" && container.querySelector(".dps-focus"))) return;
+  const el = document.createElement("section");
+  el.className = "dps-imm-bandeau";
+  el.innerHTML = `<div class="dps-imm-tete">🚨 <b>${l.length} action${l.length > 1 ? "s" : ""} immédiate${l.length > 1 ? "s" : ""} à faire</b></div>
+    ${l.map(x => `<button type="button" class="dps-imm-item" data-imm-id="${esc(x.id)}" data-imm-site="${esc(x.site)}"><span><b>${esc(x.n)} · ${esc(x.site)}${x.local ? ` · 📍 ${esc(x.local)}` : ""}</b><small>${esc(x.actionTexte)}${x.actionPar ? ` — de ${esc(x.actionPar)}` : ""}</small></span><span class="dps-imm-go">Ouvrir →</span></button>`).join("")}`;
+  (container.querySelector(".stack") || container).prepend(el);
+  el.querySelectorAll("[data-imm-id]").forEach(b => b.addEventListener("click", () => {
+    ouvrirDemandeSeule(b.dataset.immId, b.dataset.immSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
+    container.scrollIntoView({ block: "start" });
+  }));
 }
 
 function renderVue(container) {
@@ -398,6 +416,7 @@ function renderVue(container) {
       utilisateurs,
       apres: () => {
         try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
+        try { injecterBandeauImmediat(container); } catch (e) { console.error("Actions immédiates :", e); }
         const b = container.querySelector(".dps-valid-bloc");
         if (ui.allerValidation && state.demandes && b) { ui.allerValidation = false; ui.flashValidJusqua = Date.now() + 4000; setTimeout(() => container.querySelector(".dps-valid-bloc")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }
         if (b && Date.now() < (ui.flashValidJusqua || 0)) b.classList.add("dps-flash");
@@ -482,6 +501,7 @@ function ligneDepuisDoc(d) {
     commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "",
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
     actionPar: d.actionPar || "", actionParUid: d.actionParUid || "", actionFil: Array.isArray(d.actionFil) ? d.actionFil : [], actionReponseNonLue: !!d.actionReponseNonLue, actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
+    actionImmediate: !!d.actionImmediate,
   };
 }
 

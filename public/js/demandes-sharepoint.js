@@ -170,7 +170,7 @@ function texteAction(d) {
   const par = d.actionPar ? ` (donnée par ${nomPropre(d.actionPar)}${d.actionLe ? ` le ${jm(d.actionLe)}` : ""})` : "";
   const tete = d.actionFaiteLe
     ? `✓ ACTION FAITE — ${nomPropre(d.actionPourNom) || "?"}${par} : ${d.actionTexte} — faite le ${jm(d.actionFaiteLe)}${d.actionFaitePar && d.actionFaitePar !== d.actionPourNom ? ` par ${nomPropre(d.actionFaitePar)}` : ""}`
-    : `📌 ACTION EN COURS — ${nomPropre(d.actionPourNom) || "?"}${par}${d.actionEcheance ? `, avant le ${jm(d.actionEcheance)}` : ""} : ${d.actionTexte}`;
+    : `${d.actionImmediate ? "🚨 ACTION IMMÉDIATE" : "📌 ACTION EN COURS"} — ${nomPropre(d.actionPourNom) || "?"}${par}${d.actionEcheance ? `, avant le ${jm(d.actionEcheance)}` : ""} : ${d.actionTexte}`;
   return tete + (histo.length ? `\nÉchanges :\n${histo.join("\n")}` : "");
 }
 

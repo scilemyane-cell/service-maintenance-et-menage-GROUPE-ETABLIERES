@@ -1,5 +1,5 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
-import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes } from "./firestore-data.js";
+import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates } from "./firestore-data.js";
 import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -95,6 +95,11 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   urgences = [];
   unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; scheduleRender(); }));
   nouvelles = []; uidVues = user.uid || null;
+  // Actions immédiates : pour moi, et sur un poste partagé pour la personne choisie.
+  immediates = {};
+  const uidsImm = new Set([user.uid].filter(Boolean));
+  if (user.postePartage) { try { const i = JSON.parse(localStorage.getItem("etablieres-poste-identite") || "null"); if (i?.uid && Date.now() - i.t < 4 * 3600000) uidsImm.add(i.uid); } catch {} }
+  uidsImm.forEach(u => unsubs.push(watchActionsImmediates(u, (l) => { immediates[u] = l; scheduleRender(); })));
   if (["super_admin", "admin", "n1"].includes(user.role)) unsubs.push(watchNouvellesDemandes((l) => { nouvelles = l; scheduleRender(); }));
   // Tâches ménage du mois en retard (agents ménage + encadrement)
   sitesMenage = null; fichesMenage = null;
@@ -355,6 +360,26 @@ function bandeauUrgencesHTML() {
     </div></section>`;
 }
 
+// ---- Bandeau « actions immédiates » (la personne concernée) ----
+let immediates = {};
+function bandeauImmediatHTML() {
+  const vus = new Set(), l = [];
+  Object.values(immediates).flat().forEach(x => { if (!vus.has(x.id)) { vus.add(x.id); l.push(x); } });
+  if (!l.length) return "";
+  const cliquable = catsRef.some(c => c.id === "suivi-demandes");
+  return `<section class="gh-urgences gh-immediat">
+    <div class="gh-urg-tete">🚨 <b>${l.length} action${l.length > 1 ? "s" : ""} immédiate${l.length > 1 ? "s" : ""} à faire</b><span>reste affiché tant que ce n'est pas fait</span></div>
+    <div class="gh-urg-liste">${l.map(x => `
+      <div class="gh-urg crit">
+        <${cliquable ? `button type="button" data-urg-ouvrir="${esc(x.id)}" data-urg-site="${esc(x.site || "")}"` : "div"} class="gh-urg-corps">
+          <span class="gh-urg-badge">IMMÉDIAT</span>
+          <span class="gh-urg-txt"><b>${esc(x.numero || "")} · ${esc(x.site || "")}${x.local ? ` · 📍 ${esc(x.local)}` : ""}</b><small>${esc(x.actionTexte || "")}${x.actionPar ? ` — de ${esc(x.actionPar)}` : ""}</small></span>
+          ${cliquable ? `<span class="gh-urg-go">Ouvrir →</span>` : ""}
+        </${cliquable ? "button" : "div"}>
+      </div>`).join("")}
+    </div></section>`;
+}
+
 // ---- Bandeau « nouvelles demandes » (superviseurs) ----
 function bandeauNouvellesHTML() {
   const v = vues(CLE_NOUV_VUES);
@@ -566,6 +591,7 @@ function render() {
         <span class="gh-bc-go">Compléter →</span>
       </button>` : ""}
       ${transfertBannerHTML(next, confirmedRecord)}
+      ${bandeauImmediatHTML()}
       ${bandeauUrgencesHTML()}
       ${bandeauNouvellesHTML()}
 

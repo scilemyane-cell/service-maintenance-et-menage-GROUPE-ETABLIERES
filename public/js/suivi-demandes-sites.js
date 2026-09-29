@@ -136,9 +136,9 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
     const retard = l.actionEcheance && l.actionEcheance < aujourdhui();
     const peutFaire = l.actionPour === uid || perms.isEditor;
     const peutRepondre = l.actionPour === uid || estAuteur || perms.isEditor;
-    return `<div class="dps-action ${retard ? "retard" : ""}">
+    return `<div class="dps-action ${retard ? "retard" : ""} ${l.actionImmediate ? "immediat" : ""}">
       <div class="dps-action-haut">
-      <div class="dps-action-txt">📌 <b>Action pour ${esc(l.actionPourNom || "?")}</b>${l.actionEcheance ? ` <span class="dps-action-ech">${retard ? "⚠️ en retard — " : ""}avant le ${fr(l.actionEcheance)}</span>` : ""}
+      <div class="dps-action-txt">${l.actionImmediate ? `<span class="dps-immediat-badge">🚨 ACTION IMMÉDIATE</span>` : ""}📌 <b>Action pour ${esc(l.actionPourNom || "?")}</b>${l.actionEcheance ? ` <span class="dps-action-ech">${retard ? "⚠️ en retard — " : ""}avant le ${fr(l.actionEcheance)}</span>` : ""}
         ${l.actionTexte ? `<span class="dps-action-detail">${esc(l.actionTexte)}</span>` : ""}
         <small>Attribuée${l.actionPar ? ` par ${esc(l.actionPar)}` : ""}${l.actionLe ? ` le ${fr(l.actionLe)}` : ""}</small></div>
       <div class="dps-action-btns">
@@ -150,6 +150,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
         <label>Pour<select data-edit-pour>${utilisateurs.map(u => `<option value="${esc(u.uid)}" ${u.uid === l.actionPour ? "selected" : ""}>${esc(u.nom || u.email)}</option>`).join("")}${utilisateurs.some(u => u.uid === l.actionPour) ? "" : `<option value="${esc(l.actionPour)}" selected>${esc(l.actionPourNom || "?")}</option>`}</select></label>
         <label>Avant le<input type="date" data-edit-ech value="${esc(l.actionEcheance || "")}"></label>
         <label class="large">Action à faire<input spellcheck="true" lang="fr" data-edit-texte data-ia-cible value="${esc(l.actionTexte || "")}">${btnIA()}</label>
+        <label class="large dps-act-immediat"><input type="checkbox" data-edit-immediat ${l.actionImmediate ? "checked" : ""}> 🚨 Action immédiate <small>(alerte rouge en haut de son écran jusqu'à ce qu'elle soit faite)</small></label>
         <button type="button" class="dps-action-ok" data-act-enregistrer="${esc(l.id)}">💾 Enregistrer la modification</button>
       </div>` : ""}
       ${filHTML(l)}
@@ -164,6 +165,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
       <label>Avant le<input type="date" data-act-ech></label>
       <label class="large">Action à faire<input spellcheck="true" lang="fr" data-act-texte data-ia-cible placeholder="ex. Commander le mitigeur, rappeler le fournisseur…">${btnIA()}</label>
       <div class="large">${phrasesHTML("actions", perms.isEditor)}</div>
+      <label class="large dps-act-immediat"><input type="checkbox" data-act-immediat> 🚨 Action immédiate <small>(alerte rouge en haut de son écran jusqu'à ce qu'elle soit faite)</small></label>
       <button type="button" class="dps-action-ok" data-act-attribuer="${esc(l.id)}">📌 Attribuer</button>
     </div></details>`;
 }
@@ -209,9 +211,11 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     const pour = f.querySelector("[data-edit-pour]").value, texte = f.querySelector("[data-edit-texte]").value.trim(), ech = f.querySelector("[data-edit-ech]").value;
     if (!texte) { alert("L'action ne peut pas être vide."); return; }
     const u = utilisateurs.find(x => x.uid === pour);
+    const imm = !!f.querySelector("[data-edit-immediat]")?.checked;
     const champs = { actionTexte: texte, actionEcheance: ech };
+    if (imm !== !!l.actionImmediate) champs.actionImmediate = imm;
     if (pour !== l.actionPour) Object.assign(champs, { actionPour: pour, actionPourNom: u?.nom || u?.email || "", actionNonLuPour: true });
-    const modifs = [texte !== l.actionTexte && "action", ech !== (l.actionEcheance || "") && "échéance", pour !== l.actionPour && `personne (${champs.actionPourNom})`].filter(Boolean);
+    const modifs = [texte !== l.actionTexte && "action", ech !== (l.actionEcheance || "") && "échéance", pour !== l.actionPour && `personne (${champs.actionPourNom})`, imm !== !!l.actionImmediate && (imm ? "passée en IMMÉDIATE" : "n'est plus immédiate")].filter(Boolean);
     if (!modifs.length) { f.hidden = true; return; }
     champs.actionFil = ajoutFil(id, `Action modifiée : ${modifs.join(", ")}`);
     b.disabled = true;
@@ -241,7 +245,7 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
   }));
   container.querySelectorAll("[data-act-retirer]").forEach(b => b.addEventListener("click", async () => {
     if (!confirm("Retirer cette action ?")) return;
-    try { await maj(b.dataset.actRetirer, { actionPour: "", actionPourNom: "", actionTexte: "", actionEcheance: "", actionPar: "", actionParUid: "", actionLe: "", actionFaiteLe: "", actionFaitePar: "", actionFil: [], actionReponseNonLue: false, actionNonLuPour: false }); }
+    try { await maj(b.dataset.actRetirer, { actionPour: "", actionPourNom: "", actionTexte: "", actionEcheance: "", actionPar: "", actionParUid: "", actionLe: "", actionFaiteLe: "", actionFaitePar: "", actionFil: [], actionReponseNonLue: false, actionNonLuPour: false, ...(ligne(b.dataset.actRetirer).actionImmediate ? { actionImmediate: false } : {}) }); }
     catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); }
   }));
   container.querySelectorAll("[data-act-attribuer]").forEach(b => b.addEventListener("click", async () => {
@@ -253,8 +257,11 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     b.disabled = true; b.textContent = "⏳";
     // L'historique des échanges est conservé : la nouvelle action s'ajoute à la suite.
     const nomPour = u?.nom || u?.email || "";
-    const fil = ajoutFil(b.dataset.actAttribuer, `📌 Nouvelle action pour ${nomPour} : ${texte}`);
-    try { await maj(b.dataset.actAttribuer, { actionPour: pour, actionPourNom: nomPour, actionTexte: texte, actionEcheance: ech, actionPar: utilisateur, actionParUid: uid || "", actionLe: aujourdhui(), actionFaiteLe: "", actionFaitePar: "", actionFil: fil, actionReponseNonLue: false, actionNonLuPour: true }); }
+    const imm = !!f.querySelector("[data-act-immediat]")?.checked;
+    const fil = ajoutFil(b.dataset.actAttribuer, `📌 Nouvelle action${imm ? " IMMÉDIATE" : ""} pour ${nomPour} : ${texte}`);
+    // actionImmediate n'est écrit que s'il change (compatibilité avec les règles).
+    const champImm = imm || ligne(b.dataset.actAttribuer).actionImmediate ? { actionImmediate: imm } : {};
+    try { await maj(b.dataset.actAttribuer, { ...champImm, actionPour: pour, actionPourNom: nomPour, actionTexte: texte, actionEcheance: ech, actionPar: utilisateur, actionParUid: uid || "", actionLe: aujourdhui(), actionFaiteLe: "", actionFaitePar: "", actionFil: fil, actionReponseNonLue: false, actionNonLuPour: true }); }
     catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "📌 Attribuer"; }
   }));
 }
