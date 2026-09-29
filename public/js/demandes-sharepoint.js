@@ -13,7 +13,7 @@
 import { getGraphToken, getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, telechargerFichierDrive } from "./sharepoint-storage.js";
 import { db } from "./firebase-init.js";
-import { doc, getDoc, getDocs, query, where, setDoc, collection, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, getDoc, getDocs, query, where, setDoc, collection, writeBatch, serverTimestamp } from "./firestore-compte.js";
 
 const DOSSIER = "Demandes";
 const COPIE = "SG_Suivi_Demandes_GroupeEtablieres.xlsx";

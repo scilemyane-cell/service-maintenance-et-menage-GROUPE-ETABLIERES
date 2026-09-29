@@ -4,7 +4,7 @@
 // via le fichier des mises à jour (liste « nouvelles », ajoutées par le
 // flux Power Automate n° 2).
 import { db } from "./firebase-init.js";
-import { doc, collection, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, collection, runTransaction, serverTimestamp } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 
 const URGENCES = ["Normal", "Urgent", "À planifier", "Critique"];

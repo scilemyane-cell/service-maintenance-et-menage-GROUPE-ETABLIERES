@@ -9,7 +9,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, setDoc, deleteField, serverTimestamp,
   collection, query, where, Timestamp
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const PRODUITS = "stock-menage-produits";
 const SORTIES = "stock-menage-sorties";

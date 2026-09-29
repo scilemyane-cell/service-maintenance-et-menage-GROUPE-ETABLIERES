@@ -1,7 +1,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, addDoc, deleteDoc, updateDoc, collection, onSnapshot,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 export function watchReleves(callback) {
   return onSnapshot(collection(db, "releves-interventions"), (snap) => {

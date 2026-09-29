@@ -1,5 +1,5 @@
 import { db } from "./firebase-init.js";
-import { doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, setDoc, onSnapshot } from "./firestore-compte.js";
 import { SITES as DEFAULT_SITES } from "./sites-config.js";
 
 const REF = () => doc(db, "config", "menage-sites");

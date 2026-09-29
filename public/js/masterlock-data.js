@@ -14,7 +14,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDocs, onSnapshot,
   collection, query, where,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
 
 const CODES = "masterlock-codes";

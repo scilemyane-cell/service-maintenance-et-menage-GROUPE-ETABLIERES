@@ -1,6 +1,6 @@
 import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
-import { doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, setDoc, onSnapshot } from "./firestore-compte.js";
 
 const REF = () => doc(db, "config", "coordonnees");
 

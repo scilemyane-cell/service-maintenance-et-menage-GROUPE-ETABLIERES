@@ -2,7 +2,7 @@ import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, collection, onSnapshot,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 // Un document par jour de bascule N1 : transferts-ligne/{YYYY-MM-DD}
 // { date, fromPerson, toPerson, confirmedBy, confirmedByNom, confirmedAt }

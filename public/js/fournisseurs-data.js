@@ -6,7 +6,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, deleteDoc, getDocs,
   collection, onSnapshot,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const COLLECTION = "fournisseurs";
 

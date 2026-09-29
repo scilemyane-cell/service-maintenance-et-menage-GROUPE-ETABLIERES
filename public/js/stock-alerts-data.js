@@ -5,7 +5,7 @@
 // "Stock maintenance" de l'écran d'accueil, sans avoir à ouvrir le module.
 
 import { db } from "./firebase-init.js";
-import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, onSnapshot } from "./firestore-compte.js";
 
 export function watchStockAlertCount(callback) {
   let central = 0;

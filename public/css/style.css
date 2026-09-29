@@ -2615,3 +2615,21 @@ div.gh-urg-corps{cursor:default}
 .dps-imm-item span:first-child{flex:1;display:flex;flex-direction:column;min-width:0}
 .dps-imm-go{font-weight:800;white-space:nowrap}
 .gh-immediat .gh-urg-tete b{animation:dpsPulse 1.6s ease-in-out infinite}
+
+/* Compteur de lectures Firestore (Connexions) */
+.cx-lect{display:flex;flex-direction:column;gap:8px}
+.cx-lect-tete{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cx-lect-tete small{color:var(--muted,#777)}
+.cx-lect-chiffre{font-size:15px}.cx-lect-chiffre b{font-size:26px}
+.cx-lect-pct{margin-left:8px;border-radius:999px;padding:2px 9px;font-weight:800;font-size:12.5px;color:#fff}
+.cx-lect-pct.vert,.cx-lect-barre .vert,.cx-lect-jours i.vert{background:#1f9d55}
+.cx-lect-pct.orange,.cx-lect-barre .orange,.cx-lect-jours i.orange{background:#e08a00}
+.cx-lect-pct.rouge,.cx-lect-barre .rouge,.cx-lect-jours i.rouge{background:#c8102e}
+.cx-lect-barre{height:12px;border-radius:999px;background:rgba(127,127,127,.2);overflow:hidden}
+.cx-lect-barre div{height:100%;border-radius:999px}
+.cx-lect-pers{display:flex;flex-wrap:wrap;gap:6px}
+.cx-lect-pers span{background:rgba(127,127,127,.12);border-radius:999px;padding:3px 10px;font-size:13px}
+.cx-lect-jours{display:flex;gap:10px;align-items:flex-end;height:84px}
+.cx-lect-jours div{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
+.cx-lect-jours i{display:block;width:100%;max-width:34px;border-radius:5px 5px 0 0}
+.cx-lect-jours small{font-size:10.5px;color:var(--muted,#777)}

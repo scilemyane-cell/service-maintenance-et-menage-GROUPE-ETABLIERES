@@ -5,7 +5,7 @@ import {
   doc, getDoc, getDocs, setDoc, updateDoc,
   collection, addDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, deleteField,
   writeBatch, Timestamp, query, where
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const DEFAULT_PEOPLE = { n1: ["Valentin", "Lionel"], n2: ["Technicien 1", "Technicien 2", "Technicien 3"] };
 

@@ -199,6 +199,11 @@ service cloud.firestore {
     // comme n'importe quel autre compte connecté.
     // ---- Journal des connexions (Administration > Connexions) ----
     // Chacun ajoute uniquement SA propre ligne ; seul le Super Admin lit.
+    // Estimation des lectures Firestore par personne et par jour (Connexions).
+    match /lectures/{docId} {
+      allow read: if isSuperAdmin();
+      allow create, update: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
     match /connexions/{docId} {
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow read, delete: if isSuperAdmin();

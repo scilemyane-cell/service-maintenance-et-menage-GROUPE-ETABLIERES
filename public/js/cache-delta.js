@@ -7,7 +7,7 @@
 // Une relecture complète est faite une fois par semaine (ou sans copie)
 // pour rattraper d'éventuelles suppressions.
 import { db } from "./firebase-init.js";
-import { collection, query, where, onSnapshot, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, query, where, onSnapshot, getDocs, Timestamp } from "./firestore-compte.js";
 
 const DB_NOM = "smm-cache", STORE = "kv", RELECTURE_COMPLETE = 7 * 86400000, MARGE = 15 * 60000;
 

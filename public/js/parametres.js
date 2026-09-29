@@ -10,7 +10,7 @@ import { watchPeople } from "./firestore-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { auth, db } from "./firebase-init.js";
-import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, getDocs } from "./firestore-compte.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 

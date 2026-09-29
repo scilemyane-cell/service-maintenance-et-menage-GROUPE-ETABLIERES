@@ -2,7 +2,7 @@
 // Phrases types du Suivi des demandes (commentaires et actions attribuées),
 // partagées par tous : config/phrases-demandes { commentaires: [], actions: [] }.
 import { db } from "./firebase-init.js";
-import { doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, onSnapshot, setDoc } from "./firestore-compte.js";
 
 const REF = doc(db, "config", "phrases-demandes");
 export const PHRASES_DEFAUT = {

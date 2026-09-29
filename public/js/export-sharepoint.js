@@ -13,7 +13,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, getDoc, setDoc, getDocs, collection,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";

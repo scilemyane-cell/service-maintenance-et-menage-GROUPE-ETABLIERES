@@ -2,7 +2,7 @@
 // Sites de demandes attribués aux techniciens par un superviseur
 // (config/sites-techniciens : { affectations: { "<nom du site>": [uid, …] } }).
 import { db } from "./firebase-init.js";
-import { doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, onSnapshot, setDoc } from "./firestore-compte.js";
 
 const REF = doc(db, "config", "sites-techniciens");
 

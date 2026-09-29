@@ -8,7 +8,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs,
   collection, query, where, onSnapshot, serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const COLLECTION = "stock-site-items";
 const CATALOGUE_SITE = "stock-site-catalogue";

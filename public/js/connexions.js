@@ -3,14 +3,17 @@ import { esc } from "./astreinte-logic.js";
 import { listerConnexions } from "./connexions-data.js";
 import { watchUsers } from "./users-data.js";
 import { roleLabel } from "./auth.js";
+import { lireLectures, jourQuota } from "./lectures-compteur.js";
 
-let conteneur = null, lignes = [], users = [], unsub = null, filtre = "", periode = 30, erreur = "";
+let charge = 0, conteneur = null, lignes = [], users = [], unsub = null, filtre = "", periode = 30, erreur = "", lectures = null, erreurLectures = "";
 
 export async function mountConnexions(container) {
   conteneur = container;
   container.innerHTML = `<div class="hint">Chargement des connexions…</div>`;
   unsub?.(); unsub = watchUsers(u => { users = u; render(); });
-  try { lignes = await listerConnexions(90); erreur = ""; }
+  lireLectures(7).then(l => { lectures = l; erreurLectures = ""; render(); }).catch(e => { lectures = []; erreurLectures = e?.code || e?.message || String(e); render(); });
+  // 30 jours par défaut (chaque connexion listée = 1 lecture Firestore) ; 90 j à la demande.
+  try { lignes = await listerConnexions(Math.max(30, periode)); charge = Math.max(30, periode); erreur = ""; }
   catch (e) { console.error(e); erreur = e.message || String(e); lignes = []; }
   render();
 }
@@ -27,6 +30,28 @@ function ilYa(d) {
   return j === 1 ? "hier" : `il y a ${j} jours`;
 }
 const icone = (a) => a === "Téléphone" ? "📱" : a === "Tablette" ? "📲" : "💻";
+
+// ---- Compteur de lectures Firestore (estimation) ----
+const QUOTA = 50000;
+function blocLecturesHTML() {
+  if (lectures === null) return `<div class="form-card cx-lect"><b>📊 Lectures Firestore</b><div class="hint">Chargement…</div></div>`;
+  if (erreurLectures) return `<div class="form-card cx-lect"><b>📊 Lectures Firestore</b><div class="hint" style="color:var(--red)">❌ ${esc(erreurLectures)} — publie la dernière version des règles Firestore (bloc « lectures »).</div></div>`;
+  const auj = jourQuota();
+  const duJour = lectures.filter(l => l.jour === auj);
+  const total = duJour.reduce((s, l) => s + (l.n || 0), 0);
+  const pct = Math.min(100, Math.round(total / QUOTA * 100));
+  const niveau = pct >= 80 ? "rouge" : pct >= 50 ? "orange" : "vert";
+  const parJour = []; for (let i = 6; i >= 0; i--) { const j = jourQuota(new Date(Date.now() - i * 864e5)); parJour.push({ j, n: lectures.filter(l => l.jour === j).reduce((s, l) => s + (l.n || 0), 0) }); }
+  const max = Math.max(QUOTA / 10, ...parJour.map(x => x.n));
+  const nomDe = (uid, nom) => users.find(u => u.uid === uid)?.nom || nom || "?";
+  return `<div class="form-card cx-lect">
+    <div class="cx-lect-tete"><b>📊 Lectures Firestore aujourd'hui</b><small>estimation · quota gratuit remis à zéro vers 9 h</small></div>
+    <div class="cx-lect-chiffre"><b>${total.toLocaleString("fr-FR")}</b> / ${QUOTA.toLocaleString("fr-FR")} <span class="cx-lect-pct ${niveau}">${pct} %</span></div>
+    <div class="cx-lect-barre"><div class="${niveau}" style="width:${pct}%"></div></div>
+    ${duJour.length ? `<div class="cx-lect-pers">${duJour.sort((a, b) => b.n - a.n).map(l => `<span><b>${esc(nomDe(l.uid, l.nom))}</b> ${(l.n || 0).toLocaleString("fr-FR")}</span>`).join("")}</div>` : `<div class="hint">Pas encore de lecture comptée aujourd'hui (envoi toutes les 5 min).</div>`}
+    <div class="cx-lect-jours">${parJour.map(x => `<div title="${x.n.toLocaleString("fr-FR")} lectures"><i style="height:${Math.max(2, Math.round(x.n / max * 60))}px" class="${x.n >= QUOTA * .8 ? "rouge" : x.n >= QUOTA * .5 ? "orange" : "vert"}"></i><small>${x.j.slice(8)}/${x.j.slice(5, 7)}</small></div>`).join("")}</div>
+  </div>`;
+}
 
 function render() {
   if (!conteneur || !document.contains(conteneur)) { unsub?.(); unsub = null; return; }
@@ -54,11 +79,12 @@ function render() {
 
   conteneur.innerHTML = `
   <div class="stack cx">
+    ${blocLecturesHTML()}
     <div class="cx-kpis">
       <div class="cx-kpi"><b>${aujourdhui}</b><span>connecté(s) aujourd'hui</span></div>
       <div class="cx-kpi"><b>${actifs}</b><span>actif(s) sur ${periode} jours</span></div>
       <div class="cx-kpi"><b>${dansPeriode.length}</b><span>connexions sur ${periode} jours</span></div>
-      <div class="cx-kpi ${jamais ? "alerte" : ""}"><b>${jamais}</b><span>compte(s) jamais connecté(s)*</span></div>
+      <div class="cx-kpi ${jamais ? "alerte" : ""}"><b>${jamais}</b><span>compte(s) sans connexion sur ${charge} j*</span></div>
     </div>
     <div class="cx-filtres">
       <input id="cx-q" placeholder="🔍 Rechercher une personne…" value="${esc(filtre)}">
@@ -97,5 +123,9 @@ function render() {
 
   const inp = document.getElementById("cx-q");
   inp.addEventListener("input", () => { filtre = inp.value; const pos = inp.selectionStart; render(); const n = document.getElementById("cx-q"); n.focus(); n.setSelectionRange(pos, pos); });
-  document.getElementById("cx-periode").addEventListener("change", (e) => { periode = +e.target.value; render(); });
+  document.getElementById("cx-periode").addEventListener("change", async (e) => {
+    periode = +e.target.value;
+    if (periode > charge) { try { lignes = await listerConnexions(periode); charge = periode; } catch (err) { console.error(err); } }
+    render();
+  });
 }

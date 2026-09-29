@@ -3,7 +3,7 @@
 // messagerie (Outlook) avec destinataire, objet et texte déjà remplis.
 // Carnet de contacts partagé : config/contacts-demandes.
 import { db } from "./firebase-init.js";
-import { doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, onSnapshot, setDoc } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 
 const REF = doc(db, "config", "contacts-demandes");

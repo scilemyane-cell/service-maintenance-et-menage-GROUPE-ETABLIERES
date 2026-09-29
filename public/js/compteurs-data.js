@@ -13,7 +13,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
   collection, query, where, Timestamp
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
 
 const COMPTEURS = "compteurs";

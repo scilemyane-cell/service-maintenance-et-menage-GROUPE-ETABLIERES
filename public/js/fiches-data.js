@@ -3,7 +3,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc,
   collection, onSnapshot,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 // Une fiche = un document par (site, semaine, agent).
 // id du document : `${siteId}_${weekStart}_${uid}`

@@ -9,7 +9,7 @@
 // Un verrou dans config/demandes-synchro évite que deux responsables
 // importent en même temps (doublons).
 import { db } from "./firebase-init.js";
-import { doc, getDoc, getDocs, collection, query, where, limit, runTransaction, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, getDoc, getDocs, collection, query, where, limit, runTransaction, Timestamp } from "./firestore-compte.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 import { metadonneesFichierDrive } from "./sharepoint-storage.js";
 import { recupererDepuisCopie, deposerMisesAJour } from "./demandes-sharepoint.js";
@@ -44,7 +44,7 @@ async function tour() {
       // null = mode économe (ne relit que les demandes dont la ligne a changé)
       const r = await recupererDepuisCopie(null, { interactif: false });
       if (r) {
-        const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
+        const { setDoc } = await import("./firestore-compte.js");
         await setDoc(REF, { derniereEmpreinte: empreinte, verrouImport: 0 }, { merge: true });
         if (r.nouvelles) window.toast?.(`📥 ${r.nouvelles} nouvelle(s) demande(s) arrivée(s) du fichier Excel`);
       }

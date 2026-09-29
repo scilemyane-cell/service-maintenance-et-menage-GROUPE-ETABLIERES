@@ -3,7 +3,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc, getDocs, deleteField, serverTimestamp,
   collection, onSnapshot, Timestamp
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 // Les 16 catégories standard reprises de la fiche index papier — servent
 // de modèle de départ pour chaque nouveau dossier, afin d'uniformiser la

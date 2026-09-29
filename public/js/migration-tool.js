@@ -11,7 +11,7 @@ import { esc } from "./astreinte-logic.js";
 import { db } from "./firebase-init.js";
 import {
   collection, getDocs, doc, getDoc, updateDoc,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 import { getGoogleAccessToken, downloadDriveFile } from "./google-drive-readonly.js";
 import { getAccessToken as getMsToken, uploadToDrive, moveItemToFolder, buildFolderPath, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { printFicheHtml, generateAndUploadPdf } from "./site-dossier.js";

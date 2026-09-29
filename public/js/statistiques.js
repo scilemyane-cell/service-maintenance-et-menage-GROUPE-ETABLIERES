@@ -17,7 +17,7 @@
 //    dit explicitement au lieu d'afficher des zéros silencieux.
 
 import { db } from "./firebase-init.js";
-import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, getDocs, doc, getDoc } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
 

@@ -6,7 +6,7 @@
 import { db } from "./firebase-init.js";
 import {
   collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, Timestamp,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const COL = () => collection(db, "connexions");
 

@@ -13,7 +13,7 @@ import {
 } from "./masterlock-data.js";
 import { activerGlisserDeposer } from "./drag-reorder.js";
 import { db } from "./firebase-init.js";
-import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, updateDoc } from "./firestore-compte.js";
 
 const peutOrdonner = () => ["super_admin", "admin", "n1"].includes(mountedUser?.role) && !mountedUser?.apercu;
 // Ordre propre à l'onglet Masterlock (sinon celui des Dossiers de site, puis alphabétique).

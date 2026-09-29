@@ -2,7 +2,7 @@ import { auth, db } from "./firebase-init.js";
 import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, getDoc, setDoc, deleteDoc } from "./firestore-compte.js";
 import { journaliserConnexion } from "./connexions-data.js";
 
 // Rôles possibles : "super_admin" | "admin" | "n1" | "technicien" | "menage" | "mi_temps" | "direction"
@@ -67,12 +67,14 @@ export function watchAuth(callback) {
     if (memo && memo.role) {
       callback({ uid: user.uid, email: user.email, ...memo });
       journaliserConnexion(user, memo);
+      import("./lectures-compteur.js").then(m => m.demarrerCompteurLectures({ uid: user.uid, nom: memo?.nom, email: user.email })).catch(() => {});
       getCurrentUserProfile(user.uid).then(p => { if (p) memoriserProfil(user.uid, p); }).catch(() => {});
       return;
     }
     let profile = await getCurrentUserProfile(user.uid);
     if (!profile) profile = await rattacherCompteEnAttente(user);
     journaliserConnexion(user, profile); // en arrière-plan, jamais bloquant
+    import("./lectures-compteur.js").then(m => m.demarrerCompteurLectures({ uid: user.uid, nom: profile?.nom, email: user.email })).catch(() => {});
     if (!profile) {
       callback({ uid: user.uid, email: user.email, role: null, nom: user.email });
       return;

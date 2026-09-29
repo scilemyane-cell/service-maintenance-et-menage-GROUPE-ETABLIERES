@@ -1,6 +1,6 @@
 import { db } from "./firebase-init.js";
-import { doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { collection } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, setDoc, onSnapshot } from "./firestore-compte.js";
+import { collection } from "./firestore-compte.js";
 
 export function repartitionId(dispositif, weekStart, uid) {
   return `${dispositif}_${weekStart}_${uid}`;

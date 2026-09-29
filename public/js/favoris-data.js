@@ -5,7 +5,7 @@
 // Admin (via "Aperçu en tant que…") pour préparer la vue d'un technicien.
 
 import { db } from "./firebase-init.js";
-import { doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { doc, onSnapshot, setDoc } from "./firestore-compte.js";
 
 export function watchFavoris(uid, callback, onError) {
   return onSnapshot(doc(db, "favoris-sites", uid), (snap) => {

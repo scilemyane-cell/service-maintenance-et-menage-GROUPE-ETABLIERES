@@ -12,7 +12,7 @@
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
   import { watchUsers, updateUser } from "./users-data.js";
   import { db as dbMig } from "./firebase-init.js";
-  import { doc as docMig, getDoc as getDocMig, setDoc as setDocMig } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { doc as docMig, getDoc as getDocMig, setDoc as setDocMig } from "./firestore-compte.js";
   import { watchOrdreOnglets, saveOrdreOnglets } from "./ordre-onglets-data.js";
 
   initTheme();

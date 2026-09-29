@@ -23,7 +23,7 @@
 import { db } from "./firebase-init.js";
 import {
   doc, getDoc, setDoc, deleteDoc,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const COLLECTION = "dossiers-pdf-public";
 const CHUNK_SIZE = 650000; // octets bruts par morceau, avant encodage base64

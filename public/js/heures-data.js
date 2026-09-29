@@ -2,7 +2,7 @@ import { db } from "./firebase-init.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, addDoc, onSnapshot,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./firestore-compte.js";
 
 const DEFAULT_PARAMS = { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 };
 
