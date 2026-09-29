@@ -8,6 +8,7 @@
 // Un compteur eau/gaz n'a qu'un seul index.
 
 import { partager } from "./ecoute-partagee.js";
+import { ecouteDelta } from "./cache-delta.js";
 import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
@@ -124,7 +125,7 @@ export async function synchroniserEmplacementsCompteurs(dossierId, sections) {
     const match = trouverSectionPourType(sections, c.type);
     const nouvelEmplacement = match?.emplacement || "";
     if (nouvelEmplacement && nouvelEmplacement !== c.emplacement) {
-      await updateDoc(doc(db, COMPTEURS, d.id), { emplacement: nouvelEmplacement });
+      await updateDoc(doc(db, COMPTEURS, d.id), { emplacement: nouvelEmplacement, majLe: serverTimestamp() });
     }
   }
 }
@@ -211,16 +212,16 @@ export async function listerTousLesCompteurs() {
 }
 
 export async function creerCompteur(dossierId, dossierNom, compteur) {
-  const ref = await addDoc(collection(db, COMPTEURS), { dossierId, dossierNom, ...compteur });
+  const ref = await addDoc(collection(db, COMPTEURS), { dossierId, dossierNom, ...compteur, majLe: serverTimestamp() });
   return ref.id;
 }
 
 export async function modifierCompteur(id, fields) {
-  await updateDoc(doc(db, COMPTEURS, id), fields);
+  await updateDoc(doc(db, COMPTEURS, id), { ...fields, majLe: serverTimestamp() });
 }
 
 export async function envoyerCompteurCorbeille(id) {
-  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: Timestamp.now() });
+  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: Timestamp.now(), majLe: serverTimestamp() });
 }
 
 // Liste ponctuelle des compteurs actuellement à la corbeille — utilisée
@@ -233,7 +234,7 @@ export async function listerCompteursCorbeille() {
 }
 
 export async function restaurerCompteur(id) {
-  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: deleteField() });
+  await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: deleteField(), majLe: serverTimestamp() });
 }
 
 // Suppression définitive et irréversible : le compteur ET tout son
@@ -284,6 +285,7 @@ export async function enregistrerReleve(compteur, valeurs, photos, user, dateAnt
     dernierReleve: {
       at, valeurs, photos, illisibles,
       releveParNom: user?.nom || user?.email || "Inconnu",
+      majLe: serverTimestamp(), // repère pour la copie locale (cache-delta)
     },
   });
 }
@@ -309,6 +311,7 @@ export async function supprimerReleve(compteurId, releveId) {
   const dernier = restant[0];
   await updateDoc(doc(db, COMPTEURS, compteurId), {
     dernierReleve: dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, releveParNom: dernier.releveParNom } : null,
+    majLe: serverTimestamp(),
   });
 }
 
@@ -382,9 +385,8 @@ export function qrPayloadForCompteur(compteurId) {
 // d'accueil, sans avoir à ouvrir l'onglet.
 export const watchCompteursAlertCount = partager("compteurs-alertes", watchCompteursAlertCountBrut);
 // Une seule écoute de la collection compteurs pour le total ET les alertes.
-const watchCompteursBruts = partager("compteurs-bruts", (callback) => onSnapshot(collection(db, COMPTEURS), (snap) => {
-  const l = []; snap.forEach((d) => l.push(d.data())); callback(l);
-}, (err) => { console.error("watchCompteurs:", err); callback(null); }));
+// Copie sur l'appareil + seuls les compteurs modifiés sont relus (cache-delta.js).
+const watchCompteursBruts = partager("compteurs-bruts", ecouteDelta({ cle: "compteurs", col: COMPTEURS, champs: ["majLe", "dernierReleve.majLe"] }));
 function watchCompteursAlertCountBrut(callback) {
   return watchCompteursBruts((l) => callback(l ? l.filter(c => !c.supprimeLe && estEnRetard(c)).length : 0));
 }

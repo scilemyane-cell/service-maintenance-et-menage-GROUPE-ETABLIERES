@@ -167,8 +167,8 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
     onProgress(`Enregistrement ${Math.min(i + 400, ops.length)} / ${ops.length}…`);
     const batch = writeBatch(db);
     ops.slice(i, i + 400).forEach(o => o[0] === "set"
-      ? batch.set(doc(collection(db, "demandes")), { ...o[1], importeLe: serverTimestamp() })
-      : batch.update(doc(db, "demandes", o[1]), o[2]));
+      ? batch.set(doc(collection(db, "demandes")), { ...o[1], importeLe: serverTimestamp(), importMajLe: serverTimestamp() })
+      : batch.update(doc(db, "demandes", o[1]), { ...o[2], importMajLe: serverTimestamp() }));
     await batch.commit();
   }
   await setDoc(REF_SYNCHRO, { derniereLecture: Date.now() }, { merge: true });
@@ -220,7 +220,7 @@ export async function regrouperDoublonsImport(demandesApp) {
   }
   for (let i = 0; i < ops.length; i += 400) {
     const batch = writeBatch(db);
-    ops.slice(i, i + 400).forEach(([id, d]) => batch.update(doc(db, "demandes", id), d));
+    ops.slice(i, i + 400).forEach(([id, d]) => batch.update(doc(db, "demandes", id), { ...d, importMajLe: serverTimestamp() }));
     await batch.commit();
   }
   return ops.filter(o => o[1].doublonImport).length;

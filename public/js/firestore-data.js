@@ -1,4 +1,5 @@
 import { ecoutePartagee, partager } from "./ecoute-partagee.js";
+import { ecouteDelta } from "./cache-delta.js";
 import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
@@ -124,28 +125,13 @@ export async function listerInterventionsCorbeille() {
 // relit TOUS les documents de la requête. On garde donc une seule écoute par
 // requête pour toute la session (ouvrir / fermer une tuile ne relit rien) :
 // seuls les documents modifiés sont ensuite facturés.
-// mode "complet" : toutes les demandes (superviseurs : tableau, stats, synchro).
-// mode "actif" (techniciens) : demandes non clôturées + celles modifiées depuis
-// 45 jours (historique récent des sites) — beaucoup moins de lectures.
-export function watchDemandes(callback, { mode = "complet" } = {}) {
-  return ecoutePartagee(`demandes:${mode}`, (emettre) => {
-    if (mode !== "actif") {
-      onSnapshot(collection(db, "demandes"), (snap) => {
-        const list = []; snap.forEach((d) => list.push({ id: d.id, ...d.data() })); emettre(list);
-      }, (err) => { console.error("watchDemandes:", err); emettre([]); });
-      return;
-    }
-    const a = new Map(), b = new Map(); let pret = 0;
-    const envoyer = () => { if (pret < 2) return; const m = new Map([...b, ...a]); emettre([...m.entries()].map(([id, x]) => ({ id, ...x }))); };
-    const ecoute = (q, cible) => { let premier = true; onSnapshot(q, (snap) => { cible.clear(); snap.forEach(d => cible.set(d.id, d.data())); if (premier) { premier = false; pret++; } envoyer(); }, (err) => { console.error("watchDemandes (actif):", err); if (premier) { premier = false; pret++; } envoyer(); }); };
-    ecoute(query(collection(db, "demandes"), where("statut", "not-in", ["Réalisé", "Annulé"])), a);
-    ecoute(query(collection(db, "demandes"), where("dateMaj", ">=", new Date(Date.now() - 45 * 86400000))), b);
-  }, callback);
+// Demandes : copie gardée sur l'appareil + seules les demandes modifiées
+// depuis la dernière visite sont lues (voir cache-delta.js). Les champs
+// date couvrent toutes les écritures : dateMaj (appli), importeLe (nouvelle
+// demande importée), importMajLe (mise à jour venant du fichier Excel).
+export function watchDemandes(callback) {
+  return ecoutePartagee("demandes:delta", ecouteDelta({ cle: "demandes", col: "demandes", champs: ["dateMaj", "importeLe", "importMajLe"] }), callback);
 }
-// Import initial (ou réimport) en masse depuis le fichier Excel — n'écrase
-// pas les demandes déjà présentes (identifiées par leur `numero`) pour ne
-// jamais perdre un traitement déjà fait par un technicien dans l'appli ;
-// n'ajoute que les numéros absents de la base.
 // Lecture ponctuelle de toutes les demandes (outils manuels : récupérer, doublons).
 export async function lireToutesDemandes() {
   const snap = await getDocs(collection(db, "demandes"));
@@ -159,7 +145,7 @@ export async function importerDemandes(lignes) {
   for (let i = 0; i < aAjouter.length; i += 450) {
     const lot = aAjouter.slice(i, i + 450);
     const batch = writeBatch(db);
-    lot.forEach((l) => batch.set(doc(collection(db, "demandes")), { ...l, importeLe: serverTimestamp() }));
+    lot.forEach((l) => batch.set(doc(collection(db, "demandes")), { ...l, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }));
     await batch.commit();
   }
   return aAjouter.length;
