@@ -4,6 +4,7 @@
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
 import { esc } from "./astreinte-logic.js";
 import { ouvrirImpressionSite } from "./demandes-impression.js";
+import { preparerFenetre } from "./demandes-ticket.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -596,7 +597,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         const candidats = tousDuSite.filter(x => x.id !== l.id && !x.lieeA && !lieesDe(x.id).length && !TRAITE(x.statut));
         const mails = Array.isArray(l.mailsEnvoyes) ? l.mailsEnvoyes : [];
         return `${mails.length ? `<div class="dps-mails">${mails.slice(-3).map(m => `<span>📧 Mail à <b>${esc(m.a)}</b> le ${fr(m.le)}${m.par ? ` par ${esc(m.par)}` : ""}</span>`).join("")}</div>` : ""}
-        ${perms.peutTraiter ? `<button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail (gestionnaire / artisan)</button>` : ""}
+        ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button></div>` : ""}
         ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
           <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}`;
@@ -683,6 +684,13 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   container.querySelectorAll("[data-mail]").forEach(b => b.addEventListener("click", async () => {
     const { ouvrirEnvoiMail } = await import("./demandes-mail.js");
     ouvrirEnvoiMail({ ligne: lignes.find(x => x.id === b.dataset.mail), utilisateur, peutMemoriser: perms.isEditor, maj });
+  }));
+  container.querySelectorAll("[data-ticket]").forEach(b => b.addEventListener("click", async () => {
+    const l = lignes.find(x => x.id === b.dataset.ticket); if (!l) return;
+    const fenetre = preparerFenetre();
+    const { ouvrirTicketPrestataire } = await import("./demandes-ticket.js");
+    const fiche = (fav.fiches || []).find(f => memeSite(l.site, f.nom));
+    ouvrirTicketPrestataire({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "", fenetre });
   }));
   container.querySelectorAll("[data-urgence]").forEach(sel => sel.addEventListener("change", async () => {
     const l = lignes.find(x => x.id === sel.dataset.urgence), v = sel.value;
