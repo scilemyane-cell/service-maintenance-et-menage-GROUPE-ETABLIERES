@@ -98,38 +98,38 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
 // N1, la décision et la validation du déplacement sont déjà affichés à part
 // dans la fiche, ils servent seulement de contexte et ne sont pas racontés.
 export async function redigerCompteRendu(f) {
+  const texte = [f.description, f.compteRendu].filter(t => t && t.trim()).join("\n").trim()
+    || (f.type ? `Intervention ${f.type}` : "");
   const contexte = [
-    f.date && `Date : ${f.date}`,
-    (f.association || f.site) && `Lieu : ${[f.association, f.groupe, f.site].filter(Boolean).join(" / ")}`,
     f.type && `Type : ${f.type}`,
-    f.appelN1 && f.motifAppelN1 && `Motif de l'appel : ${f.motifAppelN1}`,
-    f.sansDeplacement && `Traité par téléphone / à distance, sans déplacement`,
+    f.sansDeplacement && `Traité par téléphone, sans déplacement`,
   ].filter(Boolean).join("\n");
-  const notes = [
-    f.description && `Notes du technicien : ${f.description}`,
-    f.compteRendu && `Brouillon existant à améliorer : ${f.compteRendu}`,
-  ].filter(Boolean).join("\n");
-  return genererTexte(`Tu es l'assistant du service maintenance d'un organisme de formation (Groupe Établières, Vendée).
-Un technicien${f.technicien ? ` (${f.technicien})` : ""} rédige le compte rendu de SON intervention d'astreinte. Mets ses notes au propre, en français, clair et professionnel, comme s'il l'écrivait lui-même.
-Règles :
-- 2 à 5 lignes, structure « Constat : … », « Travaux réalisés : … », « Suite à donner : … » (« Aucune » si rien n'est indiqué).
-- Décris uniquement ce que le technicien a constaté et fait sur place, d'après SES notes.
-- Ne parle PAS de l'appel au cadre d'astreinte (N1), de qui a appelé qui, ni de la validation du déplacement : c'est déjà noté ailleurs.
-- Ne répète pas la date, le site, le nom du technicien ni les horaires : ils sont déjà affichés.
-- N'invente AUCUN fait, test, résultat, matériel, cause ou chiffre absent des notes. Si les notes ne disent pas que c'est réglé, ne le dis pas.
-- Corrige l'orthographe ; pas de titre, pas de formule de politesse, pas de Markdown (pas d'astérisques).
-
-Contexte (à ne pas recopier) :
-${contexte || "—"}
-
-${notes}`);
+  return nettoyerReponseIA(await genererTexte(`Corrige et mets au propre le texte ci-dessous, écrit (souvent dicté) par un technicien de maintenance. C'est SON compte rendu d'intervention.
+Règles strictes :
+- Renvoie UNIQUEMENT le texte corrigé : une seule version, pas de proposition, pas d'alternative, pas de commentaire, pas d'introduction (« Voici… »), pas de guillemets, pas de Markdown.
+- Garde ses mots, son ordre et sa longueur autant que possible : corrige l'orthographe, la grammaire, la ponctuation, et reformule seulement ce qui est mal dit ou incompréhensible.
+- N'ajoute RIEN : aucun fait, cause, résultat, matériel, chiffre, conseil ni « suite à donner » qui ne soit pas dans le texte. N'ajoute ni titre ni rubrique.
+- Écris comme si c'était lui (phrases simples, style professionnel de terrain).
+${contexte ? `\nContexte (à ne pas recopier) :\n${contexte}\n` : ""}
+Texte à corriger :
+${texte}`));
 }
 
 // Reformule proprement la décision / consigne du N1 (1 à 2 phrases).
 export async function reformulerDecision(f) {
-  return genererTexte(`Reformule en français, en 1 à 2 phrases courtes et professionnelles, la décision ou consigne donnée par le cadre d'astreinte (N1) à un technicien de maintenance.
-Corrige l'orthographe, garde exactement le sens, n'ajoute aucun fait, pas de guillemets, pas de Markdown.
-${f.motifAppelN1 ? `Motif de l'appel : ${f.motifAppelN1}\n` : ""}Décision / consigne notée : ${f.decisionN1}`);
+  return nettoyerReponseIA(await genererTexte(`Corrige et mets au propre la décision ou consigne notée par le cadre d'astreinte (N1).
+Renvoie UNIQUEMENT le texte corrigé : une seule version, pas de proposition, pas d'alternative, pas d'introduction, pas de guillemets, pas de Markdown.
+Garde ses mots et le sens exact, corrige l'orthographe et la tournure, n'ajoute aucun fait.
+${f.motifAppelN1 ? `Contexte (à ne pas recopier) : ${f.motifAppelN1}\n` : ""}Texte à corriger : ${f.decisionN1}`));
+}
+
+// Filet de sécurité : retire une éventuelle intro (« Voici le texte corrigé : »),
+// les guillemets englobants et les astérisques si le modèle en ajoute malgré tout.
+function nettoyerReponseIA(t) {
+  let out = String(t || "").replace(/\*\*/g, "").trim();
+  out = out.replace(/^(voici|voilà|proposition|texte corrigé|version corrigée)[^\n]*:\s*\n?/i, "").trim();
+  out = out.replace(/^["«“]\s*([\s\S]*?)\s*["»”]$/, "$1").trim();
+  return out;
 }
 
 // Commentaire intervenant d'une demande (Suivi des demandes) : met au propre

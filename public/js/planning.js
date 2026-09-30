@@ -3103,7 +3103,7 @@ function renderInterventions(container, perms) {
       btn.disabled = true; btn.textContent = "⏳ Rédaction…"; statut.textContent = "";
       window.__iaEnCours = true;
       try {
-        const texte = await redigerCompteRendu(ui.form);
+        const texte = await redigerCompteRendu({ ...ui.form, description: "" });
         ui.form.compteRendu = texte.replace(/\*\*/g, "");
         document.getElementById("f-cr").value = ui.form.compteRendu;
         statut.innerHTML = `<span style="color:var(--teal)">✓ Relis et corrige si besoin avant d'enregistrer.</span>`;
