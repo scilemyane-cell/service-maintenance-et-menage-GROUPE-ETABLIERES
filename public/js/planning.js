@@ -2970,14 +2970,12 @@ function renderInterventions(container, perms) {
           <label>Heures<input type="number" step="0.25" min="0" inputmode="decimal" id="f-heures" value="${esc(ui.form.heures)}" placeholder="calcul auto"></label>
         </div>
         <div class="iv-total" id="f-total">${ui.form.heures ? `⏱️ Total : <b>${fmtDureeH(parseFloat(ui.form.heures))}</b>` : ""}</div>
-        <div class="iv-section">Détails</div>
-        <label class="iv-desc"><input id="f-desc" value="${esc(ui.form.description)}" placeholder="Notes rapides : ce qui a été constaté et fait…"></label>
         <div class="iv-cr">
           <div class="iv-cr-tete">
-            <span>📝 Compte rendu <small>(optionnel)</small></span>
+            <span>📝 Compte rendu</span>
             <button type="button" class="iv-ia" id="f-ia">✨ Rédiger avec l'IA</button>
           </div>
-          <textarea id="f-cr" rows="4" placeholder="Rédigé automatiquement à partir des notes et des champs ci-dessus — modifiable avant d'enregistrer.">${esc(ui.form.compteRendu || "")}</textarea>
+          <textarea id="f-cr" rows="4" placeholder="Tape (ou dicte) en vrac ce qui a été constaté et fait, puis ✨ Rédiger avec l'IA pour le mettre au propre.">${esc(ui.form.compteRendu || "")}</textarea>
           <div id="f-ia-statut" class="iv-ia-statut"></div>
         </div>
         <div class="iv-section">Photos du dépannage <small>(optionnel)</small></div>
@@ -3101,7 +3099,7 @@ function renderInterventions(container, perms) {
     document.getElementById("f-ia")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget, statut = document.getElementById("f-ia-statut");
       ui.form.description = document.getElementById("f-desc")?.value ?? ui.form.description;
-      if (!ui.form.description && !ui.form.type && !ui.form.compteRendu) { statut.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques notes (ou le type d'intervention).</span>`; return; }
+      if (!ui.form.description && !ui.form.type && !ui.form.compteRendu) { statut.innerHTML = `<span style="color:var(--red)">Écris d'abord quelques mots dans le compte rendu (ou le type d'intervention).</span>`; return; }
       btn.disabled = true; btn.textContent = "⏳ Rédaction…"; statut.textContent = "";
       window.__iaEnCours = true;
       try {
@@ -3264,11 +3262,11 @@ function renderInterventions(container, perms) {
         ui.ivOnglet = "mes";
         ui.form = {
           date: i.date, technicien: i.technicien, association: i.association || "", groupe: i.groupe || "",
-          site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.description || "",
+          site: i.site, type: i.type, heures: String(i.heures), heureDebut: i.heureDebut || "", heureFin: i.heureFin || "", description: i.compteRendu ? (i.description || "") : "",
           photos: i.photos || [],
           appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
           sansDeplacement: !!i.sansDeplacement,
-          compteRendu: i.compteRendu || "",
+          compteRendu: i.compteRendu || i.description || "",
           appelOrigineId: i.appelOrigineId || "", appelOrigineNumero: i.appelOrigineNumero || "",
           heureAppel: i.heureAppel || "", dureeAppelMin: i.dureeAppelMin ? String(i.dureeAppelMin) : "",
           numero: i.numero || "",
@@ -3310,7 +3308,7 @@ function renderInterventions(container, perms) {
       reinitialiserFormIntervention();
       Object.assign(ui.form, {
         date: a.date, technicien: a.technicien || ui.form.technicien, association: a.association || "", groupe: a.groupe || "", site: a.site || "",
-        type: a.type || "", description: a.description ? `Suite appel ${a.numero || ""} : ${a.description}` : `Suite appel ${a.numero || ""}`,
+        type: a.type || "", description: "", compteRendu: `Suite appel ${a.numero || ""}${a.compteRendu || a.description ? ` : ${a.compteRendu || a.description}` : ""}`,
         sansDeplacement: false, appelOrigineId: a.id, appelOrigineNumero: a.numero || "",
       });
       renderAll();
