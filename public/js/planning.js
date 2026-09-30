@@ -2459,6 +2459,42 @@ function completerHorairesHTML(i) {
   </div>`;
 }
 
+// ---- Clôture du mois (alerte de fin de mois pour les admins) ----
+// Récap par intervenant : heures, nuit, primes, statut de validation, et
+// raccourcis vers le relevé d'heures et la note de frais km à imprimer.
+function bornesMois(mois) {
+  const [a, m] = mois.split("-").map(Number);
+  const fin = new Date(a, m, 0);
+  return { start: `${mois}-01`, end: `${mois}-${String(fin.getDate()).padStart(2, "0")}` };
+}
+function clotureMoisHTML(mois) {
+  const { start, end } = bornesMois(mois);
+  const [a, m] = mois.split("-").map(Number);
+  const nomMois = new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const duMois = state.interventions.filter(i => i.date >= start && i.date <= end && !i.supprimeLe);
+  const parTech = new Map();
+  duMois.forEach(i => { const t = i.technicien || "—"; if (!parTech.has(t)) parTech.set(t, []); parTech.get(t).push(i); });
+  const s = (l, k) => l.reduce((t, i) => t + (parseFloat(i[k]) || 0), 0);
+  const lignes = [...parTech.entries()].sort((x, y) => x[0].localeCompare(y[0], "fr"));
+  const reste = duMois.filter(i => !i.transmis).length;
+  return `<div class="form-card iv-cloture" id="iv-cloture">
+    <div class="iv-cloture-tete"><h3>🗓️ Clôture de ${esc(nomMois)}</h3>
+      <span class="iv-cloture-etat ${reste ? "attente" : "ok"}">${reste ? `⏳ ${reste} intervention${reste > 1 ? "s" : ""} à valider` : "✓ Tout est validé"}</span>
+      <button class="nav-btn" id="cloture-fermer" title="Fermer">✕</button></div>
+    ${!lignes.length ? `<p class="hint">Aucune intervention sur ce mois.</p>` : `
+    <div class="table-wrap"><table class="iv-cloture-table">
+      <thead><tr><th>Intervenant</th><th>Interv.</th><th>Heures</th><th>Nuit</th><th>Primes dim.</th><th>Statut</th><th>À imprimer</th></tr></thead>
+      <tbody>${lignes.map(([t, l]) => { const att = l.filter(i => !i.transmis).length; return `<tr>
+        <td><b>${esc(t)}</b></td><td>${l.length}</td><td>${fmtDureeH(s(l, "heures"))}</td><td>${fmtDureeH(s(l, "heuresNuit"))}</td><td>${s(l, "primeDimanche")} €</td>
+        <td>${att ? `<span class="iv-cloture-etat attente">⏳ ${att} à valider</span>` : `<span class="iv-cloture-etat ok">✓ validé</span>`}</td>
+        <td class="iv-cloture-btns"><button class="add-btn" data-cloture-releve="${esc(t)}">📄 Relevé d'heures</button>${t !== "—" ? `<button class="nav-btn" data-cloture-km="${esc(t)}">🚗 Note de frais km</button>` : ""}</td></tr>`; }).join("")}</tbody>
+    </table></div>
+    <div class="iv-cloture-pied"><button class="add-btn" data-cloture-releve="Tous">📄 Relevé global (tous les intervenants)</button>
+      <span class="hint">Le relevé s'ouvre plus bas : « Imprimer » puis « Valider » pour l'archiver (les interventions passent en validé).</span></div>`}
+    ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === "cloture" ? renderApercuNoteFrais() : ""}
+  </div>`;
+}
+
 function renderInterventions(container, perms) {
   // Arrivée depuis le bandeau jaune de l'accueil : ouvre directement le
   // formulaire « Compléter mes horaires » de cette intervention.
@@ -2466,6 +2502,8 @@ function renderInterventions(container, perms) {
   if (window.ouvrirCompleterId && state.interventions.some(x => x.id === window.ouvrirCompleterId)) {
     ui.completerId = window.ouvrirCompleterId; window.ouvrirCompleterId = null; defilerVersCompleter = true; if (perms.canLogIntervention) ui.ivOnglet = "mes";
   }
+  // Arrivée depuis l'alerte « clôture du mois » de l'accueil (admins).
+  if (window.__clotureMois) { ui.cloture = window.__clotureMois; window.__clotureMois = null; ui.ivOnglet = "realisees"; defilerVersCompleter = false; ui.defilerCloture = true; }
   if (!ui.editingId && ui.form.heureAppel === undefined) ui.form.heureAppel = "";
   const intervenants = [...state.people.n1, ...state.people.n2];
   const sorted = [...state.interventions].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -2700,7 +2738,9 @@ function renderInterventions(container, perms) {
       ${completerHorsListe ? completerHorairesHTML(completerHorsListe) : ""}
       ${formHTML}
 `;
+  const clotureHTML = ui.cloture && perms.isEditor ? clotureMoisHTML(ui.cloture) : "";
   const vueRealisees = `
+      ${clotureHTML}
       <div class="ivf">
         <label class="ivf-recherche"><span>🔎</span><input id="ivf-q" type="search" placeholder="Rechercher : site, N°, technicien, motif…" value="${esc(fl.q)}"></label>
         <select id="ivf-tech"><option value="">Tous les intervenants</option>${intervenants.map(t => `<option value="${esc(t)}" ${fl.tech === t ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__aucun" ${fl.tech === "__aucun" ? "selected" : ""}>Sans technicien (téléphone)</option></select>
@@ -3054,6 +3094,15 @@ function renderInterventions(container, perms) {
       if (!interv) return;
       ouvrirApercuNoteFrais(interv.technicien, interv.date.slice(0, 7), interv.id);
     }));
+    document.getElementById("cloture-fermer")?.addEventListener("click", () => { ui.cloture = null; ui.noteFraisPreview = null; renderAll(); });
+    mountedContainer.querySelectorAll("[data-cloture-releve]").forEach(b => b.addEventListener("click", () => {
+      const { start, end } = bornesMois(ui.cloture);
+      ui.docForm.person = b.dataset.clotureReleve; ui.docForm.start = start; ui.docForm.end = end; ui.docForm.generated = true;
+      renderAll();
+      setTimeout(() => (document.getElementById("doc-print-fiche") || document.getElementById("doc-print"))?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    }));
+    mountedContainer.querySelectorAll("[data-cloture-km]").forEach(b => b.addEventListener("click", () => ouvrirApercuNoteFrais(b.dataset.clotureKm, ui.cloture, "cloture")));
+    if (ui.defilerCloture) { ui.defilerCloture = false; setTimeout(() => document.getElementById("iv-cloture")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }
     attacherApercuNoteFraisListeners();
   }
 }

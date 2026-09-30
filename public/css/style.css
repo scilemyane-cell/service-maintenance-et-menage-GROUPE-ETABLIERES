@@ -2643,3 +2643,16 @@ div.gh-urg-corps{cursor:default}
 .gh-act{align-self:flex-start;margin-top:4px;display:inline-block;background:#ffd84d;color:#3d2a00;border-radius:999px;padding:2px 9px;font:800 11.5px system-ui,sans-serif}
 .gh-act.imm{background:#fff;color:#b3121f}
 .gh-act.fait{background:#d6f5df;color:#1b7a3d}
+
+/* Clôture du mois (astreinte) */
+.iv-cloture{border:2px solid var(--gold,#c9a227)}
+.iv-cloture-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.iv-cloture-tete h3{margin:0;text-transform:none}
+.iv-cloture-tete #cloture-fermer{margin-left:auto}
+.iv-cloture-etat{border-radius:999px;padding:2px 10px;font-weight:800;font-size:12px}
+.iv-cloture-etat.attente{background:#fff1d6;color:#8a5a00}
+.iv-cloture-etat.ok{background:#e1f5e8;color:#1b7a3d}
+.iv-cloture-table td,.iv-cloture-table th{padding:6px 8px;text-align:left;vertical-align:middle}
+.iv-cloture-btns{display:flex;gap:6px;flex-wrap:wrap}
+.iv-cloture-btns button{font-size:12px;padding:6px 10px}
+.iv-cloture-pied{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}

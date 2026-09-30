@@ -309,6 +309,15 @@ function blocCarteHTML() {
 // La croix « retirer » n'apparaît qu'en mode « ✏️ Modifier » : sur téléphone,
 // on appuyait dessus par erreur en voulant ouvrir les compteurs.
 let modeEditionFavoris = false;
+// Clôture du mois (admins) : du 25 au 7 du mois suivant, rappel de valider
+// les heures d'astreinte du mois tant qu'il reste des interventions non validées.
+let interventionsToutes = [];
+function moisACloturer() {
+  const d = new Date(), f = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`;
+  if (d.getDate() >= 25) return f(d);
+  if (d.getDate() <= 7) return f(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  return null;
+}
 // ---- Bandeau « urgences » (tout le monde) ----
 // Demandes Critiques encore ouvertes + Urgentes arrivées depuis 3 jours.
 // Chacun peut masquer une alerte (« Vu ») — mémorisé dans Firestore
@@ -537,6 +546,7 @@ function render() {
   if (suitAstreinte && !aCompleterUnsub) {
     aCompleterUnsub = watchInterventions((l) => {
       interventionsACompleter = l.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe);
+      interventionsToutes = l;
       scheduleRender();
     });
   }
@@ -577,6 +587,15 @@ function render() {
   const mesACompleter = suitAstreinte ? interventionsACompleter.filter(i => (i.technicienUid && i.technicienUid === mountedUser.uid) || (maPersonne && nrmIv(i.technicien) === nrmIv(maPersonne))).sort((a, b) => (a.date || "").localeCompare(b.date || "")) : [];
   if (suitAstreinte && interventionsACompleter.length && !mesACompleter.length && mountedUser.role !== "technicien") {
     notifs.push({ cat: "astreinte", sub: "interventions", icone: "🕒", texte: `${interventionsACompleter.length} intervention${interventionsACompleter.length > 1 ? "s" : ""} en attente des horaires du technicien`, niveau: "orange" });
+  }
+  if (["admin", "super_admin"].includes(mountedUser.role)) {
+    const mois = moisACloturer();
+    if (mois) {
+      const [ca, cm] = mois.split("-").map(Number);
+      const aValider = interventionsToutes.filter(i => !i.supprimeLe && !i.transmis && (i.date || "").startsWith(mois)).length;
+      const nomMois = new Date(ca, cm - 1, 1).toLocaleDateString("fr-FR", { month: "long" });
+      if (aValider) notifs.push({ cat: "astreinte", sub: "interventions", mois, icone: "🗓️", texte: `Clôture de ${nomMois} : ${aValider} intervention${aValider > 1 ? "s" : ""} d'astreinte à valider — relevés d'heures et notes de frais km à imprimer`, niveau: "rouge" });
+    }
   }
   if (holidayToday) notifs.push({ icone: "☀️", texte: `Jour férié : ${holidayToday}`, niveau: "violet" });
 
@@ -650,7 +669,7 @@ function render() {
                 <div class="gh-astreinte-ligne"><span class="avatar" style="background:${colorForPerson(n2.assigned, people)}"></span><span>N2</span><b>${esc(n2.assigned)}</b></div>
               </div>` : `<p class="gh-vide">Astreinte pas encore configurée.</p>`}
             ${notifs.length === 0 ? `<p class="gh-aucune">Aucune notification</p>` : notifs.map(n => `
-              <${n.cat ? `button data-notif-cat="${n.cat}"${n.sub ? ` data-notif-sub="${n.sub}"` : ""}` : "div"} class="gh-notif gh-notif-${n.niveau}">
+              <${n.cat ? `button data-notif-cat="${n.cat}"${n.sub ? ` data-notif-sub="${n.sub}"` : ""}${n.mois ? ` data-notif-mois="${n.mois}"` : ""}` : "div"} class="gh-notif gh-notif-${n.niveau}">
                 <span>${n.icone}</span><span>${esc(n.texte)}</span>
               </${n.cat ? "button" : "div"}>`).join("")}
           </div>
@@ -691,6 +710,7 @@ function render() {
   mountedContainer.querySelectorAll("[data-notif-cat]").forEach(btn => {
     btn.addEventListener("click", () => {
       // Raccourcis Suivi des demandes : « valider » → bloc des demandes à valider, « actions » → onglet Mes actions.
+      if (btn.dataset.notifMois) window.__clotureMois = btn.dataset.notifMois;
       if (btn.dataset.notifCat === "suivi-demandes" && btn.dataset.notifSub) window.__suiviRaccourci = btn.dataset.notifSub;
       else if (btn.dataset.notifSub) window.ouvrirSousOnglet = btn.dataset.notifSub;
       onSelectRef(btn.dataset.notifCat);
