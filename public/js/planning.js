@@ -2557,9 +2557,108 @@ function clotureMoisHTML(mois) {
       <button class="nav-btn" id="cloture-fermer" title="Fermer">✕</button>
     </div>
     ${!cartes.length ? `<p class="hint">Aucune intervention avec déplacement sur ce mois.</p>` : `<div class="clo-grille">${cartes.map(c => c.html).join("")}</div>`}
-    <div class="clo-pied">${cartes.length ? `<button class="nav-btn" data-clo-releve="Tous">📄 Relevé global (tous)</button>` : ""}
+    <div class="clo-pied">${cartes.length ? `<button class="nav-btn" data-clo-releve="Tous">📄 Relevé global (tous)</button>` : ""}<button class="nav-btn" data-recap-prime>🏅 Récap des astreintes sur une période (prime)</button>
       ${sansTech ? `<span class="hint">${sansTech} appel${sansTech > 1 ? "s" : ""} traité${sansTech > 1 ? "s" : ""} par téléphone (sans intervenant).</span>` : ""}</div>
   </div>`;
+}
+
+// ---- Récapitulatif d'astreinte sur une période (prime de fin d'année) ----
+// Jours d'astreinte N1 / N2 tenus (planning réel : échanges, absences et
+// forçages compris), week-ends et fériés, appels reçus en N1, déplacements
+// et heures — mois par mois, imprimable et exportable (Excel).
+function planningResolu() {
+  const actif = state.people.astreinteActive || {};
+  const people = { ...state.people, n1: state.people.n1.filter(n => actif[n] !== false), n2: state.people.n2.filter(n => actif[n] !== false) };
+  const { titN1, titN2 } = computeWeeklyTitulaires(people, state.absences);
+  return { people, titN1, titN2 };
+}
+function calculerRecapAstreinte(person, start, end) {
+  const { people, titN1, titN2 } = planningResolu();
+  const moisMap = new Map();
+  const ligne = (cle) => { if (!moisMap.has(cle)) moisMap.set(cle, { cle, n1: 0, n2: 0, we: 0, ferie: 0, semaines: new Set(), appels: 0, depl: 0, heures: 0, nuit: 0, primes: 0 }); return moisMap.get(cle); };
+  // « Réalisées » : on s'arrête à aujourd'hui (les jours à venir ne comptent pas).
+  const auj = new Date(); auj.setHours(12, 0, 0, 0);
+  const d0 = new Date(Math.max(new Date(start + "T12:00"), YEAR_START)), d1 = new Date(Math.min(new Date(end + "T12:00"), YEAR_END, auj));
+  for (let d = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()); d <= d1; d = addDays(d, 1)) {
+    const n1 = resolveDayN1(d, people, state.absences, titN1).assigned === person;
+    const n2 = resolveDayN2(d, people, state.absences, titN2).assigned === person;
+    if (!n1 && !n2) continue;
+    const l = ligne(dateKey(d).slice(0, 7));
+    if (n1) l.n1++; if (n2) l.n2++;
+    if (HOLIDAYS.has(dateKey(d))) l.ferie++; else if (d.getDay() === 0 || d.getDay() === 6) l.we++;
+    const lundi = addDays(d, -((d.getDay() + 6) % 7)); l.semaines.add(dateKey(lundi));
+  }
+  const dans = (i) => i.date && i.date >= start && i.date <= end && !i.supprimeLe;
+  state.interventions.filter(i => dans(i) && i.n1Contacte === person && !i.appelOrigineId).forEach(i => { ligne(i.date.slice(0, 7)).appels++; });
+  const miennes = state.interventions.filter(i => dans(i) && i.technicien === person && !i.sansDeplacement);
+  miennes.forEach(i => { const l = ligne(i.date.slice(0, 7)); l.depl++; l.heures += parseFloat(i.heures) || 0; l.nuit += parseFloat(i.heuresNuit) || 0; l.primes += parseFloat(i.primeDimanche) || 0; });
+  const lignes = [...moisMap.values()].sort((a, b) => a.cle.localeCompare(b.cle));
+  const tot = lignes.reduce((t, l) => { ["n1", "n2", "we", "ferie", "appels", "depl", "heures", "nuit", "primes"].forEach(k => t[k] += l[k]); l.semaines.forEach(x => t.semaines.add(x)); return t; },
+    { n1: 0, n2: 0, we: 0, ferie: 0, semaines: new Set(), appels: 0, depl: 0, heures: 0, nuit: 0, primes: 0 });
+  const nonValidees = miennes.filter(i => !i.transmis).length;
+  return { lignes, tot, nonValidees, futur: end > dateKey(new Date()), horsPlanning: new Date(start + "T12:00") < YEAR_START || new Date(end + "T12:00") > YEAR_END };
+}
+const moisFr = (cle) => { const [a, m] = cle.split("-").map(Number); const t = new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+function ficheRecapAstreinteHTML(person, start, end, r) {
+  const td = (v, x = "") => `<td style="border:1px solid #999;padding:5px 6px;font-size:11.5px;text-align:center${x}">${v}</td>`;
+  const th = (v) => `<th style="border:1px solid #999;padding:5px 6px;font-size:10.5px;background:#eee">${v}</th>`;
+  const row = (l, lib, gras) => `<tr style="${gras ? "font-weight:700;background:#f4f4f4" : ""}">${td(lib, ";text-align:left")}${td(l.n1 || "—")}${td(l.n2 || "—")}${td(l.n1 + l.n2)}${td(l.we || "—")}${td(l.ferie || "—")}${td(l.semaines.size || "—")}${td(l.appels || "—")}${td(l.depl || "—")}${td(l.heures ? fmtDureeH(l.heures) : "—")}${td(l.nuit ? fmtDureeH(l.nuit) : "—")}${td(l.primes ? l.primes + " €" : "—")}</tr>`;
+  return `<div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px"><span style="font-size:13px">Le ${fmtShort(new Date())}</span></div>
+    <p style="font-size:15px;font-weight:700;margin:0 0 6px">RÉCAPITULATIF DES ASTREINTES RÉALISÉES</p>
+    <p style="font-size:13px;margin:0 0 4px">Nom : <b>${esc(person)}</b></p>
+    <p style="font-size:13px;margin:0 0 14px">Période du ${fmtShort(new Date(start + "T12:00"))} au ${fmtShort(new Date(end + "T12:00"))}${r.futur ? ` — arrêtée au ${fmtShort(new Date())}` : ""}</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px">
+      <thead><tr>${th("Mois")}${th("Jours N1")}${th("Jours N2")}${th("Total jours")}${th("dont week-end")}${th("dont fériés")}${th("Semaines")}${th("Appels reçus (N1)")}${th("Déplacements")}${th("Heures sur site")}${th("dont nuit")}${th("Primes dim.")}</tr></thead>
+      <tbody>${r.lignes.length ? r.lignes.map(l => row(l, moisFr(l.cle))).join("") : `<tr><td colspan="12" style="border:1px solid #999;padding:8px;text-align:center">Aucune astreinte sur cette période.</td></tr>`}</tbody>
+      <tfoot>${row(r.tot, "TOTAL", true)}</tfoot>
+    </table>
+    <p style="font-size:10px;color:#666;margin:0 0 4px">Jours d'astreinte d'après le planning (échanges, absences et remplacements compris). « Semaines » = semaines (lundi → dimanche) avec au moins un jour d'astreinte. Appels reçus = fiches où la personne est le cadre N1 contacté. Heures, nuit et primes = déplacements réalisés par la personne.</p>
+    ${r.nonValidees ? `<p style="font-size:11px;color:#a15c00;margin:0 0 4px">⚠ ${r.nonValidees} déplacement(s) de la période pas encore validé(s) dans un relevé d'heures.</p>` : ""}
+    <div style="margin-top:30px;display:flex;justify-content:space-between;font-size:12px"><span>Signature du salarié</span><span>Visa de la direction</span></div>
+  </div>`;
+}
+function exporterRecapCSV(person, start, end, r) {
+  const L = [["Récapitulatif des astreintes", person], ["Période", fmtShort(new Date(start + "T12:00")), fmtShort(new Date(end + "T12:00"))], [],
+    ["Mois", "Jours N1", "Jours N2", "Total jours", "dont week-end", "dont fériés", "Semaines", "Appels reçus (N1)", "Déplacements", "Heures sur site", "dont nuit (h)", "Primes dimanche (€)"]];
+  const lig = (l, lib) => [lib, l.n1, l.n2, l.n1 + l.n2, l.we, l.ferie, l.semaines.size, l.appels, l.depl, l.heures.toFixed(2).replace(".", ","), l.nuit.toFixed(2).replace(".", ","), l.primes];
+  r.lignes.forEach(l => L.push(lig(l, moisFr(l.cle)))); L.push(lig(r.tot, "TOTAL"));
+  const csv = "﻿" + L.map(x => x.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `astreintes-${person.replace(/[^\w-]+/g, "_")}-${start}-au-${end}.csv`; a.click();
+}
+function ouvrirRecapPrime(personDefaut) {
+  const perms = permissions(mountedUser);
+  const moi = personneDuCompte(mountedUser);
+  const toutes = [...new Set([...state.people.n1, ...state.people.n2])].sort((a, b) => a.localeCompare(b, "fr"));
+  const choix = perms.isEditor ? toutes : toutes.filter(p => p === moi);
+  let person = personDefaut && choix.includes(personDefaut) ? personDefaut : (choix.includes(moi) ? moi : choix[0]);
+  const auj = new Date(), a = auj.getFullYear();
+  const PRESETS = { civile: [`${a}-01-01`, `${a}-12-31`], civilePrec: [`${a - 1}-01-01`, `${a - 1}-12-31`],
+    scolaire: auj.getMonth() >= 8 ? [`${a}-09-01`, `${a + 1}-08-31`] : [`${a - 1}-09-01`, `${a}-08-31`] };
+  let [start, end] = PRESETS.civile;
+  if (!person) { window.toast?.("Aucune personne du planning reliée à ton compte."); return; }
+  const { ov, actions } = overlayCloture("Récapitulatif des astreintes (prime)", `<div class="clo-recap-filtres"></div><div class="clo-doc"></div>`);
+  const filtres = ov.querySelector(".clo-recap-filtres"), doc = ov.querySelector(".clo-doc");
+  let r;
+  const rendre = () => {
+    r = calculerRecapAstreinte(person, start, end);
+    filtres.innerHTML = `<label>Personne <select data-rp-person ${choix.length > 1 ? "" : "disabled"}>${choix.map(p => `<option ${p === person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+      <div class="iv-chips">${[["civile", `Année ${a}`], ["civilePrec", `Année ${a - 1}`], ["scolaire", "Année scolaire"]].map(([k, l]) => `<button class="iv-chip ${PRESETS[k][0] === start && PRESETS[k][1] === end ? "on" : ""}" data-rp-preset="${k}">${l}</button>`).join("")}</div>
+      <label>Du <input type="date" data-rp-start value="${start}"></label><label>Au <input type="date" data-rp-end value="${end}"></label>
+      <div class="clo-recap-kpis"><div><b>${r.tot.n1 + r.tot.n2}</b><small>jours d'astreinte</small></div><div><b>${r.tot.semaines.size}</b><small>semaines</small></div><div><b>${r.tot.we + r.tot.ferie}</b><small>jours WE / fériés</small></div><div><b>${r.tot.appels + r.tot.depl}</b><small>appels + déplacements</small></div></div>
+      ${r.futur ? `<p class="hint">ℹ️ Seules les astreintes déjà réalisées sont comptées (jusqu'à aujourd'hui).</p>` : ""}${r.horsPlanning ? `<p class="hint">ℹ️ Le planning d'astreinte de l'appli commence le ${fmtShort(YEAR_START)} : les jours avant cette date ne sont pas comptés.</p>` : ""}`;
+    doc.innerHTML = ficheRecapAstreinteHTML(person, start, end, r);
+    filtres.querySelector("[data-rp-person]").addEventListener("change", (e) => { person = e.target.value; rendre(); });
+    filtres.querySelectorAll("[data-rp-preset]").forEach(b => b.addEventListener("click", () => { [start, end] = PRESETS[b.dataset.rpPreset]; rendre(); }));
+    filtres.querySelector("[data-rp-start]").addEventListener("change", (e) => { if (isPlausibleDate(e.target.value)) { start = e.target.value; rendre(); } });
+    filtres.querySelector("[data-rp-end]").addEventListener("change", (e) => { if (isPlausibleDate(e.target.value)) { end = e.target.value; rendre(); } });
+  };
+  actions.innerHTML = `<button class="add-btn" data-rp-print>🖨️ Imprimer / PDF</button><button class="nav-btn" data-rp-csv style="background:#fff;color:#1b2a41">📊 Excel</button>`;
+  actions.querySelector("[data-rp-print]").addEventListener("click", () => imprimerFicheIsolee(doc.querySelector(".print-fiche")));
+  actions.querySelector("[data-rp-csv]").addEventListener("click", () => exporterRecapCSV(person, start, end, r));
+  rendre();
 }
 
 // Fenêtre plein écran : barre d'actions + document seul.
@@ -3293,6 +3392,7 @@ function renderInterventions(container, perms) {
       ui.cloture = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; renderAll();
     }));
     mountedContainer.querySelectorAll("[data-clo-releve]").forEach(b => b.addEventListener("click", () => ouvrirReleveCloture(b.dataset.cloReleve, ui.cloture)));
+    mountedContainer.querySelectorAll("[data-recap-prime]").forEach(b => b.addEventListener("click", () => ouvrirRecapPrime(b.dataset.recapPrime)));
     mountedContainer.querySelectorAll("[data-clo-km]").forEach(b => b.addEventListener("click", () => ouvrirKmCloture(b.dataset.cloKm, ui.cloture)));
     if (ui.defilerCloture) { ui.defilerCloture = false; setTimeout(() => document.getElementById("iv-cloture")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }
     attacherApercuNoteFraisListeners();
@@ -3425,6 +3525,8 @@ function renderSynthese(container) {
       <div class="sy-tuile ${aCompleter ? "alerte" : ""}" style="--c:${aCompleter ? "#C23B27" : "#1baf7a"}"><span>🕒 Horaires à compléter</span><b>${aCompleter}</b><small>${aCompleter ? `déplacement${aCompleter > 1 ? "s" : ""} en attente du technicien` : "tout est à jour"}</small></div>
     </div>
 
+    <button class="clo-entree" data-recap-prime>🏅 <b>Récapitulatif des astreintes réalisées</b><span>Jours N1 / N2, week-ends et fériés, appels et heures sur une période (année, année scolaire…) — à imprimer ou exporter pour la prime</span><em>Ouvrir ›</em></button>
+
     ${insights.length ? `<div class="sy-carte sy-insights"><h3>💡 À retenir</h3><ul>${insights.map(x => `<li>${x}</li>`).join("")}</ul></div>` : ""}
 
     <div class="sy-carte">
@@ -3456,6 +3558,7 @@ function renderSynthese(container) {
     </div>
   </div>`;
 
+  container.querySelectorAll("[data-recap-prime]").forEach(b => b.addEventListener("click", () => ouvrirRecapPrime()));
   container.querySelectorAll("[data-sy-periode]").forEach(b => b.addEventListener("click", () => { ui.synthPeriode = b.dataset.syPeriode; renderAll(); }));
   document.getElementById("sy-n1").addEventListener("change", (e) => { ui.synthN1 = e.target.value; renderAll(); });
   document.getElementById("filter-tech").addEventListener("change", (e) => { ui.filterTech = e.target.value; renderAll(); });

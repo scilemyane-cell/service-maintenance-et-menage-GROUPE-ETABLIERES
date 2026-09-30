@@ -2741,3 +2741,9 @@ body.clo-ouvert{overflow:hidden}
 .clo-km-hist{display:flex;gap:8px;align-items:center;font-size:13px;color:#555;margin-top:6px}
 @media (max-width:560px){.clo-jour{grid-template-columns:1fr auto}.clo-j-nat{grid-column:1/-1;grid-row:2}.clo-km-total b{font-size:21px}}
 @media print{.clo-overlay{display:none !important}}
+.clo-recap-filtres{max-width:1100px;margin:0 auto 12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#fff;border-radius:14px;padding:12px;color:#1a1a1a}
+.clo-recap-filtres label{display:flex;align-items:center;gap:6px;font-size:13px}
+.clo-recap-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.clo-recap-kpis>div{background:#f3f5f9;border-radius:12px;padding:10px;text-align:center}
+.clo-recap-kpis b{display:block;font-size:22px;color:#1b2a41}.clo-recap-kpis small{color:#667;font-size:12px}
+@media (max-width:560px){.clo-recap-kpis{grid-template-columns:1fr 1fr}}
