@@ -2222,7 +2222,7 @@ function renderDocPreview() {
 // Bloc "Appel au N1" — apparaît quand la case est cochée, pour tracer
 // les escalades du technicien vers le cadre d'astreinte (qui, pourquoi,
 // quelle décision/consigne a été donnée).
-function appelN1HTML() {
+function appelN1HTML(lieuHTML = "") {
   return `
     <div class="iv-n1">
       <label>Appel reçu par (cadre d'astreinte N1)
@@ -2231,6 +2231,7 @@ function appelN1HTML() {
           ${state.people.n1.map(nom => `<option value="${esc(nom)}" ${ui.form.n1Contacte === nom ? "selected" : ""}>${esc(nom)}</option>`).join("")}
         </select>
       </label>
+      ${lieuHTML}
       <div class="iv-n1-heure">
         ${champHeureHTML("f-heure-appel", "Heure de l'appel", ui.form.heureAppel || "")}
         <label>Durée de l'appel (min)<input type="number" min="0" step="1" id="f-duree-appel" value="${esc(ui.form.dureeAppelMin || "")}" placeholder="ex. 10"></label>
@@ -2901,36 +2902,8 @@ function renderInterventions(container, perms) {
         ${aCompleter.length ? `<button class="iv-completer-btn" data-completer="${(mesACompleter[0] || aCompleter[0]).id}">🕒 Compléter ${mesACompleter.length ? "maintenant" : "la plus ancienne"}</button>` : ""}
       </div>` : ""}
 `;
-  const formHTML = `      ${perms.canLogIntervention ? `
-      <div class="form-card iv-carte">
-        <div class="iv-tete">
-          <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
-          <span class="iv-sous">Astreinte · dépannage</span>
-        </div>
-        <div class="iv-section">📞 L'appel reçu par le cadre d'astreinte</div>
-        <div class="form-grid iv-grille iv-grille-h">
-          <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
-          ${ui.editingId && mountedUser.role === "super_admin" ? `
-          <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
-        </div>
-        ${ui.form.appelOrigineNumero ? `<div class="iv-suite">↪ Déplacement faisant suite à l'appel <b>${esc(ui.form.appelOrigineNumero)}</b> <button type="button" class="nav-btn" id="f-suite-annuler" style="padding:2px 8px;font-size:11px">✕</button></div>` : ""}
-        <div id="interv-n1-zone">${appelN1HTML()}</div>
-        <div class="iv-question">Comment la demande a-t-elle été traitée ?</div>
-        <div class="iv-mode">
-          <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === true ? "actif" : ""}" data-iv-mode="appel">
-            <span class="iv-mode-ico">📞</span><span><b>Réglé par téléphone</b><small>Sans déplacement · pas de prime dimanche</small></span>
-          </button>
-          <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === false ? "actif" : ""}" data-iv-mode="deplacement">
-            <span class="iv-mode-ico">🚗</span><span><b>Déplacement sur place</b><small>Le technicien s'est rendu sur le site</small></span>
-          </button>
-        </div>
-        <div class="iv-section">Qui, où, quoi</div>
-        <div class="form-grid iv-grille">
-          <label>Technicien
-            ${isLockedTech
-              ? `<input value="${esc(ui.form.technicien)}" disabled>`
-              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.sansDeplacement === true ? "— Aucun (réglé par le N1) —" : "— Choisir le technicien —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
-          </label>
+  const lieuN1HTML = `
+        <div class="iv-n1-lieu iv-n1-plein">
           <label>Association
             <select id="f-association">
               <option value="">— Choisir —</option>
@@ -2949,6 +2922,37 @@ function renderInterventions(container, perms) {
               <option value="">— Choisir —</option>
               ${sitesForSiteSelect.map(s => `<option value="${esc(s.nom)}" ${ui.form.site === s.nom ? 'selected' : ''}>${esc(s.nom)}</option>`).join("")}
             </select>
+          </label>
+        </div>`;
+  const formHTML = `      ${perms.canLogIntervention ? `
+      <div class="form-card iv-carte">
+        <div class="iv-tete">
+          <h3>${ui.editingId ? `✏️ Modifier l'intervention <span class="iv-num">${esc(ui.form.numero || "")}</span>` : "🔧 Nouvelle intervention"}</h3>
+          <span class="iv-sous">Astreinte · dépannage</span>
+        </div>
+        <div class="iv-section">📞 L'appel reçu par le cadre d'astreinte</div>
+        <div class="form-grid iv-grille iv-grille-h">
+          <label>Date<input type="date" id="f-date" value="${esc(ui.form.date)}"></label>
+          ${ui.editingId && mountedUser.role === "super_admin" ? `
+          <label>N° d'intervention (Super Admin)<input id="f-numero" value="${esc(ui.form.numero || "")}" placeholder="INT-00042" style="font-family:ui-monospace,monospace"></label>` : ""}
+        </div>
+        ${ui.form.appelOrigineNumero ? `<div class="iv-suite">↪ Déplacement faisant suite à l'appel <b>${esc(ui.form.appelOrigineNumero)}</b> <button type="button" class="nav-btn" id="f-suite-annuler" style="padding:2px 8px;font-size:11px">✕</button></div>` : ""}
+        <div id="interv-n1-zone">${appelN1HTML(lieuN1HTML)}</div>
+        <div class="iv-question">Comment la demande a-t-elle été traitée ?</div>
+        <div class="iv-mode">
+          <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === true ? "actif" : ""}" data-iv-mode="appel">
+            <span class="iv-mode-ico">📞</span><span><b>Réglé par téléphone</b><small>Sans déplacement · pas de prime dimanche</small></span>
+          </button>
+          <button type="button" class="iv-mode-btn ${ui.form.sansDeplacement === false ? "actif" : ""}" data-iv-mode="deplacement">
+            <span class="iv-mode-ico">🚗</span><span><b>Déplacement sur place</b><small>Le technicien s'est rendu sur le site</small></span>
+          </button>
+        </div>
+        <div class="iv-section">Qui, quoi</div>
+        <div class="form-grid iv-grille">
+          <label>Technicien
+            ${isLockedTech
+              ? `<input value="${esc(ui.form.technicien)}" disabled>`
+              : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.sansDeplacement === true ? "— Aucun (réglé par le N1) —" : "— Choisir le technicien —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
         </div>

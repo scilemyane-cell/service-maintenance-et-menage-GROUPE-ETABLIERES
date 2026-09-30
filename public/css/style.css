@@ -2750,3 +2750,7 @@ body.clo-ouvert{overflow:hidden}
 .clo-recap-kpis>div{background:#f3f5f9;border-radius:12px;padding:10px;text-align:center}
 .clo-recap-kpis b{display:block;font-size:22px;color:#1b2a41}.clo-recap-kpis small{color:#667;font-size:12px}
 @media (max-width:560px){.clo-recap-kpis{grid-template-columns:1fr 1fr}}
+/* Association / Sous-service / Site saisis par le N1 (dans le cadre jaune) */
+.iv-n1-lieu{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.iv-n1-lieu > *{min-width:0}
+.iv-n1 select:disabled{opacity:.6}
