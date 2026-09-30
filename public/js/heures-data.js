@@ -1,3 +1,4 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc,
@@ -17,7 +18,8 @@ export async function saveHeuresParams(params) {
   await setDoc(doc(db, "config", "heures-parametres"), params);
 }
 
-export function watchHeures(callback) {
+export const watchHeures = partager("heures", watchHeuresBrut);
+function watchHeuresBrut(callback) {
   return onSnapshot(collection(db, "heures"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));

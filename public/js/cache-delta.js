@@ -48,10 +48,11 @@ const depuisCache = (v) => {
   return v;
 };
 const lireChamp = (x, champ) => champ.split(".").reduce((o, k) => (o == null ? o : o[k]), x);
-const ms = (t) => (t && typeof t.toMillis === "function" ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0));
+const ms = (t) => (typeof t === "number" ? t : t && typeof t.toMillis === "function" ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0));
 
 // Renvoie une fonction demarrer(emettre) utilisable avec ecoutePartagee.
-export function ecouteDelta({ cle, col, champs }) {
+// numerique : les champs date sont des nombres (ms) et non des Timestamp.
+export function ecouteDelta({ cle, col, champs, numerique = false }) {
   return async (emettre) => {
     const docs = new Map();
     let depuis = 0, completLe = 0, timerSave = null;
@@ -78,7 +79,7 @@ export function ecouteDelta({ cle, col, champs }) {
     }
 
     // Écoute des seuls documents modifiés depuis la dernière visite.
-    const seuil = Timestamp.fromMillis(Math.max(0, depuis - MARGE));
+    const seuil = numerique ? Math.max(0, depuis - MARGE) : Timestamp.fromMillis(Math.max(0, depuis - MARGE));
     champs.forEach(champ => {
       onSnapshot(query(collection(db, col), where(champ, ">", seuil)), (snap) => {
         let change = false;

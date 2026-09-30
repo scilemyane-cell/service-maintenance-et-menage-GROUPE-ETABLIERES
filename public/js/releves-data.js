@@ -1,9 +1,11 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, addDoc, deleteDoc, updateDoc, collection, onSnapshot,
 } from "./firestore-compte.js";
 
-export function watchReleves(callback) {
+export const watchReleves = partager("releves-interventions", watchRelevesBrut);
+function watchRelevesBrut(callback) {
   return onSnapshot(collection(db, "releves-interventions"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));

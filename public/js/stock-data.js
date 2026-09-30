@@ -1,3 +1,4 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, addDoc, updateDoc, getDocs, deleteField,
@@ -71,7 +72,8 @@ export const PRODUITS_TYPE = [
   withMin("Papier toilette (colis)", "Consommables", "colis", 10),
 ];
 
-export function watchStockProduits(callback) {
+export const watchStockProduits = partager("stock-produits", watchStockProduitsBrut);
+function watchStockProduitsBrut(callback) {
   return onSnapshot(collection(db, "stock-produits"), (snap) => {
     const list = [];
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
@@ -138,7 +140,8 @@ export async function enregistrerInventaire(produitId, quantiteAvant, quantiteAp
 
 // Historique des commandes passées à un fournisseur (marquage manuel après
 // envoi de l'email de demande de devis).
-export function watchCommandesHistorique(callback) {
+export const watchCommandesHistorique = partager("stock-commandes", watchCommandesHistoriqueBrut);
+function watchCommandesHistoriqueBrut(callback) {
   return onSnapshot(collection(db, "stock-commandes"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));

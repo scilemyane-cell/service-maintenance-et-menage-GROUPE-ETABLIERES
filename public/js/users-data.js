@@ -1,7 +1,9 @@
+import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import { doc, setDoc, updateDoc, collection, onSnapshot } from "./firestore-compte.js";
 
-export function watchUsers(callback) {
+export const watchUsers = partager("users", watchUsersBrut);
+function watchUsersBrut(callback) {
   return onSnapshot(collection(db, "users"), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ uid: d.id, ...d.data() }));

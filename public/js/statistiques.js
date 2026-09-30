@@ -20,6 +20,9 @@ import { db } from "./firebase-init.js";
 import { collection, getDocs, doc, getDoc } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
+import { watchDemandes, watchInterventions } from "./firestore-data.js";
+import { ecoutePartagee } from "./ecoute-partagee.js";
+import { ecouteDelta } from "./cache-delta.js";
 
 let mountedContainer = null;
 let graphiquesActifs = {};
@@ -50,7 +53,7 @@ export async function mountStatistiques(container, user) {
   masques = modulesMasquesPour(user);
   container.innerHTML = `<div class="hint">⏳ Calcul des statistiques…</div>`;
   try {
-    cache = await collecterDonnees();
+    if (!cache || Date.now() - lectureLe > 30 * 60000) { cache = await collecterDonnees(); lectureLe = Date.now(); }
     render();
   } catch (err) {
     console.error("Statistiques:", err);
@@ -58,9 +61,23 @@ export async function mountStatistiques(container, user) {
   }
 }
 
+// Quota Firestore : les grosses collections viennent des copies locales
+// déjà tenues à jour par l'appli (demandes, interventions, relevés de
+// compteurs : seules les modifications sont relues) ; le reste est lu au
+// plus une fois toutes les 30 min (bouton « Actualiser » pour forcer).
+const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = false; u = watch((v) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(v); }); });
+const watchRelevesCompteurs = (cb) => ecoutePartagee("releves-compteurs", ecouteDelta({ cle: "releves-compteurs", col: "compteurs-releves", champs: ["createdAt"], numerique: true }), cb);
+const LOCAUX = {
+  demandes: () => premiereValeur(watchDemandes),
+  interventions: () => premiereValeur(watchInterventions),
+  relevesCompteurs: () => premiereValeur(watchRelevesCompteurs),
+};
+let lectureLe = 0;
 async function collecterDonnees() {
   const cles = Object.keys(SOURCES);
-  const resultats = await Promise.allSettled(cles.map(k => getDocs(collection(db, SOURCES[k]))));
+  const resultats = await Promise.allSettled(cles.map(k => LOCAUX[k]
+    ? LOCAUX[k]().then(liste => ({ forEach: (f) => liste.forEach(x => f({ id: x.id, data: () => x })) }))
+    : getDocs(collection(db, SOURCES[k]))));
   const data = { erreurs: [] };
   // Personnes hors roulement d'astreinte (case « Astreinte » décochée,
   // ex. l'agent espaces verts) : leurs interventions sont du travail
@@ -589,7 +606,7 @@ function render() {
 
   document.getElementById("stat-f-periode")?.addEventListener("change", e => { filtres.periode = e.target.value; render(); });
   document.getElementById("stat-f-assoc")?.addEventListener("change", e => { filtres.association = e.target.value; render(); });
-  document.getElementById("stat-rafraichir")?.addEventListener("click", () => mountStatistiques(mountedContainer, userCourant));
+  document.getElementById("stat-rafraichir")?.addEventListener("click", () => { lectureLe = 0; mountStatistiques(mountedContainer, userCourant); });
 
   dessinerGraphiques(s, p);
 }

@@ -35,7 +35,7 @@ const icone = (a) => a === "Téléphone" ? "📱" : a === "Tablette" ? "📲" : 
 const QUOTA = 50000;
 function blocLecturesHTML() {
   if (lectures === null) return `<div class="form-card cx-lect"><b>📊 Lectures Firestore</b><div class="hint">Chargement…</div></div>`;
-  if (erreurLectures) return `<div class="form-card cx-lect"><b>📊 Lectures Firestore</b><div class="hint" style="color:var(--red)">❌ ${esc(erreurLectures)} — publie la dernière version des règles Firestore (bloc « lectures »).</div></div>`;
+  if (erreurLectures) return `<div class="form-card cx-lect"><b>📊 Lectures Firestore</b><div class="hint" style="color:var(--red)">❌ ${esc(erreurLectures)}${/permission/i.test(erreurLectures) ? " — publie la dernière version des règles Firestore (bloc « lectures »)." : /quota|exhaust/i.test(erreurLectures) ? " — quota du jour dépassé (remise à zéro vers 9 h)." : ""}</div><small class="hint">Cet appareil depuis l'ouverture de l'appli : <b>${(globalThis.__smmLectures?.n || 0).toLocaleString("fr-FR")}</b> lectures</small></div>`;
   const auj = jourQuota();
   const duJour = lectures.filter(l => l.jour === auj);
   const total = duJour.reduce((s, l) => s + (l.n || 0), 0);
@@ -46,6 +46,7 @@ function blocLecturesHTML() {
   const nomDe = (uid, nom) => users.find(u => u.uid === uid)?.nom || nom || "?";
   return `<div class="form-card cx-lect">
     <div class="cx-lect-tete"><b>📊 Lectures Firestore aujourd'hui</b><small>estimation · quota gratuit remis à zéro vers 9 h</small></div>
+    <small class="hint">Cet appareil depuis l'ouverture de l'appli : <b>${(globalThis.__smmLectures?.n || 0).toLocaleString("fr-FR")}</b> lectures</small>
     <div class="cx-lect-chiffre"><b>${total.toLocaleString("fr-FR")}</b> / ${QUOTA.toLocaleString("fr-FR")} <span class="cx-lect-pct ${niveau}">${pct} %</span></div>
     <div class="cx-lect-barre"><div class="${niveau}" style="width:${pct}%"></div></div>
     ${duJour.length ? `<div class="cx-lect-pers">${duJour.sort((a, b) => b.n - a.n).map(l => `<span><b>${esc(nomDe(l.uid, l.nom))}</b> ${(l.n || 0).toLocaleString("fr-FR")}</span>`).join("")}</div>` : `<div class="hint">Pas encore de lecture comptée aujourd'hui (envoi toutes les 5 min).</div>`}
