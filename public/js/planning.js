@@ -12,6 +12,7 @@ import { watchTransferts, annulerTransfert } from "./transfert-data.js";
 import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { watchUsers } from "./users-data.js";
 import { watchAssociations } from "./associations-data.js";
+import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
@@ -212,6 +213,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; scheduleRenderAll(); }));
   if (tab === "coordonnees") unsubs.push(watchUsers((u) => { state.utilisateurs = u; scheduleRenderAll(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; scheduleRenderAll(); }));
+  unsubs.push(watchSitesDossiers((d) => { state.dossiersSites = d; scheduleRenderAll(); }));
   unsubs.push(watchReleves((r) => { state.releves = r; scheduleRenderAll(); }));
   unsubs.push(watchRecurrences((r) => { state.recurrences = r; scheduleRenderAll(); }));
 }
@@ -1095,7 +1097,7 @@ function absenceDuJour(person, dateStr) {
 // formulaire de récurrence et l'ajout ponctuel du planning individuel
 // (même logique en cascade que le formulaire d'intervention principal).
 function assocInfo(assocNom) {
-  const a = state.associations.find(x => x.nom === assocNom);
+  const a = associationEffective(assocNom);
   if (!a) return { groupes: [], hasSansGroupe: false, sites: [] };
   const groupes = [...new Set(a.sites.filter(s => s.groupe).map(s => s.groupe))];
   return { groupes, hasSansGroupe: a.sites.some(s => !s.groupe), sites: a.sites };
@@ -2495,6 +2497,26 @@ function clotureMoisHTML(mois) {
   </div>`;
 }
 
+// Sites proposés dans les interventions : liste « Associations & Sites »
+// complétée par les fiches de la tuile Sites (association + groupe de
+// chaque fiche). Si une fiche de site est rattachée à une AUTRE association,
+// c'est la fiche qui fait foi (ex. Haras de Vendée → École).
+const sansAccentSite = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+function associationEffective(nom) {
+  const a = state.associations.find(x => x.nom === nom);
+  if (!a) return null;
+  const dossiers = (state.dossiersSites || []).filter(d => d.nom && !d.supprimeLe);
+  const assocDe = new Map(dossiers.map(d => [sansAccentSite(d.nom), d.association || ""]));
+  const sites = a.sites.filter(s => { const aut = assocDe.get(sansAccentSite(s.nom)); return !aut || aut === a.nom; });
+  const deja = new Set(sites.map(s => sansAccentSite(s.nom)));
+  dossiers.filter(d => d.association === a.nom && !deja.has(sansAccentSite(d.nom)))
+    .forEach(d => { sites.push({ nom: d.nom, groupe: d.groupe || "" }); deja.add(sansAccentSite(d.nom)); });
+  // Site « modèle » portant le nom de son groupe (ex. « Résidence ») : masqué dès que de vraies résidences existent.
+  const propres = sites.filter(s => !(s.groupe && sansAccentSite(s.nom) === sansAccentSite(s.groupe) && sites.some(x => x !== s && x.groupe === s.groupe)));
+  propres.sort((x, y) => String(x.nom).localeCompare(String(y.nom), "fr", { numeric: true }));
+  return { ...a, sites: propres };
+}
+
 function renderInterventions(container, perms) {
   // Arrivée depuis le bandeau jaune de l'accueil : ouvre directement le
   // formulaire « Compléter mes horaires » de cette intervention.
@@ -2516,7 +2538,7 @@ function renderInterventions(container, perms) {
   const numerosEnDouble = Object.keys(compteNumeros).filter(n => compteNumeros[n] > 1);
   const isLockedTech = perms.isTech && !perms.isEditor;
 
-  const currentAssoc = state.associations.find(a => a.nom === ui.form.association);
+  const currentAssoc = associationEffective(ui.form.association);
   const groupesDispo = currentAssoc ? [...new Set(currentAssoc.sites.filter(s => s.groupe).map(s => s.groupe))] : [];
   const hasSansGroupe = currentAssoc ? currentAssoc.sites.some(s => !s.groupe) : false;
   const assocSelected = currentAssoc ? { groupes: groupesDispo, hasOnlyGrouped: groupesDispo.length > 0 && !hasSansGroupe } : null;
