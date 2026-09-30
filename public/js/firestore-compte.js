@@ -7,7 +7,7 @@ import * as F from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestor
 // Liste explicite (esbuild ne sait pas résoudre « export * » d'un module externe).
 // Ajouter ici toute nouvelle fonction Firestore utilisée dans l'appli.
 export {
-  Timestamp, addDoc, collection, deleteDoc, deleteField, doc, increment, initializeFirestore, limit, orderBy, persistentLocalCache, persistentSingleTabManager, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch,
+  Timestamp, addDoc, collection, deleteDoc, deleteField, doc, increment, initializeFirestore, limit, orderBy, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const C = (globalThis.__smmLectures = globalThis.__smmLectures || { n: 0, envoye: 0 });

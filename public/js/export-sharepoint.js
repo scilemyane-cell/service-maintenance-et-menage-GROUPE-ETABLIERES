@@ -302,6 +302,7 @@ async function extraireFichesMenage() {
   const lignes = [];
   fichesSnap.forEach(d => {
     const f = d.data();
+    if (f.supprimeLe) return;
     const site = parSiteId.get(f.siteId);
     lignes.push({
       Dispositif: site?.dispositif || "Dispositif MNA",
@@ -665,8 +666,8 @@ const MODULES = [
   { dossier: ["Menage"], fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
 ];
 
-// Déclenchée automatiquement à la connexion à l'appli, UNE fois par jour
-// au maximum (quota Firestore : chaque export relit des milliers de
+// Déclenchée automatiquement à la connexion à l'appli, UNE fois par
+// semaine au maximum (quota Firestore : chaque export relit des milliers de
 // documents ; le faire à chaque ouverture épuisait le quota gratuit). Ne se déclenche que si
 // une session Microsoft est déjà active dans le navigateur (jamais de
 // popup de connexion imposée) — sinon, retentera à la prochaine
@@ -682,7 +683,9 @@ export async function runDailyExportIfNeeded() {
     // relevés de compteurs, interventions, fiches…) — des milliers de
     // lectures. Il ne tourne plus qu'UNE fois par jour pour tout le monde
     // (le 1er appareil connecté), plus à chaque ouverture / rechargement.
-    if (statut.lastExportDate === todayStr()) return;
+    // Une fois par SEMAINE (le bouton « Exporter maintenant » reste dispo).
+    const dernier = statut.lastExportAt ? Date.parse(statut.lastExportAt) : 0;
+    if (statut.lastExportDate === todayStr() || (dernier && Date.now() - dernier < 7 * 86400000)) return;
     if (statut.exportEnCoursLe && Date.now() - statut.exportEnCoursLe < 30 * 60000) return;
     await setDoc(STATUS_DOC, { exportEnCoursLe: Date.now() }, { merge: true });
     const dernieresEmpreintes = { ...(statut.empreintes || {}) };

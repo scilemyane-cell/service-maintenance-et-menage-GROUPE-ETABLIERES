@@ -175,7 +175,7 @@ function render() {
   document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
     if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
-      await deleteFiche(ui.openId);
+      await deleteFiche(ui.openId, state.fiches.find(f => f.id === ui.openId)?.agentUid);
       ui.openId = null;
       render();
     }
@@ -184,7 +184,7 @@ function render() {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
-        await deleteFiche(btn.dataset.delFiche);
+        await deleteFiche(btn.dataset.delFiche, state.fiches.find(f => f.id === btn.dataset.delFiche)?.agentUid);
         if (ui.openId === btn.dataset.delFiche) ui.openId = null;
         render();
       }

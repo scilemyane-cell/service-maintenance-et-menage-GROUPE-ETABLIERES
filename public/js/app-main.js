@@ -467,15 +467,7 @@
       // interrompre une saisie en cours dans un module ouvert.
       watchHomeOrder((o) => { homeOrder = o; if (currentCategory === null) render(); });
     }
-    if (!stockAlertSubscribed) {
-      stockAlertSubscribed = true;
-      // Idem pour les badges d'alerte stock : ils ne s'affichent que sur
-      // les tuiles de l'accueil, jamais dans les onglets du module —
-      // un remontage complet ici a déjà fait disparaître des saisies en
-      // cours (ex. formulaire "Ajouter un produit" ouvert par un autre
-      // utilisateur au même moment).
-      watchStockAlertCount((counts) => { stockAlertCount = counts; if (currentCategory === null) render(); });
-    }
+    // Badges d'alerte stock : abonnement dans render() (voir « QUOTA »).
     if (!modulesConstructionSubscribed) {
       modulesConstructionSubscribed = true;
       watchModulesConstruction((ids) => { modulesConstruction = ids; if (currentCategory === null || estMasqueConstruction(currentCategory, utilisateurEffectif())) render(); });
@@ -762,6 +754,12 @@
 
     if (!category) {
       const cats = visibleCategoriesFor(currentUser);
+      // QUOTA : les badges d'alerte stock relisent tout le stock (central +
+      // sites) à chaque ouverture : seulement pour ceux qui voient la tuile.
+      if (!stockAlertSubscribed && cats.some(c => c.id === "stock")) {
+        stockAlertSubscribed = true;
+        watchStockAlertCount((counts) => { stockAlertCount = counts; if (currentCategory === null) render(); });
+      }
       setTimeout(prechargerModules, 600);
       mountDashboard(content, currentUser, cats, (catId, dossierIdAOuvrir) => {
         currentCategory = catId;

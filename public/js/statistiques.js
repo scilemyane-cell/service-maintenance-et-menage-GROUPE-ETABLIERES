@@ -23,6 +23,7 @@ import { modulesMasquesPour } from "./modules-construction-data.js";
 import { watchDemandes, watchInterventions } from "./firestore-data.js";
 import { ecoutePartagee } from "./ecoute-partagee.js";
 import { ecouteDelta } from "./cache-delta.js";
+import { watchRelevesCompteurs } from "./compteurs-data.js";
 
 let mountedContainer = null;
 let graphiquesActifs = {};
@@ -66,7 +67,6 @@ export async function mountStatistiques(container, user) {
 // compteurs : seules les modifications sont relues) ; le reste est lu au
 // plus une fois toutes les 30 min (bouton « Actualiser » pour forcer).
 const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = false; u = watch((v) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(v); }); });
-const watchRelevesCompteurs = (cb) => ecoutePartagee("releves-compteurs", ecouteDelta({ cle: "releves-compteurs", col: "compteurs-releves", champs: ["createdAt"], numerique: true }), cb);
 const LOCAUX = {
   demandes: () => premiereValeur(watchDemandes),
   interventions: () => premiereValeur(watchInterventions),

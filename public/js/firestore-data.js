@@ -1,5 +1,5 @@
 import { ecoutePartagee, partager } from "./ecoute-partagee.js";
-import { ecouteDelta } from "./cache-delta.js";
+import { ecouteDelta, majLocale } from "./cache-delta.js";
 import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
@@ -72,6 +72,19 @@ function watchInterventionsBrut(callback) {
     snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
     callback(list);
   }, (err) => { console.error("watchInterventions:", err); callback([]); });
+}
+// QUOTA : l'accueil n'a besoin que d'une petite partie des interventions
+// (à compléter, à venir, mois à clôturer) — requêtes ciblées au lieu de
+// relire tout l'historique à chaque ouverture.
+export function watchInterventionsDepuis(dateIso, callback) {
+  return ecoutePartagee(`interv-depuis:${dateIso}`, (emettre) => onSnapshot(query(collection(db, "interventions"), where("date", ">=", dateIso)), (snap) => {
+    const l = []; snap.forEach(d => { if (!d.data().supprimeLe) l.push({ id: d.id, ...d.data() }); }); emettre(l);
+  }, (err) => { console.error("watchInterventionsDepuis:", err); emettre([]); }), callback);
+}
+export function watchInterventionsACompleter(callback) {
+  return ecoutePartagee("interv-a-completer", (emettre) => onSnapshot(query(collection(db, "interventions"), where("horairesACompleter", "==", true)), (snap) => {
+    const l = []; snap.forEach(d => { if (!d.data().supprimeLe) l.push({ id: d.id, ...d.data() }); }); emettre(l);
+  }, (err) => { console.error("watchInterventionsACompleter:", err); emettre([]); }), callback);
 }
 export async function addIntervention(record) {
   // Numéro d'intervention séquentiel (ex. "INT-00042"), attribué de
@@ -150,80 +163,48 @@ export async function importerDemandes(lignes) {
   }
   return aAjouter.length;
 }
-// Actions attribuées à un utilisateur sur des demandes (badge de la tuile).
+// ---- Vues dérivées des demandes ----
+// QUOTA : ces vues (bandeaux, badges) étaient chacune une requête Firestore
+// relue à chaque ouverture de l'appli (toutes les urgences depuis toujours,
+// etc.). Elles sont maintenant calculées à partir de la copie locale des
+// demandes (watchDemandes, cache-delta) : zéro lecture supplémentaire.
+const msDe = (t) => (t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : 0));
+const resumeAction = (x) => (x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null);
+function deriverDemandes(cle, calcul, callback) {
+  return ecoutePartagee(`derive:${cle}`, (emettre) => { watchDemandes((liste) => emettre(calcul(liste))); }, callback);
+}
 // Demandes Urgentes / Critiques encore ouvertes (bandeau d'accueil).
 export function watchUrgencesOuvertes(callback) {
-  return ecoutePartagee("urgences", (emettre) => watchUrgencesOuvertesBrut(emettre), callback);
-}
-function watchUrgencesOuvertesBrut(callback) {
-  // Urgence de la demande, ou urgence requalifiée par un superviseur (urgenceCorrigee).
-  const parId = { a: new Map(), b: new Map() };
-  const emettre = () => {
-    const tout = new Map([...parId.a, ...parId.b]), list = [];
-    tout.forEach((x, id) => {
-      const urg = x.urgenceCorrigee || x.urgence;
-      if (!["Urgent", "Critique"].includes(urg) || x.lieeA || ["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut)) return;
-      const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
-      list.push({ id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: urg, dateDemande: x.dateDemande, importeMs: t,
-        action: x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null });
-    });
-    callback(list);
-  };
-  const ecoute = (champ, cible) => onSnapshot(query(collection(db, "demandes"), where(champ, "in", ["Urgent", "Critique"])), (snap) => {
-    cible.clear(); snap.forEach((d) => cible.set(d.id, d.data())); emettre();
-  }, (err) => { console.error("watchUrgencesOuvertes:", err); emettre(); });
-  const u1 = ecoute("urgence", parId.a), u2 = ecoute("urgenceCorrigee", parId.b);
-  return () => { u1(); u2(); };
+  return deriverDemandes("urgences", (liste) => liste.filter(x => {
+    const urg = x.urgenceCorrigee || x.urgence;
+    return ["Urgent", "Critique"].includes(urg) && !x.lieeA && !["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut);
+  }).map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, dateDemande: x.dateDemande, importeMs: msDe(x.importeLe), action: resumeAction(x) })), callback);
 }
 // Nouvelles demandes (importées ou créées dans l'appli depuis 7 jours) — bandeau superviseur.
 export function watchNouvellesDemandes(callback) {
-  return ecoutePartagee("nouvelles", (emettre) => watchNouvellesDemandesBrut(emettre), callback);
-}
-function watchNouvellesDemandesBrut(callback) {
-  const depuis = new Date(Date.now() - 7 * 86400000);
-  return onSnapshot(query(collection(db, "demandes"), where("importeLe", ">=", depuis)), (snap) => {
-    const list = [], limiteDate = Date.now() - 10 * 86400000;
-    snap.forEach((d) => {
-      const x = d.data();
-      if (x.lieeA || ["Réalisé", "Annulé"].includes(x.statut)) return;
-      if (x.dateDemande && new Date(x.dateDemande + "T00:00:00").getTime() < limiteDate) return; // historique ré-importé
-      const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
-      list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: t, creeDansApp: !!x.creeDansApp,
-        action: x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null });
-    });
-    list.sort((a, b) => b.importeMs - a.importeMs);
-    callback(list);
-  }, (err) => { console.error("watchNouvellesDemandes:", err); callback([]); });
+  return deriverDemandes("nouvelles", (liste) => {
+    const depuis = Date.now() - 7 * 86400000, limiteDate = Date.now() - 10 * 86400000;
+    return liste.filter(x => msDe(x.importeLe) >= depuis && !x.lieeA && !["Réalisé", "Annulé"].includes(x.statut)
+        && !(x.dateDemande && new Date(x.dateDemande + "T00:00:00").getTime() < limiteDate))
+      .map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: msDe(x.importeLe), creeDansApp: !!x.creeDansApp, action: resumeAction(x) }))
+      .sort((a, b) => b.importeMs - a.importeMs);
+  }, callback);
 }
 // Demandes déclarées réalisées par les techniciens, en attente de validation.
 export function watchDemandesAValider(callback) {
-  return onSnapshot(query(collection(db, "demandes"), where("statut", "==", "Réalisé – à valider")), (snap) => {
-    let n = 0; snap.forEach((d) => { if (!d.data().lieeA) n++; }); callback(n);
-  }, (err) => { console.error("watchDemandesAValider:", err); callback(0); });
+  return deriverDemandes("a-valider", (liste) => liste.filter(x => x.statut === "Réalisé – à valider" && !x.lieeA).length, callback);
 }
 // Actions IMMÉDIATES attribuées à une personne, pas encore faites (bandeau rouge de l'accueil).
 export function watchActionsImmediates(uid, callback) {
-  return ecoutePartagee(`immediates:${uid}`, (emettre) => watchActionsImmediatesBrut(uid, emettre), callback);
+  return deriverDemandes(`immediates:${uid}`, (liste) => liste.filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !x.lieeA)
+    .map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, actionTexte: x.actionTexte, actionPar: x.actionPar })), callback);
 }
-function watchActionsImmediatesBrut(uid, callback) {
-  return onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
-    const list = [];
-    snap.forEach((d) => { const x = d.data(); if (x.actionImmediate && !x.actionFaiteLe && !x.lieeA) list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, actionTexte: x.actionTexte, actionPar: x.actionPar }); });
-    callback(list);
-  }, (err) => { console.error("watchActionsImmediates:", err); callback([]); });
-}
+// Actions à faire + retours non lus sur les actions que j'ai attribuées (badge de la tuile).
 export function watchMesActionsDemandes(uid, callback) {
-  let a = 0, r = 0;
-  const u1 = onSnapshot(query(collection(db, "demandes"), where("actionPour", "==", uid)), (snap) => {
-    a = 0; snap.forEach((d) => { if (!d.data().actionFaiteLe) a++; }); callback(a + r);
-  }, (err) => { console.error("watchMesActionsDemandes:", err); });
-  // Réponses / actions faites sur les actions que j'ai attribuées, pas encore vues.
-  const u2 = onSnapshot(query(collection(db, "demandes"), where("actionParUid", "==", uid)), (snap) => {
-    r = 0; snap.forEach((d) => { if (d.data().actionReponseNonLue) r++; }); callback(a + r);
-  }, (err) => { console.error("watchMesActionsDemandes (retours):", err); });
-  return () => { u1(); u2(); };
+  return deriverDemandes(`mes-actions:${uid}`, (liste) => liste.filter(x => (x.actionPour === uid && !x.actionFaiteLe) || (x.actionParUid === uid && x.actionReponseNonLue)).length, callback);
 }
 export async function updateDemande(id, fields) {
+  majLocale("demandes", id, { ...fields, dateMaj: Timestamp.now() }); // affichage immédiat, même hors ligne
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
 }
 export async function ajouterDemande(record) {

@@ -50,6 +50,19 @@ const depuisCache = (v) => {
 const lireChamp = (x, champ) => champ.split(".").reduce((o, k) => (o == null ? o : o[k]), x);
 const ms = (t) => (typeof t === "number" ? t : t && typeof t.toMillis === "function" ? t.toMillis() : (t && t.seconds ? t.seconds * 1000 : 0));
 
+// Registre des copies locales ouvertes : permet d'appliquer tout de suite
+// une modification faite sur CET appareil (même hors ligne), sans attendre
+// que le serveur ait posé l'horodatage (serverTimestamp) qui la fait
+// entrer dans l'écoute « modifiés depuis ».
+const REGISTRE = new Map();
+export function majLocale(cle, id, champs, { remplacer = false } = {}) {
+  const r = REGISTRE.get(cle);
+  if (!r || !id) return;
+  const avant = r.docs.get(id) || {};
+  r.docs.set(id, remplacer ? { ...champs } : { ...avant, ...champs });
+  r.emettreListe(); r.sauver();
+}
+
 // Renvoie une fonction demarrer(emettre) utilisable avec ecoutePartagee.
 // numerique : les champs date sont des nombres (ms) et non des Timestamp.
 export function ecouteDelta({ cle, col, champs, numerique = false }) {
@@ -62,12 +75,14 @@ export function ecouteDelta({ cle, col, champs, numerique = false }) {
       const o = {}; docs.forEach((d, id) => { o[id] = versCache(d); });
       idbEcrire(`delta:${cle}`, { docs: o, depuis, completLe });
     }, 1500); };
+    let pret = false;
+    REGISTRE.set(cle, { docs, sauver, emettreListe: () => { if (pret) emettre(liste()); } });
 
     const cache = await idbLire(`delta:${cle}`);
     if (cache && cache.docs && Date.now() - (cache.completLe || 0) < RELECTURE_COMPLETE) {
       Object.entries(cache.docs).forEach(([id, d]) => docs.set(id, depuisCache(d)));
       depuis = cache.depuis || 0; completLe = cache.completLe || 0;
-      emettre(liste());
+      pret = true; emettre(liste());
     } else {
       try {
         const snap = await getDocs(collection(db, col));
@@ -75,7 +90,7 @@ export function ecouteDelta({ cle, col, champs, numerique = false }) {
         completLe = Date.now();
         sauver();
       } catch (e) { console.error(`cache-delta ${cle} (lecture complète) :`, e); }
-      emettre(liste());
+      pret = true; emettre(liste());
     }
 
     // Écoute des seuls documents modifiés depuis la dernière visite.

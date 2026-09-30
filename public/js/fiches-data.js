@@ -1,9 +1,11 @@
 import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
-  doc, setDoc, deleteDoc,
+  doc, setDoc, deleteDoc, serverTimestamp, deleteField, Timestamp,
   collection, onSnapshot,
 } from "./firestore-compte.js";
+import { ecoutePartagee } from "./ecoute-partagee.js";
+import { ecouteDelta, majLocale } from "./cache-delta.js";
 
 // Une fiche = un document par (site, semaine, agent).
 // id du document : `${siteId}_${weekStart}_${uid}`
@@ -11,7 +13,16 @@ export function ficheId(siteId, weekStart, uid) {
   return `${siteId}_${weekStart}_${uid}`;
 }
 
-export const watchFiches = partager("fiches", watchFichesBrut);
+// QUOTA : copie locale des fiches + seules les fiches modifiées depuis la
+// dernière visite sont relues (champ majLe posé à chaque enregistrement).
+// Une fiche supprimée devient un « tombeau » (supprimeLe) pour que tous
+// les appareils le voient ; elle est masquée partout.
+export function watchFiches(callback) {
+  return ecoutePartagee("fiches:delta", ecouteDelta({ cle: "fiches", col: "fiches", champs: ["majLe"] }),
+    (liste) => callback(liste.filter(f => !f.supprimeLe)));
+}
+// Ancienne écoute complète (plus utilisée, gardée pour référence).
+export const watchFichesComplet = partager("fiches", watchFichesBrut);
 function watchFichesBrut(callback) {
   return onSnapshot(collection(db, "fiches"), (snap) => {
     const list = [];
@@ -21,9 +32,14 @@ function watchFichesBrut(callback) {
 }
 
 export async function saveFiche(id, data) {
-  await setDoc(doc(db, "fiches", id), data, { merge: true });
+  majLocale("fiches", id, { ...data, majLe: Timestamp.now(), supprimeLe: null });
+  await setDoc(doc(db, "fiches", id), { ...data, majLe: serverTimestamp(), supprimeLe: deleteField() }, { merge: true });
 }
 
-export async function deleteFiche(id) {
-  await deleteDoc(doc(db, "fiches", id));
+// Suppression = fiche vidée et marquée supprimée (visible des autres appareils
+// qui gardent une copie locale). agentUid conservé pour les règles.
+export async function deleteFiche(id, agentUid = "") {
+  majLocale("fiches", id, { supprimeLe: Timestamp.now(), majLe: Timestamp.now(), ...(agentUid ? { agentUid } : {}) }, { remplacer: true });
+  await setDoc(doc(db, "fiches", id), { supprimeLe: serverTimestamp(), majLe: serverTimestamp(), ...(agentUid ? { agentUid } : {}) });
 }
+void deleteDoc;

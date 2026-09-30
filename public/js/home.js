@@ -1,5 +1,5 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
-import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates } from "./firestore-data.js";
+import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
 import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -537,18 +537,21 @@ function render() {
   const maPersonne = personnePlanning(mountedUser, toutesPersonnes);
   const horsAstreinte = !!maPersonne && !peopleAstreinte.n1.includes(maPersonne) && !peopleAstreinte.n2.includes(maPersonne);
   if (horsAstreinte && !interventionsUnsub) {
-    const u1 = watchInterventions((l) => { interventions = l; scheduleRender(); });
+    const u1 = watchInterventionsDepuis(dateKey(new Date()), (l) => { interventions = l; scheduleRender(); });
     const u2 = watchRecurrences((l) => { recurrences = l; scheduleRender(); });
     interventionsUnsub = () => { u1(); u2(); };
   }
   // Interventions dont le technicien doit saisir ses horaires au retour.
   const suitAstreinte = ["technicien", "super_admin", "admin", "n1"].includes(mountedUser.role);
   if (suitAstreinte && !aCompleterUnsub) {
-    aCompleterUnsub = watchInterventions((l) => {
+    const u1 = watchInterventionsACompleter((l) => {
       interventionsACompleter = l.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe);
-      interventionsToutes = l;
       scheduleRender();
     });
+    // Clôture du mois (admins) : seulement le mois concerné.
+    const mois = estAdmin ? moisACloturer() : null;
+    const u2 = mois ? watchInterventionsDepuis(`${mois}-01`, (l) => { interventionsToutes = l; scheduleRender(); }) : null;
+    aCompleterUnsub = () => { u1(); u2 && u2(); };
   }
   const afficherSites = catsRef.some(c => c.id === "sites") && dossiers.length > 0;
 

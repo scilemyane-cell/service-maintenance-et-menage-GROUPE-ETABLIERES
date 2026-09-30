@@ -7,14 +7,14 @@
 // — à relever ensemble à chaque passage, avec une seule photo du tableau.
 // Un compteur eau/gaz n'a qu'un seul index.
 
-import { partager } from "./ecoute-partagee.js";
-import { ecouteDelta } from "./cache-delta.js";
+import { partager, ecoutePartagee } from "./ecoute-partagee.js";
+import { ecouteDelta, majLocale } from "./cache-delta.js";
 import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
   collection, query, where, Timestamp
 } from "./firestore-compte.js";
-import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
+import { getDossierUnique, saveDossier, watchSitesDossiers } from "./site-dossier-data.js";
 
 const COMPTEURS = "compteurs";
 const RELEVES = "compteurs-releves";
@@ -194,33 +194,38 @@ export function prochaineEcheanceLabel(compteur) {
 // Liste ponctuelle des dossiers de site ayant les compteurs activés —
 // utilisée par l'écran principal du nouvel onglet.
 export async function listerSitesAvecCompteurs() {
-  const q = query(collection(db, "sites-dossiers"), where("compteursActifs", "==", true));
-  const snap = await getDocs(q);
-  const list = [];
-  snap.forEach((d) => {
-    if (!d.data().supprimeLe) list.push({ id: d.id, nom: d.data().nom, association: d.data().association || "", groupe: d.data().groupe || "" });
-  });
-  return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+  // QUOTA : depuis l'écoute partagée des fiches de site (déjà chargée par l'accueil).
+  const dossiers = await premiereValeur(watchSitesDossiers);
+  return dossiers.filter(d => d.compteursActifs === true && !d.supprimeLe)
+    .map(d => ({ id: d.id, nom: d.nom, association: d.association || "", groupe: d.groupe || "" }))
+    .sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
 }
 
 // Liste ponctuelle de tous les compteurs, tous sites confondus.
 export async function listerTousLesCompteurs() {
-  const snap = await getDocs(collection(db, COMPTEURS));
-  const list = [];
-  snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
-  return list;
+  // QUOTA : depuis la copie locale des compteurs (cache-delta) au lieu de
+  // relire toute la collection à chaque ouverture de la tuile / scan de QR.
+  return (await premiereValeur(watchCompteursBruts)).filter(c => !c.supprimeLe);
 }
+// Liste des compteurs tenue à jour en direct (copie locale).
+export function watchCompteursListe(callback) { return watchCompteursBruts((l) => callback((l || []).filter(c => !c.supprimeLe))); }
+const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = false; u = watch((v) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(v); }); });
+// Relevés de compteurs : copie locale (champ createdAt en ms).
+export const watchRelevesCompteurs = (cb) => ecoutePartagee("releves-compteurs", ecouteDelta({ cle: "releves-compteurs", col: RELEVES, champs: ["createdAt"], numerique: true }), cb);
 
 export async function creerCompteur(dossierId, dossierNom, compteur) {
   const ref = await addDoc(collection(db, COMPTEURS), { dossierId, dossierNom, ...compteur, majLe: serverTimestamp() });
+  majLocale("compteurs", ref.id, { dossierId, dossierNom, ...compteur, majLe: Timestamp.now() });
   return ref.id;
 }
 
 export async function modifierCompteur(id, fields) {
+  majLocale("compteurs", id, { ...fields, majLe: Timestamp.now() });
   await updateDoc(doc(db, COMPTEURS, id), { ...fields, majLe: serverTimestamp() });
 }
 
 export async function envoyerCompteurCorbeille(id) {
+  majLocale("compteurs", id, { supprimeLe: Timestamp.now(), majLe: Timestamp.now() });
   await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: Timestamp.now(), majLe: serverTimestamp() });
 }
 
@@ -234,6 +239,7 @@ export async function listerCompteursCorbeille() {
 }
 
 export async function restaurerCompteur(id) {
+  majLocale("compteurs", id, { supprimeLe: null, majLe: Timestamp.now() });
   await updateDoc(doc(db, COMPTEURS, id), { supprimeLe: deleteField(), majLe: serverTimestamp() });
 }
 
@@ -281,6 +287,7 @@ export async function enregistrerReleve(compteur, valeurs, photos, user, dateAnt
     createdAt: at,
     saisiHorsDate: !!dateAntidatee,
   });
+  majLocale("compteurs", compteur.id, { dernierReleve: { at, valeurs, photos, illisibles, releveParNom: user?.nom || user?.email || "Inconnu", majLe: Timestamp.now() } });
   await updateDoc(doc(db, COMPTEURS, compteur.id), {
     dernierReleve: {
       at, valeurs, photos, illisibles,
@@ -426,10 +433,8 @@ export function consommationMensuelle(releves, cle, nbMois = 12) {
 // bord global (consommation agrégée par type, comparaison entre sites).
 // Un seul aller-retour Firestore plutôt qu'une requête par compteur.
 export async function listerTousLesReleves() {
-  const snap = await getDocs(collection(db, RELEVES));
-  const list = [];
-  snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-  return list;
+  // QUOTA : copie locale des relevés (seuls les nouveaux sont relus).
+  return [...(await premiereValeur(watchRelevesCompteurs))];
 }
 
 // Valeur totale d'un compteur (somme de tous ses index — utile pour un
