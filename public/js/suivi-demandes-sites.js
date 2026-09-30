@@ -107,7 +107,8 @@ export const A_VALIDER = "Réalisé – à valider";
 const EN_ATTENTE_VALID = (s) => s === A_VALIDER;
 const A_TRAITER = (s) => !TRAITE(s) && !EN_ATTENTE_VALID(s);
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
-const joursDepuis = (iso) => { if (!iso) return null; const d = new Date(iso + "T00:00:00"); return isNaN(d) ? null : Math.max(0, Math.round((Date.now() - d) / 86400000)); };
+// Jours calendaires écoulés (aujourd'hui = 0, hier = 1), quelle que soit l'heure.
+const joursDepuis = (iso) => { if (!iso) return null; const d = new Date(String(iso).slice(0, 10) + "T12:00:00"); if (isNaN(d)) return null; const auj = new Date(); auj.setHours(12, 0, 0, 0); return Math.max(0, Math.round((auj - d) / 86400000)); };
 const fr = (iso) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
 const sa = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
