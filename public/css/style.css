@@ -2754,3 +2754,15 @@ body.clo-ouvert{overflow:hidden}
 .iv-n1-lieu{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
 .iv-n1-lieu > *{min-width:0}
 .iv-n1 select:disabled{opacity:.6}
+/* Appui technique (collègue en renfort, téléphone ou sur place) */
+.iv-appuis{display:flex;flex-direction:column;gap:8px}
+.iv-appui{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center}
+.iv-appui > *{min-width:0}
+.iv-appui select{min-height:42px;border-radius:10px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);padding:9px 12px;font-size:14px;font-family:inherit}
+.iv-appui-mode{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.iv-appui-mode button{border:none;background:var(--panel-alt);color:var(--text-dim);padding:10px 10px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.iv-appui-mode button.actif{background:var(--gold);color:#fff;font-weight:600}
+.iv-appui-suppr{border:none;background:none;color:var(--red);font-size:16px;cursor:pointer;padding:6px}
+.iv-appui-ajout{align-self:flex-start;font-size:13px}
+.ivc-appuis{font-size:12px;color:var(--text-dim);margin:4px 0}
+@media (max-width:640px){.iv-appui{grid-template-columns:1fr auto}.iv-appui select{grid-column:1 / -1}}

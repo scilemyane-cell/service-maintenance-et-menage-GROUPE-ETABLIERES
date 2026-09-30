@@ -2345,7 +2345,7 @@ function attacherPhotosInterventionListeners() {
 // intervention à la mauvaise personne) — sauf pour un technicien, qui ne
 // saisit que pour lui-même.
 function reinitialiserFormIntervention() {
-  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "", heureAppel: "", dureeAppelMin: "" });
+  Object.assign(ui.form, { association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", compteRendu: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "", sansDeplacement: null, appelOrigineId: "", appelOrigineNumero: "", heureAppel: "", dureeAppelMin: "", appuis: [] });
   ui.form.technicien = mountedUser?.role === "technicien" ? (mountedUser.nom || mountedUser.email) : "";
 }
 
@@ -2873,6 +2873,7 @@ function renderInterventions(container, perms) {
         <div class="ivc-qui">${i.technicien ? `<span class="iv-qui"><i style="background:${couleur}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">Pas de technicien</span>`}${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</div>
       </div>
       ${i.appelN1 ? `<div class="ivc-appel"><span>📞 Appel N1 · <b>${esc(i.n1Contacte || "—")}</b>${i.heureAppel ? ` · ${esc(i.heureAppel)}` : ""}</span><p>${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` <em>→ ${esc(i.decisionN1)}</em>` : ""}</p></div>` : ""}
+      ${(i.appuis || []).length ? `<div class="ivc-appuis">🤝 Appui technique : ${i.appuis.map(a => `<b>${esc(a.personne)}</b> <small>(${a.mode === "deplacement" ? "🚗 sur place" : "📞 téléphone"})</small>`).join(", ")}</div>` : ""}
       ${i.description ? `<p class="ivc-desc">${esc(i.description)}</p>` : ""}
       ${i.compteRendu ? `<details class="ivc-cr"><summary>📝 Compte rendu</summary><div>${esc(i.compteRendu).replace(/\n/g, "<br>")}</div></details>` : ""}
       ${reposHTML}
@@ -2962,6 +2963,22 @@ function renderInterventions(container, perms) {
               : `<select id="f-tech"><option value="" ${!ui.form.technicien ? 'selected' : ''}>${ui.form.sansDeplacement === true ? "— Aucun (réglé par le N1) —" : "— Choisir le technicien —"}</option>${intervenants.map(t => `<option value="${esc(t)}" ${ui.form.technicien === t ? 'selected' : ''}>${esc(t)}</option>`).join("")}</select>`}
           </label>
           <label>Type<input id="f-type" list="types" value="${esc(ui.form.type)}" placeholder="ex. Plomberie"><datalist id="types">${TYPE_SUGGESTIONS.map(t => `<option value="${esc(t)}">`).join("")}</datalist></label>
+        </div>
+        <div class="iv-section">Appui technique <small>(optionnel — un collègue en renfort)</small></div>
+        <div class="iv-appuis">
+          ${(ui.form.appuis || []).map((a, k) => `
+          <div class="iv-appui">
+            <select data-appui-personne="${k}">
+              <option value="">— Qui a aidé ? —</option>
+              ${[...new Set([...state.people.n1, ...state.people.n2])].filter(n => n !== ui.form.technicien).map(n => `<option value="${esc(n)}" ${a.personne === n ? "selected" : ""}>${esc(n)}</option>`).join("")}
+            </select>
+            <div class="iv-appui-mode">
+              <button type="button" class="${a.mode !== "deplacement" ? "actif" : ""}" data-appui-mode="${k}" data-mode="telephone">📞 Téléphone</button>
+              <button type="button" class="${a.mode === "deplacement" ? "actif" : ""}" data-appui-mode="${k}" data-mode="deplacement">🚗 Sur place</button>
+            </div>
+            <button type="button" class="iv-appui-suppr" data-appui-suppr="${k}" title="Retirer">✕</button>
+          </div>`).join("")}
+          <button type="button" class="nav-btn iv-appui-ajout" id="f-appui-ajout">➕ Ajouter un appui technique</button>
         </div>
         <div class="iv-section">Horaires ${ui.form.sansDeplacement === false && mountedUser.role !== "technicien" ? `<small>— peut rester vide : le technicien les complètera à son retour</small>` : ""}</div>
         <div class="form-grid iv-grille iv-grille-h">
@@ -3094,6 +3111,13 @@ function renderInterventions(container, perms) {
       ui.form.sansDeplacement = b.dataset.ivMode === "appel";
       container.querySelectorAll("[data-iv-mode]").forEach(x => x.classList.toggle("actif", x === b));
     }));
+    document.getElementById("f-appui-ajout")?.addEventListener("click", () => { ui.form.appuis = [...(ui.form.appuis || []), { personne: "", mode: "telephone" }]; renderAll(); });
+    container.querySelectorAll("[data-appui-personne]").forEach(el => el.addEventListener("change", () => { ui.form.appuis[+el.dataset.appuiPersonne].personne = el.value; }));
+    container.querySelectorAll("[data-appui-mode]").forEach(b => b.addEventListener("click", () => {
+      ui.form.appuis[+b.dataset.appuiMode].mode = b.dataset.mode;
+      b.parentElement.querySelectorAll("button").forEach(x => x.classList.toggle("actif", x === b));
+    }));
+    container.querySelectorAll("[data-appui-suppr]").forEach(b => b.addEventListener("click", () => { ui.form.appuis.splice(+b.dataset.appuiSuppr, 1); renderAll(); }));
     document.getElementById("f-suite-annuler")?.addEventListener("click", () => { ui.form.appelOrigineId = ""; ui.form.appelOrigineNumero = ""; renderAll(); });
     document.getElementById("f-cr")?.addEventListener("input", (e) => { ui.form.compteRendu = e.target.value; });
     document.getElementById("f-ia")?.addEventListener("click", async (e) => {
@@ -3190,6 +3214,7 @@ function renderInterventions(container, perms) {
         heuresNuit: nuit, primeDimanche: dimanche && !sansDeplacement ? PRIME_DIMANCHE : 0,
         sansDeplacement,
         compteRendu: (ui.form.compteRendu || "").trim(),
+        appuis: (ui.form.appuis || []).filter(a => a.personne).map(a => ({ personne: a.personne, mode: a.mode === "deplacement" ? "deplacement" : "telephone" })),
         horairesACompleter, technicienUid: techUid,
         heureAppel: ui.form.heureAppel || "", dureeAppelMin: parseFloat(ui.form.dureeAppelMin) || 0,
         appelOrigineId: ui.form.appelOrigineId || "", appelOrigineNumero: ui.form.appelOrigineNumero || "",
@@ -3266,6 +3291,7 @@ function renderInterventions(container, perms) {
           photos: i.photos || [],
           appelN1: i.appelN1 || false, n1Contacte: i.n1Contacte || "", motifAppelN1: i.motifAppelN1 || "", decisionN1: i.decisionN1 || "",
           sansDeplacement: !!i.sansDeplacement,
+          appuis: (i.appuis || []).map(a => ({ ...a })),
           compteRendu: i.compteRendu || i.description || "",
           appelOrigineId: i.appelOrigineId || "", appelOrigineNumero: i.appelOrigineNumero || "",
           heureAppel: i.heureAppel || "", dureeAppelMin: i.dureeAppelMin ? String(i.dureeAppelMin) : "",
