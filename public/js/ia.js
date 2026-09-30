@@ -138,6 +138,42 @@ ${f.motifAppelN1 ? `Motif de l'appel : ${f.motifAppelN1}\n` : ""}Décision / con
 // serveurs européens, sans compte) : corrige les fautes sans changer le
 // sens ni reformuler. Utilisée en priorité pour les commentaires, actions et
 // réponses ; l'IA Gemini ne sert plus qu'en secours.
+// Complément au correcteur : notes de terrain du type « réparation réaliser »,
+// « robinet changer » → participe passé accordé (« réparation réalisée »).
+// Ne touche pas « à changer », « pour réparer », « il faut commander »…
+const VERBES_NOTES = ["realiser", "effectuer", "terminer", "changer", "remplacer", "reparer", "commander", "poser", "installer", "nettoyer",
+  "verifier", "controler", "regler", "debloquer", "deboucher", "fixer", "livrer", "demonter", "remonter", "graisser", "purger", "resserrer",
+  "serrer", "valider", "signaler", "traiter", "securiser", "condamner", "reposer", "recoller", "repeindre", "refaire", "faire"];
+const AVANT_INFINITIF = new Set(["a", "à", "pour", "de", "d", "faut", "doit", "doivent", "va", "vont", "peut", "peuvent", "pouvoir", "veut", "veulent",
+  "souhaite", "souhaitent", "faire", "fait", "sans", "avant", "apres", "après", "devra", "devront", "prevoir", "prévoir", "merci", "et", "ou", "ne", "se", "s", "me", "te", "le", "la", "les", "l", "en", "y"]);
+const FEMININS = /(tion|sion|ure|ee|ée|ie|ette|elle|ence|ance|ade|ise|ine|eille|aille|ouille|ere|ère|oire|ude|ite)$/i;
+const FEMININS_MOTS = new Set(["porte", "fuite", "serrure", "poignee", "poignée", "fenetre", "fenêtre", "vitre", "ampoule", "prise", "chaudiere", "chaudière",
+  "piece", "pièce", "chasse", "douche", "baignoire", "lampe", "plaque", "cle", "clé", "clef", "boite", "boîte", "vmc", "gache", "gâche", "charniere", "charnière",
+  "poubelle", "table", "chaise", "armoire", "cuisine", "salle", "chambre", "commande", "barre", "grille", "tuyauterie", "canalisation", "evacuation", "évacuation",
+  "bonde", "cuvette", "vanne", "pompe", "ventilation", "hotte", "plinthe", "dalle", "tringle", "rampe", "marche", "main", "cloison", "peinture", "moquette", "gaine", "sonde", "carte", "batterie", "pile"]);
+const MASCULINS_MOTS = new Set(["mitigeur", "robinet", "joint", "radiateur", "ballon", "chauffe-eau", "wc", "lavabo", "evier", "évier", "siphon", "interrupteur",
+  "neon", "néon", "store", "volet", "cylindre", "verrou", "groom", "placard", "tiroir", "lit", "matelas", "sommier", "carreau", "carrelage", "plafond", "mur", "sol",
+  "tableau", "disjoncteur", "detecteur", "détecteur", "extincteur", "compteur", "thermostat", "circulateur", "flexible", "abattant", "mecanisme", "mécanisme", "devis", "travail", "travaux", "nettoyage", "remplacement", "depannage", "dépannage", "diagnostic", "controle", "contrôle"]);
+const sansAccent = (m) => m.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function accordParticipes(texte) {
+  return texte.replace(/([\p{L}'’-]+)(\s+)([\p{L}]+)(?=\s*(?:[.,;:!?]|$|\s+(?:et|par|le|ce|ok|fait|termin)))/gu, (tout, avant, esp, verbe) => {
+    const v = sansAccent(verbe);
+    if (!VERBES_NOTES.includes(v)) return tout;
+    const a = sansAccent(avant.replace(/^.*['’]/, ""));
+    if (AVANT_INFINITIF.has(a) || AVANT_INFINITIF.has(avant.toLowerCase())) return tout;
+    const brut = avant.toLowerCase();
+    const pluriel = /[sx]$/.test(brut) && !["devis", "prix", "choix", "sas", "gaz", "bas", "bois", "dos", "puits", "radis", "tapis", "repas", "travaux"].includes(brut) || brut === "travaux";
+    const singulier = pluriel ? brut.replace(/[sx]$/, "") : brut;
+    const fem = !MASCULINS_MOTS.has(singulier) && !MASCULINS_MOTS.has(brut) && (FEMININS_MOTS.has(singulier) || FEMININS.test(singulier));
+    // On repart de la forme du texte (accents éventuellement déjà corrigés).
+    let p = v === "faire" ? "fait" : v === "refaire" ? "refait" : v === "repeindre" ? "repeint" : verbe.slice(0, -2) + "é";
+    p = p.replace(/^r[eé]a/i, (m) => m[0] + "éa").replace(/^([rR])ep/, "$1ép").replace(/^([rR])eg/, "$1ég").replace(/^([dD])eb/, "$1éb").replace(/^([dD])em/, "$1ém").replace(/^([vV])er/, "$1ér").replace(/^([sS])ec/, "$1éc").replace(/^([cC])ontrol/, "$1ontrôl");
+    if (fem) p += "e";
+    if (pluriel) p += "s";
+    return avant + esp + p;
+  });
+}
+
 export async function corrigerOrthographe(texte) {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -155,6 +191,7 @@ export async function corrigerOrthographe(texte) {
       if (r == null) return;
       out = out.slice(0, m.offset) + r + out.slice(m.offset + m.length);
     });
+    out = accordParticipes(out);
     out = out.replace(/\s+([,.])/g, "$1").replace(/^\s*(\p{Ll})/u, (x, c) => c.toUpperCase()).trim();
     if (out && !/[.!?…]$/.test(out)) out += ".";
     return out;
