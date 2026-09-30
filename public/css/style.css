@@ -2633,3 +2633,13 @@ div.gh-urg-corps{cursor:default}
 .cx-lect-jours div{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
 .cx-lect-jours i{display:block;width:100%;max-width:34px;border-radius:5px 5px 0 0}
 .cx-lect-jours small{font-size:10.5px;color:var(--muted,#777)}
+
+/* Pastille « action attribuée » */
+.dps-pastille.act{background:#fff4d6;color:#8a5a00;border:1px solid #f1d27a}
+.dps-pastille.act.imm{background:#b3121f;color:#fff;border-color:#b3121f}
+.dps-pastille.act.fait{background:#e7f6ec;color:#1b7a3d;border-color:#b9e3c7}
+.badge-action{display:inline-block;margin-top:2px;background:#fff4d6;color:#8a5a00;border-radius:6px;padding:1px 6px;font-weight:700;white-space:nowrap}
+.badge-action.imm{background:#b3121f;color:#fff}
+.gh-act{align-self:flex-start;margin-top:4px;display:inline-block;background:#ffd84d;color:#3d2a00;border-radius:999px;padding:2px 9px;font:800 11.5px system-ui,sans-serif}
+.gh-act.imm{background:#fff;color:#b3121f}
+.gh-act.fait{background:#d6f5df;color:#1b7a3d}

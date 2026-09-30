@@ -164,7 +164,8 @@ function watchUrgencesOuvertesBrut(callback) {
       const urg = x.urgenceCorrigee || x.urgence;
       if (!["Urgent", "Critique"].includes(urg) || x.lieeA || ["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut)) return;
       const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
-      list.push({ id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: urg, dateDemande: x.dateDemande, importeMs: t });
+      list.push({ id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: urg, dateDemande: x.dateDemande, importeMs: t,
+        action: x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null });
     });
     callback(list);
   };
@@ -187,7 +188,8 @@ function watchNouvellesDemandesBrut(callback) {
       if (x.lieeA || ["Réalisé", "Annulé"].includes(x.statut)) return;
       if (x.dateDemande && new Date(x.dateDemande + "T00:00:00").getTime() < limiteDate) return; // historique ré-importé
       const t = x.importeLe?.toMillis ? x.importeLe.toMillis() : (x.importeLe?.seconds ? x.importeLe.seconds * 1000 : 0);
-      list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: t, creeDansApp: !!x.creeDansApp });
+      list.push({ id: d.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: t, creeDansApp: !!x.creeDansApp,
+        action: x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null });
     });
     list.sort((a, b) => b.importeMs - a.importeMs);
     callback(list);

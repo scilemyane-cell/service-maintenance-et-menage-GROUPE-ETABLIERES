@@ -666,7 +666,7 @@ function renderTableau(container) {
           <tbody>
             ${lignes.length === 0 ? `<tr><td colspan="12" class="demandes-table-empty">Aucune demande ne correspond à ces filtres.</td></tr>` : lignes.map(l => `
               <tr data-id="${esc(l.id)}">
-                <td class="mono">${esc(l.n)}${l.lieeANumero ? `<br><small class="badge-lien">🔗 doublon de ${esc(l.lieeANumero)}</small>` : ""}${(n => n ? `<br><small class="badge-lien">🔗 +${n} doublon${n > 1 ? "s" : ""}</small>` : "")((state.demandes || []).filter(d => d.lieeA === l.id).length)}</td>
+                <td class="mono">${esc(l.n)}${l.actionPour && l.actionTexte && !l.actionFaiteLe ? `<br><small class="badge-action ${l.actionImmediate ? "imm" : ""}" title="${esc(l.actionTexte)}">${l.actionImmediate ? "🚨" : "📌"} ${esc(l.actionPourNom || "")}</small>` : ""}${l.lieeANumero ? `<br><small class="badge-lien">🔗 doublon de ${esc(l.lieeANumero)}</small>` : ""}${(n => n ? `<br><small class="badge-lien">🔗 +${n} doublon${n > 1 ? "s" : ""}</small>` : "")((state.demandes || []).filter(d => d.lieeA === l.id).length)}</td>
                 <td class="mono">${fmtDateFR(l.date)}</td>
                 <td>${esc(l.site)}</td>
                 <td>${esc(l.association)}</td>
