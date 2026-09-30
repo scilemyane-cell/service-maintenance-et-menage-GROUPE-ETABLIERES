@@ -2769,6 +2769,13 @@ function associationEffective(nom) {
   const deja = new Set(sites.map(s => sansAccentSite(s.nom)));
   dossiers.filter(d => d.association === a.nom && !deja.has(sansAccentSite(d.nom)))
     .forEach(d => { sites.push({ nom: d.nom, groupe: d.groupe || "" }); deja.add(sansAccentSite(d.nom)); });
+  // Un même sous-service peut être écrit différemment selon la source
+  // (ex. « Résidence » dans l'association, « RESIDENCE » dans une fiche de
+  // site) : on les fusionne sous une seule orthographe (celle de l'association
+  // en priorité) pour ne pas afficher deux fois le même choix.
+  const graphie = new Map();
+  [...a.sites, ...sites].forEach(s => { const k = sansAccentSite(s.groupe); if (k && !graphie.has(k)) graphie.set(k, s.groupe); });
+  sites.forEach((s, i) => { if (s.groupe) sites[i] = { ...s, groupe: graphie.get(sansAccentSite(s.groupe)) }; });
   // Site « modèle » portant le nom de son groupe (ex. « Résidence ») : masqué dès que de vraies résidences existent.
   const propres = sites.filter(s => !(s.groupe && sansAccentSite(s.nom) === sansAccentSite(s.groupe) && sites.some(x => x !== s && x.groupe === s.groupe)));
   propres.sort((x, y) => String(x.nom).localeCompare(String(y.nom), "fr", { numeric: true }));
