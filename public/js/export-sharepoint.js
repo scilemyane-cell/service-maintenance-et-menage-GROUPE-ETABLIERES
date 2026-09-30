@@ -665,10 +665,9 @@ const MODULES = [
   { dossier: ["Menage"], fichier: "Fiches_menage.pdf", titre: "Fiches de traçabilité ménage", extraire: extraireFichesMenage },
 ];
 
-// Déclenchée automatiquement à chaque connexion à l'appli (voir
-// app.html) — plus de limite "une fois par jour" : à chaque ouverture,
-// pour que les données sur SharePoint restent aussi fraîches que
-// possible sans dépendre d'un serveur programmé. Ne se déclenche que si
+// Déclenchée automatiquement à la connexion à l'appli, UNE fois par jour
+// au maximum (quota Firestore : chaque export relit des milliers de
+// documents ; le faire à chaque ouverture épuisait le quota gratuit). Ne se déclenche que si
 // une session Microsoft est déjà active dans le navigateur (jamais de
 // popup de connexion imposée) — sinon, retentera à la prochaine
 // connexion.
@@ -679,6 +678,13 @@ export async function runDailyExportIfNeeded() {
 
     const snap = await getDoc(STATUS_DOC);
     const statut = snap.exists() ? snap.data() : {};
+    // QUOTA : cet export relit des collections entières (stock, mouvements,
+    // relevés de compteurs, interventions, fiches…) — des milliers de
+    // lectures. Il ne tourne plus qu'UNE fois par jour pour tout le monde
+    // (le 1er appareil connecté), plus à chaque ouverture / rechargement.
+    if (statut.lastExportDate === todayStr()) return;
+    if (statut.exportEnCoursLe && Date.now() - statut.exportEnCoursLe < 30 * 60000) return;
+    await setDoc(STATUS_DOC, { exportEnCoursLe: Date.now() }, { merge: true });
     const dernieresEmpreintes = { ...(statut.empreintes || {}) };
     for (const mod of MODULES) {
       const lignes = await mod.extraire();
