@@ -595,6 +595,16 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-champs">
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
         <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
+        ${perms.isEditor && !TRAITE(l.statut) ? (() => {
+          // Clôture par un superviseur : qui a réellement fait l'intervention.
+          const parDefaut = val(l, "declarePar") || nomDe(techsDuSite(l.site)[0]) || "";
+          const noms = [...new Set([...techs.map(t => t.nom || t.email), utilisateur].filter(Boolean))];
+          return `<label class="dps-realise-par" ${val(l, "statut") === "Réalisé" ? "" : "hidden"}>Réalisé par<select data-dps-champ="declarePar">
+            <option value="">— choisir le technicien —</option>
+            ${noms.map(n => `<option value="${esc(n)}" ${n === parDefaut ? "selected" : ""}>${esc(n)}${n === utilisateur ? " (moi)" : ""}</option>`).join("")}
+            <option value="Entreprise extérieure" ${parDefaut === "Entreprise extérieure" ? "selected" : ""}>Entreprise extérieure</option>
+          </select></label>`;
+        })() : ""}
         <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
         <label class="dps-com">Commentaire<textarea spellcheck="true" lang="fr" data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech ? `<small class="dps-com-auteur">✍️ ${l.commentaireTechPar ? `${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}` : "auteur inconnu (saisi dans le fichier Excel ou avant le suivi des auteurs)"}</small>` : ""}${phrasesHTML("commentaires", perms.isEditor)}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
       </div>
@@ -758,6 +768,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       c.querySelectorAll("[data-dps-statut]").forEach(x => x.classList.toggle("on", x === b));
       poser(c, "statut", b.dataset.dpsStatut);
       c.querySelector('[data-dps-champ="commentaireTech"]')?.classList.toggle("dps-requis", b.dataset.dpsStatut === "Réalisé");
+      c.querySelector(".dps-realise-par")?.toggleAttribute("hidden", b.dataset.dpsStatut !== "Réalisé");
       if (b.dataset.dpsStatut === "Réalisé") {
         const d = c.querySelector('[data-dps-champ="dateIntervention"]');
         if (d && !d.value) { d.value = aujourdhui(); poser(c, "dateIntervention", d.value); }
@@ -809,6 +820,17 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         }
       }
       if (champs.statut === "Réalisé" && !(champs.dateIntervention || l.dateIntervention)) champs.dateIntervention = aujourdhui();
+      if (champs.statut === "Réalisé" && perms.isEditor) {
+        // Le superviseur indique quel technicien a réalisé l'intervention.
+        const sel = c.querySelector('[data-dps-champ="declarePar"]');
+        const par = String(br.declarePar ?? sel?.value ?? "").trim();
+        if (!par) {
+          sel?.classList.add("dps-obligatoire"); sel?.focus();
+          const etat = c.querySelector(".dps-etat"); if (etat) { etat.textContent = "👷 Choisis le technicien qui a réalisé l'intervention."; etat.className = "dps-etat erreur"; }
+          return;
+        }
+        Object.assign(champs, { declarePar: par, declareLe: champs.dateIntervention || l.dateIntervention || aujourdhui() });
+      }
       if (champs.statut === "Réalisé") {
         if (perms.isEditor) Object.assign(champs, { validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur });
         else Object.assign(champs, { statut: A_VALIDER, declarePar: utilisateur, declareLe: aujourdhui() });
