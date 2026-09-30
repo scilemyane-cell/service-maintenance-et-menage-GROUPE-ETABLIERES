@@ -180,6 +180,33 @@
       mesActionsUnsub = watchMesActionsDemandes(uid, (n) => { if (mesActionsUid !== uid) return; const avant = mesActionsCount; mesActionsCount = n; if (avant !== n && currentCategory === null) render(); });
     });
   }
+  // En-tête de l'accueil (superviseurs) : demandes restant à traiter + urgentes.
+  let demOuvertes = null, demOuvertesAbonne = false;
+  const STATUTS_FINIS = ["Réalisé", "Annulé", "Réalisé – à valider"];
+  function compteDemandesHTML() {
+    if (!demOuvertes) return "";
+    return `<button type="button" class="gh-compte" data-gh-compte="a-traiter" title="Demandes restant à traiter"><b>${demOuvertes.n}</b><span>à traiter</span></button>
+      <button type="button" class="gh-compte ${demOuvertes.u ? "urg" : ""}" data-gh-compte="urgentes" title="Urgentes et critiques"><b>${demOuvertes.u}</b><span>urgente${demOuvertes.u > 1 ? "s" : ""}</span></button>`;
+  }
+  function suivreDemandesOuvertes(role) {
+    if (demOuvertesAbonne || !["super_admin", "admin", "n1"].includes(role)) return;
+    demOuvertesAbonne = true;
+    import("./firestore-data.js").then(({ watchDemandes }) => watchDemandes((liste) => {
+      const ouvertes = liste.filter(d => !d.lieeA && !STATUTS_FINIS.includes(d.statut));
+      demOuvertes = { n: ouvertes.length, u: ouvertes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length };
+      const el = document.getElementById("gh-compte-dem");
+      if (el) { el.innerHTML = compteDemandesHTML(); brancherCompteDemandes(); }
+    }));
+  }
+  function brancherCompteDemandes() {
+    document.querySelectorAll("[data-gh-compte]").forEach(b => b.onclick = () => {
+      window.__suiviRaccourci = b.dataset.ghCompte;
+      currentCategory = "suivi-demandes";
+      const cat = allCategories(currentUser).find(c => c.id === "suivi-demandes");
+      currentSubtab = categorySubtabsFor(cat, currentUser)[0]?.id || null;
+      render();
+    });
+  }
   let compteursAlertSubscribed = false;
   let backButtonGuardSetup = false;
   let modulesConstruction = [];
@@ -550,7 +577,7 @@
 
   function render() {
     const app = document.getElementById("app");
-    try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); suivreAValider(currentUser?.role); } catch (e) { console.error(e); }
+    try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); suivreAValider(currentUser?.role); suivreDemandesOuvertes(currentUser?.role); } catch (e) { console.error(e); }
 
     if (currentUser.role === null) {
       app.innerHTML = `
@@ -594,6 +621,7 @@
           <span class="gh-horloge" id="gh-heure">${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
           <svg class="gh-ico-cal" viewBox="0 0 48 44" aria-hidden="true"><rect x="2" y="6" width="44" height="36" rx="4" fill="none" stroke="#fff" stroke-width="3"/><path d="M2 16h44" stroke="#fff" stroke-width="3"/><path d="M12 2v8M36 2v8" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
           <span class="gh-jour"><span>${maintenant.toLocaleDateString("fr-FR", { weekday: "short" })}</span> <b>${maintenant.getDate()}</b><br>${maintenant.toLocaleDateString("fr-FR", { month: "long" })}</span>
+          ${["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? `<span class="gh-compte-dem" id="gh-compte-dem">${compteDemandesHTML()}</span>` : ""}
         </div>
         <div class="gh-user">
           <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><svg class="gh-user-ico" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16" cy="12.5" r="5" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 26c2-5 5.5-7 9-7s7 2 9 7" fill="none" stroke="#fff" stroke-width="2"/></svg> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <svg class="gh-user-chev" viewBox="0 0 16 10" aria-hidden="true"><path d="M1 1l7 7 7-7" fill="none" stroke="#fff" stroke-width="1.8"/></svg></button>
@@ -654,6 +682,7 @@
       cycleTheme();
       e.currentTarget.textContent = THEME_LABELS[getStoredTheme()]; // mise à jour du libellé seule, sans re-render de l'écran en cours (évite de perdre une saisie non enregistrée)
     });
+    brancherCompteDemandes();
     const userBtn = document.getElementById("gh-user-btn"), userPop = document.getElementById("gh-user-pop");
     userBtn?.addEventListener("click", (e) => { e.stopPropagation(); userPop.hidden = !userPop.hidden; });
     userPop?.addEventListener("click", (e) => e.stopPropagation());

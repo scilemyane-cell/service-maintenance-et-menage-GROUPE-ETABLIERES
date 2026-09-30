@@ -178,6 +178,11 @@ export function mountSuiviDemandesTab(container, user) {
   const raccourci = window.__suiviRaccourci; window.__suiviRaccourci = null;
   if (raccourci === "actions") ui.vue = "actions";
   if (raccourci === "valider") ui.allerValidation = true;
+  // En-tête de l'accueil : « à traiter » / « urgentes » → tableau filtré.
+  if (raccourci === "a-traiter" || raccourci === "urgentes") {
+    ui.vue = "tableau"; ui.vueChoisie = true; ui.filtreStatut = "a-traiter"; ui.recherche = ""; ui.filtreSites = []; ui.filtreAssociation = "";
+    ui.filtreUrgence = raccourci === "urgentes" ? "__urg" : "";
+  }
   const ouvrir = window.__suiviOuvrir; window.__suiviOuvrir = null;
   if (ouvrir?.id) ouvrirDemandeSeule(ouvrir.id, ouvrir.site);
   render(container);
@@ -520,7 +525,7 @@ function lignesFiltrees() {
   return toutesLesLignes().filter(l => {
     if (l.lieeA && !ui.voirDoublons) return false;
     if (ui.filtreStatut === "a-traiter" ? STATUTS_TRAITES.includes(l.statut) : (ui.filtreStatut && ui.filtreStatut !== "tous" && l.statut !== ui.filtreStatut)) return false;
-    if (ui.filtreUrgence && l.urgence !== ui.filtreUrgence) return false;
+    if (ui.filtreUrgence === "__urg" ? !["Urgent", "Critique"].includes(l.urgence) : (ui.filtreUrgence && l.urgence !== ui.filtreUrgence)) return false;
     if (ui.filtreSites.length > 0 && !ui.filtreSites.includes(l.site)) return false;
     if (ui.filtreAssociation && l.association !== ui.filtreAssociation) return false;
     if (ui.recherche) {
@@ -646,7 +651,7 @@ function renderTableau(container) {
             ${DEMANDES_SEED.statuts.map(s => `<option value="${esc(s)}" ${ui.filtreStatut === s ? "selected" : ""}>${esc(s)}</option>`).join("")}
           </select>
         </label>
-        ${selectHTML("demandes-f-urgence", "Urgence", DEMANDES_SEED.urgences, ui.filtreUrgence)}
+        ${selectHTML("demandes-f-urgence", "Urgence", DEMANDES_SEED.urgences, ui.filtreUrgence).replace('<option value="">Tous</option>', `<option value="">Tous</option><option value="__urg" ${ui.filtreUrgence === "__urg" ? "selected" : ""}>Urgentes + critiques</option>`)}
         ${selectHTML("demandes-f-association", "Association", DEMANDES_SEED.assocs, ui.filtreAssociation)}
         ${siteMultiSelectHTML([...DEMANDES_SEED.sites].sort(), ui.filtreSites)}
         <button type="button" class="demandes-reset-btn" id="demandes-reset-filtres">✕ Réinitialiser</button>

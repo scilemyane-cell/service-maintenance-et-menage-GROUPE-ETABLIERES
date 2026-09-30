@@ -2656,3 +2656,16 @@ div.gh-urg-corps{cursor:default}
 .iv-cloture-btns{display:flex;gap:6px;flex-wrap:wrap}
 .iv-cloture-btns button{font-size:12px;padding:6px 10px}
 .iv-cloture-pied{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+
+/* En-tête accueil : demandes à traiter / urgentes (superviseurs) */
+.gh-compte-dem{display:flex;gap:6px;margin-left:4px}
+.gh-compte{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:54px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);border-radius:10px;padding:3px 8px;color:#fff;cursor:pointer;font:600 10.5px "Montserrat",system-ui,sans-serif;line-height:1.1}
+.gh-compte b{font-size:18px;font-weight:800}
+.gh-compte.urg{background:#fff;color:#c8102e;border-color:#fff;animation:dpsPulse 1.6s ease-in-out infinite}
+@media (max-width:520px){.gh-compte{min-width:44px;padding:2px 6px}.gh-compte b{font-size:15px}}
+@media (max-width:520px){
+  .topbar-gmao .gh-date:has(.gh-compte-dem) .gh-ico-horloge,
+  .topbar-gmao .gh-date:has(.gh-compte-dem) .gh-ico-cal{display:none}
+  .topbar-gmao .gh-date:has(.gh-compte-dem){gap:8px;padding:8px 10px}
+}
+.gh-compte span{white-space:nowrap}
