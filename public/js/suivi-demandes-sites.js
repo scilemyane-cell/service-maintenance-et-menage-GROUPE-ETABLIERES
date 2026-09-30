@@ -124,6 +124,9 @@ function filHTML(l) {
   if (!fil.length) return "";
   return `<div class="dps-fil">${fil.map(m => `<div class="dps-fil-msg ${m.fait ? "fait" : ""}"><b>${esc(m.de || "?")}</b> <small>${heureFr(m.le)}</small><span>${m.fait ? "✓ " : ""}${esc(m.texte || "")}</span></div>`).join("")}</div>`;
 }
+// Noms à ne jamais « corriger » (sites, personnes, prestataires) pour l'IA.
+const motsConnus = (lignes, utilisateurs = []) => [...new Set([...(lignes || []).flatMap(l => [l.site, l.intervenant, l.demandeur, l.commentaireTechPar, l.actionPourNom, l.actionParNom]),
+  ...(utilisateurs || []).flatMap(u => [u?.nom, u?.displayName, u?.name, typeof u === "string" ? u : ""])].filter(Boolean))];
 const btnIA = () => `<button type="button" class="dps-ia dps-ia-mini" data-ia-champ title="L'IA corrige et met au propre, sans changer le sens">✨ Mettre au propre</button>`;
 function formReponseHTML(l, { avecFait }) {
   return `<details class="dps-repondre"><summary>💬 Répondre</summary>
@@ -204,7 +207,7 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     b.disabled = true; const avant = b.textContent; b.textContent = "⏳ IA…";
     try {
       const { redigerCommentaireDemande } = await import("./ia.js");
-      const t = (await redigerCommentaireDemande({ descr: l.descr, notes })).replace(/\*\*/g, "").trim();
+      const t = (await redigerCommentaireDemande({ descr: l.descr, notes, mots: motsConnus(lignes) })).replace(/\*\*/g, "").trim();
       const { proposerIA } = await import("./ia-suggestion.js");
       if (t) proposerIA(b, t, (v) => { champ.value = v; champ.dispatchEvent(new Event("input", { bubbles: true })); });
     } catch (err) { console.error(err); import("./ia-suggestion.js").then(m => m.signalerErreurIA(err)); }
@@ -786,7 +789,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       btn.disabled = true; const avant = btn.textContent; btn.textContent = "⏳ IA…";
       try {
         const { redigerCommentaireDemande } = await import("./ia.js");
-        const texte = (await redigerCommentaireDemande({ descr: l?.descr, local: l?.local, statut: val(l, "statut"), notes })).replace(/\*\*/g, "").trim();
+        const texte = (await redigerCommentaireDemande({ descr: l?.descr, local: l?.local, statut: val(l, "statut"), notes, mots: motsConnus(lignes, utilisateurs) })).replace(/\*\*/g, "").trim();
         const { proposerIA } = await import("./ia-suggestion.js");
         if (texte) proposerIA(btn, texte, (v) => { ta.value = v; poser(c, "commentaireTech", v); });
       } catch (err) { console.error(err); import("./ia-suggestion.js").then(m => m.signalerErreurIA(err)); }

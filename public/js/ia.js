@@ -174,6 +174,46 @@ function accordParticipes(texte) {
   });
 }
 
+// Garde-fous du correcteur : LanguageTool ne connaît pas nos fournisseurs,
+// prénoms, sites ni références (« sonepar » → « sonner » !). Un mot inconnu
+// n'est corrigé que si la suggestion est le même mot à un accent / une lettre
+// près ; les noms connus ne sont jamais touchés (juste mis en majuscule).
+const NOMS = ["Sonepar", "Tereva", "Cedeo", "Brossette", "Rexel", "Yesss", "Legrand", "Leroy Merlin", "Castorama", "Brico Dépôt", "Point P", "Würth", "Wurth", "Trenois",
+  "Otis", "Schindler", "Kone", "Dalkia", "Engie", "Veolia", "Saur", "Enedis", "Grdf", "Atlantic", "Thermor", "Saunier Duval", "Frisquet", "Viessmann", "De Dietrich", "Aldes",
+  "Ronald", "Lionel", "Harmonie", "Camileia", "Agropolis", "Établières", "Etablières", "Vendée Habitat", "Écol'eau", "Svdp", "Aga"];
+const PROTEGES = new Set(["ref", "réf", "refs", "aga", "svdp", "vmc", "ecs", "cta", "pac", "tgbt", "baes", "ssi", "rdc", "bat", "bât", "log", "apt", "appt", "ch", "sdb", "wc", "ok", "rdv", "tel", "tél", "mail", "sav", "bt", "dt", "n1", "n2"]);
+NOMS.forEach(n => PROTEGES.add(sansAccent(n)));
+const MOTS_APPLI = new Set();
+// Noms de sites / personnes de l'appli, ajoutés par les écrans qui les connaissent.
+export function ajouterMotsConnus(liste) { (liste || []).forEach(t => String(t || "").split(/[\s/,()«»"-]+/).forEach(m => { if (m.length > 2) MOTS_APPLI.add(sansAccent(m)); })); }
+function distance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function suggestionSure(orig, rempl, m) {
+  const mots = orig.split(/[\s'’-]+/).filter(Boolean);
+  // Référence, code, sigle, nom avec majuscule interne : on ne touche pas.
+  if (mots.some(w => /\d/.test(w) || (w.length > 1 && w === w.toUpperCase() && /\p{L}/u.test(w)) || /\p{Ll}\p{Lu}/u.test(w))) return false;
+  if (mots.some(w => PROTEGES.has(sansAccent(w)) || MOTS_APPLI.has(sansAccent(w)))) return false;
+  const typo = m?.rule?.issueType === "misspelling" || /TYPOS|MORFOLOGIK|HUNSPELL/i.test(`${m?.rule?.category?.id || ""} ${m?.rule?.id || ""}`);
+  if (!typo) return true; // grammaire, accord, ponctuation : on garde
+  const a = sansAccent(orig), b = sansAccent(rempl);
+  if (a === b) return true;                 // accent / majuscule
+  if (/\s/.test(rempl) && a.replace(/\s/g, "") === b.replace(/[\s'’-]/g, "")) return true; // mots collés
+  if (/^\p{Lu}/u.test(orig)) return false;  // mot inconnu en majuscule = nom propre
+  return a.length >= 4 && distance(a, b) <= (a.length >= 8 ? 2 : 1);
+}
+function nomsPropres(t) {
+  NOMS.forEach(n => {
+    const re = new RegExp(`(^|[^\\p{L}])(${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?![\\p{L}])`, "giu");
+    t = t.replace(re, (x, av) => av + (n.length <= 4 ? n.toUpperCase() : n));
+  });
+  return t;
+}
+
 export async function corrigerOrthographe(texte) {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -185,12 +225,16 @@ export async function corrigerOrthographe(texte) {
     if (!res.ok) throw new Error(`LanguageTool ${res.status}`);
     const { matches = [] } = await res.json();
     let out = texte;
-    // On applique la première suggestion de chaque faute, de la fin vers le début.
+    // On applique la première suggestion de chaque faute, de la fin vers le début,
+    // SAUF quand elle risque de dénaturer un nom (fournisseur, personne, réf.).
     [...matches].sort((a, b) => b.offset - a.offset).forEach(m => {
       const r = m.replacements?.[0]?.value;
       if (r == null) return;
+      const orig = texte.slice(m.offset, m.offset + m.length);
+      if (!suggestionSure(orig, r, m)) return;
       out = out.slice(0, m.offset) + r + out.slice(m.offset + m.length);
     });
+    out = nomsPropres(out);
     out = accordParticipes(out);
     out = out.replace(/\s+([,.])/g, "$1").replace(/^\s*(\p{Ll})/u, (x, c) => c.toUpperCase()).trim();
     if (out && !/[.!?…]$/.test(out)) out += ".";
@@ -199,6 +243,7 @@ export async function corrigerOrthographe(texte) {
 }
 
 export async function redigerCommentaireDemande(f) {
+  ajouterMotsConnus(f.mots);
   try { return await corrigerOrthographe(f.notes); }
   catch (e) { console.warn("Correcteur indisponible, repli sur l'IA Gemini :", e); }
   return genererTexte(`Corrige et reformule légèrement le texte ci-dessous, écrit dans le champ « commentaire » d'une demande d'intervention (service maintenance, Groupe Établières).
