@@ -436,6 +436,7 @@ function render() {
         <label style="flex:1;min-width:180px">Association
           <select id="stat-f-assoc"><option value="">Toutes</option>${listeAssociations(data).map(a => `<option value="${esc(a)}" ${filtres.association === a ? "selected" : ""}>${esc(a)}</option>`).join("")}</select>
         </label>
+        <button class="add-btn" id="stat-rapport" style="font-size:12px">📑 Rapport direction (PDF)</button>
         <button class="nav-btn" id="stat-rafraichir" style="font-size:12px">🔄 Actualiser</button>
         <p class="hint" style="margin:0;flex-basis:100%">Du ${fmtDate(p.debut)} au ${fmtDate(p.fin)} · comparaison ${comp.replace(/^vs /, "avec ")} (${fmtDate(p.prevDebut)} → ${fmtDate(p.prevFin)})${filtres.association ? ` · filtre association : <b>${esc(filtres.association)}</b> (sans effet sur absences et fiches ménage)` : ""}</p>
       </div>
@@ -606,6 +607,15 @@ function render() {
 
   document.getElementById("stat-f-periode")?.addEventListener("change", e => { filtres.periode = e.target.value; render(); });
   document.getElementById("stat-f-assoc")?.addEventListener("change", e => { filtres.association = e.target.value; render(); });
+  document.getElementById("stat-rapport")?.addEventListener("click", async () => {
+    const fenetre = window.open("", "_blank");
+    if (fenetre) fenetre.document.write("<p style='font:16px system-ui;padding:20px'>Préparation du rapport…</p>");
+    let logo = new URL("img/logo-etablieres.png", location.href).href;
+    try { const b = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => ok(logo); r.readAsDataURL(b); }); } catch { /* logo par URL */ }
+    const { ouvrirRapportDirection } = await import("./rapport-direction.js");
+    ouvrirRapportDirection({ s, p, data, filtres, v, variation, fenetre, logo, periodeLibelle: PERIODES[filtres.periode] || "", auteur: userCourant?.nom || "",
+      typesCompteur: TYPE_COMPTEUR, seuilReleve: SEUIL_RETARD_RELEVE_J, ordreUrgence: ORDRE_URGENCE });
+  });
   document.getElementById("stat-rafraichir")?.addEventListener("click", () => { lectureLe = 0; mountStatistiques(mountedContainer, userCourant); });
 
   dessinerGraphiques(s, p);
