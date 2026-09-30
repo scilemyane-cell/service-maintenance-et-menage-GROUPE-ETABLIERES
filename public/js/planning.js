@@ -2115,30 +2115,26 @@ function attacherImportPrttListeners(container) {
 // =================================================================
 // Interventions
 // =================================================================
-function renderDocPreview() {
-  const filtered = state.interventions
-    .filter(i => ui.docForm.person === "Tous" || i.technicien === ui.docForm.person)
-    .filter(i => i.date >= ui.docForm.start && i.date <= ui.docForm.end)
+function interventionsReleve(person, start, end) {
+  return state.interventions
+    .filter(i => person === "Tous" || i.technicien === person)
+    .filter(i => i.date >= start && i.date <= end && !i.supprimeLe)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+function ficheReleveHTML(person, start, end, id = "") {
+  const filtered = interventionsReleve(person, start, end);
   const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
   const totalNuit = filtered.reduce((s, i) => s + (i.heuresNuit || 0), 0);
   const totalPrimes = filtered.reduce((s, i) => s + (i.primeDimanche || 0), 0);
-
   return `
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
-      <button class="nav-btn" id="doc-valider" style="border-color:var(--teal)">✅ Valider ce relevé (transmis au manager)</button>
-      <button class="nav-btn" id="doc-close">✕ Fermer l'aperçu</button>
-    </div>
-    <div id="doc-valid-status" style="font-size:12px;margin:6px 0"></div>
-    <div class="print-fiche" id="doc-print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+    <div class="print-fiche" ${id ? `id="${id}"` : ""} style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
         <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
         <span style="font-size:13px">Le ${fmtShort(new Date())}</span>
       </div>
       <p style="font-size:14px;margin:0 0 6px">RELEVÉ D'HEURES SUPPLÉMENTAIRES — ASTREINTE</p>
-      <p style="font-size:13px;margin:0 0 6px">Intervenant : ${esc(ui.docForm.person)}</p>
-      <p style="font-size:13px;margin:0 0 18px">Période du ${fmtShort(new Date(ui.docForm.start))} au ${fmtShort(new Date(ui.docForm.end))}</p>
+      <p style="font-size:13px;margin:0 0 6px">Intervenant : ${esc(person)}</p>
+      <p style="font-size:13px;margin:0 0 18px">Période du ${fmtShort(new Date(start))} au ${fmtShort(new Date(end))}</p>
 
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
         <thead><tr>
@@ -2187,6 +2183,34 @@ function renderDocPreview() {
         <span>Signature manager (validation pour paiement)</span>
       </div>
     </div>
+  `;
+}
+// Valide (archive) un relevé : les interventions passent en « transmis ».
+async function validerReleve(person, start, end) {
+  const filtered = interventionsReleve(person, start, end);
+  if (!filtered.length) throw new Error("Aucune intervention sur cette période à valider.");
+  const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
+  const totalNuit = filtered.reduce((s, i) => s + (i.heuresNuit || 0), 0);
+  const totalPrimes = filtered.reduce((s, i) => s + (i.primeDimanche || 0), 0);
+  await createReleve({
+    person, start, end, total, totalNuit, totalPrimes, nbInterventions: filtered.length,
+    interventionIds: filtered.map(i => i.id),
+    validatedBy: mountedUser.uid, validatedByNom: mountedUser.nom || mountedUser.email,
+    validatedAt: new Date().toISOString(),
+  });
+  await Promise.all(filtered.filter(i => !i.transmis).map(i => updateIntervention(i.id, { transmis: true })));
+  return { n: filtered.length, total };
+}
+
+function renderDocPreview() {
+  return `
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="add-btn" id="doc-print">🖨️ Exporter en PDF (imprimer)</button>
+      <button class="nav-btn" id="doc-valider" style="border-color:var(--teal)">✅ Valider ce relevé (transmis au manager)</button>
+      <button class="nav-btn" id="doc-close">✕ Fermer l'aperçu</button>
+    </div>
+    <div id="doc-valid-status" style="font-size:12px;margin:6px 0"></div>
+    ${ficheReleveHTML(ui.docForm.person, ui.docForm.start, ui.docForm.end, "doc-print-fiche")}
   `;
 }
 
@@ -2484,32 +2508,149 @@ function bornesMois(mois) {
   const fin = new Date(a, m, 0);
   return { start: `${mois}-01`, end: `${mois}-${String(fin.getDate()).padStart(2, "0")}` };
 }
+function moisClotureParDefaut() {
+  const d = new Date(); if (d.getDate() <= 10) d.setMonth(d.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+const eurosFr = (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+const initialesNom = (n) => String(n || "?").split(/[\s-]+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join("");
+
+// Clôture du mois : une carte par intervenant, deux étapes claires
+// (① relevé d'heures à valider, ② remboursement km), chaque document
+// s'ouvre seul en plein écran, prêt à imprimer.
 function clotureMoisHTML(mois) {
   const { start, end } = bornesMois(mois);
   const [a, m] = mois.split("-").map(Number);
   const nomMois = new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const duMois = state.interventions.filter(i => i.date >= start && i.date <= end && !i.supprimeLe);
   const parTech = new Map();
-  duMois.forEach(i => { const t = i.technicien || "—"; if (!parTech.has(t)) parTech.set(t, []); parTech.get(t).push(i); });
+  duMois.filter(i => i.technicien).forEach(i => { if (!parTech.has(i.technicien)) parTech.set(i.technicien, []); parTech.get(i.technicien).push(i); });
+  const sansTech = duMois.filter(i => !i.technicien).length;
   const s = (l, k) => l.reduce((t, i) => t + (parseFloat(i[k]) || 0), 0);
-  const lignes = [...parTech.entries()].sort((x, y) => x[0].localeCompare(y[0], "fr"));
-  const reste = duMois.filter(i => !i.transmis).length;
+  const cartes = [...parTech.entries()].sort((x, y) => x[0].localeCompare(y[0], "fr")).map(([t, l]) => {
+    const att = l.filter(i => !i.transmis).length;
+    const c = state.coordonnees[t] || {};
+    const jours = calculerLignesNoteFrais(t, mois);
+    const km = jours.reduce((x, j) => x + (parseFloat(j.km) || 0), 0);
+    const kmFait = !jours.length;
+    const kmManque = !kmFait && !c.kmDomicileService;
+    const fini = !att && kmFait;
+    const primes = s(l, "primeDimanche");
+    return { fini, html: `<div class="clo-carte ${fini ? "fini" : ""}">
+      <div class="clo-tete"><span class="clo-av">${esc(initialesNom(t))}</span>
+        <div class="clo-id"><b>${esc(t)}</b><small>${l.length} intervention${l.length > 1 ? "s" : ""} · ${fmtDureeH(s(l, "heures"))}${s(l, "heuresNuit") ? ` · dont nuit ${fmtDureeH(s(l, "heuresNuit"))}` : ""}${primes ? ` · primes ${primes} €` : ""}</small></div>
+        ${fini ? `<span class="clo-badge ok">✓ Terminé</span>` : ""}</div>
+      <div class="clo-etapes">
+        <button class="clo-etape ${att ? "" : "ok"}" data-clo-releve="${esc(t)}"><span class="clo-num">${att ? "1" : "✓"}</span>
+          <span class="clo-txt"><b>Relevé d'heures</b><small>${att ? `${att} intervention${att > 1 ? "s" : ""} à valider` : "Validé"}</small></span><span class="clo-go">${att ? "Vérifier ›" : "Revoir ›"}</span></button>
+        <button class="clo-etape ${kmFait ? "ok" : kmManque ? "alerte" : ""}" data-clo-km="${esc(t)}"><span class="clo-num">${kmFait ? "✓" : "2"}</span>
+          <span class="clo-txt"><b>Remboursement km</b><small>${kmFait ? "Demandé" : kmManque ? "⚠ Km domicile à renseigner" : `${jours.length} jour${jours.length > 1 ? "s" : ""} · ${km.toFixed(0)} km · ≈ ${eurosFr(km * TARIF_KM)}`}</small></span><span class="clo-go">${kmFait ? "Revoir ›" : "Préparer ›"}</span></button>
+      </div></div>` };
+  });
+  const nbFini = cartes.filter(c => c.fini).length;
   return `<div class="form-card iv-cloture" id="iv-cloture">
-    <div class="iv-cloture-tete"><h3>🗓️ Clôture de ${esc(nomMois)}</h3>
-      <span class="iv-cloture-etat ${reste ? "attente" : "ok"}">${reste ? `⏳ ${reste} intervention${reste > 1 ? "s" : ""} à valider` : "✓ Tout est validé"}</span>
-      <button class="nav-btn" id="cloture-fermer" title="Fermer">✕</button></div>
-    ${!lignes.length ? `<p class="hint">Aucune intervention sur ce mois.</p>` : `
-    <div class="table-wrap"><table class="iv-cloture-table">
-      <thead><tr><th>Intervenant</th><th>Interv.</th><th>Heures</th><th>Nuit</th><th>Primes dim.</th><th>Statut</th><th>À imprimer</th></tr></thead>
-      <tbody>${lignes.map(([t, l]) => { const att = l.filter(i => !i.transmis).length; return `<tr>
-        <td><b>${esc(t)}</b></td><td>${l.length}</td><td>${fmtDureeH(s(l, "heures"))}</td><td>${fmtDureeH(s(l, "heuresNuit"))}</td><td>${s(l, "primeDimanche")} €</td>
-        <td>${att ? `<span class="iv-cloture-etat attente">⏳ ${att} à valider</span>` : `<span class="iv-cloture-etat ok">✓ validé</span>`}</td>
-        <td class="iv-cloture-btns"><button class="add-btn" data-cloture-releve="${esc(t)}">📄 Relevé d'heures</button>${t !== "—" ? `<button class="nav-btn" data-cloture-km="${esc(t)}">🚗 Note de frais km</button>` : ""}</td></tr>`; }).join("")}</tbody>
-    </table></div>
-    <div class="iv-cloture-pied"><button class="add-btn" data-cloture-releve="Tous">📄 Relevé global (tous les intervenants)</button>
-      <span class="hint">Le relevé s'ouvre plus bas : « Imprimer » puis « Valider » pour l'archiver (les interventions passent en validé).</span></div>`}
-    ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === "cloture" ? renderApercuNoteFrais() : ""}
+    <div class="clo-bandeau">
+      <button class="nav-btn" data-clo-mois="-1" title="Mois précédent">◀</button>
+      <div class="clo-titre"><h3>Clôture de ${esc(nomMois)}</h3>
+        ${cartes.length ? `<div class="clo-prog"><i style="width:${Math.round(nbFini / cartes.length * 100)}%"></i></div><small>Terminé : ${nbFini} sur ${cartes.length} intervenant${cartes.length > 1 ? "s" : ""}</small>` : ""}</div>
+      <button class="nav-btn" data-clo-mois="1" title="Mois suivant">▶</button>
+      <button class="nav-btn" id="cloture-fermer" title="Fermer">✕</button>
+    </div>
+    ${!cartes.length ? `<p class="hint">Aucune intervention avec déplacement sur ce mois.</p>` : `<div class="clo-grille">${cartes.map(c => c.html).join("")}</div>`}
+    <div class="clo-pied">${cartes.length ? `<button class="nav-btn" data-clo-releve="Tous">📄 Relevé global (tous)</button>` : ""}
+      ${sansTech ? `<span class="hint">${sansTech} appel${sansTech > 1 ? "s" : ""} traité${sansTech > 1 ? "s" : ""} par téléphone (sans intervenant).</span>` : ""}</div>
   </div>`;
+}
+
+// Fenêtre plein écran : barre d'actions + document seul.
+function overlayCloture(titre, contenu) {
+  document.getElementById("clo-overlay")?.remove();
+  const ov = document.createElement("div");
+  ov.id = "clo-overlay"; ov.className = "clo-overlay";
+  ov.innerHTML = `<div class="clo-ov-barre"><button class="nav-btn" data-ov-fermer>← Retour</button><b>${esc(titre)}</b><span class="clo-ov-actions"></span></div><div class="clo-ov-corps">${contenu}</div>`;
+  document.body.append(ov);
+  document.body.classList.add("clo-ouvert");
+  const fermer = () => { ov.remove(); document.body.classList.remove("clo-ouvert"); document.removeEventListener("keydown", esc_); renderAll(); };
+  const esc_ = (e) => { if (e.key === "Escape") fermer(); };
+  document.addEventListener("keydown", esc_);
+  ov.querySelector("[data-ov-fermer]").addEventListener("click", fermer);
+  return { ov, fermer, actions: ov.querySelector(".clo-ov-actions") };
+}
+
+function ouvrirReleveCloture(person, mois) {
+  const { start, end } = bornesMois(mois);
+  const nomMois = new Date(start).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const { ov, actions } = overlayCloture(`Relevé d'heures — ${person === "Tous" ? "tous les intervenants" : person} — ${nomMois}`, `<div class="clo-doc">${ficheReleveHTML(person, start, end)}</div>`);
+  const maj = () => {
+    const att = interventionsReleve(person, start, end).filter(i => !i.transmis).length;
+    actions.innerHTML = `<button class="add-btn" data-ov-print>🖨️ Imprimer / PDF</button>${att
+      ? `<button class="add-btn clo-vert" data-ov-valider>✅ Valider le relevé (${att})</button>`
+      : `<span class="clo-badge ok">✓ Relevé validé</span>`}`;
+    actions.querySelector("[data-ov-print]").addEventListener("click", () => imprimerFicheIsolee(ov.querySelector(".print-fiche")));
+    actions.querySelector("[data-ov-valider]")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "⏳ Validation…";
+      try { const { n } = await validerReleve(person, start, end); window.toast?.(`✓ Relevé validé — ${n} intervention(s) archivée(s)`, "success"); interventionsReleve(person, start, end).forEach(i => { i.transmis = true; }); maj(); }
+      catch (err) { b.disabled = false; b.textContent = "✅ Valider le relevé"; window.toast?.("Échec : " + (err.message || err), "error"); }
+    });
+  };
+  maj();
+}
+
+function ouvrirKmCloture(nom, mois) {
+  const nomMois = new Date(`${mois}-01`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  let historique = false;
+  let lignes = calculerLignesNoteFrais(nom, mois);
+  const { ov, actions, fermer } = overlayCloture(`Remboursement km — ${nom} — ${nomMois}`, `<div class="clo-km"></div>`);
+  const zone = ov.querySelector(".clo-km");
+  const dejaFait = () => state.interventions.some(i => i.technicien === nom && i.date?.startsWith(mois) && i.fraisRembourse);
+  const rendre = () => {
+    const c = state.coordonnees[nom] || {};
+    const inc = lignes.filter(l => l.incluse);
+    const km = inc.reduce((x, l) => x + (parseFloat(l.km) || 0), 0);
+    if (!c.kmDomicileService) {
+      zone.innerHTML = `<div class="clo-km-manque"><p>⚠ Il manque le trajet de <b>${esc(nom)}</b> : km aller-retour domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)}.</p>
+        <label>Km aller-retour <input type="number" min="0" step="0.1" data-km-dom placeholder="ex. 24"></label> <button class="add-btn" data-km-dom-ok>Enregistrer</button></div>`;
+      actions.innerHTML = "";
+      zone.querySelector("[data-km-dom-ok]").addEventListener("click", async () => {
+        const v = parseFloat(zone.querySelector("[data-km-dom]").value) || 0; if (!v) return;
+        await saveCoordonnee(nom, { ...c, kmDomicileService: v });
+        state.coordonnees[nom] = { ...c, kmDomicileService: v };
+        lignes = calculerLignesNoteFrais(nom, mois, historique); rendre();
+      });
+      return;
+    }
+    zone.innerHTML = !lignes.length
+      ? `<div class="clo-km-vide">${dejaFait() ? "✓ Le remboursement de ce mois a déjà été demandé." : "Aucun déplacement à rembourser sur ce mois."}</div>`
+      : `<div class="clo-km-total"><div><b>${km.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km</b><small>${inc.length} jour${inc.length > 1 ? "s" : ""} retenu${inc.length > 1 ? "s" : ""}</small></div><div><b>≈ ${eurosFr(km * TARIF_KM)}</b><small>à ${String(TARIF_KM).replace(".", ",")} €/km</small></div></div>
+        <p class="hint">Trajet habituel : ${esc(c.adresseDomicile || "domicile")} ↔ ${esc(SERVICE_TECHNIQUE_NOM)} = ${c.kmDomicileService} km A/R. Modifie un jour seulement si le trajet a été différent.</p>
+        <div class="clo-jours">${lignes.map((l, i) => `<div class="clo-jour ${l.incluse ? "" : "off"}">
+          <label class="clo-j-date"><input type="checkbox" data-j-inc="${i}" ${l.incluse ? "checked" : ""}><b>${new Date(l.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}</b></label>
+          <div class="clo-j-nat">${l.numeros ? `<code>${esc(l.numeros)}</code> ` : ""}${esc(l.nature)}</div>
+          <label class="clo-j-km"><input type="number" min="0" step="0.1" data-j-km="${i}" value="${l.km}" ${l.incluse ? "" : "disabled"}> km</label>
+          <input class="clo-j-frais" data-j-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="Frais annexes (péage, repas…)" ${l.incluse ? "" : "disabled"}>
+        </div>`).join("")}</div>`;
+    zone.insertAdjacentHTML("beforeend", `<label class="clo-km-hist"><input type="checkbox" data-j-hist ${historique ? "checked" : ""}> Ajouter les jours des mois précédents pas encore remboursés</label>`);
+    actions.innerHTML = lignes.length ? `<button class="add-btn" data-ov-print ${inc.length ? "" : "disabled"}>🖨️ Imprimer la note de frais</button>
+      <button class="add-btn clo-vert" data-ov-fait ${inc.length ? "" : "disabled"} title="Une fois la note transmise : ces jours ne réapparaîtront plus">✓ Remboursement demandé</button>` : "";
+    zone.querySelectorAll("[data-j-inc]").forEach(cb => cb.addEventListener("change", () => { lignes[+cb.dataset.jInc].incluse = cb.checked; rendre(); }));
+    zone.querySelectorAll("[data-j-km]").forEach(inp => inp.addEventListener("change", () => { lignes[+inp.dataset.jKm].km = parseFloat(inp.value) || 0; rendre(); }));
+    zone.querySelectorAll("[data-j-frais]").forEach(inp => inp.addEventListener("input", () => { lignes[+inp.dataset.jFrais].fraisAnnexes = inp.value; }));
+    zone.querySelector("[data-j-hist]")?.addEventListener("change", (e) => { historique = e.target.checked; lignes = calculerLignesNoteFrais(nom, mois, historique); rendre(); });
+    actions.querySelector("[data-ov-print]")?.addEventListener("click", () => imprimerNoteDeFrais(nom, mois, lignes.filter(l => l.incluse)));
+    actions.querySelector("[data-ov-fait]")?.addEventListener("click", async (e) => {
+      const retenues = lignes.filter(l => l.incluse), ids = retenues.flatMap(l => l.interventionIds || []);
+      if (!ids.length) return;
+      if (!(await window.confirmDialog(`As-tu bien imprimé et transmis la note de frais ? Les ${retenues.length} jour(s) seront marqués « remboursement demandé » et ne réapparaîtront plus.`, { texteValider: "Oui, c'est fait" }))) return;
+      e.currentTarget.disabled = true;
+      try {
+        await Promise.all(ids.map(id => updateIntervention(id, { fraisRembourse: true })));
+        state.interventions.forEach(i => { if (ids.includes(i.id)) i.fraisRembourse = true; });
+        window.toast?.(`✓ Remboursement demandé (${retenues.length} jour(s))`, "success");
+        fermer();
+      } catch (err) { window.toast?.("Échec : " + (err.message || err), "error"); e.currentTarget.disabled = false; }
+    });
+  };
+  rendre();
 }
 
 // Sites proposés dans les interventions : liste « Associations & Sites »
@@ -2778,7 +2919,8 @@ function renderInterventions(container, perms) {
       ${completerHorsListe ? completerHorairesHTML(completerHorsListe) : ""}
       ${formHTML}
 `;
-  const clotureHTML = ui.cloture && perms.isEditor ? clotureMoisHTML(ui.cloture) : "";
+  const clotureHTML = !perms.isEditor ? "" : ui.cloture ? clotureMoisHTML(ui.cloture)
+    : `<button class="clo-entree" id="cloture-ouvrir">🗓️ <b>Clôture du mois</b><span>Relevés d'heures et remboursements km, intervenant par intervenant</span><em>Ouvrir ›</em></button>`;
   const vueRealisees = `
       ${clotureHTML}
       <div class="ivf">
@@ -3131,26 +3273,12 @@ function renderInterventions(container, perms) {
     document.getElementById("doc-close")?.addEventListener("click", () => { ui.docForm.generated = false; renderAll(); });
     document.getElementById("doc-valider")?.addEventListener("click", async () => {
       const statusEl = document.getElementById("doc-valid-status");
-      const filtered = state.interventions
-        .filter(i => ui.docForm.person === "Tous" || i.technicien === ui.docForm.person)
-        .filter(i => i.date >= ui.docForm.start && i.date <= ui.docForm.end);
-      if (filtered.length === 0) { statusEl.innerHTML = `<span style="color:var(--red)">Aucune intervention sur cette période à valider.</span>`; return; }
       statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Validation en cours…</span>`;
       try {
-        const total = filtered.reduce((s, i) => s + (i.heures || 0), 0);
-        const totalNuit = filtered.reduce((s, i) => s + (i.heuresNuit || 0), 0);
-        const totalPrimes = filtered.reduce((s, i) => s + (i.primeDimanche || 0), 0);
-        await createReleve({
-          person: ui.docForm.person, start: ui.docForm.start, end: ui.docForm.end,
-          total, totalNuit, totalPrimes, nbInterventions: filtered.length,
-          interventionIds: filtered.map(i => i.id),
-          validatedBy: mountedUser.uid, validatedByNom: mountedUser.nom || mountedUser.email,
-          validatedAt: new Date().toISOString(),
-        });
-        await Promise.all(filtered.map(i => updateIntervention(i.id, { transmis: true })));
-        statusEl.innerHTML = `<span style="color:var(--teal)">✓ Relevé validé et archivé — ${filtered.length} intervention(s), ${total.toFixed(2)}h au total.</span>`;
+        const { n, total } = await validerReleve(ui.docForm.person, ui.docForm.start, ui.docForm.end);
+        statusEl.innerHTML = `<span style="color:var(--teal)">✓ Relevé validé et archivé — ${n} intervention(s), ${total.toFixed(2)}h au total.</span>`;
       } catch (e) {
-        statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
+        statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;
       }
     });
     mountedContainer.querySelectorAll("[data-note-frais-ligne]").forEach(btn => btn.addEventListener("click", () => {
@@ -3158,14 +3286,14 @@ function renderInterventions(container, perms) {
       if (!interv) return;
       ouvrirApercuNoteFrais(interv.technicien, interv.date.slice(0, 7), interv.id);
     }));
-    document.getElementById("cloture-fermer")?.addEventListener("click", () => { ui.cloture = null; ui.noteFraisPreview = null; renderAll(); });
-    mountedContainer.querySelectorAll("[data-cloture-releve]").forEach(b => b.addEventListener("click", () => {
-      const { start, end } = bornesMois(ui.cloture);
-      ui.docForm.person = b.dataset.clotureReleve; ui.docForm.start = start; ui.docForm.end = end; ui.docForm.generated = true;
-      renderAll();
-      setTimeout(() => (document.getElementById("doc-print-fiche") || document.getElementById("doc-print"))?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    document.getElementById("cloture-fermer")?.addEventListener("click", () => { ui.cloture = null; renderAll(); });
+    document.getElementById("cloture-ouvrir")?.addEventListener("click", () => { ui.cloture = moisClotureParDefaut(); renderAll(); });
+    mountedContainer.querySelectorAll("[data-clo-mois]").forEach(b => b.addEventListener("click", () => {
+      const [a, m] = ui.cloture.split("-").map(Number); const d = new Date(a, m - 1 + Number(b.dataset.cloMois), 1);
+      ui.cloture = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; renderAll();
     }));
-    mountedContainer.querySelectorAll("[data-cloture-km]").forEach(b => b.addEventListener("click", () => ouvrirApercuNoteFrais(b.dataset.clotureKm, ui.cloture, "cloture")));
+    mountedContainer.querySelectorAll("[data-clo-releve]").forEach(b => b.addEventListener("click", () => ouvrirReleveCloture(b.dataset.cloReleve, ui.cloture)));
+    mountedContainer.querySelectorAll("[data-clo-km]").forEach(b => b.addEventListener("click", () => ouvrirKmCloture(b.dataset.cloKm, ui.cloture)));
     if (ui.defilerCloture) { ui.defilerCloture = false; setTimeout(() => document.getElementById("iv-cloture")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }
     attacherApercuNoteFraisListeners();
   }

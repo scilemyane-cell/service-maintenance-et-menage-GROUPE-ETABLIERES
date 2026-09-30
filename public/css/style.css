@@ -2689,3 +2689,55 @@ a.canal-lien{text-decoration:none;display:inline-flex;align-items:center}
 
 select.dps-obligatoire{border-color:#c8102e!important;box-shadow:0 0 0 3px rgba(200,16,46,.25)!important}
 .dps-realise-par select{font-weight:700}
+
+/* ---- Clôture du mois (v2) : cartes par intervenant + documents plein écran ---- */
+.clo-entree{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;margin:0 0 12px;padding:12px 14px;border:2px dashed var(--gold,#c9a227);border-radius:14px;background:var(--panel,#fff);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.clo-entree span{color:var(--text-dim,#667);font-size:13px;flex:1;min-width:180px}
+.clo-entree em{font-style:normal;font-weight:800;color:var(--gold,#a8841a)}
+.clo-bandeau{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.clo-titre{flex:1;min-width:0;text-align:center}
+.clo-titre h3{margin:0;text-transform:none;font-size:18px}
+.clo-titre small{color:var(--text-dim,#667);font-size:12px}
+.clo-prog{height:6px;border-radius:6px;background:#e6e9ef;margin:6px auto 3px;max-width:260px;overflow:hidden}
+.clo-prog i{display:block;height:100%;background:#1b9a4b;border-radius:6px}
+.clo-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.clo-carte{border:1px solid var(--border,#d9dee7);border-radius:14px;padding:12px;background:var(--panel,#fff)}
+.clo-carte.fini{border-color:#9fd8b3;background:#f3fbf6}
+.clo-tete{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.clo-av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:#1b2a41;color:#fff;font-weight:800;flex:none}
+.clo-id{flex:1;min-width:0}.clo-id b{display:block}.clo-id small{color:var(--text-dim,#667);font-size:12px}
+.clo-badge{border-radius:999px;padding:3px 10px;font-weight:800;font-size:12px;white-space:nowrap}
+.clo-badge.ok{background:#e1f5e8;color:#1b7a3d}
+.clo-etapes{display:grid;gap:8px}
+.clo-etape{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:12px;border:2px solid #f0c36d;background:#fff8e8;color:#1a1a1a;font:inherit;text-align:left;cursor:pointer}
+.clo-etape.ok{border-color:#bfe3cb;background:#f1faf4}
+.clo-etape.alerte{border-color:#f0a3a3;background:#fff0f0}
+.clo-num{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#f0a92b;color:#fff;font-weight:900;flex:none}
+.clo-etape.ok .clo-num{background:#1b9a4b}.clo-etape.alerte .clo-num{background:#c8102e}
+.clo-txt{flex:1;min-width:0}.clo-txt b{display:block;font-size:14px}.clo-txt small{color:#555;font-size:12.5px}
+.clo-go{font-weight:800;font-size:13px;color:#1b2a41;white-space:nowrap}
+.clo-pied{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+body.clo-ouvert{overflow:hidden}
+.clo-overlay{position:fixed;inset:0;z-index:9000;background:#e9ecf1;display:flex;flex-direction:column}
+.clo-ov-barre{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#1b2a41;color:#fff}
+.clo-ov-barre>b{flex:1;min-width:160px;font-size:15px}
+.clo-ov-barre .nav-btn{background:#fff;color:#1b2a41}
+.clo-ov-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.clo-vert{background:#1b9a4b !important;border-color:#1b9a4b !important;color:#fff !important}
+.clo-ov-corps{flex:1;overflow:auto;padding:16px}
+.clo-doc{max-width:1100px;margin:0 auto}.clo-doc .print-fiche{overflow-x:auto;box-shadow:0 4px 20px rgba(0,0,0,.12)}
+.clo-km{max-width:760px;margin:0 auto;color:#1a1a1a}
+.clo-km-total{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
+.clo-km-total>div{background:#fff;border-radius:14px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.clo-km-total b{display:block;font-size:26px;color:#1b2a41}.clo-km-total small{color:#667}
+.clo-jours{display:grid;gap:8px;margin:10px 0}
+.clo-jour{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;background:#fff;border-radius:12px;padding:10px 12px;border:1px solid #d9dee7}
+.clo-jour.off{opacity:.45}
+.clo-j-date{display:flex;align-items:center;gap:8px;white-space:nowrap}.clo-j-date input{width:20px;height:20px}
+.clo-j-nat{font-size:13px;color:#333;min-width:0}.clo-j-nat code{font-size:11px;background:#eef1f6;padding:1px 5px;border-radius:5px}
+.clo-j-km{display:flex;align-items:center;gap:4px;white-space:nowrap}.clo-j-km input{width:74px;text-align:right}
+.clo-j-frais{grid-column:1/-1;width:100%}
+.clo-km-vide,.clo-km-manque{background:#fff;border-radius:14px;padding:18px;text-align:center}
+.clo-km-hist{display:flex;gap:8px;align-items:center;font-size:13px;color:#555;margin-top:6px}
+@media (max-width:560px){.clo-jour{grid-template-columns:1fr auto}.clo-j-nat{grid-column:1/-1;grid-row:2}.clo-km-total b{font-size:21px}}
+@media print{.clo-overlay{display:none !important}}
