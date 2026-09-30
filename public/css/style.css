@@ -457,6 +457,9 @@ select{ max-width:100%; }
      layout même masquées par visibility:hidden, ce qui produisait des
      pages vierges après la fiche). */
   body.printing-fiche #app{ display:none !important; }
+  /* Téléphone : rien d'autre que la fiche (évite la page blanche en plus). */
+  body.printing-fiche > *:not(#fiche-print-root){ display:none !important; }
+  html:has(body.printing-fiche), body.printing-fiche{ height:auto !important; min-height:0 !important; overflow:visible !important; }
   body.printing-fiche #fiche-print-root{ display:block !important; visibility:visible !important; }
   body.printing-fiche #fiche-print-root *{ visibility:visible !important; }
   body.printing-fiche #fiche-print-root .print-fiche{
