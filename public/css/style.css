@@ -2766,3 +2766,7 @@ body.clo-ouvert{overflow:hidden}
 .iv-appui-ajout{align-self:flex-start;font-size:13px}
 .ivc-appuis{font-size:12px;color:var(--text-dim);margin:4px 0}
 @media (max-width:640px){.iv-appui{grid-template-columns:1fr auto}.iv-appui select{grid-column:1 / -1}}
+.iv-appui-heures{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 10px;border-left:3px solid var(--gold);background:color-mix(in srgb,var(--gold) 5%,transparent);border-radius:6px}
+.iv-appui-heures > *{min-width:0}
+.iv-appui-heures small{grid-column:1 / -1;font-size:11px;color:var(--text-dim)}
+@media (max-width:640px){.iv-appui-heures{grid-template-columns:1fr}}

@@ -2785,6 +2785,55 @@ function associationEffective(nom) {
 // Rafraîchit l'écran quand la liste des interventions en attente change.
 window.addEventListener("interventions-attente", () => { if (mountedContainer && document.contains(mountedContainer) && ui.subtab === "interventions") renderAll(); });
 
+// ----- Appui technique -----
+// Relit les horaires saisis dans les lignes d'appui (sélecteurs heure/min).
+function syncAppuis() {
+  (ui.form.appuis || []).forEach((a, k) => {
+    const d = document.getElementById(`f-appui-debut-${k}`), f = document.getElementById(`f-appui-fin-${k}`);
+    if (d) a.heureDebut = d.value || ""; if (f) a.heureFin = f.value || "";
+  });
+}
+function appuisPropres() {
+  syncAppuis();
+  return (ui.form.appuis || []).filter(a => a.personne).map(a => {
+    const dep = a.mode === "deplacement";
+    return { personne: a.personne, mode: dep ? "deplacement" : "telephone",
+      heureDebut: dep ? (a.heureDebut || "") : "", heureFin: dep ? (a.heureFin || "") : "",
+      interventionId: dep ? (a.interventionId || "") : "" };
+  });
+}
+// Un appui SUR PLACE = une intervention à part entière au nom du collègue
+// (ses heures, heures de nuit, prime dimanche et déplacement comptent comme
+// pour n'importe quelle intervention), rattachée à l'intervention principale.
+async function enregistrerAppuisDeplacement(principal, p, appuisAvant) {
+  const appuis = p.appuis || [];
+  const gardes = new Set(appuis.map(a => a.interventionId).filter(Boolean));
+  // Appui retiré ou repassé en téléphone : son intervention part à la corbeille.
+  for (const a of appuisAvant) if (a.interventionId && !gardes.has(a.interventionId)) await envoyerInterventionCorbeille(a.interventionId);
+  let modifie = false;
+  for (const a of appuis) {
+    if (a.mode !== "deplacement") continue;
+    const heures = dureeHeures(a.heureDebut, a.heureFin);
+    const lie = {
+      date: p.date, technicien: a.personne, association: p.association, groupe: p.groupe, site: p.site, type: p.type,
+      heureDebut: a.heureDebut, heureFin: a.heureFin, heures: heures || 0,
+      heuresNuit: heuresDeNuit(a.heureDebut, a.heureFin), primeDimanche: estDimanche(p.date) ? PRIME_DIMANCHE : 0,
+      sansDeplacement: false, horairesACompleter: !(heures > 0),
+      technicienUid: state.coordonnees?.[a.personne]?.uid || "",
+      appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "",
+      appuiDeId: principal.id, appuiDeNumero: principal.numero || "",
+    };
+    if (a.interventionId && state.interventions.some(x => x.id === a.interventionId)) {
+      await updateIntervention(a.interventionId, lie);
+    } else {
+      const r = await addIntervention({ ...lie, description: "", compteRendu: `Appui technique sur place — intervention ${principal.numero || ""}`.trim(), photos: [],
+        createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
+      a.interventionId = r.id; modifie = true;
+    }
+  }
+  if (modifie) await updateIntervention(principal.id, { appuis });
+}
+
 function renderInterventions(container, perms) {
   // Arrivée depuis le bandeau jaune de l'accueil : ouvre directement le
   // formulaire « Compléter mes horaires » de cette intervention.
@@ -2864,6 +2913,7 @@ function renderInterventions(container, perms) {
           ${i.sansDeplacement ? `<span class="ivc-b gris">📞 Par téléphone</span>` : `<span class="ivc-b bleu">🚗 Sur place</span>`}
           ${aCompl ? `<span class="ivc-b orange">🕒 Horaires à compléter</span>` : ""}
           ${i.appelOrigineNumero ? `<span class="ivc-b bleu" title="Déplacement faisant suite à un appel">↪ suite ${esc(i.appelOrigineNumero)}</span>` : ""}
+          ${i.appuiDeId ? `<span class="ivc-b bleu" title="Appui technique sur une autre intervention">🤝 appui ${esc(i.appuiDeNumero || "")}</span>` : ""}
           ${perms.isEditor && i.transmis ? `<span class="ivc-b vert">✓ Transmis</span>` : ""}
         </span>
         <span class="ivc-duree">${h > 0 ? `<b>${fmtDureeH(h)}</b>` : `<b class="muet">${i.sansDeplacement ? "Appel" : "—"}</b>`}${i.heureDebut || i.heureFin ? `<small>${esc(i.heureDebut || "?")} → ${esc(i.heureFin || "?")}</small>` : ""}</span>
@@ -2873,7 +2923,7 @@ function renderInterventions(container, perms) {
         <div class="ivc-qui">${i.technicien ? `<span class="iv-qui"><i style="background:${couleur}">${esc(initials(i.technicien))}</i>${esc(i.technicien)}</span>` : `<span class="iv-muet">Pas de technicien</span>`}${i.type ? `<span class="iv-type">${esc(i.type)}</span>` : ""}</div>
       </div>
       ${i.appelN1 ? `<div class="ivc-appel"><span>📞 Appel N1 · <b>${esc(i.n1Contacte || "—")}</b>${i.heureAppel ? ` · ${esc(i.heureAppel)}` : ""}</span><p>${esc(i.motifAppelN1 || "")}${i.decisionN1 ? ` <em>→ ${esc(i.decisionN1)}</em>` : ""}</p></div>` : ""}
-      ${(i.appuis || []).length ? `<div class="ivc-appuis">🤝 Appui technique : ${i.appuis.map(a => `<b>${esc(a.personne)}</b> <small>(${a.mode === "deplacement" ? "🚗 sur place" : "📞 téléphone"})</small>`).join(", ")}</div>` : ""}
+      ${(i.appuis || []).length ? `<div class="ivc-appuis">🤝 Appui technique : ${i.appuis.map(a => `<b>${esc(a.personne)}</b> <small>(${a.mode === "deplacement" ? `🚗 sur place${a.heureDebut || a.heureFin ? ` ${esc(a.heureDebut || "?")} → ${esc(a.heureFin || "?")}` : ""}` : "📞 téléphone"})</small>`).join(", ")}</div>` : ""}
       ${i.description ? `<p class="ivc-desc">${esc(i.description)}</p>` : ""}
       ${i.compteRendu ? `<details class="ivc-cr"><summary>📝 Compte rendu</summary><div>${esc(i.compteRendu).replace(/\n/g, "<br>")}</div></details>` : ""}
       ${reposHTML}
@@ -2977,6 +3027,11 @@ function renderInterventions(container, perms) {
               <button type="button" class="${a.mode === "deplacement" ? "actif" : ""}" data-appui-mode="${k}" data-mode="deplacement">🚗 Sur place</button>
             </div>
             <button type="button" class="iv-appui-suppr" data-appui-suppr="${k}" title="Retirer">✕</button>
+            ${a.mode === "deplacement" ? `<div class="iv-appui-heures">
+              ${champHeureHTML(`f-appui-debut-${k}`, "Départ", a.heureDebut || "")}
+              ${champHeureHTML(`f-appui-fin-${k}`, "Retour", a.heureFin || "")}
+              <small>Crée une intervention à son nom (heures, nuit, dimanche, déplacement) — peut rester vide : il complètera à son retour.</small>
+            </div>` : ""}
           </div>`).join("")}
           <button type="button" class="nav-btn iv-appui-ajout" id="f-appui-ajout">➕ Ajouter un appui technique</button>
         </div>
@@ -3111,13 +3166,14 @@ function renderInterventions(container, perms) {
       ui.form.sansDeplacement = b.dataset.ivMode === "appel";
       container.querySelectorAll("[data-iv-mode]").forEach(x => x.classList.toggle("actif", x === b));
     }));
-    document.getElementById("f-appui-ajout")?.addEventListener("click", () => { ui.form.appuis = [...(ui.form.appuis || []), { personne: "", mode: "telephone" }]; renderAll(); });
+    document.getElementById("f-appui-ajout")?.addEventListener("click", () => { syncAppuis(); ui.form.appuis = [...(ui.form.appuis || []), { personne: "", mode: "telephone" }]; renderAll(); });
     container.querySelectorAll("[data-appui-personne]").forEach(el => el.addEventListener("change", () => { ui.form.appuis[+el.dataset.appuiPersonne].personne = el.value; }));
     container.querySelectorAll("[data-appui-mode]").forEach(b => b.addEventListener("click", () => {
+      syncAppuis();
       ui.form.appuis[+b.dataset.appuiMode].mode = b.dataset.mode;
-      b.parentElement.querySelectorAll("button").forEach(x => x.classList.toggle("actif", x === b));
+      renderAll();
     }));
-    container.querySelectorAll("[data-appui-suppr]").forEach(b => b.addEventListener("click", () => { ui.form.appuis.splice(+b.dataset.appuiSuppr, 1); renderAll(); }));
+    container.querySelectorAll("[data-appui-suppr]").forEach(b => b.addEventListener("click", () => { syncAppuis(); ui.form.appuis.splice(+b.dataset.appuiSuppr, 1); renderAll(); }));
     document.getElementById("f-suite-annuler")?.addEventListener("click", () => { ui.form.appelOrigineId = ""; ui.form.appelOrigineNumero = ""; renderAll(); });
     document.getElementById("f-cr")?.addEventListener("input", (e) => { ui.form.compteRendu = e.target.value; });
     document.getElementById("f-ia")?.addEventListener("click", async (e) => {
@@ -3214,7 +3270,7 @@ function renderInterventions(container, perms) {
         heuresNuit: nuit, primeDimanche: dimanche && !sansDeplacement ? PRIME_DIMANCHE : 0,
         sansDeplacement,
         compteRendu: (ui.form.compteRendu || "").trim(),
-        appuis: (ui.form.appuis || []).filter(a => a.personne).map(a => ({ personne: a.personne, mode: a.mode === "deplacement" ? "deplacement" : "telephone" })),
+        appuis: appuisPropres(),
         horairesACompleter, technicienUid: techUid,
         heureAppel: ui.form.heureAppel || "", dureeAppelMin: parseFloat(ui.form.dureeAppelMin) || 0,
         appelOrigineId: ui.form.appelOrigineId || "", appelOrigineNumero: ui.form.appelOrigineNumero || "",
@@ -3235,13 +3291,18 @@ function renderInterventions(container, perms) {
         }
         payload.numero = numeroVoulu;
       }
+      const appuisAvant = ui.editingId ? (state.interventions.find(x => x.id === ui.editingId)?.appuis || []) : [];
       try {
+        let principal;
         if (ui.editingId) {
           await updateIntervention(ui.editingId, payload);
+          principal = { id: ui.editingId, numero: ui.form.numero || state.interventions.find(x => x.id === ui.editingId)?.numero || "" };
           ui.editingId = null;
         } else {
-          await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
+          principal = await addIntervention({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
         }
+        try { await enregistrerAppuisDeplacement(principal, payload, appuisAvant); }
+        catch (e2) { console.error("appuis:", e2); window.toast?.("⚠️ Intervention enregistrée, mais l'appui sur place n'a pas pu être créé : " + (e2.message || e2)); }
         reinitialiserFormIntervention();
         renderAll();
       } catch (e) {

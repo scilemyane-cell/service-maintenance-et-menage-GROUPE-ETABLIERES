@@ -101,7 +101,9 @@ export async function addIntervention(record) {
   });
   // createdBy = toujours le compte réellement connecté (règle Firestore),
   // y compris quand un responsable saisit depuis « Aperçu en tant que… ».
-  await addDoc(collection(db, "interventions"), { ...record, createdBy: auth.currentUser?.uid || record.createdBy, numero: `INT-${String(numero).padStart(5, "0")}` });
+  const num = `INT-${String(numero).padStart(5, "0")}`;
+  const ref = await addDoc(collection(db, "interventions"), { ...record, createdBy: auth.currentUser?.uid || record.createdBy, numero: num });
+  return { id: ref.id, numero: num };
 }
 export async function updateIntervention(id, fields) {
   await updateDoc(doc(db, "interventions", id), fields);
