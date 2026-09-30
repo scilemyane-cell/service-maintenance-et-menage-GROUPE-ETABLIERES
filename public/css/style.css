@@ -2669,3 +2669,8 @@ div.gh-urg-corps{cursor:default}
   .topbar-gmao .gh-date:has(.gh-compte-dem){gap:8px;padding:8px 10px}
 }
 .gh-compte span{white-space:nowrap}
+
+/* Commentaire obligatoire pour clôturer */
+textarea.dps-requis{border-color:#e08a00!important;box-shadow:0 0 0 2px rgba(224,138,0,.2)}
+textarea.dps-obligatoire{border-color:#c8102e!important;box-shadow:0 0 0 3px rgba(200,16,46,.25)!important;background:#fff5f6}
+.dps-etat.erreur{color:#c8102e;font-weight:700}

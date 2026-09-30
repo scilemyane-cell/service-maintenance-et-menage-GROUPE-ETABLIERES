@@ -756,13 +756,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     c.querySelectorAll("[data-dps-statut]").forEach(b => b.addEventListener("click", () => {
       c.querySelectorAll("[data-dps-statut]").forEach(x => x.classList.toggle("on", x === b));
       poser(c, "statut", b.dataset.dpsStatut);
+      c.querySelector('[data-dps-champ="commentaireTech"]')?.classList.toggle("dps-requis", b.dataset.dpsStatut === "Réalisé");
       if (b.dataset.dpsStatut === "Réalisé") {
         const d = c.querySelector('[data-dps-champ="dateIntervention"]');
         if (d && !d.value) { d.value = aujourdhui(); poser(c, "dateIntervention", d.value); }
         c.querySelector('[data-dps-champ="commentaireTech"]')?.focus();
       }
     }));
-    c.querySelectorAll("[data-dps-champ]").forEach(inp => inp.addEventListener("input", () => poser(c, inp.dataset.dpsChamp, inp.value)));
+    c.querySelectorAll("[data-dps-champ]").forEach(inp => inp.addEventListener("input", () => { inp.classList.remove("dps-obligatoire"); poser(c, inp.dataset.dpsChamp, inp.value); }));
     c.querySelectorAll("select[data-dps-champ]").forEach(inp => inp.addEventListener("change", () => poser(c, inp.dataset.dpsChamp, inp.value)));
     brancherPhrases(c.querySelector(".dps-com") || c, () => c.querySelector('[data-dps-champ="commentaireTech"]'), "ajout", (ta) => poser(c, "commentaireTech", ta.value));
     c.querySelector("[data-dps-ia]")?.addEventListener("click", async (e) => {
@@ -795,6 +796,17 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       const champs = {};
       Object.keys(br).forEach(k => { const v = String(br[k] ?? "").trim(); if (v !== (l[k] || "")) champs[k] = v; });
       if (!Object.keys(champs).length) return;
+      // Clôture : le commentaire (ce qui a été fait) est obligatoire.
+      if (champs.statut === "Réalisé") {
+        const com = String(br.commentaireTech ?? l.commentaireTech ?? "").trim();
+        if (com.length < 3) {
+          const ta = c.querySelector('[data-dps-champ="commentaireTech"]');
+          ta?.classList.add("dps-obligatoire"); ta?.focus(); ta?.scrollIntoView({ behavior: "smooth", block: "center" });
+          const etat = c.querySelector(".dps-etat"); if (etat) { etat.textContent = "✍️ Le commentaire est obligatoire pour clôturer : écris ce qui a été fait."; etat.className = "dps-etat erreur"; }
+          window.toast?.("Commentaire obligatoire pour clôturer la demande.", "error");
+          return;
+        }
+      }
       if (champs.statut === "Réalisé" && !(champs.dateIntervention || l.dateIntervention)) champs.dateIntervention = aujourdhui();
       if (champs.statut === "Réalisé") {
         if (perms.isEditor) Object.assign(champs, { validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur });
