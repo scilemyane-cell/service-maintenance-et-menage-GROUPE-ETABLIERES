@@ -38,6 +38,14 @@ export function installerGardeDates() {
     const a = annee(el);
     if (a !== null && (a < 1990 || a > 2100)) e.stopImmediatePropagation(); // année en cours de frappe
   };
+  // Ouvre toujours le calendrier / l'horloge du téléphone au toucher du
+  // champ (certains téléphones ne l'ouvraient pas et n'affichaient pas
+  // non plus de clavier : la date était impossible à saisir).
+  document.addEventListener("click", (e) => {
+    const el = e.target;
+    if (!el || !el.matches || !el.matches(SEL) || el.disabled || el.readOnly) return;
+    try { if (typeof el.showPicker === "function") el.showPicker(); } catch { /* déjà ouvert ou non autorisé */ }
+  }, true);
   document.addEventListener("change", garde, true);
   document.addEventListener("input", garde, true);
 }
