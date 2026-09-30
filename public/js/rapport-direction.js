@@ -60,6 +60,58 @@ function pointsAttention(s, ctx) {
   return L;
 }
 
+const STYLE = `<style>
+@page{size:A4 portrait;margin:12mm 12mm 14mm}
+*{box-sizing:border-box}
+body{font:11.5px/1.45 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#1a1a1a;margin:0;background:#e9ecf1}
+.barre{position:sticky;top:0;z-index:2;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;background:#1b2a41}
+.barre button{font:700 14px system-ui;padding:9px 16px;border-radius:10px;border:0;background:#c8102e;color:#fff;cursor:pointer}
+.barre span{color:#cfd8e6;font-size:12.5px;align-self:center}
+.page{max-width:210mm;margin:14px auto;background:#fff;padding:12mm;box-shadow:0 4px 20px rgba(0,0,0,.12)}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:10px;border-bottom:3px solid #c8102e}
+header img{height:54px}
+header .t{text-align:right}header h1{margin:0;font-size:20px;color:#1b2a41;letter-spacing:.3px}header p{margin:2px 0 0;color:#555}
+.intro{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 4px;color:#444;font-size:11px}
+h2{display:flex;align-items:center;gap:8px;font-size:15px;color:#1b2a41;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #d5dbe5}
+h2 span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#1b2a41;color:#fff;font-size:12px}
+h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:#667;margin:12px 0 6px}
+section{break-inside:auto}
+section+section{break-before:page}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+.kpi{border:1px solid #d5dbe5;border-radius:10px;padding:8px 10px;background:#fafbfd;break-inside:avoid}
+.kpi b{display:block;font-size:20px;color:#1b2a41;line-height:1.15}.kpi span{display:block;color:#444}.kpi small{display:block;color:#777;font-size:10px;margin-top:2px}
+.var{font-weight:800}.var.bon{color:#1b7a3d}.var.mauvais{color:#c8102e}.var.neutre{color:#888}
+.synthese .kpis{grid-template-columns:repeat(4,1fr)}
+.points{list-style:none;padding:0;margin:6px 0}
+.points li{padding:6px 10px 6px 30px;margin:4px 0;border-radius:8px;position:relative;break-inside:avoid}
+.points li::before{position:absolute;left:9px;top:6px}
+.points .alerte{background:#fdecee}.points .alerte::before{content:"⚠"}
+.points .ok{background:#e9f7ef}.points .ok::before{content:"✓";color:#1b7a3d;font-weight:900}
+.points .info{background:#eef2f8}.points .info::before{content:"•";font-weight:900;color:#1b2a41}
+.deux{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.deux>div{break-inside:avoid}
+.graph{display:flex;align-items:flex-end;gap:4px;height:130px;padding:4px 0;border-bottom:1px solid #ccc;break-inside:avoid}
+.graph .col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+.graph .piles{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px}
+.graph .piles i{width:40%;max-width:18px;border-radius:3px 3px 0 0;min-height:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.graph em{font-style:normal;font-size:8.5px;color:#444;white-space:nowrap}.graph small{font-size:9px;color:#666}
+.leg{font-size:10px;color:#555;margin:4px 0 0}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.bh-l{display:grid;grid-template-columns:38% 1fr auto auto;gap:6px;align-items:center;font-size:10.5px;padding:2px 0}
+.bh-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bh-p{height:9px;background:#eef1f6;border-radius:5px;overflow:hidden}.bh-p i{display:block;height:100%;background:#1b2a41;border-radius:5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.bh-l small{color:#777;min-width:32px;text-align:right}
+table{width:100%;border-collapse:collapse;font-size:10.5px;break-inside:auto}
+th{background:#eef1f6;text-align:left;padding:4px 6px;border-bottom:1px solid #c9d1de;font-size:9.5px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+td{padding:4px 6px;border-bottom:1px solid #e3e7ee;vertical-align:top}
+tfoot td{font-weight:800;border-top:2px solid #1b2a41}
+tr{break-inside:avoid}
+.rouge{color:#c8102e}
+.vide,.note{color:#777;font-style:italic;font-size:10.5px}
+footer{margin-top:18px;padding-top:6px;border-top:1px solid #d5dbe5;font-size:9.5px;color:#777;display:flex;justify-content:space-between}
+@media print{body{background:#fff}.barre{display:none}.page{box-shadow:none;margin:0;padding:0;max-width:none}}
+@media (max-width:640px){.kpis,.synthese .kpis{grid-template-columns:1fr 1fr}.deux{grid-template-columns:1fr}.page{padding:14px}}
+</style>`;
+
 export function ouvrirRapportDirection(ctx) {
   const { s, p, data, filtres, v, variation, periodeLibelle, auteur, typesCompteur, seuilReleve, ordreUrgence } = ctx;
   const comp = p.libelleComparaison;
@@ -176,57 +228,7 @@ export function ouvrirRapportDirection(ctx) {
 
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rapport d'activité — Service Maintenance — ${esc(periodeLibelle)}</title>
-<style>
-@page{size:A4 portrait;margin:12mm 12mm 14mm}
-*{box-sizing:border-box}
-body{font:11.5px/1.45 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#1a1a1a;margin:0;background:#e9ecf1}
-.barre{position:sticky;top:0;z-index:2;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;background:#1b2a41}
-.barre button{font:700 14px system-ui;padding:9px 16px;border-radius:10px;border:0;background:#c8102e;color:#fff;cursor:pointer}
-.barre span{color:#cfd8e6;font-size:12.5px;align-self:center}
-.page{max-width:210mm;margin:14px auto;background:#fff;padding:12mm;box-shadow:0 4px 20px rgba(0,0,0,.12)}
-header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:10px;border-bottom:3px solid #c8102e}
-header img{height:54px}
-header .t{text-align:right}header h1{margin:0;font-size:20px;color:#1b2a41;letter-spacing:.3px}header p{margin:2px 0 0;color:#555}
-.intro{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 4px;color:#444;font-size:11px}
-h2{display:flex;align-items:center;gap:8px;font-size:15px;color:#1b2a41;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #d5dbe5}
-h2 span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#1b2a41;color:#fff;font-size:12px}
-h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:#667;margin:12px 0 6px}
-section{break-inside:auto}
-section+section{break-before:page}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
-.kpi{border:1px solid #d5dbe5;border-radius:10px;padding:8px 10px;background:#fafbfd;break-inside:avoid}
-.kpi b{display:block;font-size:20px;color:#1b2a41;line-height:1.15}.kpi span{display:block;color:#444}.kpi small{display:block;color:#777;font-size:10px;margin-top:2px}
-.var{font-weight:800}.var.bon{color:#1b7a3d}.var.mauvais{color:#c8102e}.var.neutre{color:#888}
-.synthese .kpis{grid-template-columns:repeat(4,1fr)}
-.points{list-style:none;padding:0;margin:6px 0}
-.points li{padding:6px 10px 6px 30px;margin:4px 0;border-radius:8px;position:relative;break-inside:avoid}
-.points li::before{position:absolute;left:9px;top:6px}
-.points .alerte{background:#fdecee}.points .alerte::before{content:"⚠"}
-.points .ok{background:#e9f7ef}.points .ok::before{content:"✓";color:#1b7a3d;font-weight:900}
-.points .info{background:#eef2f8}.points .info::before{content:"•";font-weight:900;color:#1b2a41}
-.deux{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.deux>div{break-inside:avoid}
-.graph{display:flex;align-items:flex-end;gap:4px;height:130px;padding:4px 0;border-bottom:1px solid #ccc;break-inside:avoid}
-.graph .col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
-.graph .piles{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px}
-.graph .piles i{width:40%;max-width:18px;border-radius:3px 3px 0 0;min-height:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.graph em{font-style:normal;font-size:8.5px;color:#444;white-space:nowrap}.graph small{font-size:9px;color:#666}
-.leg{font-size:10px;color:#555;margin:4px 0 0}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.bh-l{display:grid;grid-template-columns:38% 1fr auto auto;gap:6px;align-items:center;font-size:10.5px;padding:2px 0}
-.bh-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bh-p{height:9px;background:#eef1f6;border-radius:5px;overflow:hidden}.bh-p i{display:block;height:100%;background:#1b2a41;border-radius:5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.bh-l small{color:#777;min-width:32px;text-align:right}
-table{width:100%;border-collapse:collapse;font-size:10.5px;break-inside:auto}
-th{background:#eef1f6;text-align:left;padding:4px 6px;border-bottom:1px solid #c9d1de;font-size:9.5px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-td{padding:4px 6px;border-bottom:1px solid #e3e7ee;vertical-align:top}
-tfoot td{font-weight:800;border-top:2px solid #1b2a41}
-tr{break-inside:avoid}
-.rouge{color:#c8102e}
-.vide,.note{color:#777;font-style:italic;font-size:10.5px}
-footer{margin-top:18px;padding-top:6px;border-top:1px solid #d5dbe5;font-size:9.5px;color:#777;display:flex;justify-content:space-between}
-@media print{body{background:#fff}.barre{display:none}.page{box-shadow:none;margin:0;padding:0;max-width:none}}
-@media (max-width:640px){.kpis,.synthese .kpis{grid-template-columns:1fr 1fr}.deux{grid-template-columns:1fr}.page{padding:14px}}
-</style></head><body>
+${STYLE}</head><body>
 <div class="barre"><button onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button><span>Conseil : format A4, orientation portrait.</span></div>
 <div class="page">
 <header><img src="${esc(ctx.logo)}" alt="Groupe Établières"><div class="t"><h1>RAPPORT D'ACTIVITÉ</h1><p>Service Maintenance et Ménage</p></div></header>
@@ -252,9 +254,72 @@ ${corps}
 </div>
 </body></html>`;
 
-  const w = ctx.fenetre || window.open("", "_blank");
+  afficher(html, ctx.fenetre, `rapport-activite-${p.debut}-${p.fin}.html`);
+}
+
+function afficher(html, fenetre, nomFichier) {
+  const w = fenetre || window.open("", "_blank");
   if (w) { w.document.open(); w.document.write(html); w.document.close(); return; }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-  a.download = `rapport-activite-${p.debut}-${p.fin}.html`; a.click();
+  a.download = nomFichier; a.click();
+}
+
+// ---- Rapport direction — Astreinte (depuis Astreinte › Synthèse) ----
+export function ouvrirRapportAstreinte(c) {
+  const hm = (h) => `${Math.floor(h)} h ${String(Math.round((h % 1) * 60)).padStart(2, "0")}`;
+  const aujourdhui = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  const liste = (g) => g.slice(0, 10).map(([k, l]) => [k, l.length]);
+  const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+  const maxH = Math.max(1, ...c.parHeure);
+  const heures = `<div class="graph">${c.parHeure.map((n, h) => `<div class="col"><div class="piles"><i style="width:70%;max-width:14px;height:${(n / maxH) * 100}%;background:${h >= 21 || h < 6 ? "#6a5cff" : "#1b2a41"}"></i></div><em>${n || ""}</em><small>${h % 3 === 0 ? h + "h" : ""}</small></div>`).join("")}</div><p class="leg"><i style="background:#6a5cff"></i>Nuit (21h – 6h) <i style="background:#1b2a41"></i>Jour</p>`;
+  const rep = c.repartition.filter((r) => r.jours || r.appels || r.depl);
+  const totRep = rep.reduce((t, r) => { ["n1", "n2", "jours", "we", "ferie", "appels", "depl", "heures"].forEach((k) => (t[k] += r[k])); return t; }, { n1: 0, n2: 0, jours: 0, we: 0, ferie: 0, appels: 0, depl: 0, heures: 0 });
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rapport astreinte — ${esc(c.periodeLibelle)}</title>${STYLE}</head><body>
+<div class="barre"><button onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button><span>Conseil : format A4, orientation portrait.</span></div>
+<div class="page">
+<header><img src="${esc(c.logo)}" alt="Groupe Établières"><div class="t"><h1>RAPPORT D'ASTREINTE</h1><p>Service Maintenance — astreinte technique</p></div></header>
+<div class="intro"><span>📅 <b>${esc(c.periodeLibelle)}</b> — du ${fr(c.debut)} au ${fr(c.fin)}</span>${c.filtres ? `<span>🔎 ${esc(c.filtres)}</span>` : ""}</div>
+<section class="synthese">
+  <h2>Synthèse</h2>
+  <div class="kpis">
+    ${kpi(fmtNb(c.appels), "appels reçus")}
+    ${kpi(`${pct(c.parTel, c.appels)} %`, "réglés par téléphone", `${fmtNb(c.parTel)} appel(s) sans déplacement`)}
+    ${kpi(fmtNb(c.deplacements), "déplacements sur site")}
+    ${kpi(hm(c.hSite), "heures sur site", c.deplacements ? `${hm(c.hSite / c.deplacements)} par déplacement` : "")}
+    ${kpi(hm(c.hNuit), "heures de nuit", "21h – 6h")}
+    ${kpi(euros(c.primes), "primes dimanche")}
+    ${kpi(c.delaiMoy != null ? `${c.delaiMoy} min` : "—", "délai appel → départ", c.nbDelais ? `moyenne sur ${c.nbDelais} déplacement(s)` : "")}
+    ${kpi(c.minTel ? hm(c.minTel / 60) : "—", "temps au téléphone (N1)")}
+  </div>
+  ${c.insights.length ? `<h3>Points clés</h3><ul class="points">${c.insights.map((t) => `<li class="${/⚠/.test(t) ? "alerte" : "info"}">${t.replace(/⚠️\s*/, "")}</li>`).join("")}</ul>` : ""}
+  ${c.evo.length ? `<h3>Évolution sur 12 mois</h3>${barresMois(c.evo.map((e) => ({ label: e.label })), [{ nom: "Réglés par téléphone", valeurs: c.evo.map((e) => e.tel), couleur: "#1baf7a" }, { nom: "Déplacements", valeurs: c.evo.map((e) => e.dep), couleur: "#2a78d6" }])}` : ""}
+</section>
+<section>
+  <h2><span>1</span> Qui a tenu l'astreinte</h2>
+  <p class="note">Jours d'astreinte d'après le planning (échanges, absences et remplacements compris), jusqu'à aujourd'hui.</p>
+  ${rep.length ? table(["Personne", "Jours N1", "Jours N2", "Total jours", "dont WE", "dont fériés", "Appels reçus (N1)", "Déplacements", "Heures sur site"],
+    rep.map((r) => [`<b>${esc(r.nom)}</b>`, r.n1 || "—", r.n2 || "—", r.jours, r.we || "—", r.ferie || "—", r.appels || "—", r.depl || "—", r.heures ? hm(r.heures) : "—"]),
+    ["Total", totRep.n1, totRep.n2, totRep.jours, totRep.we, totRep.ferie, totRep.appels, totRep.depl, hm(totRep.heures)]) : `<p class="vide">Planning d'astreinte non disponible sur cette période.</p>`}
+  <div class="deux">
+    <div><h3>Appels par cadre d'astreinte (N1)</h3>${barresH(liste(c.parN1), c.appels)}</div>
+    <div><h3>Déplacements par technicien</h3>${c.parTech.length ? table(["Technicien", "Dépl.", "Heures", "Nuit", "Primes"], c.parTech.map(([t, l]) => [esc(t), l.length, hm(l.reduce((s, i) => s + (parseFloat(i.heures) || 0), 0)), hm(l.reduce((s, i) => s + (parseFloat(i.heuresNuit) || 0), 0)), euros(l.reduce((s, i) => s + (parseFloat(i.primeDimanche) || 0), 0))])) : `<p class="vide">Aucun déplacement.</p>`}</div>
+  </div>
+</section>
+<section>
+  <h2><span>2</span> Nature et répartition des appels</h2>
+  <div class="deux">
+    <div><h3>Sites les plus sollicités</h3>${barresH(liste(c.parSite), c.appels)}</div>
+    <div><h3>Types d'intervention</h3>${barresH(liste(c.parType), c.appels)}</div>
+  </div>
+  <h3>Heure des appels</h3>${heures}
+  <div class="deux">
+    <div><h3>Jour de la semaine</h3>${barresH(JOURS.map((j, i) => [j, c.parJour[i]]), c.appels)}</div>
+    <div><h3>Délais</h3>${table(["Indicateur", "Valeur"], [["Délai moyen appel → départ", c.delaiMoy != null ? `${c.delaiMoy} min` : "—"], ["Appels la nuit (21h – 6h)", `${c.nuitCount} (${pct(c.nuitCount, c.avecHeure)} %)`], ["Appels le week-end", `${c.weCount} (${pct(c.weCount, c.appels)} %)`], ["Déplacements sans horaires", c.aCompleter]])}</div>
+  </div>
+</section>
+<footer><span>Groupe Établières — Service Maintenance · Rapport édité le ${aujourdhui}${c.auteur ? ` par ${esc(c.auteur)}` : ""}</span><span>Source : application Service Maintenance et Ménage</span></footer>
+</div></body></html>`;
+  afficher(html, c.fenetre, `rapport-astreinte-${c.debut}-${c.fin}.html`);
 }

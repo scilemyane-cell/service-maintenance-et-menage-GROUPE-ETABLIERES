@@ -3407,7 +3407,7 @@ function evolutionMensuelle(interventions, moisCount = 12) {
   const mois = [];
   for (let i = moisCount - 1; i >= 0; i--) {
     const d = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1);
-    mois.push({ cle: d.toISOString().slice(0, 7), label: d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }) });
+    mois.push({ cle: dateKey(d).slice(0, 7), label: d.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }) });
   }
   const parCle = {}; interventions.forEach(iv => { if (iv.date) { const cle = iv.date.slice(0, 7); parCle[cle] = (parCle[cle] || 0) + 1; } });
   return { labels: mois.map(m => m.label), valeurs: mois.map(m => parCle[m.cle] || 0) };
@@ -3472,7 +3472,7 @@ function renderSynthese(container) {
   const parTech = grouper(deplacements, i => i.technicien);
 
   // Évolution 12 mois : réglés par téléphone / déplacements
-  const mois = []; for (let k = 11; k >= 0; k--) { const d = new Date(auj.getFullYear(), auj.getMonth() - k, 1); mois.push({ cle: d.toISOString().slice(0, 7), label: d.toLocaleDateString("fr-FR", { month: "short" }) }); }
+  const mois = []; for (let k = 11; k >= 0; k--) { const d = new Date(auj.getFullYear(), auj.getMonth() - k, 1); mois.push({ cle: dateKey(d).slice(0, 7), label: d.toLocaleDateString("fr-FR", { month: "short" }) }); }
   const base = toutes.filter(i => (ui.filterTech === "Tous" || i.technicien === ui.filterTech) && (ui.filterSite === "Tous" || i.site === ui.filterSite) && (ui.synthN1 === "Tous" || i.n1Contacte === ui.synthN1));
   const evo = mois.map(m => ({ ...m, tel: base.filter(i => i.date.startsWith(m.cle) && i.sansDeplacement && !i.appelOrigineId).length, dep: base.filter(i => i.date.startsWith(m.cle) && !i.sansDeplacement).length }));
   const maxEvo = Math.max(1, ...evo.map(e => e.tel + e.dep));
@@ -3503,6 +3503,7 @@ function renderSynthese(container) {
         <h2>Synthèse de l'<span>astreinte</span></h2>
         <p>${{ mois: "Ce mois-ci", "3mois": "3 derniers mois", "12mois": "12 derniers mois", scolaire: "Année scolaire", tout: "Toute la période" }[ui.synthPeriode]}${ui.synthN1 !== "Tous" ? ` · N1 : ${esc(ui.synthN1)}` : ""}${ui.filterTech !== "Tous" ? ` · ${esc(ui.filterTech)}` : ""}${ui.filterSite !== "Tous" ? ` · ${esc(nomPropre(ui.filterSite))}` : ""}</p>
       </div>
+      <button class="add-btn sy-rapport" id="sy-rapport">📑 Rapport direction (PDF)</button>
       <div class="sdw-kpis">
         <div><b>${appels.length}</b><small>📞 appels reçus</small></div>
         <div><b>${pct(parTel.length, appels.length)} %</b><small>☎️ réglés par téléphone</small></div>
@@ -3559,6 +3560,22 @@ function renderSynthese(container) {
   </div>`;
 
   container.querySelectorAll("[data-recap-prime]").forEach(b => b.addEventListener("click", () => ouvrirRecapPrime()));
+  document.getElementById("sy-rapport")?.addEventListener("click", async () => {
+    const fenetre = window.open("", "_blank");
+    if (fenetre) fenetre.document.write("<p style='font:16px system-ui;padding:20px'>Préparation du rapport…</p>");
+    let logo = new URL("img/logo-etablieres.png", location.href).href;
+    try { const b = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => ok(logo); r.readAsDataURL(b); }); } catch { /* logo par URL */ }
+    const debut = debutPeriode === "0000" ? dateKey(YEAR_START) : debutPeriode, fin = dateKey(auj);
+    const personnes = [...new Set([...state.people.n1, ...state.people.n2])];
+    const repartition = personnes.map(nom => { const r = calculerRecapAstreinte(nom, debut, fin).tot; return { nom, n1: r.n1, n2: r.n2, jours: r.n1 + r.n2, we: r.we, ferie: r.ferie, appels: r.appels, depl: r.depl, heures: r.heures }; })
+      .sort((x, y) => y.jours - x.jours || y.appels - x.appels);
+    const filtresTxt = [ui.synthN1 !== "Tous" ? `N1 : ${ui.synthN1}` : "", ui.filterTech !== "Tous" ? `Technicien : ${ui.filterTech}` : "", ui.filterSite !== "Tous" ? `Site : ${nomPropre(ui.filterSite)}` : ""].filter(Boolean).join(" · ");
+    const { ouvrirRapportAstreinte } = await import("./rapport-direction.js");
+    ouvrirRapportAstreinte({ fenetre, logo, debut: debutPeriode === "0000" ? (f.map(i => i.date).sort()[0] || debut) : debut, fin, filtres: filtresTxt,
+      periodeLibelle: { mois: "Mois en cours", "3mois": "3 derniers mois", "12mois": "12 derniers mois", scolaire: "Année scolaire", tout: "Toute la période" }[ui.synthPeriode],
+      auteur: mountedUser?.nom || "", appels: appels.length, parTel: parTel.length, deplacements: deplacements.length, hSite, hNuit, primes, minTel, delaiMoy, nbDelais: delais.length,
+      insights, evo, parHeure, parJour, parN1, parSite, parType, parTech, nuitCount, weCount, avecHeure, aCompleter, repartition });
+  });
   container.querySelectorAll("[data-sy-periode]").forEach(b => b.addEventListener("click", () => { ui.synthPeriode = b.dataset.syPeriode; renderAll(); }));
   document.getElementById("sy-n1").addEventListener("change", (e) => { ui.synthN1 = e.target.value; renderAll(); });
   document.getElementById("filter-tech").addEventListener("change", (e) => { ui.filterTech = e.target.value; renderAll(); });
