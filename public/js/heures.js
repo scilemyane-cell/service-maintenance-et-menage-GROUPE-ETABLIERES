@@ -1,3 +1,4 @@
+import { differerSiSaisieDate } from "./saisie-dates.js";
 import { addDays, dateKey, fmtShort, esc, isPlausibleDate } from "./astreinte-logic.js";
 import { watchHeures, addHeures, validateHeures, deleteHeures, watchHeuresParams, saveHeuresParams } from "./heures-data.js";
 
@@ -59,6 +60,7 @@ export function mountHeures(container, user) {
 function render() {
   if (!mountedContainer || !mountedUser) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; }
+  if (differerSiSaisieDate(mountedContainer, render)) return;
   const isSelfEntry = mountedUser.role === "menage" || mountedUser.role === "mi_temps";
   const isReviewer = mountedUser.role === "super_admin" || mountedUser.role === "admin" || mountedUser.role === "n1" || mountedUser.role === "direction";
 

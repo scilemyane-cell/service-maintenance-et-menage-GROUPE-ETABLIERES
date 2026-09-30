@@ -1,3 +1,4 @@
+import { differerSiSaisieDate } from "./saisie-dates.js";
 import { addDays, dateKey, fmtShort, esc, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
@@ -429,6 +430,7 @@ function lancerConfettis() {
 function render() {
   if (!mountedContainer) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; }
+  if (differerSiSaisieDate(mountedContainer, render)) return;
   if (state.sites.length === 0) { mountedContainer.innerHTML = `<div class="hint">Chargement des sites…</div>`; return; }
   const disps = dispositifs();
   const sitesInDisp = state.sites.filter(s => siteDispositif(s) === ui.dispositif);

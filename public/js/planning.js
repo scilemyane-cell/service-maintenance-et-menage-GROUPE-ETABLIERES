@@ -1,3 +1,4 @@
+import { differerSiSaisieDate } from "./saisie-dates.js";
 import {
   addDays, dateKey, sameDay, fmtLong, fmtShort, HOLIDAYS,
   YEAR_START, YEAR_END, computeWeeklyTitulaires, resolveDayN1, resolveDayN2,
@@ -313,6 +314,7 @@ export function mountPlanningIndividuelTab(container, user) { startListeners(con
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
+  if (differerSiSaisieDate(mountedContainer, renderAll)) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; } // l'utilisateur a changé d'écran, on arrête d'écouter
   const perms = permissions(mountedUser);
   if (ui.subtab === "absences" && !perms.canSeeAbsencesTab) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }

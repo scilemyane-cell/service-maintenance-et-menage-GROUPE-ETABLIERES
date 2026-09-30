@@ -1,3 +1,4 @@
+import { differerSiSaisieDate } from "./saisie-dates.js";
 import { nomPropre, villeDe, dessinPourSite } from "./sites-visuel.js";
 import { categorieSite } from "./site-map.js";
 // compteurs.js
@@ -143,6 +144,7 @@ async function load() {
 function render() {
   if (!mountedContainer) return;
   if (!document.contains(mountedContainer)) return;
+  if (differerSiSaisieDate(mountedContainer, render)) return;
   if (ui.screen === "releve") return renderReleve();
   if (ui.rapideSiteId) return renderRapide();
   if (ui.rapportSiteId) return renderRapportSite();

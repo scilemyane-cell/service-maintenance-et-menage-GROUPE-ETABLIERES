@@ -1,5 +1,7 @@
   import { watchAuth, logout, roleLabel } from "./auth.js";
   import "./ui-feedback.js";
+  import { installerGardeDates } from "./saisie-dates.js";
+  installerGardeDates();
   import { watchCompteursAlertCount } from "./compteurs-data.js";
   import { mountDashboard } from "./home.js";
   import { watchHomeOrder, saveHomeOrder } from "./home-order-data.js";

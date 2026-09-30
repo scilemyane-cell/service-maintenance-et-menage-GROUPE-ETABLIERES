@@ -1,3 +1,4 @@
+import { differerSiSaisieDate } from "./saisie-dates.js";
 // Tableau de bord "Suivi des demandes d'intervention" — reprend le fichier
 // Excel externe (hors appli, "SG_Suivi_Demandes_GroupeEtablieres") que les
 // demandeurs continuent de remplir. Depuis cette version, la vue "Tableau"
@@ -379,6 +380,7 @@ async function toutesLesDemandesPourOutil() {
   return await lireToutesDemandes(); // outils manuels : relecture complète volontaire
 }
 function render(container) {
+  if (differerSiSaisieDate(container, () => render(container))) return;
   const r = renderVue(container);
   try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
   try { injecterBandeauImmediat(container); } catch (e) { console.error("Actions immédiates :", e); }
