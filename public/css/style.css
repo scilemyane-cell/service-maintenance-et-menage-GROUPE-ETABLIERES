@@ -2674,3 +2674,10 @@ div.gh-urg-corps{cursor:default}
 textarea.dps-requis{border-color:#e08a00!important;box-shadow:0 0 0 2px rgba(224,138,0,.2)}
 textarea.dps-obligatoire{border-color:#c8102e!important;box-shadow:0 0 0 3px rgba(200,16,46,.25)!important;background:#fff5f6}
 .dps-etat.erreur{color:#c8102e;font-weight:700}
+
+/* Interventions gardées sur l'appareil */
+.iv-attente{border:2px solid #e08a00;background:rgba(224,138,0,.08)}
+.iv-attente-tete{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.iv-attente-tete span{color:var(--text-dim);font-size:12.5px}
+.iv-attente-tete button{margin-left:auto}
+.iv-attente ul{margin:8px 0 0;padding-left:18px;font-size:13px}

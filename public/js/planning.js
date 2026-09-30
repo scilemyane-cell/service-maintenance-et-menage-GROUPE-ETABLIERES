@@ -13,6 +13,7 @@ import { watchCoordonnees, saveCoordonnee } from "./coordonnees-data.js";
 import { watchUsers } from "./users-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
+import { mettreEnAttente, estErreurTemporaire, listerAttente, envoyerAttente } from "./interventions-attente.js";
 import { watchReleves, createReleve, deleteReleve } from "./releves-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, deleteDriveItem, DOSSIERS_ROOT_FOLDER } from "./sharepoint-storage.js";
@@ -1656,6 +1657,20 @@ function renderPlanningIndividuel(container, perms) {
         window.toast?.("✓ Intervention enregistrée");
       } catch (e) {
         console.error("Intervention planning:", e);
+        // Quota / réseau : ajout gardé sur l'appareil, envoyé automatiquement plus tard.
+        if (estErreurTemporaire(e) && !ui.planningQuickEditingId) {
+          mettreEnAttente({ type: "add", payload: {
+            date: ui.planningQuickDate, technicien: person, association: f.association, groupe: f.groupe || "", site: f.site,
+            type: f.type, heures: duree !== null ? duree : 0, description: f.description || "",
+            heureDebut: f.heureDebut || "", heureFin: f.heureFin || "",
+            heuresNuit: heuresDeNuit(f.heureDebut, f.heureFin), primeDimanche: estDimanche(ui.planningQuickDate) ? PRIME_DIMANCHE : 0,
+            photos: [], appelN1: false, n1Contacte: "", motifAppelN1: "", decisionN1: "", origine: "planning",
+            createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email,
+          } });
+          ui.planningQuickDate = null; renderAll();
+          window.toast?.("💾 Intervention gardée sur cet appareil : elle sera envoyée automatiquement dès que possible.");
+          return;
+        }
         const msg = e.code === "permission-denied" ? "enregistrement refusé par les règles Firestore (droits du compte connecté)" : (e.message || String(e));
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(msg)}</span>`;
         alert("L'intervention n'a PAS été enregistrée : " + msg);
@@ -2517,6 +2532,9 @@ function associationEffective(nom) {
   return { ...a, sites: propres };
 }
 
+// Rafraîchit l'écran quand la liste des interventions en attente change.
+window.addEventListener("interventions-attente", () => { if (mountedContainer && document.contains(mountedContainer) && ui.subtab === "interventions") renderAll(); });
+
 function renderInterventions(container, perms) {
   // Arrivée depuis le bandeau jaune de l'accueil : ouvre directement le
   // formulaire « Compléter mes horaires » de cette intervention.
@@ -2779,12 +2797,27 @@ function renderInterventions(container, perms) {
       ${doublonsHTML}
       ${listeParMois(filtrees, true)}
       ${releveHTML}`;
+  // Interventions gardées sur l'appareil (quota / réseau) en attente d'envoi.
+  const attente = listerAttente();
+  const attenteHTML = attente.length ? `<div class="form-card iv-attente">
+      <div class="iv-attente-tete">💾 <b>${attente.length} intervention${attente.length > 1 ? "s" : ""} gardée${attente.length > 1 ? "s" : ""} sur cet appareil</b>
+        <span>pas encore envoyée${attente.length > 1 ? "s" : ""} (quota Firebase ou réseau) — envoi automatique dès que possible</span>
+        <button type="button" class="add-btn" id="iv-attente-envoyer">📤 Envoyer maintenant</button></div>
+      <ul>${attente.map(a => `<li>${esc(a.payload?.date ? a.payload.date.split("-").reverse().join("/") : "")} · ${esc(a.payload?.technicien || "")} · ${esc(a.payload?.site || a.payload?.association || "")}${a.type === "update" ? " (modification)" : ""}</li>`).join("")}</ul>
+    </div>` : "";
   container.innerHTML = `
     <div class="stack iv-v3">
+      ${attenteHTML}
       ${onglets}
       ${ui.ivOnglet === "mes" ? vueMes : vueRealisees}
     </div>
   `;
+  document.getElementById("iv-attente-envoyer")?.addEventListener("click", async (e) => {
+    e.target.disabled = true; e.target.textContent = "⏳ Envoi…";
+    const n = await envoyerAttente();
+    if (!n) window.toast?.("Toujours impossible d'envoyer (quota Firebase du jour ou réseau). Nouvel essai automatique dans quelques minutes.");
+    renderAll();
+  });
 
   container.querySelectorAll("[data-iv-onglet]").forEach(b => b.addEventListener("click", () => {
     ui.ivOnglet = b.dataset.ivOnglet; ui.completerId = null; renderAll();
@@ -2935,6 +2968,15 @@ function renderInterventions(container, perms) {
         reinitialiserFormIntervention();
         renderAll();
       } catch (e) {
+        // Quota / réseau : on ne perd rien, l'intervention est gardée sur l'appareil.
+        if (estErreurTemporaire(e)) {
+          mettreEnAttente(ui.editingId ? { type: "update", id: ui.editingId, payload } : { type: "add", payload: { ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email } });
+          ui.editingId = null;
+          reinitialiserFormIntervention();
+          renderAll();
+          window.toast?.("💾 Intervention gardée sur cet appareil : elle sera envoyée automatiquement dès que possible.");
+          return;
+        }
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
       }
     });

@@ -472,6 +472,8 @@
       modulesConstructionSubscribed = true;
       watchModulesConstruction((ids) => { modulesConstruction = ids; if (currentCategory === null || estMasqueConstruction(currentCategory, utilisateurEffectif())) render(); });
     }
+    // Interventions gardées sur l'appareil (quota/réseau) : envoi automatique.
+    if (!window.__intervAttente) { window.__intervAttente = true; import("./interventions-attente.js").then(m => m.demarrerEnvoiAuto()).catch(() => {}); }
     if (!window.__synchroDemandesAuto && ["super_admin", "admin", "n1"].includes(user.role)) {
       window.__synchroDemandesAuto = true;
       import("./demandes-auto.js").then(m => m.demarrerSynchroAutoDemandes()).catch(e => console.warn("Synchro auto demandes :", e));
