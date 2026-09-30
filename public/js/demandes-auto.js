@@ -51,12 +51,16 @@ async function tour() {
     }
 
     // 2) Dépôt des modifications faites dans l'appli depuis le dernier envoi
+    // Quota : on travaille sur la copie locale des demandes (déjà tenue à
+    // jour par l'appli, voir cache-delta.js) — aucune relecture Firestore.
     const dernierDepot = synchro.dernierDepot || 0;
-    const modif = await getDocs(query(collection(db, "demandes"), where("dateMaj", ">", Timestamp.fromMillis(dernierDepot)), limit(1)));
-    if (!modif.empty && await prendreVerrou("verrouDepot")) {
-      const recents = await getDocs(query(collection(db, "demandes"), where("dateMaj", ">=", Timestamp.fromMillis(Math.min(dernierDepot - 6 * 3600000, Date.now() - 36 * 3600000)))));
-      const liste = []; recents.forEach(d => liste.push({ id: d.id, ...d.data() }));
-      await deposerMisesAJour(liste, { interactif: false });
+    const { watchDemandes } = await import("./firestore-data.js");
+    const toutes = await new Promise((ok) => { let u = null, fini = false; u = watchDemandes((l) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(l); }); });
+    const msDe = (t) => (t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : 0));
+    const aDeposer = toutes.some(d => msDe(d.dateMaj) > dernierDepot);
+    if (aDeposer && await prendreVerrou("verrouDepot")) {
+      const depuis = Math.min(dernierDepot - 6 * 3600000, Date.now() - 36 * 3600000);
+      await deposerMisesAJour(toutes.filter(d => msDe(d.dateMaj) >= depuis), { interactif: false });
     }
   } catch (e) { console.warn("Synchro auto des demandes :", e); }
   finally { enCours = false; }
