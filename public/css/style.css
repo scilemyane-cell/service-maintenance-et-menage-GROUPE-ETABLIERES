@@ -2681,3 +2681,8 @@ textarea.dps-obligatoire{border-color:#c8102e!important;box-shadow:0 0 0 3px rgb
 .iv-attente-tete span{color:var(--text-dim);font-size:12.5px}
 .iv-attente-tete button{margin-left:auto}
 .iv-attente ul{margin:8px 0 0;padding-left:18px;font-size:13px}
+
+/* Version de test (/beta/) */
+.canal-test-bandeau{position:sticky;top:0;z-index:3000;background:repeating-linear-gradient(45deg,#7a3cff,#7a3cff 12px,#6a2cef 12px,#6a2cef 24px);color:#fff;text-align:center;padding:6px 10px;font:600 13px system-ui,sans-serif}
+.canal-test-bandeau a{color:#fff;text-decoration:underline;margin-left:8px}
+a.canal-lien{text-decoration:none;display:inline-flex;align-items:center}

@@ -122,6 +122,18 @@
   // Super Admin : la version est affichée. Tout le monde : bandeau
   // « Nouvelle version disponible » dès qu'une mise à jour est en ligne.
   // ---------------------------------------------------------------
+  // Deux versions en ligne, sur les MÊMES données : la version validée
+  // (adresse normale, pour tout le monde) et la version de TEST sous /beta/
+  // (Super Admin seulement) — une nouveauté n'arrive chez les autres
+  // qu'une fois validée.
+  const CANAL_TEST = window.location.pathname.startsWith("/beta/");
+  if (CANAL_TEST) {
+    const b = document.createElement("div");
+    b.className = "canal-test-bandeau";
+    b.innerHTML = `🧪 <b>VERSION DE TEST</b> — visible seulement par toi. <a href="/app.html">Revenir à la version validée</a>`;
+    document.addEventListener("DOMContentLoaded", () => document.body.prepend(b));
+    if (document.body) document.body.prepend(b);
+  }
   const VERSION_CHARGEE = (() => { try { return new URL(document.querySelector('script[src*="app.bundle.js"]').src).searchParams.get("v") || "dev"; } catch { return "dev"; } })();
   let versionEnLigne = null;
   function versionTexte() {
@@ -380,6 +392,9 @@
 
   watchAuth((user) => {
     if (!user) { window.location.href = "index.html"; return; }
+    // Version de TEST (/beta/) : réservée au Super Admin. Les autres
+    // utilisateurs sont renvoyés vers la version validée (même lien, même QR).
+    if (CANAL_TEST && user.role !== "super_admin") { window.location.replace("/app.html" + window.location.search + window.location.hash); return; }
     currentUser = user;
     // Lien direct depuis un QR produit (scanné avec l'appareil photo du
     // téléphone, hors appli) : .../app.html?stock=ID_PRODUIT
@@ -623,6 +638,7 @@
             <p class="gh-user-role">${escapeHtml(roleLabel(currentUser.role))}</p>
             ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
             ${voitAdministration ? `<button class="nav-btn" id="admin-btn">⚙️ Administration</button>` : ""}
+            ${currentUser.role === "super_admin" ? (CANAL_TEST ? `<a class="nav-btn canal-lien" href="/app.html">✅ Version validée</a>` : `<a class="nav-btn canal-lien" href="/beta/app.html">🧪 Version de test</a>`) : ""}
             <button class="logout-btn" id="logout-btn">Se déconnecter</button>
           </div>
         </div>
@@ -653,6 +669,7 @@
           ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
           <button class="nav-btn theme-modules-btn" id="theme-modules-btn" title="Affichage clair ou sombre">${getThemeModules() === "sombre" ? "☀️ Clair" : "🌙 Sombre"}</button>
           ${voitAdministration ? `<button class="nav-btn gear-btn ${currentCategory === "administration" ? "active" : ""}" id="admin-btn" title="Administration">⚙️</button>` : ""}
+          ${currentUser.role === "super_admin" ? (CANAL_TEST ? `<a class="nav-btn canal-lien" href="/app.html" title="Revenir à la version validée">✅ Validée</a>` : `<a class="nav-btn canal-lien" href="/beta/app.html" title="Ouvrir la version de test">🧪 Test</a>`) : ""}
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
       </header>
