@@ -2770,3 +2770,7 @@ body.clo-ouvert{overflow:hidden}
 .iv-appui-heures > *{min-width:0}
 .iv-appui-heures small{grid-column:1 / -1;font-size:11px;color:var(--text-dim)}
 @media (max-width:640px){.iv-appui-heures{grid-template-columns:1fr}}
+.clo-j-trajet{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
+.clo-j-mode{font:inherit;font-size:12.5px;padding:5px 10px;border-radius:999px;border:1px solid #c9d1de;background:#fff;color:#334;cursor:pointer}
+.clo-j-mode.on{background:#1b2a41;border-color:#1b2a41;color:#fff;font-weight:700}
+.clo-j-dest{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:12px;color:#556}.clo-j-dest input{flex:1;min-width:0}

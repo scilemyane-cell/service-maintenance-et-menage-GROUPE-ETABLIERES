@@ -685,6 +685,7 @@ function calculerLignesNoteFrais(nom, mois, touteLHistoire = false) {
       fraisAnnexes: "",
       incluse: true,
       interventionIds: interventionsJour.map(i => i.id),
+      sites: [...new Set(interventionsJour.map(i => i.site).filter(Boolean))].join(", "),
     };
   });
 }
@@ -2724,18 +2725,37 @@ function ouvrirKmCloture(nom, mois) {
     zone.innerHTML = !lignes.length
       ? `<div class="clo-km-vide">${dejaFait() ? "✓ Le remboursement de ce mois a déjà été demandé." : "Aucun déplacement à rembourser sur ce mois."}</div>`
       : `<div class="clo-km-total"><div><b>${km.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km</b><small>${inc.length} jour${inc.length > 1 ? "s" : ""} retenu${inc.length > 1 ? "s" : ""}</small></div><div><b>≈ ${eurosFr(km * TARIF_KM)}</b><small>à ${String(TARIF_KM).replace(".", ",")} €/km</small></div></div>
-        <p class="hint">Trajet habituel : ${esc(c.adresseDomicile || "domicile")} ↔ ${esc(SERVICE_TECHNIQUE_NOM)} = ${c.kmDomicileService} km A/R. Modifie un jour seulement si le trajet a été différent.</p>
-        <div class="clo-jours">${lignes.map((l, i) => `<div class="clo-jour ${l.incluse ? "" : "off"}">
+        <p class="hint">Trajet habituel : ${esc(c.adresseDomicile || "domicile")} ↔ ${esc(SERVICE_TECHNIQUE_NOM)} = ${c.kmDomicileService} km A/R. Si le technicien est allé directement sur le site, touche « 📍 Direct sur le site » et tape les km du jour.</p>
+        <div class="clo-jours">${lignes.map((l, i) => { const direct = l.villeDestination !== `${SERVICE_TECHNIQUE_NOM} — ${SERVICE_TECHNIQUE_ADRESSE}`; return `<div class="clo-jour ${l.incluse ? "" : "off"}">
           <label class="clo-j-date"><input type="checkbox" data-j-inc="${i}" ${l.incluse ? "checked" : ""}><b>${new Date(l.date).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })}</b></label>
           <div class="clo-j-nat">${l.numeros ? `<code>${esc(l.numeros)}</code> ` : ""}${esc(l.nature)}</div>
-          <label class="clo-j-km"><input type="number" min="0" step="0.1" data-j-km="${i}" value="${l.km}" ${l.incluse ? "" : "disabled"}> km</label>
+          <label class="clo-j-km"><input type="number" inputmode="decimal" min="0" step="0.1" data-j-km="${i}" value="${l.km}" ${l.incluse ? "" : "disabled"}> km</label>
+          <div class="clo-j-trajet">
+            <button type="button" class="clo-j-mode ${direct ? "" : "on"}" data-j-mode="service" data-j="${i}" ${l.incluse ? "" : "disabled"}>🏢 Via le service technique</button>
+            <button type="button" class="clo-j-mode ${direct ? "on" : ""}" data-j-mode="direct" data-j="${i}" ${l.incluse ? "" : "disabled"}>📍 Direct sur le site</button>
+          </div>
+          <label class="clo-j-dest">Destination<input data-j-dest="${i}" value="${esc(l.villeDestination)}" ${l.incluse ? "" : "disabled"}></label>
           <input class="clo-j-frais" data-j-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="Frais annexes (péage, repas…)" ${l.incluse ? "" : "disabled"}>
-        </div>`).join("")}</div>`;
+        </div>`; }).join("")}</div>`;
     zone.insertAdjacentHTML("beforeend", `<label class="clo-km-hist"><input type="checkbox" data-j-hist ${historique ? "checked" : ""}> Ajouter les jours des mois précédents pas encore remboursés</label>`);
     actions.innerHTML = lignes.length ? `<button class="add-btn" data-ov-print ${inc.length ? "" : "disabled"}>🖨️ Imprimer la note de frais</button>
       <button class="add-btn clo-vert" data-ov-fait ${inc.length ? "" : "disabled"} title="Une fois la note transmise : ces jours ne réapparaîtront plus">✓ Remboursement demandé</button>` : "";
     zone.querySelectorAll("[data-j-inc]").forEach(cb => cb.addEventListener("change", () => { lignes[+cb.dataset.jInc].incluse = cb.checked; rendre(); }));
-    zone.querySelectorAll("[data-j-km]").forEach(inp => inp.addEventListener("change", () => { lignes[+inp.dataset.jKm].km = parseFloat(inp.value) || 0; rendre(); }));
+    // Km : mis à jour en direct (sans redessiner, pour ne pas perdre la saisie).
+    const majTotaux = () => {
+      const inc2 = lignes.filter(l => l.incluse), km2 = inc2.reduce((x, l) => x + (parseFloat(l.km) || 0), 0);
+      const t = zone.querySelector(".clo-km-total");
+      if (t) t.innerHTML = `<div><b>${km2.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km</b><small>${inc2.length} jour${inc2.length > 1 ? "s" : ""} retenu${inc2.length > 1 ? "s" : ""}</small></div><div><b>≈ ${eurosFr(km2 * TARIF_KM)}</b><small>à ${String(TARIF_KM).replace(".", ",")} €/km</small></div>`;
+    };
+    zone.querySelectorAll("[data-j-km]").forEach(inp => inp.addEventListener("input", () => { lignes[+inp.dataset.jKm].km = parseFloat(String(inp.value).replace(",", ".")) || 0; majTotaux(); }));
+    zone.querySelectorAll("[data-j-dest]").forEach(inp => inp.addEventListener("input", () => { lignes[+inp.dataset.jDest].villeDestination = inp.value; }));
+    zone.querySelectorAll("[data-j-mode]").forEach(b => b.addEventListener("click", () => {
+      const l = lignes[+b.dataset.j];
+      if (b.dataset.jMode === "direct") { l.villeDestination = l.sites || l.nature; l.km = ""; }
+      else { l.villeDestination = `${SERVICE_TECHNIQUE_NOM} — ${SERVICE_TECHNIQUE_ADRESSE}`; l.km = (state.coordonnees[nom] || {}).kmDomicileService || 0; }
+      rendre();
+      if (b.dataset.jMode === "direct") { const k = zone.querySelector(`[data-j-km="${b.dataset.j}"]`); k?.focus(); window.toast?.("Indique les km aller-retour domicile ↔ site pour ce jour."); }
+    }));
     zone.querySelectorAll("[data-j-frais]").forEach(inp => inp.addEventListener("input", () => { lignes[+inp.dataset.jFrais].fraisAnnexes = inp.value; }));
     zone.querySelector("[data-j-hist]")?.addEventListener("change", (e) => { historique = e.target.checked; lignes = calculerLignesNoteFrais(nom, mois, historique); rendre(); });
     actions.querySelector("[data-ov-print]")?.addEventListener("click", () => imprimerNoteDeFrais(nom, mois, lignes.filter(l => l.incluse)));
