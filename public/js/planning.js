@@ -3523,17 +3523,24 @@ function renderSynthese(container) {
   if (!ui.synthPeriode) ui.synthPeriode = "12mois";
   if (!ui.synthN1) ui.synthN1 = "Tous";
   const auj = new Date();
-  const debutPeriode = {
+  // Période : raccourcis, ou un mois précis (« m:AAAA-MM »).
+  const moisChoisi = /^m:\d{4}-\d{2}$/.test(ui.synthPeriode) ? ui.synthPeriode.slice(2) : null;
+  const libMois = (cle) => { const [a, m] = cle.split("-").map(Number); const t = new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+  const moisPrec = dateKey(new Date(auj.getFullYear(), auj.getMonth() - 1, 1)).slice(0, 7);
+  const debutPeriode = moisChoisi ? `${moisChoisi}-01` : {
     mois: dateKey(new Date(auj.getFullYear(), auj.getMonth(), 1)),
     "3mois": dateKey(new Date(auj.getFullYear(), auj.getMonth() - 2, 1)),
     "12mois": dateKey(new Date(auj.getFullYear(), auj.getMonth() - 11, 1)),
     scolaire: dateKey(new Date(auj.getMonth() >= 8 ? auj.getFullYear() : auj.getFullYear() - 1, 8, 1)),
     tout: "0000",
   }[ui.synthPeriode];
+  const finPeriode = moisChoisi ? (() => { const [a, m] = moisChoisi.split("-").map(Number); return dateKey(new Date(a, m, 0)); })() : dateKey(auj);
+  const libellePeriode = moisChoisi ? libMois(moisChoisi) : { mois: "Ce mois-ci", "3mois": "3 derniers mois", "12mois": "12 derniers mois", scolaire: "Année scolaire", tout: "Toute la période" }[ui.synthPeriode];
+  const moisDispo = (() => { const prem = toutes.map(i => i.date).sort()[0] || dateKey(auj); const L = []; for (let d = new Date(auj.getFullYear(), auj.getMonth(), 1); dateKey(d).slice(0, 7) >= prem.slice(0, 7); d = new Date(d.getFullYear(), d.getMonth() - 1, 1)) L.push(dateKey(d).slice(0, 7)); return L; })();
   const sites = ["Tous", ...[...new Set(toutes.map(i => i.site).filter(Boolean))].sort()];
   const techs = ["Tous", ...[...new Set(toutes.map(i => i.technicien).filter(Boolean))].sort()];
   const n1s = ["Tous", ...[...new Set(toutes.map(i => i.n1Contacte).filter(Boolean))].sort()];
-  const f = toutes.filter(i => i.date >= debutPeriode
+  const f = toutes.filter(i => i.date >= debutPeriode && i.date <= finPeriode
     && (ui.filterTech === "Tous" || i.technicien === ui.filterTech)
     && (ui.filterSite === "Tous" || i.site === ui.filterSite)
     && (ui.synthN1 === "Tous" || i.n1Contacte === ui.synthN1));
@@ -3599,7 +3606,7 @@ function renderSynthese(container) {
     <div class="sdw-hero">
       <div>
         <h2>Synthèse de l'<span>astreinte</span></h2>
-        <p>${{ mois: "Ce mois-ci", "3mois": "3 derniers mois", "12mois": "12 derniers mois", scolaire: "Année scolaire", tout: "Toute la période" }[ui.synthPeriode]}${ui.synthN1 !== "Tous" ? ` · N1 : ${esc(ui.synthN1)}` : ""}${ui.filterTech !== "Tous" ? ` · ${esc(ui.filterTech)}` : ""}${ui.filterSite !== "Tous" ? ` · ${esc(nomPropre(ui.filterSite))}` : ""}</p>
+        <p>${esc(libellePeriode)}${ui.synthN1 !== "Tous" ? ` · N1 : ${esc(ui.synthN1)}` : ""}${ui.filterTech !== "Tous" ? ` · ${esc(ui.filterTech)}` : ""}${ui.filterSite !== "Tous" ? ` · ${esc(nomPropre(ui.filterSite))}` : ""}</p>
       </div>
       <button class="add-btn sy-rapport" id="sy-rapport">📑 Rapport direction (PDF)</button>
       <div class="sdw-kpis">
@@ -3609,7 +3616,8 @@ function renderSynthese(container) {
       </div>
     </div>
     <div class="sy-filtres">
-      <div class="iv-chips">${[["mois", "Ce mois-ci"], ["3mois", "3 mois"], ["12mois", "12 mois"], ["scolaire", "Année scolaire"], ["tout", "Tout"]].map(([k, l]) => `<button class="iv-chip ${ui.synthPeriode === k ? "on" : ""}" data-sy-periode="${k}">${l}</button>`).join("")}</div>
+      <div class="iv-chips">${[["mois", "Ce mois-ci"], [`m:${moisPrec}`, "Mois dernier"], ["3mois", "3 mois"], ["12mois", "12 mois"], ["scolaire", "Année scolaire"], ["tout", "Tout"]].map(([k, l]) => `<button class="iv-chip ${ui.synthPeriode === k ? "on" : ""}" data-sy-periode="${k}">${l}</button>`).join("")}</div>
+      <label>Mois<select id="sy-mois"><option value="">— choisir —</option>${moisDispo.map(m => `<option value="m:${m}" ${ui.synthPeriode === `m:${m}` ? "selected" : ""}>${esc(libMois(m))}</option>`).join("")}</select></label>
       <label>N1${sel("sy-n1", n1s, ui.synthN1)}</label>
       <label>Technicien${sel("filter-tech", techs, ui.filterTech)}</label>
       <label>Site${sel("filter-site", sites, ui.filterSite)}</label>
@@ -3663,18 +3671,19 @@ function renderSynthese(container) {
     if (fenetre) fenetre.document.write("<p style='font:16px system-ui;padding:20px'>Préparation du rapport…</p>");
     let logo = new URL("img/logo-etablieres.png", location.href).href;
     try { const b = await (await fetch(logo)).blob(); logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => ok(logo); r.readAsDataURL(b); }); } catch { /* logo par URL */ }
-    const debut = debutPeriode === "0000" ? dateKey(YEAR_START) : debutPeriode, fin = dateKey(auj);
+    const debut = debutPeriode === "0000" ? dateKey(YEAR_START) : debutPeriode, fin = finPeriode;
     const personnes = [...new Set([...state.people.n1, ...state.people.n2])];
     const repartition = personnes.map(nom => { const r = calculerRecapAstreinte(nom, debut, fin).tot; return { nom, n1: r.n1, n2: r.n2, jours: r.n1 + r.n2, we: r.we, ferie: r.ferie, appels: r.appels, depl: r.depl, heures: r.heures }; })
       .sort((x, y) => y.jours - x.jours || y.appels - x.appels);
     const filtresTxt = [ui.synthN1 !== "Tous" ? `N1 : ${ui.synthN1}` : "", ui.filterTech !== "Tous" ? `Technicien : ${ui.filterTech}` : "", ui.filterSite !== "Tous" ? `Site : ${nomPropre(ui.filterSite)}` : ""].filter(Boolean).join(" · ");
     const { ouvrirRapportAstreinte } = await import("./rapport-direction.js");
     ouvrirRapportAstreinte({ fenetre, logo, debut: debutPeriode === "0000" ? (f.map(i => i.date).sort()[0] || debut) : debut, fin, filtres: filtresTxt,
-      periodeLibelle: { mois: "Mois en cours", "3mois": "3 derniers mois", "12mois": "12 derniers mois", scolaire: "Année scolaire", tout: "Toute la période" }[ui.synthPeriode],
+      periodeLibelle: libellePeriode,
       auteur: mountedUser?.nom || "", appels: appels.length, parTel: parTel.length, deplacements: deplacements.length, hSite, hNuit, primes, minTel, delaiMoy, nbDelais: delais.length,
       insights, evo, parHeure, parJour, parN1, parSite, parType, parTech, nuitCount, weCount, avecHeure, aCompleter, repartition });
   });
   container.querySelectorAll("[data-sy-periode]").forEach(b => b.addEventListener("click", () => { ui.synthPeriode = b.dataset.syPeriode; renderAll(); }));
+  document.getElementById("sy-mois")?.addEventListener("change", (e) => { if (e.target.value) { ui.synthPeriode = e.target.value; renderAll(); } });
   document.getElementById("sy-n1").addEventListener("change", (e) => { ui.synthN1 = e.target.value; renderAll(); });
   document.getElementById("filter-tech").addEventListener("change", (e) => { ui.filterTech = e.target.value; renderAll(); });
   document.getElementById("filter-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; renderAll(); });
