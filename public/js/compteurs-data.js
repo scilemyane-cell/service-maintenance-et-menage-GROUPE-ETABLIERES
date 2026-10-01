@@ -180,15 +180,32 @@ export function estEnRetard(compteur) {
     if (!compteur.dernierReleve?.at) return true;
     return compteur.dernierReleve.at < derniereEcheanceAnnuelle(compteur).getTime();
   }
+  // Mensuel : le relevé doit être fait entre le 27 et le 3 du mois suivant.
+  // Pendant la période : « à relever » tant qu'il n'est pas fait ; après
+  // la période : « en retard » s'il n'a pas été fait depuis son ouverture.
   if (!compteur.dernierReleve?.at) return true;
-  return (Date.now() - compteur.dernierReleve.at) > JOURS_TOLERANCE_MENSUEL * 24 * 3600 * 1000;
+  return compteur.dernierReleve.at < fenetreReleve().debut.getTime();
 }
+
+// Période de relevé mensuelle : du 27 au 3 du mois suivant (inclus).
+// Renvoie la période en cours si elle est ouverte, sinon la dernière.
+export function fenetreReleve(d = new Date()) {
+  const y = d.getFullYear(), m = d.getMonth();
+  const debut = d.getDate() >= 27 ? new Date(y, m, 27) : new Date(y, m - 1, 27);
+  const fin = new Date(debut.getFullYear(), debut.getMonth() + 1, 3, 23, 59, 59, 999);
+  const ouverte = d >= debut && d <= fin;
+  const prochaine = ouverte ? null : new Date(y, m, 27);
+  const f = (x) => x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  return { debut, fin, ouverte, prochaine, libelle: `du ${f(debut)} au ${f(fin)}`, libelleProchaine: prochaine ? `du ${f(prochaine)} au ${f(new Date(y, m + 1, 3))}` : "" };
+}
+// Mot affiché pour un compteur non relevé : pendant la période « à relever », après « en retard ».
+export const motRetard = () => (fenetreReleve().ouverte ? "à relever" : "en retard");
 
 export function prochaineEcheanceLabel(compteur) {
   if (compteur.frequence === "annuel") {
     return `chaque année le ${String(compteur.echeanceJour || 1).padStart(2, "0")}/${String(compteur.echeanceMois || 1).padStart(2, "0")}`;
   }
-  return "tous les mois";
+  return "chaque mois du 27 au 3";
 }
 
 // Liste ponctuelle des dossiers de site ayant les compteurs activés —

@@ -2774,3 +2774,5 @@ body.clo-ouvert{overflow:hidden}
 .clo-j-mode{font:inherit;font-size:12.5px;padding:5px 10px;border-radius:999px;border:1px solid #c9d1de;background:#fff;color:#334;cursor:pointer}
 .clo-j-mode.on{background:#1b2a41;border-color:#1b2a41;color:#fff;font-weight:700}
 .clo-j-dest{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:12px;color:#556}.clo-j-dest input{flex:1;min-width:0}
+.cpt-fenetre{margin:8px 0 0;display:inline-block;padding:6px 12px;border-radius:999px;font-size:13px;background:rgba(255,255,255,.12);color:inherit}
+.cpt-fenetre.ouverte{background:#f0a92b;color:#1a1a1a}

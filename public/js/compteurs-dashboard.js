@@ -15,7 +15,7 @@
 // (bleu) pour la période, gris pour N-1, vert = baisse, rouge = hausse.
 
 import { esc } from "./astreinte-logic.js";
-import { estEnRetard, uniteValeur, clesIndex } from "./compteurs-data.js";
+import { estEnRetard, motRetard, uniteValeur, clesIndex } from "./compteurs-data.js";
 
 const ENERGIES = [
   { id: "elec", label: "Électricité", couleur: "#eda100" },
@@ -135,7 +135,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
       texte: `${fmt(v)} ${uniteValeur(c)} contre ${fmt(vp)} ${uniteValeur(c)} en ${nomMois} ${mDebut.getFullYear() - 1} (${esc(c.nom)}). Fuite ou dérive à vérifier.`, site: c.dossierId });
   });
   if (enRetard.length) attention.push({ niveau: "crit", icone: "!", poids: 1000,
-    titre: `${enRetard.length} compteur${enRetard.length > 1 ? "s" : ""} en retard de relevé`,
+    titre: `${enRetard.length} compteur${enRetard.length > 1 ? "s" : ""} ${motRetard()}`,
     texte: [...new Set(enRetard.map(c => nomCourt(c.dossierNom)))].slice(0, 8).join(", ") + (enRetard.length > 8 ? "…" : "") + "." });
   const ill = releves.filter(r => r.createdAt > Date.now() - 90 * JOUR && r.illisibles && Object.values(r.illisibles).some(Boolean) && compteurs.some(c => c.id === r.compteurId));
   if (ill.length) attention.push({ niveau: "warn", icone: "?", poids: 10,
@@ -177,7 +177,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         <div class="pe-carte pe-kpi">
           <div class="pe-lab">Relevés à jour</div>
           <div class="pe-val">${tauxAJour ?? "—"}<small>%</small></div>
-          ${enRetard.length ? `<span class="pe-delta pe-hausse">${enRetard.length} compteur${enRetard.length > 1 ? "s" : ""} en retard</span>` : `<span class="pe-delta pe-baisse">✓ tout est à jour</span>`}
+          ${enRetard.length ? `<span class="pe-delta pe-hausse">${enRetard.length} compteur${enRetard.length > 1 ? "s" : ""} ${motRetard()}</span>` : `<span class="pe-delta pe-baisse">✓ tout est à jour</span>`}
         </div>
       </div>
 
@@ -221,7 +221,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
               <td class="n">${ecart(l.dRef)}</td>
               <td>${l.tendance ? sparkline(l.tendance) : `<span class="pe-muet">—</span>`}</td>
               <td><span class="pe-couv"><span style="width:${Math.round(l.couverture * 100)}%"></span></span>${Math.round(l.couverture * 100)} %</td>
-              <td>${l.retard ? `<span class="pe-badge pe-b-ko">● ${l.retard} en retard</span>` : l.illisible ? `<span class="pe-badge pe-b-w">? Illisible</span>` : `<span class="pe-badge pe-b-ok">✓ À jour</span>`}</td>
+              <td>${l.retard ? `<span class="pe-badge pe-b-ko">● ${l.retard} ${motRetard()}</span>` : l.illisible ? `<span class="pe-badge pe-b-w">? Illisible</span>` : `<span class="pe-badge pe-b-ok">✓ À jour</span>`}</td>
             </tr>`).join("")}
           </tbody>
         </table></div>

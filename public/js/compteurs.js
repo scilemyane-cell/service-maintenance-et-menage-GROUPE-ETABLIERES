@@ -20,7 +20,7 @@ import {
   listerSitesAvecCompteurs, listerTousLesCompteurs, creerCompteur, modifierCompteur,
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
-  estEnRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
+  estEnRetard, fenetreReleve, motRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
   trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve,
   creerSectionDossierPourCompteur, libelleIndex,
   listerTousLesReleves, consommationMensuelleAgregee, consommationRecente,
@@ -263,7 +263,7 @@ function renderSiteCard(site) {
         <span style="display:flex;align-items:center;gap:10px">
           ${enRetard.length > 0 ? `
             <span class="ssx-badge-tip" tabindex="0">
-              <span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800;cursor:default">⚠️ ${enRetard.length} en retard</span>
+              <span style="background:var(--red);color:#fff;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800;cursor:default">⚠️ ${enRetard.length} ${motRetard()}</span>
               <div class="ssx-tip-content">
                 <p style="margin:0 0 6px;font-size:11px;color:var(--text-dim);font-weight:700">En retard sur ${esc(site.nom)} :</p>
                 <ul>
@@ -333,11 +333,14 @@ function renderListe() {
         <div>
           <h2>Relevé de <span>compteurs</span></h2>
           <p>Eau, gaz, électricité par site — photo obligatoire à chaque relevé</p>
+          ${(() => { const fr = fenetreReleve(); return fr.ouverte
+            ? `<p class="cpt-fenetre ouverte">📅 <b>Période de relevé en cours : ${fr.libelle}</b>${nbRetardTotal ? ` — ${nbRetardTotal} compteur${nbRetardTotal > 1 ? "s" : ""} à relever` : " — tout est relevé ✓"}</p>`
+            : `<p class="cpt-fenetre">📅 Relevés mensuels à faire entre le 27 et le 3 · prochaine période ${fr.libelleProchaine}</p>`; })()}
         </div>
         <div class="sdw-kpis">
           <div><b>${state.sites.length}</b><small>sites</small></div>
           <div><b>${nbCompteursTotal}</b><small>compteurs</small></div>
-          <div class="${nbRetardTotal ? "sdw-kpi-alerte" : ""}"><b>${nbRetardTotal}</b><small>en retard</small></div>
+          <div class="${nbRetardTotal ? "sdw-kpi-alerte" : ""}"><b>${nbRetardTotal}</b><small>${motRetard()}</small></div>
           <div class="sdw-actions">
             <button class="add-btn" id="cpt-voir-stats">📊 Tableau de bord</button>
             ${peutAntidater(mountedUser) ? `
@@ -373,13 +376,13 @@ function renderListe() {
                   const etat = nb === 0 ? "vide" : r > 0 ? "retard" : "ok";
                   const cat = categorieSite(site);
                   return `<button class="sdw-tuile sdw-cpt sdw-${etat} ${site.id === ui.siteSelectionne ? "sdw-sel" : ""}" data-select-site="${site.id}" style="--c:${cat.couleur}">
-                    <span class="sdw-statut" title="${nb === 0 ? "Aucun compteur" : r > 0 ? `${r} compteur(s) en retard` : "Tous les relevés sont à jour"}">${nb === 0 ? "–" : r > 0 ? r : "✓"}</span>
+                    <span class="sdw-statut" title="${nb === 0 ? "Aucun compteur" : r > 0 ? `${r} compteur(s) ${motRetard()}` : "Tous les relevés sont à jour"}">${nb === 0 ? "–" : r > 0 ? r : "✓"}</span>
                     <span class="sdw-tag"><i></i>${esc(cat.cle === "autre" ? (site.association || "Autre") : cat.label)}</span>
                     <b class="sdw-nom" title="${esc(site.nom)}">${esc(nomPropre(site.nom))}</b>
                     <small class="sdw-ville">${esc(villeDe(site.adresse) || "")}</small>
                     <span class="sdw-bas">
                       <span>🎛️ ${nb} compteur${nb > 1 ? "s" : ""}</span>
-                      ${nb === 0 ? "" : r > 0 ? `<span class="sdw-etat retard">${r} en retard</span>` : `<span class="sdw-etat ok">À jour</span>`}
+                      ${nb === 0 ? "" : r > 0 ? `<span class="sdw-etat retard">${r} ${motRetard()}</span>` : `<span class="sdw-etat ok">À jour</span>`}
                     </span>
                   </button>`;
                 }).join("")}
