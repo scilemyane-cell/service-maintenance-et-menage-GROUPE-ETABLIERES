@@ -152,7 +152,7 @@ export function blocActionHTML(l, { perms, uid, utilisateurs = [], ouvert = fals
         ${l.actionTexte ? `<span class="dps-action-detail">${esc(l.actionTexte)}</span>` : ""}
         <small>Attribuée${l.actionPar ? ` par ${esc(l.actionPar)}` : ""}${l.actionLe ? ` le ${fr(l.actionLe)}` : ""}</small></div>
       <div class="dps-action-btns">
-        ${peutFaire ? `<button type="button" class="dps-action-fait" data-act-fait="${esc(l.id)}">✓ Fait</button>` : ""}
+        ${peutFaire ? `<button type="button" class="dps-action-fait" data-act-fait="${esc(l.id)}" title="L'action seulement — l'intervention se clôture à part">✓ Action faite</button>` : ""}
         ${peutAttribuer || estAuteur ? `<button type="button" class="dps-action-modif" data-act-modif title="Modifier ou transférer l'action à quelqu'un d'autre">✏️ Modifier / transférer</button>` : ""}
         ${peutAttribuer ? `<button type="button" class="dps-action-suppr" data-act-retirer="${esc(l.id)}" title="Retirer l'action">✕</button>` : ""}
       </div></div>
@@ -234,9 +234,19 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
   container.querySelectorAll("[data-act-fait]").forEach(b => b.addEventListener("click", async () => {
     b.disabled = true; b.textContent = "⏳";
     const id = b.dataset.actFait;
+    const l = ligne(id);
     try { await maj(id, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur, actionFil: ajoutFil(id, "Action faite", true), actionReponseNonLue: true, ...(auteurUid(id) ? { actionParUid: auteurUid(id) } : {}) }); }
-    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "✓ Fait"; }
+    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; b.textContent = "✓ Action faite"; return; }
+    proposerCloture(l);
   }));
+  // Après « Action faite » : l'action n'est PAS l'intervention. On le dit
+  // clairement et on propose de clôturer l'intervention tout de suite.
+  const proposerCloture = async (l) => {
+    if (!l?.id || TRAITE(l.statut) || l.statut === "Réalisé") return;
+    const oui = await window.confirmDialog(`L'action est notée comme faite.\n\n⚠️ L'intervention ${l.n || ""} (${l.site || ""}) n'est PAS clôturée pour autant.\n\nLe travail est-il terminé sur place ?`,
+      { titre: "✓ Action faite — et l'intervention ?", texteValider: "✅ Oui, clôturer l'intervention", texteAnnuler: "Non, pas encore" });
+    if (oui) window.dispatchEvent(new CustomEvent("dps-cloturer", { detail: { id: l.id, site: l.site } }));
+  };
   const envoyer = async (b, fait) => {
     const zone = b.closest(".dps-repondre"), ta = zone.querySelector("[data-rep-texte]"), texte = ta.value.trim();
     const id = b.dataset.repEnvoyer || b.dataset.repFait;
@@ -245,7 +255,8 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
     const champs = { actionFil: ajoutFil(id, texte || "Action faite", fait), ...notif(id) };
     if (fait) Object.assign(champs, { actionFaiteLe: aujourdhui(), actionFaitePar: utilisateur, actionReponseNonLue: true, ...(auteurUid(id) ? { actionParUid: auteurUid(id) } : {}) });
     try { await maj(id, champs); }
-    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; return; }
+    if (fait) proposerCloture(ligne(id));
   };
   container.querySelectorAll("[data-rep-envoyer]").forEach(b => b.addEventListener("click", () => envoyer(b, false)));
   container.querySelectorAll("[data-rep-fait]").forEach(b => b.addEventListener("click", () => envoyer(b, true)));

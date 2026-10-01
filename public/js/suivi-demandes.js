@@ -376,6 +376,20 @@ function fmtDateFR(iso) {
 const vueTechSeule = () => permsUtilisateur().isTech;
 
 let mountedContainer = null;
+// « Clôturer l'intervention » proposé après « Action faite » : ouvre la
+// demande seule et prépare la clôture (statut Réalisé, date du jour).
+window.addEventListener("dps-cloturer", (e) => {
+  const c = mountedContainer; const { id, site } = e.detail || {};
+  if (!c || !document.contains(c) || !id) return;
+  ouvrirDemandeSeule(id, site); ui.vue = "sites"; ui.vueChoisie = true; render(c);
+  setTimeout(() => {
+    const carte = c.querySelector(`.dps-carte[data-id="${CSS.escape(id)}"]`);
+    if (!carte) return;
+    carte.querySelector("[data-dps-realise]")?.click();
+    carte.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.toast?.("Complète le commentaire puis valide pour clôturer l'intervention.");
+  }, 300);
+});
 async function toutesLesDemandesPourOutil() {
   return await lireToutesDemandes(); // outils manuels : relecture complète volontaire
 }
