@@ -523,7 +523,7 @@ function ligneDepuisDoc(d) {
     intervenant: d.intervenant && d.intervenant !== d.categorieIntervenant ? d.intervenant : "", commentaireTech: d.commentaireTech || "",
     dateIntervention: d.dateIntervention || "", dateStatut: d.dateStatut || "", contact: d.contact || "", categorieIntervenant: d.categorieIntervenant || "",
     local: d.local || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
-    declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "",
+    declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "", validation: d.validation || "", refusPar: d.refusPar || "", refusLe: d.refusLe || "", refusMotif: d.refusMotif || "",
     importeMs: d.importeLe?.toMillis ? d.importeLe.toMillis() : (d.importeLe?.seconds ? d.importeLe.seconds * 1000 : 0),
     lieeA: d.lieeA || "", lieeANumero: d.lieeANumero || "", mailsEnvoyes: Array.isArray(d.mailsEnvoyes) ? d.mailsEnvoyes : [],
     commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "",

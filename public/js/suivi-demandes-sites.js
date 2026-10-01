@@ -398,32 +398,35 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const carteValidation = (l) => `
     <article class="dps-carte a-valider" data-id="${esc(l.id)}">
       <div class="dps-carte-tete"><span class="dps-num">${esc(l.n)}</span>${badgeUrg(l.urgence)}${pastilleActionHTML(l)}<span class="dps-local">🏠 ${esc(l.site)}</span>${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}</div>
+      ${l.validation === "ANNULATION"
+        ? `<div class="dps-valid-type annul">🚫 <b>Annulation demandée</b> par ${esc(l.declarePar || "le technicien")}${l.declareLe ? ` le ${fr(l.declareLe)}` : ""} — en attente de validation du superviseur</div>`
+        : `<div class="dps-valid-type">✅ <b>Intervention réalisée</b>${l.declarePar ? ` par ${esc(l.declarePar)}` : ""}${l.declareLe ? ` le ${fr(l.declareLe)}` : ""} — en attente de validation du superviseur</div>`}
       <p class="dps-descr">${esc(l.descr) || "<i>Sans descriptif</i>"}</p>
       <div class="dps-lecture">
-        <span>Réalisée le <b>${fr(l.dateIntervention) || "—"}</b>${l.intervenant ? ` · intervenant : <b>${esc(l.intervenant)}</b>` : ""}</span>
+        <span>${l.validation === "ANNULATION" ? "Annulation demandée le" : "Réalisée le"} <b>${fr(l.dateIntervention) || "—"}</b>${l.intervenant ? ` · intervenant : <b>${esc(l.intervenant)}</b>` : ""}</span>
         ${l.declarePar ? `<span>Déclarée par <b>${esc(l.declarePar)}</b>${l.declareLe ? ` le ${fr(l.declareLe)}` : ""}</span>` : ""}
         ${l.commentaireTech ? `<span class="dps-com-lu">« ${esc(l.commentaireTech)} »${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : `<span class="dps-com-lu vide">Pas de commentaire</span>`}
       </div>
       ${perms.isEditor ? `<div class="dps-actions">
-        <button type="button" class="dps-enregistrer valider" data-dps-valider>✓ Valider</button>
-        <button type="button" class="dps-annuler" data-dps-refuser>↩ Refuser</button>
-      </div>` : `<span class="dps-pastille valid">⏳ En attente du superviseur</span>`}
+        <button type="button" class="dps-enregistrer valider" data-dps-valider>${l.validation === "ANNULATION" ? "✓ Valider l'annulation" : "✓ Valider la réalisation"}</button>
+        <button type="button" class="dps-annuler" data-dps-refuser>↩ Refuser (renvoyer au technicien)</button>
+      </div>` : `<span class="dps-pastille valid">⏳ En attente de validation du superviseur</span>`}
       <div class="dps-etat" aria-live="polite"></div>
     </article>`;
   const brancherValidation = () => container.querySelectorAll(".dps-carte.a-valider").forEach(c => {
     const etat = c.querySelector(".dps-etat");
     c.querySelector("[data-dps-valider]")?.addEventListener("click", async (e) => {
       e.target.disabled = true; etat.textContent = "⏳ Validation…";
-      try { await majP(c.dataset.id, { statut: "Réalisé", validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur, dateStatut: aujourdhui() }); etat.textContent = "✓ Validée"; etat.className = "dps-etat ok"; }
+      const lv = lignes.find(x => x.id === c.dataset.id);
+      const annul = lv?.validation === "ANNULATION";
+      try { await majP(c.dataset.id, { statut: annul ? "Annulé" : "Réalisé", validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur, dateStatut: aujourdhui() }); etat.textContent = annul ? "✓ Annulation validée" : "✓ Réalisation validée"; etat.className = "dps-etat ok"; }
       catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; e.target.disabled = false; }
     });
     c.querySelector("[data-dps-refuser]")?.addEventListener("click", async () => {
-      const motif = prompt("Motif du refus (sera ajouté au commentaire) :", "");
+      const motif = prompt("Pourquoi refuses-tu ? (le technicien verra ce message sur la demande)", "");
       if (motif === null) return;
-      const l = lignes.find(x => x.id === c.dataset.id);
-      const com = [l?.commentaireTech, `[Refusé le ${fr(aujourdhui())}${utilisateur ? " par " + utilisateur : ""}${motif.trim() ? " : " + motif.trim() : ""}]`].filter(Boolean).join("\n");
       etat.textContent = "⏳ …";
-      try { await majP(c.dataset.id, { statut: "Pris en compte", commentaireTech: com, dateStatut: aujourdhui() }); etat.textContent = "↩ Renvoyée au technicien"; etat.className = "dps-etat ok"; }
+      try { await majP(c.dataset.id, { statut: "Pris en compte", validation: "REFUSEE", refusPar: utilisateur, refusLe: aujourdhui(), refusMotif: motif.trim(), dateStatut: aujourdhui() }); etat.textContent = "↩ Renvoyée au technicien"; etat.className = "dps-etat ok"; }
       catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; }
     });
   });
@@ -597,6 +600,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>
+      ${l.validation === "REFUSEE" && !TRAITE(l.statut) ? `<div class="dps-refus">↩ <b>Clôture refusée</b>${l.refusPar ? ` par ${esc(l.refusPar)}` : ""}${l.refusLe ? ` le ${fr(l.refusLe)}` : ""}${l.refusMotif ? ` : « ${esc(l.refusMotif)} »` : ""}<small>Complète puis renvoie la clôture.</small></div>` : ""}
       <p class="dps-descr">${esc(l.descr) || "<i>Sans descriptif</i>"}</p>
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
@@ -678,7 +682,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     </div>
     ${perms.isEditor && techs.length ? `<div class="dps-affect"><span>👷 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}</div>`
       : techsDuSite(st.site).length ? `<div class="dps-affect"><span>👷 ${esc(techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "))}</span></div>` : ""}
-    ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Déclarées réalisées par les techniciens — vérifie et valide." : "Envoyées au superviseur pour validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
+    ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Réalisations et annulations déclarées par les techniciens — vérifie puis valide ou refuse." : "Envoyées au superviseur : en attente de sa validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
     <div class="dps-tri-barre">
       <label class="dps-recherche"><span>🔎</span><input id="dps-qsite" type="search" placeholder="Logement, local, N°, mot du descriptif…" value="${esc(st.qSite)}"></label>
       <label class="dps-tri">Trier par<select id="dps-tri">${Object.entries(TRIS).map(([k, [lib]]) => `<option value="${k}" ${st.tri === k ? "selected" : ""}>${lib}</option>`).join("")}</select></label>
@@ -823,12 +827,12 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       Object.keys(br).forEach(k => { const v = String(br[k] ?? "").trim(); if (v !== (l[k] || "")) champs[k] = v; });
       if (!Object.keys(champs).length) return;
       // Clôture : le commentaire (ce qui a été fait) est obligatoire.
-      if (champs.statut === "Réalisé") {
+      if (champs.statut === "Réalisé" || champs.statut === "Annulé") {
         const com = String(br.commentaireTech ?? l.commentaireTech ?? "").trim();
-        if (com.length < 3) {
+        if (com.length < 3 || (l.validation === "REFUSEE" && !("commentaireTech" in champs) && champs.statut)) {
           const ta = c.querySelector('[data-dps-champ="commentaireTech"]');
           ta?.classList.add("dps-obligatoire"); ta?.focus(); ta?.scrollIntoView({ behavior: "smooth", block: "center" });
-          const etat = c.querySelector(".dps-etat"); if (etat) { etat.textContent = "✍️ Le commentaire est obligatoire pour clôturer : écris ce qui a été fait."; etat.className = "dps-etat erreur"; }
+          const etat = c.querySelector(".dps-etat"); if (etat) { etat.textContent = l.validation === "REFUSEE" && com.length >= 3 ? "✍️ Clôture refusée : complète le commentaire (ce qui a été fait) avant de renvoyer." : champs.statut === "Annulé" ? "✍️ Le commentaire est obligatoire : explique pourquoi la demande est annulée." : "✍️ Le commentaire est obligatoire pour clôturer : écris ce qui a été fait."; etat.className = "dps-etat erreur"; }
           window.toast?.("Commentaire obligatoire pour clôturer la demande.", "error");
           return;
         }
@@ -847,7 +851,12 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       }
       if (champs.statut === "Réalisé") {
         if (perms.isEditor) Object.assign(champs, { validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur });
-        else Object.assign(champs, { statut: A_VALIDER, declarePar: utilisateur, declareLe: aujourdhui() });
+        else Object.assign(champs, { statut: A_VALIDER, validation: "", declarePar: utilisateur, declareLe: aujourdhui() });
+      }
+      // Annulation par un technicien : passe aussi par la validation du superviseur.
+      if (champs.statut === "Annulé") {
+        if (perms.isEditor) Object.assign(champs, { validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur });
+        else Object.assign(champs, { statut: A_VALIDER, validation: "ANNULATION", declarePar: utilisateur, declareLe: aujourdhui() });
       }
       if (champs.statut && perms.isEditor) champs.dateStatut = aujourdhui();
       if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui() });
@@ -862,7 +871,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           await majP(c.dataset.id, champs);
         }
         delete st.brouillons[c.dataset.id];
-        etat.textContent = champs.statut === "Réalisé" ? "✓ Demande réalisée et validée" : champs.statut === A_VALIDER ? "✓ Envoyée au superviseur pour validation" : "✓ Enregistré"; etat.className = "dps-etat ok";
+        etat.textContent = champs.statut === "Réalisé" ? "✓ Demande réalisée et validée" : champs.statut === "Annulé" ? "✓ Demande annulée" : champs.statut === A_VALIDER ? (champs.validation === "ANNULATION" ? "✓ Annulation envoyée au superviseur pour validation" : "✓ Envoyée au superviseur pour validation") : "✓ Enregistré"; etat.className = "dps-etat ok";
       } catch (err) {
         console.error("Demande :", err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; e.target.disabled = false;
       }
