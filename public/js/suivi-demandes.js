@@ -390,28 +390,44 @@ window.addEventListener("dps-cloturer", (e) => {
     window.toast?.("Complète le commentaire puis valide pour clôturer l'intervention.");
   }, 300);
 });
-// Fenêtre de réparation : propositions cochées par défaut + groupes à vérifier.
-function ouvrirReparation(propositions, aVerifier, appliquer) {
+// Sauvegarde complète des demandes téléchargée sur l'appareil (avant réparation).
+function sauvegarderDemandes(toutes) {
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ le: new Date().toISOString(), demandes: toutes }, null, 1)], { type: "application/json" }));
+    a.download = `sauvegarde-demandes-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.json`; a.click();
+  } catch (e) { console.warn("Sauvegarde :", e); }
+}
+// Fenêtre de réparation : APERÇU (rien n'est écrit) + validation explicite.
+function ouvrirReparation({ propositions, aVerifier, aRecreer }, appliquer, annuler) {
   document.getElementById("rep-modal")?.remove();
   const court = (t, n = 70) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
+  let derniere = null; try { derniere = JSON.parse(localStorage.getItem("smm-reparation-derniere") || "null"); } catch { /* */ }
   const m = document.createElement("div"); m.id = "rep-modal"; m.className = "ndm-fond";
   m.innerHTML = `<div class="ndm rep-modal" role="dialog" aria-modal="true">
-    <div class="ndm-tete"><h3>🩹 Réparer les suivis mélangés</h3></div>
-    ${propositions.length ? `<p class="hint">Pour chaque ligne, le commentaire / l'action correspond mieux à l'autre demande du même N°. Coché = on échange les suivis.</p>
+    <div class="ndm-tete"><h3>🩹 Réparer les suivis mélangés — aperçu</h3></div>
+    <p class="rep-rassure">🔒 <b>Rien n'a été modifié pour l'instant.</b> Si tu valides : une sauvegarde complète est d'abord téléchargée sur ton appareil, puis seules les lignes cochées sont traitées. Chaque échange peut être annulé.</p>
+    ${aRecreer.length ? `<details class="rep-verif" open><summary>📥 ${aRecreer.length} demande(s) du fichier perdue(s) dans l'appli — seront recréées</summary><ul>${aRecreer.slice(0, 80).map(n => `<li><b>${esc(n.numero)}</b> · ${esc(n.site || "")}${n.local ? ` · ${esc(n.local)}` : ""} — ${esc(court(n.descriptif, 60))}</li>`).join("")}</ul></details>` : ""}
+    ${propositions.length ? `<p class="hint">Le commentaire / l'action correspond mieux à l'autre demande du même N°. Décoche ce qui te paraît faux.</p>
     <div class="rep-liste">${propositions.map((p, i) => `<label class="rep-item"><input type="checkbox" data-rep-i="${i}" checked>
       <span><b>${esc(p.a.numero)}</b> · ${esc(p.a.site || "")}${p.a.local ? ` · ${esc(p.a.local)}` : ""}<br>
       💬 « ${esc(court(p.suivi))} »<br>
       <span class="rep-de">❌ est sous : ${esc(court(p.a.descriptif, 60))}</span><br>
-      <span class="rep-vers">✅ va sous : ${esc(court(p.b.descriptif, 60))}</span></span></label>`).join("")}</div>` : `<p>✓ Aucun mélange évident trouvé automatiquement.</p>`}
+      <span class="rep-vers">✅ irait sous : ${esc(court(p.b.descriptif, 60))}${String(p.b.id).startsWith("sim-") ? " <small>(demande recréée)</small>" : ""}</span></span></label>`).join("")}</div>` : `<p>✓ Aucun suivi mélangé détecté automatiquement.</p>`}
     ${aVerifier.length ? `<details class="rep-verif"><summary>⚠️ ${aVerifier.length} groupe(s) de N° en double à vérifier à la main</summary><ul>${aVerifier.slice(0, 60).map(g => `<li><b>${esc(g[0].numero)}</b> · ${esc(g[0].site || "")} : ${g.map(d => esc(court(d.descriptif, 40))).join(" / ")}</li>`).join("")}</ul><p class="hint">Sur ces cartes (pastille « ⚠️ N° en double »), utilise « ↔️ Échanger » si besoin.</p></details>` : ""}
-    <div class="ndm-btns"><button type="button" class="dps-annuler" data-rep-fermer>Fermer</button>${propositions.length ? `<button type="button" class="dps-enregistrer" data-rep-ok>🩹 Appliquer la sélection</button>` : ""}</div>
+    <div class="ndm-btns">${derniere?.paires?.length ? `<button type="button" class="dps-annuler" data-rep-undo title="Défait les échanges de la dernière réparation (${new Date(derniere.le).toLocaleString("fr-FR")})">↩ Annuler la dernière réparation</button>` : ""}
+      <button type="button" class="dps-annuler" data-rep-fermer>Fermer sans rien changer</button>${propositions.length || aRecreer.length ? `<button type="button" class="dps-enregistrer" data-rep-ok>🩹 Valider la réparation</button>` : ""}</div>
   </div>`;
   document.body.append(m);
   const fermer = () => m.remove();
   m.querySelector("[data-rep-fermer]").addEventListener("click", fermer);
+  m.querySelector("[data-rep-undo]")?.addEventListener("click", async (e) => {
+    if (!confirm("Annuler la dernière réparation ? Les suivis échangés reviennent comme avant.")) return;
+    e.target.disabled = true; e.target.textContent = "⏳…"; await annuler(); fermer();
+  });
   m.querySelector("[data-rep-ok]")?.addEventListener("click", async (e) => {
     const choisies = propositions.filter((p, i) => m.querySelector(`[data-rep-i="${i}"]`)?.checked);
-    if (!choisies.length) { fermer(); return; }
+    if (!confirm(`Confirmer ?\n• Sauvegarde téléchargée d'abord\n• ${aRecreer.length} demande(s) recréée(s)\n• ${choisies.length} suivi(s) remis en place`)) return;
     e.target.disabled = true; e.target.textContent = "⏳ Réparation…";
     await appliquer(choisies); fermer();
   });
@@ -777,18 +793,36 @@ function renderTableau(container) {
   document.getElementById("demandes-reparer")?.addEventListener("click", async (e) => {
     e.target.disabled = true;
     try {
-      msg("⏳ Étape 1/2 : relecture complète du fichier (recrée les demandes perdues)…");
-      await recupererDepuisCopie(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg("⏳ " + esc(t)) });
-      msg("⏳ Étape 2/2 : recherche des suivis mélangés…");
+      // 1) Aperçu uniquement : RIEN n'est modifié tant que tu n'as pas validé.
+      msg("⏳ Lecture des demandes et du fichier (aperçu, rien n'est modifié)…");
       const toutes = await toutesLesDemandesPourOutil();
+      const sim = await recupererDepuisCopie(toutes, { simulation: true, onProgress: (t) => msg("⏳ " + esc(t)) });
+      const aRecreer = (sim?.nouvelles || []);
       const { analyserMelanges, echangerSuivi } = await import("./demandes-reparation.js");
-      const { propositions, aVerifier } = analyserMelanges(toutes);
-      msg(propositions.length ? `🩹 ${propositions.length} suivi(s) mélangé(s) trouvé(s).` : "✓ Aucun suivi mélangé détecté automatiquement.");
-      ouvrirReparation(propositions, aVerifier, async (choisies) => {
-        let n = 0;
-        for (const p of choisies) { try { await echangerSuivi(p.a, p.b, async (id, champs) => { await updateDemande(id, champs); }); n++; } catch (err) { console.error("Réparation", p.a.numero, err); } }
+      const { propositions, aVerifier } = analyserMelanges([...toutes, ...aRecreer.map((n, i) => ({ id: `sim-${i}`, ...n }))]);
+      msg(`🩹 Aperçu prêt : ${aRecreer.length} demande(s) à recréer, ${propositions.length} suivi(s) à remettre en place.`);
+      ouvrirReparation({ propositions, aVerifier, aRecreer }, async (choisies) => {
+        // 2) Sauvegarde téléchargée AVANT toute modification.
+        sauvegarderDemandes(toutes);
+        if (aRecreer.length) { msg("⏳ Recréation des demandes perdues…"); await recupererDepuisCopie(toutes, { onProgress: (t) => msg("⏳ " + esc(t)) }); }
+        const apres = aRecreer.length ? await toutesLesDemandesPourOutil() : toutes;
+        const vrai = (d) => !String(d.id).startsWith("sim-") ? apres.find(x => x.id === d.id)
+          : apres.find(x => x.numero === d.numero && (x.site || "") === (d.site || "") && (x.descriptif || "") === (d.descriptif || ""));
+        const faits = []; let n = 0;
+        for (const p of choisies) {
+          const a = vrai(p.a), b = vrai(p.b); if (!a || !b) continue;
+          try { await echangerSuivi(a, b, async (id, champs) => { await updateDemande(id, champs); }); faits.push([a.id, b.id]); n++; } catch (err) { console.error("Réparation", a.numero, err); }
+        }
+        try { localStorage.setItem("smm-reparation-derniere", JSON.stringify({ le: Date.now(), paires: faits })); } catch { /* */ }
         planifierDepotAuto();
-        msg(`✓ ${n} suivi(s) remis sur la bonne demande.`);
+        msg(`✓ ${n} suivi(s) remis sur la bonne demande${aRecreer.length ? `, ${aRecreer.length} demande(s) recréée(s)` : ""}. Sauvegarde téléchargée · annulation possible depuis le même bouton.`);
+      }, async () => {
+        // Annuler la dernière réparation : on ré-échange les mêmes paires.
+        const der = JSON.parse(localStorage.getItem("smm-reparation-derniere") || "null"); if (!der?.paires?.length) return;
+        const actuelles = await toutesLesDemandesPourOutil(); let n = 0;
+        for (const [ia, ib] of der.paires) { const a = actuelles.find(x => x.id === ia), b = actuelles.find(x => x.id === ib); if (a && b) { await echangerSuivi(a, b, async (id, champs) => { await updateDemande(id, champs); }); n++; } }
+        localStorage.removeItem("smm-reparation-derniere"); planifierDepotAuto();
+        msg(`↩ Réparation annulée (${n} échange(s) défait(s)).`);
       });
     } catch (err) { console.error("Réparation :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }

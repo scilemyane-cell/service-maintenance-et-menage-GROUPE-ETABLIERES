@@ -157,7 +157,7 @@ export function rapprocherLignes(fichier, demandesApp) {
 
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
 // des demandes que personne n'a encore touchées dans l'appli.
-export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {} } = {}) {
+export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return null;
   onProgress("Lecture de la copie SharePoint…");
@@ -188,6 +188,7 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
     }
   }
   const { nouvelles, majs } = rapprocherLignes(fichier, demandesApp);
+  if (simulation) return { nouvelles, majs, total: fichier.length }; // aperçu : rien n'est écrit
   const ops = [...nouvelles.map(n => ["set", n]), ...majs.map(([id, d]) => ["update", id, d])];
   for (let i = 0; i < ops.length; i += 400) {
     onProgress(`Enregistrement ${Math.min(i + 400, ops.length)} / ${ops.length}…`);
