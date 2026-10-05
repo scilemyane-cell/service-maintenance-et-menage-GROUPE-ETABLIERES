@@ -596,7 +596,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} ${lieesDe(l.id).length ? "a-liees" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>
@@ -642,7 +642,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button></div>` : ""}
         ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
           <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
-          <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}`;
+          <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}
+        ${perms.isEditor && tousDuSite.length > 1 ? `<details class="dps-lier dps-echanger"><summary>↔️ Suivi sur la mauvaise demande ? Échanger avec une autre</summary>
+          <p class="dps-echanger-aide">Échange le statut, le commentaire, l'intervenant, la clôture et l'action entre cette demande et celle choisie. Le descriptif, le N° et le local ne bougent pas.</p>
+          <div class="dps-lier-champs"><select data-echanger-choix><option value="">— Choisir la bonne demande —</option>${tousDuSite.filter(x => x.id !== l.id).sort((a, b) => (a.local || "").localeCompare(b.local || "", "fr", { numeric: true })).map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
+          <button type="button" class="dps-action-ok" data-echanger="${esc(l.id)}">↔️ Échanger le suivi</button></div></details>` : ""}`;
       })()}
       ${opts.sansAction ? "" : blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
@@ -751,6 +755,27 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const champs = { lieeA: principale.id, lieeANumero: principale.n };
     CHAMPS_PROPAGES.forEach(k => { if (principale[k]) champs[k] = principale[k]; });
     try { await maj(idD, champs); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
+  // Réparation : le suivi (commentaire, action…) d'une demande s'est retrouvé
+  // sous une autre → on échange les champs de traitement entre les deux.
+  const CHAMPS_SUIVI = ["statut", "intervenant", "contact", "categorieIntervenant", "dateIntervention", "dateStatut", "commentaireTech", "commentaireTechPar", "commentaireTechLe",
+    "declarePar", "declareLe", "validation", "dateValidation", "validePar", "refusPar", "refusLe", "refusMotif",
+    "actionPour", "actionPourNom", "actionTexte", "actionEcheance", "actionImmediate", "actionPar", "actionParUid", "actionLe", "actionFaiteLe", "actionFaitePar", "actionFil", "actionReponseNonLue", "mailsEnvoyes"];
+  const suiviDe = (x) => Object.fromEntries(CHAMPS_SUIVI.map(k => [k, k === "actionFil" || k === "mailsEnvoyes" ? (Array.isArray(x[k]) ? x[k] : []) : k === "actionImmediate" || k === "actionReponseNonLue" ? !!x[k] : (k === "statut" && x[k] === "Non renseigné" ? "" : (x[k] ?? ""))]));
+  container.querySelectorAll("[data-echanger]").forEach(b => b.addEventListener("click", async () => {
+    const a = lignes.find(x => x.id === b.dataset.echanger);
+    const idB = b.closest(".dps-echanger")?.querySelector("[data-echanger-choix]")?.value;
+    const c2 = lignes.find(x => x.id === idB);
+    if (!a || !c2) { window.toast?.("Choisis d'abord la bonne demande dans la liste."); return; }
+    if (!(await window.confirmDialog(`Échanger le suivi entre :\n• ${a.n} — ${(a.descr || "").slice(0, 50)}\n• ${c2.n} — ${(c2.descr || "").slice(0, 50)}\n\nStatut, commentaire, intervenant, clôture et action passent de l'une à l'autre.`, { titre: "↔️ Échanger le suivi", texteValider: "Échanger" }))) return;
+    b.disabled = true;
+    try {
+      const sa_ = suiviDe(a), sb_ = suiviDe(c2), trace = `Suivi échangé avec ${c2.n} par ${utilisateur} le ${fr(aujourdhui())}`;
+      await maj(a.id, { ...sb_, actionNonLuPour: false });
+      await maj(c2.id, { ...sa_, actionNonLuPour: false });
+      window.toast?.(`✓ Suivi échangé entre ${a.n} et ${c2.n}`, "success");
+      console.info(trace);
+    } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
   }));
   container.querySelectorAll("[data-delier]").forEach(b => b.addEventListener("click", async () => {
     if (!confirm("Détacher cette demande ? Elle redeviendra une demande à part.")) return;

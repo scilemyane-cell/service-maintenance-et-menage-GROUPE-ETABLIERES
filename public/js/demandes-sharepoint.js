@@ -98,6 +98,63 @@ const CHAMPS_DEMANDEUR = ["dateDemande", "site", "association", "type", "descrip
 // encore été touchée dans l'appli (sinon c'est l'appli qui fait foi).
 const CHAMPS_TRAITEMENT = ["statut", "intervenant", "contact", "categorieIntervenant", "dateIntervention", "dateStatut", "commentaireTech"];
 
+// Rapprochement lignes du fichier ↔ demandes de l'appli (fonction pure, testable).
+export function rapprocherLignes(fichier, demandesApp) {
+  const parNumero = new Map((demandesApp || []).map(d => [d.numero, d]));
+  const vus = {}; fichier.forEach(f => { vus[f.numero] = (vus[f.numero] || 0) + 1; });
+  const appVus = {}; (demandesApp || []).forEach(d => { appVus[d.numero] = (appVus[d.numero] || 0) + 1; });
+  const nouvelles = [], majs = [];
+  // N° en double (le même N° utilisé pour deux demandes différentes dans le
+  // fichier) : on rapproche alors par N° + début du descriptif, sinon par
+  // N° + date de demande.
+  const empreinte = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const parCle = new Map(), parNumDate = new Map();
+  (demandesApp || []).forEach(d => { const c = `${d.numero}|${empreinte(d)}`; parCle.set(c, [...(parCle.get(c) || []), d]); const k = `${d.numero}|${d.dateDemande || ""}`; parNumDate.set(k, parNumDate.has(k) ? null : d); });
+  // Une demande « travaillée » dans l'appli (commentaire, action, statut…) :
+  // son descriptif ne doit JAMAIS être remplacé par celui d'une autre ligne
+  // du fichier — sinon le suivi (commentaire, action) se retrouve sous une
+  // autre intervention.
+  const travaillee = (a) => !!(a.dateMaj || a.actionPour || a.actionFil?.length || a.commentaireTechPar || a.declarePar);
+  const dejaPris = new Set();
+  // Passe 1 : correspondances exactes (N° + début du descriptif) d'abord,
+  // pour qu'une autre ligne au même N° ne « vole » pas la demande.
+  const cibleDe = new Map();
+  fichier.forEach(f => {
+    const ambigu = vus[f.numero] > 1 || appVus[f.numero] > 1;
+    if (!ambigu) return;
+    const exactes = (parCle.get(`${f.numero}|${empreinte(f)}`) || []).filter(a => !dejaPris.has(a.id));
+    if (exactes.length) { exactes.forEach(a => dejaPris.add(a.id)); cibleDe.set(f, exactes); }
+  });
+  for (const f of fichier) {
+    const ambigu = vus[f.numero] > 1 || appVus[f.numero] > 1;
+    let cibles = cibleDe.get(f);
+    if (!cibles) {
+      if (!ambigu) cibles = parNumero.get(f.numero) ? [parNumero.get(f.numero)] : [];
+      else { const parDate = parNumDate.get(`${f.numero}|${f.dateDemande || ""}`); cibles = parDate && !dejaPris.has(parDate.id) ? [parDate] : []; }
+      // Descriptif différent d'une demande déjà travaillée : c'est une AUTRE
+      // demande (N° réutilisé / en double dans le fichier) → on la crée à part.
+      if (cibles.length === 1 && travaillee(cibles[0]) && empreinte(cibles[0]) && empreinte(f) && empreinte(cibles[0]) !== empreinte(f)) {
+        if (!(demandesApp || []).some(d => d.numero === f.numero && empreinte(d) === empreinte(f))) nouvelles.push(f);
+        continue;
+      }
+      cibles.forEach(a => dejaPris.add(a.id));
+    }
+    if (!cibles.length) {
+      // N° en double sans correspondance sûre : si une demande de l'appli a le même N° et la même date, on ne crée rien (prudence).
+      if (ambigu && (demandesApp || []).some(d => d.numero === f.numero && (d.dateDemande || "") === (f.dateDemande || "") && empreinte(d) === empreinte(f))) continue;
+      nouvelles.push(f); continue;
+    }
+    for (const a of cibles) {
+      const diff = {};
+      if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
+      const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
+      champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+      if (Object.keys(diff).length) majs.push([a.id, diff]);
+    }
+  }
+  return { nouvelles, majs };
+}
+
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
 // des demandes que personne n'a encore touchées dans l'appli.
 export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {} } = {}) {
@@ -130,38 +187,7 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
       }
     }
   }
-  const parNumero = new Map((demandesApp || []).map(d => [d.numero, d]));
-  const vus = {}; fichier.forEach(f => { vus[f.numero] = (vus[f.numero] || 0) + 1; });
-  const appVus = {}; (demandesApp || []).forEach(d => { appVus[d.numero] = (appVus[d.numero] || 0) + 1; });
-  const nouvelles = [], majs = [];
-  // N° en double (le même N° utilisé pour deux demandes différentes dans le
-  // fichier) : on rapproche alors par N° + début du descriptif, sinon par
-  // N° + date de demande.
-  const empreinte = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
-  const parCle = new Map(), parNumDate = new Map();
-  (demandesApp || []).forEach(d => { const c = `${d.numero}|${empreinte(d)}`; parCle.set(c, [...(parCle.get(c) || []), d]); const k = `${d.numero}|${d.dateDemande || ""}`; parNumDate.set(k, parNumDate.has(k) ? null : d); });
-  const dejaPris = new Set();
-  for (const f of fichier) {
-    const ambigu = vus[f.numero] > 1 || appVus[f.numero] > 1;
-    // Toutes les demandes de l'appli qui correspondent à cette ligne (normalement
-    // une seule ; plusieurs si elle a été importée deux fois par le passé).
-    const cibles = !ambigu ? (parNumero.get(f.numero) ? [parNumero.get(f.numero)] : [])
-      : (parCle.get(`${f.numero}|${empreinte(f)}`) || (parNumDate.get(`${f.numero}|${f.dateDemande || ""}`) ? [parNumDate.get(`${f.numero}|${f.dateDemande || ""}`)] : []));
-    if (!cibles.length) {
-      // N° en double sans correspondance sûre : si une demande de l'appli a le même N° et la même date, on ne crée rien (prudence).
-      if (ambigu && (demandesApp || []).some(d => d.numero === f.numero && (d.dateDemande || "") === (f.dateDemande || ""))) continue;
-      nouvelles.push(f); continue;
-    }
-    for (const a of cibles) {
-      if (dejaPris.has(a.id)) continue; // même demande de l'appli déjà rapprochée
-      dejaPris.add(a.id);
-      const diff = {};
-      if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
-      const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
-      champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
-      if (Object.keys(diff).length) majs.push([a.id, diff]);
-    }
-  }
+  const { nouvelles, majs } = rapprocherLignes(fichier, demandesApp);
   const ops = [...nouvelles.map(n => ["set", n]), ...majs.map(([id, d]) => ["update", id, d])];
   for (let i = 0; i < ops.length; i += 400) {
     onProgress(`Enregistrement ${Math.min(i + 400, ops.length)} / ${ops.length}…`);
