@@ -180,7 +180,11 @@ export async function comparerAvecFichier(demandesApp, { onProgress = () => {} }
   });
   const absentes = app.filter(d => !vus.has(d.id) && !(d.creeDansApp && !d.vuDansFichier));
   const nouvellesApp = app.filter(d => d.creeDansApp && !d.vuDansFichier);
-  return { total: fichier.length, totalApp: app.length, manquantes, statutDiff, siteDiff, absentes, nouvellesApp };
+  // N° présents plusieurs fois dans l'Excel : le flux Power Automate met à
+  // jour la PREMIÈRE ligne trouvée → les mises à jour partent sur la mauvaise.
+  const compte = {}; fichier.forEach(f => { (compte[f.numero] = compte[f.numero] || []).push(f); });
+  const doublonsFichier = Object.entries(compte).filter(([, l]) => l.length > 1).map(([numero, l]) => ({ numero, lignes: l }));
+  return { total: fichier.length, totalApp: app.length, manquantes, statutDiff, siteDiff, absentes, nouvellesApp, doublonsFichier };
 }
 
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
