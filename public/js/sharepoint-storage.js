@@ -211,6 +211,27 @@ export async function getAccessToken() {
 // [nomProduit]) plutôt que dans un unique dossier plat. Utilise une session
 // d'upload par blocs de 5 Mo (fonctionne aussi bien pour une petite photo
 // que pour un gros PDF, sans limite de taille pratique).
+// Petit fichier (< 4 Mo, ex. le JSON des mises à jour des demandes) : envoi
+// en une seule requête qui REMPLACE le fichier existant — pas de session
+// d'envoi (qui pouvait échouer en 404 si un autre envoi tournait en même
+// temps), avec 3 essais.
+export async function remplacerPetitFichier(file, token, rootFolder, filename) {
+  const driveId = await resolveDriveId(token);
+  const folder = buildFolderPath(rootFolder, []);
+  await ensureFolderPath(driveId, token, folder);
+  const chemin = `${folder}/${sanitizeFilename(filename)}`.split("/").map(encodeURIComponent).join("/");
+  let derniere = null;
+  for (let essai = 1; essai <= 3; essai++) {
+    const res = await fetchWithTimeout(`${GRAPH_ROOT}/drives/${driveId}/root:/${chemin}:/content?@microsoft.graph.conflictBehavior=replace`, {
+      method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type || "application/octet-stream" }, body: file,
+    }, 30000).catch(e => ({ ok: false, status: e?.message || "réseau" }));
+    if (res.ok) return await res.json();
+    derniere = res.status;
+    await new Promise(r => setTimeout(r, 1500 * essai));
+  }
+  throw new Error(`Échec de l'envoi du fichier (${derniere})`);
+}
+
 export async function uploadToDrive(file, token, folderSegments = [], rootFolder = ROOT_FOLDER, options = {}) {
   const { conflictBehavior = "rename", fixedFilename = null } = options;
   const driveId = await resolveDriveId(token);

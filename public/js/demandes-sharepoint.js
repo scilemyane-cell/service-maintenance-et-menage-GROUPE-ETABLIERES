@@ -11,7 +11,7 @@
 //     mises-a-jour-demandes.json (demandes modifiées dans l'appli) ; un
 //     second flux reporte ces lignes dans le fichier original (par N°).
 import { getGraphToken, getGraphTokenSilentOnly } from "./graph-auth.js";
-import { uploadToDrive, telechargerFichierDrive } from "./sharepoint-storage.js";
+import { uploadToDrive, telechargerFichierDrive, remplacerPetitFichier } from "./sharepoint-storage.js";
 import { db } from "./firebase-init.js";
 import { doc, getDoc, getDocs, query, where, setDoc, collection, writeBatch, serverTimestamp } from "./firestore-compte.js";
 
@@ -321,7 +321,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   }));
   onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)${nouvelles.length ? ` et ${nouvelles.length} nouvelle(s)` : ""}…`);
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
-  await uploadToDrive(fichier, token, [], DOSSIER, { conflictBehavior: "replace", fixedFilename: FICHIER_MAJ });
+  await remplacerPetitFichier(fichier, token, DOSSIER, FICHIER_MAJ);
   await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)] }, { merge: true });
   return { envoyees: lignes.length, ignorees: [...new Set(ignorees)] };
 }
