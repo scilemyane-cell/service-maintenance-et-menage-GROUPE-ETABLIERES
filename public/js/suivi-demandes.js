@@ -31,7 +31,7 @@ import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
-import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport } from "./demandes-sharepoint.js";
+import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
@@ -390,6 +390,28 @@ window.addEventListener("dps-cloturer", (e) => {
     window.toast?.("Complète le commentaire puis valide pour clôturer l'intervention.");
   }, 300);
 });
+// Résultat de la comparaison appli ↔ fichier (lecture seule).
+function ouvrirComparaison(r) {
+  document.getElementById("cmp-modal")?.remove();
+  const court = (t, n = 60) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
+  const fr = (x) => (x ? String(x).slice(0, 10).split("-").reverse().join("/") : "");
+  const touchee = (d) => !!(d.dateMaj || d.actionPour || d.commentaireTechPar || d.declarePar);
+  const bloc = (titre, aide, liste, ligne, ouvert = false) => `<details class="rep-verif" ${ouvert && liste.length ? "open" : ""}><summary>${titre} <b>(${liste.length})</b></summary>${aide ? `<p class="hint">${aide}</p>` : ""}${liste.length ? `<ul>${liste.slice(0, 300).map(ligne).join("")}</ul>${liste.length > 300 ? `<p class="hint">… et ${liste.length - 300} autre(s).</p>` : ""}` : "<p class='hint'>✓ Rien à signaler.</p>"}</details>`;
+  const m = document.createElement("div"); m.id = "cmp-modal"; m.className = "ndm-fond";
+  m.innerHTML = `<div class="ndm rep-modal" role="dialog" aria-modal="true">
+    <div class="ndm-tete"><h3>🔍 Appli ↔ fichier Excel</h3></div>
+    <p class="rep-rassure">🔒 Contrôle en lecture seule — rien n'a été modifié. Fichier : <b>${r.total}</b> lignes · Appli : <b>${r.totalApp}</b> demandes.</p>
+    ${bloc("📥 Dans le fichier mais pas dans l'appli", "Seront ajoutées par « Récupérer les demandes du fichier » (ou la synchro automatique).", r.manquantes, f => `<li><b>${esc(f.numero)}</b> · ${esc(f.site)} · ${fr(f.dateDemande)} — ${esc(court(f.descriptif))} <small>(${esc(f.statut)})</small></li>`, true)}
+    ${bloc("🔁 Statut différent", "« appli à jour » : modifié dans l'appli, l'Excel sera mis à jour au prochain envoi. Sinon : l'appli n'a pas encore relu le fichier.", r.statutDiff, ({ f, d }) => `<li><b>${esc(f.numero)}</b> · ${esc(d.site)} — ${esc(court(d.descriptif, 45))}<br>Fichier : <b>${esc(f.statut)}</b> · Appli : <b>${esc(d.statut || "—")}</b> ${touchee(d) ? "<small>(appli à jour)</small>" : ""}</li>`, true)}
+    ${bloc("🏷️ Site écrit différemment", "Regroupé automatiquement dans l'appli quand seule la casse ou un accent change.", r.siteDiff, ({ f, d }) => `<li><b>${esc(f.numero)}</b> — fichier « ${esc(f.site)} » · appli « ${esc(d.site)} »</li>`)}
+    ${bloc("🗂️ Dans l'appli mais plus dans le fichier", "Ligne supprimée ou N° / descriptif modifié dans l'Excel.", r.absentes, d => `<li><b>${esc(d.numero)}</b> · ${esc(d.site)} — ${esc(court(d.descriptif))} <small>(${esc(d.statut || "—")})</small></li>`)}
+    ${bloc("🆕 Créées dans l'appli, pas encore dans le fichier", "Seront ajoutées au fichier par le prochain envoi.", r.nouvellesApp, d => `<li><b>${esc(d.numero)}</b> · ${esc(d.site)} — ${esc(court(d.descriptif))}</li>`)}
+    <div class="ndm-btns"><button type="button" class="dps-annuler" data-cmp-fermer>Fermer</button></div>
+  </div>`;
+  document.body.append(m);
+  m.querySelector("[data-cmp-fermer]").addEventListener("click", () => m.remove());
+}
+
 // Sauvegarde complète des demandes téléchargée sur l'appareil (avant réparation).
 function sauvegarderDemandes(toutes) {
   try {
@@ -576,8 +598,24 @@ function ligneDepuisDoc(d) {
   };
 }
 
+// Même site écrit différemment dans le fichier (« Lycée » / « lycée », « Siège » /
+// « siège ») : regroupé sous l'orthographe la plus fréquente ; association
+// manquante (« Autres ») reprise des autres demandes du même site.
 function toutesLesLignes() {
-  return (state.demandes || []).map(ligneDepuisDoc);
+  const lignes = (state.demandes || []).map(ligneDepuisDoc);
+  const cle = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const orth = new Map(), assoc = new Map();
+  lignes.forEach(l => {
+    const k = cle(l.site); if (!orth.has(k)) orth.set(k, {}); const o = orth.get(k); o[l.site] = (o[l.site] || 0) + 1;
+    if (l.association && l.association !== "Autres") { if (!assoc.has(k)) assoc.set(k, {}); const a = assoc.get(k); a[l.association] = (a[l.association] || 0) + 1; }
+  });
+  const meilleur = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1] || (/^\p{Lu}/u.test(b[0]) ? 1 : 0) - (/^\p{Lu}/u.test(a[0]) ? 1 : 0))[0]?.[0];
+  lignes.forEach(l => {
+    const k = cle(l.site);
+    const s = meilleur(orth.get(k)); if (s) l.site = s;
+    if ((!l.association || l.association === "Autres") && assoc.has(k)) l.association = meilleur(assoc.get(k));
+  });
+  return lignes;
 }
 
 function lignesFiltrees() {
@@ -685,7 +723,7 @@ function renderTableau(container) {
     <div class="stack">
       <div class="demandes-source-note">
         📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
-        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -788,6 +826,17 @@ function renderTableau(container) {
       const r = await recupererDepuisCopie(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg(esc(t)) });
       msg(`✓ ${r.nouvelles} nouvelle(s) demande(s), ${r.misesAJour} mise(s) à jour depuis le fichier (${r.total} lignes lues).`);
     } catch (err) { console.error("Récupération demandes :", err); msg(erreurSp(err)); }
+    finally { e.target.disabled = false; }
+  });
+  document.getElementById("demandes-comparer")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      msg("⏳ Comparaison avec le fichier (lecture seule)…");
+      const r = await comparerAvecFichier(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg("⏳ " + esc(t)) });
+      if (!r) { msg(""); return; }
+      msg(`🔍 Fichier : ${r.total} lignes · appli : ${r.totalApp} demandes · ${r.manquantes.length} absente(s) de l'appli · ${r.statutDiff.length} statut(s) différent(s).`);
+      ouvrirComparaison(r);
+    } catch (err) { console.error("Comparaison :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
   document.getElementById("demandes-reparer")?.addEventListener("click", async (e) => {

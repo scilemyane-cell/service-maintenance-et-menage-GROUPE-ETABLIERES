@@ -155,6 +155,34 @@ export function rapprocherLignes(fichier, demandesApp) {
   return { nouvelles, majs };
 }
 
+// Contrôle de cohérence (lecture seule) : compare la copie du fichier Excel
+// et les demandes de l'appli, sans rien modifier.
+export async function comparerAvecFichier(demandesApp, { onProgress = () => {} } = {}) {
+  const token = await getGraphToken(); if (!token) return null;
+  onProgress("Lecture de la copie SharePoint…");
+  const buf = await telechargerFichierDrive(`${DOSSIER}/${COPIE}`, token);
+  if (!buf) throw new Error(`Copie introuvable : appsmm › ${DOSSIER} › ${COPIE}.`);
+  const XLSX = await window.chargerLib("XLSX");
+  const fichier = await demandesDepuisClasseur(XLSX.read(buf, { type: "array" }), XLSX);
+  const emp = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const app = (demandesApp || []).filter(d => !d.lieeA);
+  const parCle = new Map(), parNum = new Map();
+  app.forEach(d => { parCle.set(`${d.numero}|${emp(d)}`, d); parNum.set(d.numero, [...(parNum.get(d.numero) || []), d]); });
+  const vus = new Set();
+  const stNorm = (v) => { const t = sa(v); return t.startsWith("realis") ? "realise" : t.startsWith("annul") ? "annule" : (!t || t === "non renseigne") ? "" : t; };
+  const manquantes = [], statutDiff = [], siteDiff = [];
+  fichier.forEach(f => {
+    const d = parCle.get(`${f.numero}|${emp(f)}`) || ((parNum.get(f.numero) || []).length === 1 ? parNum.get(f.numero)[0] : null);
+    if (!d) { manquantes.push(f); return; }
+    vus.add(d.id);
+    if (stNorm(f.statut) !== stNorm(d.statut)) statutDiff.push({ f, d });
+    if (sa(f.site) !== sa(d.site)) siteDiff.push({ f, d });
+  });
+  const absentes = app.filter(d => !vus.has(d.id) && !(d.creeDansApp && !d.vuDansFichier));
+  const nouvellesApp = app.filter(d => d.creeDansApp && !d.vuDansFichier);
+  return { total: fichier.length, totalApp: app.length, manquantes, statutDiff, siteDiff, absentes, nouvellesApp };
+}
+
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
 // des demandes que personne n'a encore touchées dans l'appli.
 export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false } = {}) {
