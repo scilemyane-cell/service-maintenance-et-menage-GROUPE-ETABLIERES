@@ -214,7 +214,33 @@ function nomsPropres(t) {
   return t;
 }
 
+// Texte tapé TOUT EN MAJUSCULES : le correcteur ne corrige pas les mots en
+// capitales (pris pour des sigles) → on repasse en minuscules (phrase normale)
+// en gardant les sigles connus (VMC, AGA…) et les références (N°, codes).
+function sortirDesMajuscules(texte) {
+  const lettres = texte.replace(/[^\p{L}]/gu, ""), maj = lettres.replace(/[^\p{Lu}]/gu, "");
+  if (lettres.length < 8 || maj.length / lettres.length < 0.7) return texte;
+  return texte.toLowerCase()
+    .replace(/[\p{L}\d'’-]+/gu, (m) => (/\d/.test(m) || PROTEGES.has(sansAccent(m)) && m.length <= 4 ? m.toUpperCase() : m))
+    .replace(/(^|[.!?]\s+)(\p{Ll})/gu, (x, a, c) => a + c.toUpperCase());
+}
+// « intervention prévu » → « intervention prévue » (participes irréguliers courants).
+const IRREGULIERS = { prevu: "prévu", prevus: "prévu", fait: "fait", faits: "fait", mis: "mis", remis: "remis", pris: "pris", repris: "repris", recu: "reçu", recus: "reçu", vu: "vu", vus: "vu" };
+function accordIrreguliers(texte) {
+  return texte.replace(/([\p{L}'’-]+)(\s+)(pr[ée]vus?|re[çc]us?)\b/giu, (tout, nom, esp, part) => {
+    const base = IRREGULIERS[sansAccent(part)]; if (!base) return tout;
+    const n = nom.toLowerCase(), pl = /[sx]$/.test(n) && !["devis", "prix", "choix", "travaux"].includes(n) || n === "travaux";
+    const sing = pl ? n.replace(/[sx]$/, "") : n;
+    if (["le", "la", "les", "l", "un", "une", "est", "sont", "a", "ont", "pas", "bien", "mal"].includes(sansAccent(sing))) return tout;
+    const fem = !MASCULINS_MOTS.has(sing) && (FEMININS_MOTS.has(sing) || FEMININS.test(sing));
+    let r = base + (fem ? "e" : "") + (pl ? "s" : "");
+    if (part[0] === part[0].toUpperCase() && part !== part.toLowerCase()) r = r.charAt(0).toUpperCase() + r.slice(1);
+    return nom + esp + r;
+  });
+}
+
 export async function corrigerOrthographe(texte) {
+  texte = sortirDesMajuscules(texte);
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
   try {
     const res = await fetch("https://api.languagetool.org/v2/check", {
@@ -236,6 +262,7 @@ export async function corrigerOrthographe(texte) {
     });
     out = nomsPropres(out);
     out = accordParticipes(out);
+    out = accordIrreguliers(out);
     out = out.replace(/\s+([,.])/g, "$1").replace(/^\s*(\p{Ll})/u, (x, c) => c.toUpperCase()).trim();
     if (out && !/[.!?…]$/.test(out)) out += ".";
     return out;
