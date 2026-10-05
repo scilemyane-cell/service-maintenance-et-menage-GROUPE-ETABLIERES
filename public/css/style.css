@@ -2795,3 +2795,10 @@ body.clo-ouvert{overflow:hidden}
 .rep-de{color:#a3122a}.rep-vers{color:#1b7a3d;font-weight:700}
 .rep-verif{margin:8px 0;font-size:13px}.rep-verif li{margin:3px 0}
 .rep-rassure{background:#e9f7ef;border:1px solid #bfe3cb;border-radius:10px;padding:8px 10px;font-size:13px;color:#155c33}
+.dps-trouvees{background:var(--panel,#fff);border:1px solid var(--border,#d9dee7);border-radius:14px;padding:12px}
+.dps-trouvees h3{margin:0 0 8px;font-size:15px}
+.dps-trouvees-liste{display:grid;gap:6px}
+.dps-trouvee{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;text-align:left;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border,#d9dee7);border-radius:10px;background:transparent;color:inherit;cursor:pointer}
+.dps-trouvee em{font-style:normal;font-weight:700;font-size:12px;color:#8a5a00;white-space:nowrap}
+.dps-trouvee em.fini{color:#1b7a3d}
+@media (max-width:560px){.dps-trouvee{grid-template-columns:auto 1fr}.dps-trouvee em{grid-column:1/-1}}

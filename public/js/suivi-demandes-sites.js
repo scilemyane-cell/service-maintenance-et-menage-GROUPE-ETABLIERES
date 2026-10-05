@@ -515,12 +515,20 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div class="dps-cartes">${av.map(l => carteValidation(l)).join("")}</div>
       </section>` : ""; })() : ""}
       <div class="dps-barre">
-        <label class="dps-recherche"><span>🔎</span><input id="dps-q" type="search" placeholder="Rechercher un site…" value="${esc(st.q)}"></label>
+        <label class="dps-recherche"><span>🔎</span><input id="dps-q" type="search" placeholder="Rechercher un site, un N° (SG-623) ou un mot…" value="${esc(st.q)}"></label>
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
         ${perms.isEditor && techs.length ? `<button type="button" class="dps-gerer-affect" id="dps-gerer-affect">👷 Attribuer des sites…</button>` : ""}
         ${!estTech && techs.length ? `<label class="dps-tech-filtre">👷<select id="dps-tech"><option value="">Tous les techniciens</option>${techs.map(t => `<option value="${esc(t.uid)}" ${st.tech === t.uid ? "selected" : ""}>${esc(t.nom || t.email)} (${(n => `${n} site${n > 1 ? "s" : ""}`)(Object.values(aff.data).filter(l => l.includes(t.uid)).length)})</option>`).join("")}</select></label>` : ""}
         <label class="dps-case"><input type="checkbox" id="dps-traitees" ${st.voirTraitees ? "checked" : ""}> Sites sans demande en attente</label>
       </div>
+      ${q.length >= 3 ? (() => {
+        // Recherche aussi dans les demandes (N°, descriptif, local), même traitées ou reliées.
+        const trouvees = lignes.filter(l => sa(l.n).includes(q) || sa(l.descr).includes(q) || sa(l.local).includes(q)).slice(0, 30);
+        const etat = (l) => l.lieeA ? `🔗 doublon de ${esc(l.lieeANumero || "?")}` : TRAITE(l.statut) ? `✓ ${esc(l.statut)}` : EN_ATTENTE_VALID(l.statut) ? "⏳ à valider" : `à traiter · ${esc(l.statut)}`;
+        return `<section class="dps-trouvees"><h3>📄 Demandes trouvées <small>${trouvees.length}${trouvees.length === 30 ? "+" : ""}</small></h3>
+          ${trouvees.length ? `<div class="dps-trouvees-liste">${trouvees.map(l => `<button type="button" class="dps-trouvee" data-ouvrir-dem="${esc(l.id)}" data-ouvrir-site="${esc(l.site)}"><b>${esc(l.n)}</b><span>${esc(l.site)}${l.local ? ` · ${esc(l.local)}` : ""} — ${esc((l.descr || "").slice(0, 70))}</span><em class="${TRAITE(l.statut) || l.lieeA ? "fini" : ""}">${etat(l)}</em></button>`).join("")}</div>`
+          : `<p class="dps-vide">❌ Aucune demande « ${esc(st.q.trim())} » dans l'appli${/^[a-z]{1,4}-?\d+$/i.test(st.q.trim()) ? " : elle n'a pas encore été récupérée du fichier Excel (onglet Tableau › « 📥 Récupérer les demandes du fichier »)" : ""}.</p>`}</section>`;
+      })() : ""}
       ${attribues.length ? `
       <section class="dps-favoris dps-attribues">
         <h3>👷 Mes sites attribués <small>${attribues.reduce((t, s) => t + s.ouvertes, 0)} demande(s) à traiter</small>${(n => n ? `<span class="dps-pastille nouv">🆕 ${n} nouvelle${n > 1 ? "s" : ""} demande${n > 1 ? "s" : ""}</span>` : "")(attribues.reduce((t, s) => t + (s.nouvelles || 0), 0))}</h3>
@@ -552,6 +560,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelector("#dps-tech")?.addEventListener("change", (e) => { st.tech = e.target.value; rerender(); });
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
+    container.querySelectorAll("[data-ouvrir-dem]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.ouvrirSite; st.q = ""; st.vuAvant = null; st.focusId = b.dataset.ouvrirDem; rerender(); container.scrollIntoView({ block: "start" }); }));
     container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" }); }));
     brancherValidation();
     brancherNouvelle();
