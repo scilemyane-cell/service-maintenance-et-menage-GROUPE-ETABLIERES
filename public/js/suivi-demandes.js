@@ -604,7 +604,8 @@ function ligneDepuisDoc(d) {
 // manquante (« Autres ») reprise des autres demandes du même site.
 function toutesLesLignes() {
   const lignes = (state.demandes || []).map(ligneDepuisDoc);
-  const cle = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  // Clé sans accents, majuscules, espaces ni ponctuation : « RS- Le Mail » = « RS - Le Mail ».
+  const cle = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const orth = new Map(), assoc = new Map();
   lignes.forEach(l => {
     const k = cle(l.site); if (!orth.has(k)) orth.set(k, {}); const o = orth.get(k); o[l.site] = (o[l.site] || 0) + 1;

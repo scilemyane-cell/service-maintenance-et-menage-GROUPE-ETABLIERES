@@ -56,7 +56,9 @@ function suivreAffectations() {
   if (aff.abonne) return; aff.abonne = true;
   watchAffectationsSites((d) => { aff.data = d || {}; aff.rerender?.(); });
 }
-const techsDuSite = (nom) => aff.data[nom] || [];
+// Attributions retrouvées même si le site est écrit autrement (« RS- Le Mail » / « RS - Le Mail »).
+const cleSiteAff = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const techsDuSite = (nom) => { const k = cleSiteAff(nom); return [...new Set(Object.entries(aff.data || {}).filter(([n]) => n === nom || cleSiteAff(n) === k).flatMap(([, l]) => l || []))]; };
 
 // ---------- Sites favoris ----------
 // Mêmes favoris que l'accueil / les compteurs (fiches sites), rapprochés
@@ -797,7 +799,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const actuels = techsDuSite(st.site), id = b.dataset.affect;
     const nouveaux = actuels.includes(id) ? actuels.filter(x => x !== id) : [...actuels, id];
     b.disabled = true;
-    try { await saveAffectationSite(st.site, nouveaux); }
+    try {
+      await saveAffectationSite(st.site, nouveaux);
+      // Variantes d'écriture du même site : on les vide (l'attribution est désormais sous le nom affiché).
+      for (const n of Object.keys(aff.data || {})) if (n !== st.site && cleSiteAff(n) === cleSiteAff(st.site) && (aff.data[n] || []).length) await saveAffectationSite(n, []);
+    }
     catch (e) { console.error(e); alert("Échec de l'attribution : " + (e?.message || e)); b.disabled = false; }
   }));
 
