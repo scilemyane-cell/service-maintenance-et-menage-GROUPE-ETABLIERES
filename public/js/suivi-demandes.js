@@ -390,6 +390,33 @@ window.addEventListener("dps-cloturer", (e) => {
     window.toast?.("Complète le commentaire puis valide pour clôturer l'intervention.");
   }, 300);
 });
+// Fenêtre de réparation : propositions cochées par défaut + groupes à vérifier.
+function ouvrirReparation(propositions, aVerifier, appliquer) {
+  document.getElementById("rep-modal")?.remove();
+  const court = (t, n = 70) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
+  const m = document.createElement("div"); m.id = "rep-modal"; m.className = "ndm-fond";
+  m.innerHTML = `<div class="ndm rep-modal" role="dialog" aria-modal="true">
+    <div class="ndm-tete"><h3>🩹 Réparer les suivis mélangés</h3></div>
+    ${propositions.length ? `<p class="hint">Pour chaque ligne, le commentaire / l'action correspond mieux à l'autre demande du même N°. Coché = on échange les suivis.</p>
+    <div class="rep-liste">${propositions.map((p, i) => `<label class="rep-item"><input type="checkbox" data-rep-i="${i}" checked>
+      <span><b>${esc(p.a.numero)}</b> · ${esc(p.a.site || "")}${p.a.local ? ` · ${esc(p.a.local)}` : ""}<br>
+      💬 « ${esc(court(p.suivi))} »<br>
+      <span class="rep-de">❌ est sous : ${esc(court(p.a.descriptif, 60))}</span><br>
+      <span class="rep-vers">✅ va sous : ${esc(court(p.b.descriptif, 60))}</span></span></label>`).join("")}</div>` : `<p>✓ Aucun mélange évident trouvé automatiquement.</p>`}
+    ${aVerifier.length ? `<details class="rep-verif"><summary>⚠️ ${aVerifier.length} groupe(s) de N° en double à vérifier à la main</summary><ul>${aVerifier.slice(0, 60).map(g => `<li><b>${esc(g[0].numero)}</b> · ${esc(g[0].site || "")} : ${g.map(d => esc(court(d.descriptif, 40))).join(" / ")}</li>`).join("")}</ul><p class="hint">Sur ces cartes (pastille « ⚠️ N° en double »), utilise « ↔️ Échanger » si besoin.</p></details>` : ""}
+    <div class="ndm-btns"><button type="button" class="dps-annuler" data-rep-fermer>Fermer</button>${propositions.length ? `<button type="button" class="dps-enregistrer" data-rep-ok>🩹 Appliquer la sélection</button>` : ""}</div>
+  </div>`;
+  document.body.append(m);
+  const fermer = () => m.remove();
+  m.querySelector("[data-rep-fermer]").addEventListener("click", fermer);
+  m.querySelector("[data-rep-ok]")?.addEventListener("click", async (e) => {
+    const choisies = propositions.filter((p, i) => m.querySelector(`[data-rep-i="${i}"]`)?.checked);
+    if (!choisies.length) { fermer(); return; }
+    e.target.disabled = true; e.target.textContent = "⏳ Réparation…";
+    await appliquer(choisies); fermer();
+  });
+}
+
 async function toutesLesDemandesPourOutil() {
   return await lireToutesDemandes(); // outils manuels : relecture complète volontaire
 }
@@ -642,7 +669,7 @@ function renderTableau(container) {
     <div class="stack">
       <div class="demandes-source-note">
         📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
-        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -745,6 +772,25 @@ function renderTableau(container) {
       const r = await recupererDepuisCopie(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg(esc(t)) });
       msg(`✓ ${r.nouvelles} nouvelle(s) demande(s), ${r.misesAJour} mise(s) à jour depuis le fichier (${r.total} lignes lues).`);
     } catch (err) { console.error("Récupération demandes :", err); msg(erreurSp(err)); }
+    finally { e.target.disabled = false; }
+  });
+  document.getElementById("demandes-reparer")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      msg("⏳ Étape 1/2 : relecture complète du fichier (recrée les demandes perdues)…");
+      await recupererDepuisCopie(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg("⏳ " + esc(t)) });
+      msg("⏳ Étape 2/2 : recherche des suivis mélangés…");
+      const toutes = await toutesLesDemandesPourOutil();
+      const { analyserMelanges, echangerSuivi } = await import("./demandes-reparation.js");
+      const { propositions, aVerifier } = analyserMelanges(toutes);
+      msg(propositions.length ? `🩹 ${propositions.length} suivi(s) mélangé(s) trouvé(s).` : "✓ Aucun suivi mélangé détecté automatiquement.");
+      ouvrirReparation(propositions, aVerifier, async (choisies) => {
+        let n = 0;
+        for (const p of choisies) { try { await echangerSuivi(p.a, p.b, async (id, champs) => { await updateDemande(id, champs); }); n++; } catch (err) { console.error("Réparation", p.a.numero, err); } }
+        planifierDepotAuto();
+        msg(`✓ ${n} suivi(s) remis sur la bonne demande.`);
+      });
+    } catch (err) { console.error("Réparation :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
   document.getElementById("demandes-doublons-import")?.addEventListener("click", async (e) => {
