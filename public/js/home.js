@@ -542,7 +542,7 @@ function render() {
     interventionsUnsub = () => { u1(); u2(); };
   }
   // Interventions dont le technicien doit saisir ses horaires au retour.
-  const suitAstreinte = ["technicien", "super_admin", "admin", "n1"].includes(mountedUser.role);
+  const suitAstreinte = ["technicien", "super_admin", "admin", "n1"].includes(mountedUser.role) || (!!maPersonne && [...(people.n1 || []), ...(people.n2 || [])].includes(maPersonne));
   if (suitAstreinte && !aCompleterUnsub) {
     const u1 = watchInterventionsACompleter((l) => {
       interventionsACompleter = l.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe);

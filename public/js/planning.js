@@ -171,9 +171,12 @@ function cleanup() {
   if (renderAllTimer) { clearTimeout(renderAllTimer); renderAllTimer = null; }
 }
 
+const uidPose = new Set();
 export function permissions(user) {
   const isEditor = user.role === "super_admin" || user.role === "admin" || user.role === "n1";
-  const isTech = user.role === "technicien";
+  // Membre du roulement d'astreinte (ex. agent d'entretien en N2) : traité comme technicien ici.
+  const dansRoulement = !["super_admin", "admin", "n1"].includes(user.role) && (() => { try { const p = personneDuCompte(user); return !!p && [...(state.people.n1 || []), ...(state.people.n2 || [])].includes(p); } catch { return false; } })();
+  const isTech = user.role === "technicien" || dansRoulement;
   // Niveau "Lecture" réglé au cas par cas (Paramètres > Utilisateurs >
   // Gérer l'accès, sur la tuile Astreinte) pour technicien/menage/
   // mi_temps/direction : voit la tuile mais ne peut rien y modifier —
@@ -185,7 +188,7 @@ export function permissions(user) {
     lectureSeule,
     canEditNames: isEditor,
     canManageAbsences: isEditor,
-    canLogIntervention: (isEditor || isTech) && !lectureSeule,
+    canLogIntervention: (isEditor || isTech) && (!lectureSeule || dansRoulement),
     canSeeSynthese: isEditor || user.role === "direction",
     canSeeAbsencesTab: isEditor,
     canSeeInterventionsTab: isEditor || isTech,
@@ -213,7 +216,7 @@ function startListeners(container, user, tab) {
   unsubs.push(watchInterventions((i) => { state.interventions = i; scheduleRenderAll(); }));
   unsubs.push(watchTransferts((t) => { state.transferts = t; scheduleRenderAll(); }));
   unsubs.push(watchCoordonnees((c) => { state.coordonnees = c; scheduleRenderAll(); }));
-  if (tab === "coordonnees") unsubs.push(watchUsers((u) => { state.utilisateurs = u; scheduleRenderAll(); }));
+  if (tab === "coordonnees" || tab === "interventions") unsubs.push(watchUsers((u) => { state.utilisateurs = u; scheduleRenderAll(); }));
   unsubs.push(watchAssociations((a) => { state.associations = a; scheduleRenderAll(); }));
   unsubs.push(watchSitesDossiers((d) => { state.dossiersSites = d; scheduleRenderAll(); }));
   unsubs.push(watchReleves((r) => { state.releves = r; scheduleRenderAll(); }));
@@ -2351,6 +2354,15 @@ function reinitialiserFormIntervention() {
 }
 
 // L'intervention est-elle celle du compte connecté (technicien assigné) ?
+// Compte relié à une personne du planning : lien Coordonnées, sinon le nom.
+function uidDePersonne(nom) {
+  if (!nom) return "";
+  const lie = state.coordonnees?.[nom]?.uid; if (lie) return lie;
+  const n = normNomPlanning(nom), users = state.utilisateurs || [];
+  const u = users.find(x => normNomPlanning(x.nomPlanning) === n || normNomPlanning(x.nom) === n)
+    || (users.filter(x => normNomPlanning(x.nom).split(/\s+/)[0] === n.split(/\s+/)[0]).length === 1 ? users.find(x => normNomPlanning(x.nom).split(/\s+/)[0] === n.split(/\s+/)[0]) : null);
+  return u?.uid || "";
+}
 function estMonIntervention(i) {
   if (i.technicienUid && i.technicienUid === mountedUser?.uid) return true;
   const moi = personneDuCompte(mountedUser || {});
@@ -2884,6 +2896,8 @@ function renderInterventions(container, perms) {
     : [];
 
   const aCompleter = state.interventions.filter(i => i.horairesACompleter && !i.sansDeplacement && !i.supprimeLe && (perms.isEditor || estMonIntervention(i)));
+  // Intervention à compléter sans compte relié (sinon le technicien ne peut pas l'enregistrer) : on le pose.
+  if (perms.isEditor && !mountedUser.apercu) aCompleter.forEach(i => { const u = !i.technicienUid && uidDePersonne(i.technicien); if (u && !uidPose.has(i.id)) { uidPose.add(i.id); updateIntervention(i.id, { technicienUid: u }).catch(e => console.warn("technicienUid", e)); } });
   const mesACompleter = aCompleter.filter(estMonIntervention);
   // ----- Deux onglets : « Mes interventions » (saisie + les miennes) et
   // « Interventions réalisées » (historique complet, filtres, relevé). -----
@@ -2954,7 +2968,7 @@ function renderInterventions(container, perms) {
           ${(i.photos || []).length ? `<button class="ivc-b photo" data-voir-photos-interv="${i.id}">📷 ${i.photos.length} photo${i.photos.length > 1 ? "s" : ""}</button>` : ""}
           ${perms.isEditor && i.transmis && mountedUser.role === "super_admin" ? `<button class="ivc-b" data-remettre-attente="${i.id}">🔓 Débloquer</button>` : ""}
         </span>
-        <div class="iv-actions">${aCompl && (perms.isEditor || estMonIntervention(i)) && !perms.lectureSeule ? `<button class="iv-completer-btn" data-completer="${i.id}" title="Saisir l'heure de départ et de retour">🕒 Compléter</button>` : ""}${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div>
+        <div class="iv-actions">${aCompl && (perms.isEditor || estMonIntervention(i)) && (!perms.lectureSeule || estMonIntervention(i)) ? `<button class="iv-completer-btn" data-completer="${i.id}" title="Saisir l'heure de départ et de retour">🕒 Compléter</button>` : ""}${i.sansDeplacement && perms.canLogIntervention && !state.interventions.some(x => x.appelOrigineId === i.id) ? `<button class="iv-suite-btn" data-creer-deplacement="${i.id}" title="Créer l'intervention sur place qui fait suite à cet appel">🚗 Déplacement</button>` : ""}${canDelete ? `<button class="iv-ico" data-edit="${i.id}" title="Modifier">✏️</button>` : ""}${perms.isEditor ? `<button class="iv-ico" data-note-frais-ligne="${i.id}" title="Note de frais du mois">🖨️</button>` : ""}${canDelete ? `<button class="iv-ico danger" data-del="${i.id}" title="Supprimer">🗑️</button>` : ""}</div>
       </div>
     </article>
     ${ui.noteFraisPreview && ui.noteFraisPreview.declencheePar === i.id ? renderApercuNoteFrais() : ""}
@@ -3282,7 +3296,7 @@ function renderInterventions(container, perms) {
       // Horaires laissés vides à la création par le cadre d'astreinte : le
       // technicien les complètera lui-même à son retour (repos 11h).
       const horairesACompleter = !sansDeplacement && (!ui.form.heureFin || !(parseFloat(ui.form.heures) > 0));
-      const techUid = mountedUser.role === "technicien" ? mountedUser.uid : (state.coordonnees?.[ui.form.technicien]?.uid || "");
+      const techUid = uidDePersonne(ui.form.technicien) || (mountedUser.role === "technicien" ? mountedUser.uid : "");
       const payload = {
         date: ui.form.date, technicien: ui.form.technicien, association: ui.form.association, groupe: ui.form.groupe, site: ui.form.site,
         type: ui.form.type, heures: parseFloat(ui.form.heures) || 0, description: ui.form.description,

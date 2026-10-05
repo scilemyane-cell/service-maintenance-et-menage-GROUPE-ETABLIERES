@@ -13,6 +13,7 @@
   import { initTheme, cycleTheme, getStoredTheme, THEME_LABELS, getThemeModules, basculerThemeModules } from "./theme.js";
   import { watchModulesConstruction, basculerModuleConstruction } from "./modules-construction-data.js";
   import { watchUsers, updateUser } from "./users-data.js";
+  import { suivreMembresAstreinte, personneAstreinte } from "./astreinte-membres.js";
   import { db as dbMig } from "./firebase-init.js";
   import { doc as docMig, getDoc as getDocMig, setDoc as setDocMig } from "./firestore-compte.js";
   import { watchOrdreOnglets, saveOrdreOnglets } from "./ordre-onglets-data.js";
@@ -398,6 +399,7 @@
     // utilisateurs sont renvoyés vers la version validée (même lien, même QR).
     if (CANAL_TEST && user.role !== "super_admin") { window.location.replace("/app.html" + window.location.search + window.location.hash); return; }
     currentUser = user;
+    suivreMembresAstreinte(() => { try { render(); } catch (e) { /* écran pas encore prêt */ } });
     // Lien direct depuis un QR produit (scanné avec l'appareil photo du
     // téléphone, hors appli) : .../app.html?stock=ID_PRODUIT
     const stockParam = new URLSearchParams(window.location.search).get("stock");
@@ -553,6 +555,11 @@
     return liste.map((s, i) => ({ s, i })).sort((a, b) => (rang(a.s.id) - rang(b.s.id)) || (a.i - b.i)).map(x => x.s);
   }
   function categorySubtabsBrut(category, user) {
+    // Membre du roulement d'astreinte (quel que soit son rôle) : voit l'onglet
+    // Interventions comme un technicien pour compléter ses horaires.
+    if (category.id === "astreinte" && user.role !== "technicien" && !["super_admin", "admin", "n1", "direction"].includes(user.role) && personneAstreinte(user)) {
+      return category.subtabs.filter(s => s.roles.includes("technicien"));
+    }
     if (user.role === "direction") {
       if (TUILES_INTERDITES_DIRECTION.includes(category.id)) return [];
       return category.subtabs;
