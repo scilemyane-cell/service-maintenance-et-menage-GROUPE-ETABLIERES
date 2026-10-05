@@ -288,9 +288,18 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   // Seulement les demandes modifiées dans l'appli ces 7 derniers jours : le
   // flux Power Automate reste léger (quota d'actions quotidien) tout en
   // rattrapant largement un envoi manqué.
-  const depuis = Date.now() - 7 * 86400000;
+  // 10 jours : le fichier déposé est REMPLACÉ à chaque envoi et le flux
+  // Power Automate ne tourne qu'à heure fixe — une modification du vendredi
+  // doit encore y être le lundi (avant : 36 h seulement → mises à jour perdues).
+  const depuis = Date.now() - 10 * 86400000;
   const ms = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds ? d.dateMaj.seconds * 1000 : 0);
-  const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier)).map(d => ({
+  // N° porté par plusieurs demandes : le flux retrouve la ligne Excel par le
+  // N° seul et écrirait les deux suivis sur la même ligne (le dernier gagne)
+  // → on ne les envoie pas, ils sont signalés à part.
+  const compteNum = {}; (demandesApp || []).filter(d => !d.lieeA).forEach(d => { compteNum[d.numero] = (compteNum[d.numero] || 0) + 1; });
+  const ignorees = [];
+  const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier))
+    .filter(d => { if (!d.lieeA && compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
     numero: d.numero,
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation === "OUI" ? "OUI" : "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
@@ -309,8 +318,8 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)${nouvelles.length ? ` et ${nouvelles.length} nouvelle(s)` : ""}…`);
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
   await uploadToDrive(fichier, token, [], DOSSIER, { conflictBehavior: "replace", fixedFilename: FICHIER_MAJ });
-  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length }, { merge: true });
-  return { envoyees: lignes.length };
+  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)] }, { merge: true });
+  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)] };
 }
 
 export async function lireDerniereSynchro() {

@@ -887,7 +887,7 @@ function renderTableau(container) {
     e.target.disabled = true;
     try {
       const r = await deposerMisesAJour(state.demandes || [], { onProgress: (t) => msg(esc(t)) });
-      msg(`✓ Fichier des mises à jour déposé : il contient les ${r.envoyees} demande(s) modifiée(s) dans l'appli ces 7 derniers jours. Power Automate les reporte dans le fichier Excel.`);
+      msg(`✓ Fichier des mises à jour déposé : ${r.envoyees} demande(s) modifiée(s) ces 10 derniers jours. Power Automate les reportera dans l'Excel à sa prochaine exécution.${r.ignorees?.length ? ` <span style="color:var(--red)">⚠️ Non envoyées car le N° existe en double : ${esc(r.ignorees.join(", "))} — à corriger dans l'Excel (N° unique).</span>` : ""}`);
     } catch (err) { console.error("Dépôt demandes :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });

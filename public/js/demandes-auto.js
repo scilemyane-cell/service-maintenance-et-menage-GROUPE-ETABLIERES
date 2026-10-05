@@ -59,8 +59,9 @@ async function tour() {
     const msDe = (t) => (t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : 0));
     const aDeposer = toutes.some(d => msDe(d.dateMaj) > dernierDepot);
     if (aDeposer && await prendreVerrou("verrouDepot")) {
-      const depuis = Math.min(dernierDepot - 6 * 3600000, Date.now() - 36 * 3600000);
-      await deposerMisesAJour(toutes.filter(d => msDe(d.dateMaj) >= depuis), { interactif: false });
+      // Toutes les demandes : le dépôt garde lui-même les 10 derniers jours et
+      // repère les N° en double (copie locale, aucune lecture Firestore).
+      await deposerMisesAJour(toutes, { interactif: false });
     }
   } catch (e) { console.warn("Synchro auto des demandes :", e); }
   finally { enCours = false; }
