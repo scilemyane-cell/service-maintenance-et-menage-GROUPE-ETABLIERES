@@ -498,7 +498,18 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${l.declarePar ? `<span>Déclarée par <b>${esc(l.declarePar)}</b>${l.declareLe ? ` le ${fr(l.declareLe)}` : ""}</span>` : ""}
         ${l.commentaireTech ? `<span class="dps-com-lu">« ${esc(l.commentaireTech)} »${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : `<span class="dps-com-lu vide">Pas de commentaire</span>`}
       </div>
-      ${perms.isEditor ? `<div class="dps-actions">
+      ${perms.isEditor ? `<details class="dps-vf">
+        <summary>✏️ Corriger avant de valider <small>(un détail à reprendre ? inutile de refuser)</small></summary>
+        <div class="dps-vf-champs">
+          <label>Date d'intervention<input type="date" data-vf="dateIntervention" value="${esc(l.dateIntervention || "")}"></label>
+          <label>Réalisé par<input data-vf="declarePar" value="${esc(l.declarePar || "")}" placeholder="Technicien ou entreprise"></label>
+          <label>Contact / entreprise<input data-vf="intervenant" value="${esc(l.intervenant || "")}" placeholder="ex. Ronald, Écol'eau…"></label>
+          <label class="large">Commentaire<textarea data-vf="commentaireTech" rows="3" spellcheck="true" lang="fr">${esc(l.commentaireTech || "")}</textarea></label>
+        </div>
+        <div class="dps-vf-btns"><button type="button" class="dps-annuler" data-vf-enregistrer>💾 Enregistrer seulement</button></div>
+        <p class="dps-vf-aide">« ✓ Valider » ci-dessous enregistre aussi tes corrections.</p>
+      </details>
+      <div class="dps-actions">
         <button type="button" class="dps-enregistrer valider" data-dps-valider>${l.validation === "ANNULATION" ? "✓ Valider l'annulation" : "✓ Valider la réalisation"}</button>
         <button type="button" class="dps-annuler" data-dps-refuser>↩ Refuser (renvoyer au technicien)</button>
       </div>` : `<span class="dps-pastille valid">⏳ En attente de validation du superviseur</span>`}
@@ -506,11 +517,25 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     </article>`;
   const brancherValidation = () => container.querySelectorAll(".dps-carte.a-valider").forEach(c => {
     const etat = c.querySelector(".dps-etat");
+    // Corrections du superviseur (seulement les champs réellement modifiés).
+    const corrections = () => {
+      const lv = lignes.find(x => x.id === c.dataset.id) || {}, ch = {};
+      c.querySelectorAll("[data-vf]").forEach(el => { const k = el.dataset.vf, v = el.value.trim(); if (v !== String(lv[k] || "").trim()) ch[k] = v; });
+      if ("commentaireTech" in ch) { ch.commentaireTechPar = utilisateur; ch.commentaireTechLe = aujourdhui(); }
+      return ch;
+    };
+    c.querySelector("[data-vf-enregistrer]")?.addEventListener("click", async (e) => {
+      const ch = corrections(); if (!Object.keys(ch).length) { etat.textContent = "Rien n'a été modifié."; return; }
+      e.target.disabled = true; etat.textContent = "⏳ Enregistrement…";
+      try { await majP(c.dataset.id, ch); etat.textContent = "✓ Corrections enregistrées — reste à valider"; etat.className = "dps-etat ok"; }
+      catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; }
+      e.target.disabled = false;
+    });
     c.querySelector("[data-dps-valider]")?.addEventListener("click", async (e) => {
       e.target.disabled = true; etat.textContent = "⏳ Validation…";
       const lv = lignes.find(x => x.id === c.dataset.id);
       const annul = lv?.validation === "ANNULATION";
-      try { await majP(c.dataset.id, { statut: annul ? "Annulé" : "Réalisé", validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur, dateStatut: aujourdhui() }); etat.textContent = annul ? "✓ Annulation validée" : "✓ Réalisation validée"; etat.className = "dps-etat ok"; }
+      try { await majP(c.dataset.id, { ...corrections(), statut: annul ? "Annulé" : "Réalisé", validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur, dateStatut: aujourdhui() }); etat.textContent = annul ? "✓ Annulation validée" : "✓ Réalisation validée"; etat.className = "dps-etat ok"; }
       catch (err) { console.error(err); etat.textContent = "❌ Échec — réessaie"; etat.className = "dps-etat ko"; e.target.disabled = false; }
     });
     c.querySelector("[data-dps-refuser]")?.addEventListener("click", async () => {
