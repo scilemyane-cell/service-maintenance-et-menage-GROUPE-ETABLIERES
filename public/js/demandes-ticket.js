@@ -73,6 +73,10 @@ footer{margin-top:18px;font-size:10.5px;color:#777;text-align:center}
 .ed.bloc{display:block;border:1px dashed #9fb2d0}
 .ed:focus{background:#fff8d6}
 .ed:empty::before{content:attr(data-ph);color:#9aa7ba;font-style:italic}
+.capture .ed,.capture .ed.bloc{border-color:transparent}.capture .ed.bloc{border:1px solid #d5dbe5}.capture .ed:empty::before{content:""}.capture .ed:focus{background:none}
+.capture .page{box-shadow:none;margin:0}
+.barre button.copie{background:#1a4fb4}
+.barre .msg{font-weight:700;color:#1d6b35}
 @media print{
   body{background:#fff}.barre{display:none}
   .page{box-shadow:none;margin:0;padding:0;max-width:none}
@@ -81,7 +85,7 @@ footer{margin-top:18px;font-size:10.5px;color:#777;text-align:center}
   .ed:empty::before{content:""}
 }
 </style></head><body>
-<div class="barre"><button onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button><button class="sec" id="copier">📋 Copier le texte</button><span>Les zones en pointillés sont modifiables.</span></div>
+<div class="barre"><button class="copie" id="copier-img" title="Copie le ticket en image : colle-le ensuite dans ton mail (Ctrl+V ou appui long › Coller)">📋 Copier pour un mail</button><button onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button><button class="sec" id="copier">📝 Copier le texte</button><span class="aide">Les zones en pointillés sont modifiables.</span></div>
 <div class="page">
 <header>
   <img src="${logo}" alt="Groupe Établières">
@@ -129,6 +133,30 @@ ${ed(esc(DELAIS[urg] || "Dans les meilleurs délais"))}
 <footer>Groupe Établières — Service Maintenance · Réf. ${esc(l.n)}</footer>
 </div>
 <script>
+// Outil de capture chargé en arrière-plan (sans bloquer l'affichage du ticket).
+let h2c=null;
+const chargerCapture=()=>window.html2canvas?Promise.resolve():(h2c||(h2c=new Promise((ok,ko)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";const echec=()=>{h2c=null;ko(new Error("outil de capture non chargé (connexion ?)"));};const t=setTimeout(echec,15000);sc.onload=()=>{clearTimeout(t);ok();};sc.onerror=()=>{clearTimeout(t);echec();};document.head.append(sc);})));
+setTimeout(()=>chargerCapture().catch(()=>{}),300);
+// « Copier pour un mail » : le ticket est copié en IMAGE dans le presse-papiers,
+// à coller directement dans le corps du mail. Sinon, l'image est téléchargée.
+document.getElementById("copier-img").addEventListener("click",()=>{
+  const b=document.getElementById("copier-img"),page=document.querySelector(".page"),aide=document.querySelector(".barre .aide");
+  b.disabled=true;b.textContent="⏳ Préparation…";
+  const image=(async()=>{
+    await chargerCapture();
+    document.activeElement?.blur();document.body.classList.add("capture");
+    try{const c=await html2canvas(page,{scale:2,backgroundColor:"#ffffff",useCORS:true,logging:false});return await new Promise(r=>c.toBlob(r,"image/png"));}
+    finally{document.body.classList.remove("capture");}
+  })();
+  const fin=(txt)=>{b.disabled=false;b.textContent="📋 Copier pour un mail";aide.innerHTML=txt;aide.className="aide msg";};
+  const telecharger=async()=>{const bl=await image;const a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download="ticket-${esc(String(l.n).replace(/[^\w-]+/g, "_"))}.png";a.click();fin("⬇️ Image du ticket téléchargée : ajoute-la à ton mail.");};
+  try{
+    if(!navigator.clipboard?.write||!window.ClipboardItem)throw new Error("non pris en charge");
+    navigator.clipboard.write([new ClipboardItem({"image/png":image})])
+      .then(()=>fin("✓ Ticket copié ! Ouvre ton mail et colle-le (Ctrl+V, ou appui long › Coller)."))
+      .catch(e=>{console.warn(e);telecharger().catch(err=>fin("❌ "+err.message));});
+  }catch(e){telecharger().catch(err=>fin("❌ "+err.message));}
+});
 document.getElementById("copier").addEventListener("click",async()=>{
   const p=document.querySelector(".page").cloneNode(true);
   p.querySelectorAll("h2").forEach(h=>h.textContent="\\n"+h.textContent.toUpperCase());
@@ -138,7 +166,7 @@ document.getElementById("copier").addEventListener("click",async()=>{
   document.body.append(p);p.style.cssText="position:absolute;left:-9999px";
   const t=p.innerText.replace(/\\n{3,}/g,"\\n\\n").trim();p.remove();
   try{await navigator.clipboard.writeText(t);}catch(e){const ta=document.createElement("textarea");ta.value=t;document.body.append(ta);ta.select();document.execCommand("copy");ta.remove();}
-  const b=document.getElementById("copier");b.textContent="✓ Copié";setTimeout(()=>b.textContent="📋 Copier le texte",1800);
+  const b=document.getElementById("copier");b.textContent="✓ Copié";setTimeout(()=>b.textContent="📝 Copier le texte",1800);
 });
 </script>
 </body></html>`;
