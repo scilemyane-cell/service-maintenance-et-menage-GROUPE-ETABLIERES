@@ -224,10 +224,6 @@ function render() {
         </table>` : ""}
 
         <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
-        <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
-          <span>SIGNATURE AGENT</span>
-          <span>SIGNATURE + NOM ÉDUCATEUR</span>
-        </div>
         ${mentionHTML(opened) ? `<p style="font-size:9px;margin-top:28px;color:#777">${mentionHTML(opened)}</p>` : ""}
       </div>` : ""}
     </div>
