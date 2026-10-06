@@ -1,3 +1,4 @@
+import { capturerAncre, restaurerAncre } from "./ancre-scroll.js";
 import { differerSiSaisieDate } from "./saisie-dates.js";
 import {
   addDays, dateKey, sameDay, fmtLong, fmtShort, HOLIDAYS,
@@ -327,6 +328,10 @@ function renderAll() {
   if (ui.subtab === "archive-releves" && !perms.canSeeArchiveReleves) { mountedContainer.innerHTML = `<div class="placeholder-card">Accès non autorisé.</div>`; return; }
 
   mountedContainer.classList.add("ast", "sdw");
+  const ancre = capturerAncre(mountedContainer);
+  try { renderOnglet(perms); } finally { restaurerAncre(mountedContainer, ancre); }
+}
+function renderOnglet(perms) {
   if (ui.subtab === "calendrier") renderCalendar(mountedContainer, perms);
   else if (ui.subtab === "absences") renderAbsences(mountedContainer, perms);
   else if (ui.subtab === "interventions") renderInterventions(mountedContainer, perms);
