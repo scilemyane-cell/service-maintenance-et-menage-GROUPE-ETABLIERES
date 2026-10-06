@@ -55,6 +55,8 @@ const ms = (t) => (typeof t === "number" ? t : t && typeof t.toMillis === "funct
 // que le serveur ait posé l'horodatage (serverTimestamp) qui la fait
 // entrer dans l'écoute « modifiés depuis ».
 const REGISTRE = new Map();
+// Copie locale actuelle d'un document (null si inconnue).
+export function docLocal(cle, id) { return REGISTRE.get(cle)?.docs.get(id) || null; }
 export function majLocale(cle, id, champs, { remplacer = false } = {}) {
   const r = REGISTRE.get(cle);
   if (!r || !id) return;

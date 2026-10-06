@@ -5,7 +5,7 @@ import {
   collection, onSnapshot,
 } from "./firestore-compte.js";
 import { ecoutePartagee } from "./ecoute-partagee.js";
-import { ecouteDelta, majLocale } from "./cache-delta.js";
+import { ecouteDelta, majLocale, docLocal } from "./cache-delta.js";
 
 // Une fiche = un document par (site, semaine, agent).
 // id du document : `${siteId}_${weekStart}_${uid}`
@@ -33,16 +33,23 @@ function watchFichesBrut(callback) {
 
 // Traçabilité honnête : une fiche remplie après la fin de sa semaine (+3 j)
 // garde la date de cette saisie tardive (affichée sur la fiche et à l'impression).
-function marquerSaisieTardive(data) {
-  if (!data || data.saisieTardiveLe || !data.weekEnd) return data;
+// Une correction d'une fiche déjà remplie n'est pas une saisie tardive.
+const aDuContenu = (d) => !!d && (Object.values(d.cells || {}).some(Boolean) || Object.values(d.obs || {}).some(Boolean) || (d.chambres || []).length || d.observationsGenerales);
+function marquerSaisieTardive(data, avant) {
+  if (!data || !data.weekEnd) return data;
+  const d = new Date(), auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Déjà remplie auparavant (rempliLe, ou fiche existante avec du contenu) → correction.
+  const correction = !!data.rempliLe || (!data.reconstituee && aDuContenu(avant));
+  const contenu = aDuContenu(data);
+  if (contenu && !data.rempliLe) data.rempliLe = auj;
+  if (data.saisieTardiveLe || correction) return data;
   const limite = new Date(String(data.weekEnd).slice(0, 10) + "T00:00:00"); limite.setDate(limite.getDate() + 3);
-  const contenu = Object.values(data.cells || {}).some(Boolean) || Object.values(data.obs || {}).some(Boolean) || (data.chambres || []).length || data.observationsGenerales;
-  if (Date.now() > limite.getTime() && contenu) { const d = new Date(); data.saisieTardiveLe = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+  if (Date.now() > limite.getTime() && contenu) data.saisieTardiveLe = auj;
   return data;
 }
 
 export async function saveFiche(id, data) {
-  marquerSaisieTardive(data);
+  marquerSaisieTardive(data, docLocal("fiches", id));
   majLocale("fiches", id, { ...data, majLe: Timestamp.now(), supprimeLe: null });
   await setDoc(doc(db, "fiches", id), { ...data, majLe: serverTimestamp(), supprimeLe: deleteField() }, { merge: true });
 }
