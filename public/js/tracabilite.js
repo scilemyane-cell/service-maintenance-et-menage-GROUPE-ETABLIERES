@@ -48,6 +48,14 @@ function mentionHTML(f, court = false) {
   return "";
 }
 
+// Cases du planning prévu : chaque tâche quotidienne (sans fréquence
+// particulière) sur les jours où la pièce est prévue.
+function cellsPlanning(site) {
+  const c = {};
+  (site?.rooms || []).forEach((room, ri) => room.tasks.forEach((t, ti) => { if (!t.freq) room.days.forEach(d => { c[`${ri}-${ti}-${d}`] = true; }); }));
+  return c;
+}
+
 // Ouvre des fiches VIDES pour les semaines dont la fiche papier a disparu :
 // l'agent coche ensuite ce qu'il a réellement fait ; chaque fiche porte la
 // mention « reconstituée » (date, qui l'a ouverte, motif).
@@ -63,6 +71,7 @@ function ouvrirReconstitution() {
     <fieldset class="rcs-sites"><legend>Sites</legend>${sites.map(s => `<label><input type="checkbox" value="${esc(s.id)}"> ${esc(s.name)}</label>`).join("") || "<i>Aucun site</i>"}</fieldset>
     <div class="rcs-dates"><label>Du<input type="date" id="rcs-du" value="2026-09-01"></label><label>Au<input type="date" id="rcs-au" value="${finDefaut}"></label></div>
     <label>Motif<input id="rcs-motif" value="Fiche papier disparue"></label>
+    <label class="rcs-pre"><input type="checkbox" id="rcs-pre"> <span><b>Pré-cocher d'après le planning prévu</b> — les tâches prévues chaque jour sont cochées (pas celles « 1X/mois », « 2X/semaine »…). À revoir ensuite avec l'agent : décocher ce qui n'a pas été fait. La fiche indique qu'elle a été pré-cochée.</span></label>
     <div class="ndm-etat"></div>
     <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Annuler</button><button type="button" class="dps-enregistrer" id="rcs-ok">🧾 Créer les fiches à compléter</button></div>
   </div>`;
@@ -73,21 +82,22 @@ function ouvrirReconstitution() {
   fond.querySelector("#rcs-ok").addEventListener("click", async (e) => {
     const uid = fond.querySelector("#rcs-agent").value, agent = state.agents.find(a => a.uid === uid);
     const ids = [...fond.querySelectorAll(".rcs-sites input:checked")].map(i => i.value);
-    const du = fond.querySelector("#rcs-du").value, au = fond.querySelector("#rcs-au").value, motif = fond.querySelector("#rcs-motif").value.trim() || "Fiche papier disparue";
+    const pre = fond.querySelector("#rcs-pre").checked;
+    const du = fond.querySelector("#rcs-du").value, au = fond.querySelector("#rcs-au").value, motif = (fond.querySelector("#rcs-motif").value.trim() || "Fiche papier disparue") + (pre ? " — pré-cochée d'après le planning prévu, à corriger avec l'agent" : "");
     if (!agent || !ids.length || !du || !au || au < du) { etat.textContent = "Choisis l'agent, au moins un site et une période valide."; return; }
     const semaines = []; for (let d = lundi(new Date(du + "T00:00:00")); dateKey(d) <= au; d = addDays(d, 7)) semaines.push(dateKey(d));
     const aCreer = [];
     ids.forEach(sid => semaines.forEach(w => { const id = ficheId(sid, w, uid); if (!state.fiches.some(f => f.id === id)) aCreer.push({ id, sid, w }); }));
     if (!aCreer.length) { etat.textContent = "Toutes ces semaines ont déjà une fiche."; return; }
-    if (!confirm(`Créer ${aCreer.length} fiche(s) vide(s) « reconstituée » pour ${agent.nom || agent.email} ?\nL'agent devra cocher ce qu'il a réellement fait.`)) return;
+    if (!confirm(pre ? `Créer ${aCreer.length} fiche(s) « reconstituée » PRÉ-COCHÉES d'après le planning pour ${agent.nom || agent.email} ?\nÀ corriger ensuite avec l'agent (décocher ce qui n'a pas été fait).` : `Créer ${aCreer.length} fiche(s) vide(s) « reconstituée » pour ${agent.nom || agent.email} ?\nL'agent devra cocher ce qu'il a réellement fait.`)) return;
     e.target.disabled = true; etat.textContent = "⏳ Création…";
     const auj = dateKey(new Date()), par = mountedUser?.nom || mountedUser?.email || "";
     try {
       for (const x of aCreer) {
         const site = state.sites.find(s => s.id === x.sid);
         await saveFiche(x.id, { siteId: x.sid, siteName: site?.name || "", weekStart: x.w, weekEnd: dateKey(addDays(new Date(x.w + "T00:00:00"), 4)),
-          agentUid: uid, agentNom: agent.nom || agent.email, cells: {}, obs: {}, periodiques: {}, chambres: [], observationsGenerales: "", submitted: false,
-          reconstituee: { le: auj, par, motif } });
+          agentUid: uid, agentNom: agent.nom || agent.email, cells: pre ? cellsPlanning(site) : {}, obs: {}, periodiques: {}, chambres: [], observationsGenerales: "", submitted: false,
+          reconstituee: { le: auj, par, motif, ...(pre ? { preCochee: true } : {}) } });
       }
       window.toast?.(`✓ ${aCreer.length} fiche(s) à compléter créée(s)`); fond.remove();
     } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); e.target.disabled = false; }
