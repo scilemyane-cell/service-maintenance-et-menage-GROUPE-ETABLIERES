@@ -9,7 +9,7 @@ import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAffectationsSites, saveAffectationSite, saveAffectationsSites } from "./affectations-sites-data.js";
-import { watchEntreprises, saveEntreprises } from "./entreprises-data.js";
+import { abonnerEntreprises, saveEntreprises, entreprises, ficheEntreprise, cleEntreprise } from "./entreprises-data.js";
 import { watchPhrasesDemandes, savePhrasesDemandes, PHRASES_DEFAUT } from "./phrases-demandes-data.js";
 
 // ---------- Phrases types (commentaires / actions) ----------
@@ -62,13 +62,12 @@ const cleSiteAff = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u03
 const techsDuSite = (nom) => { const k = cleSiteAff(nom); return [...new Set(Object.entries(aff.data || {}).filter(([n]) => n === nom || cleSiteAff(n) === k).flatMap(([, l]) => l || []))]; };
 
 // ---------- Entreprises extérieures (prestataires) ----------
-const ent = { liste: [], abonne: false, rerender: null };
+const ent = { get liste() { return entreprises(); }, abonne: false, rerender: null };
 function suivreEntreprises() {
   if (ent.abonne) return; ent.abonne = true;
-  watchEntreprises((l) => { ent.liste = l || []; ent.rerender?.(); });
+  abonnerEntreprises(() => ent.rerender?.());
 }
-const cleEnt = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const ficheEntreprise = (nom) => ent.liste.find(e => cleEnt(e.nom) === cleEnt(nom));
+const cleEnt = cleEntreprise;
 
 // Fiche d'une entreprise (création rapide depuis une demande). Résout l'entreprise ou null.
 function ouvrirNouvelleEntreprise() {
@@ -88,7 +87,7 @@ function ouvrirNouvelleEntreprise() {
     fond.addEventListener("click", (e) => { if (e.target === fond) fermer(null); });
     fond.querySelector("#ent-ok").addEventListener("click", async (e) => {
       const v = (id) => fond.querySelector(id).value.trim();
-      const e1 = { nom: v("#ent-nom"), contact: v("#ent-contact"), metier: v("#ent-metier"), tel: v("#ent-tel"), email: v("#ent-email") };
+      const e1 = { notes: "", nom: v("#ent-nom"), contact: v("#ent-contact"), metier: v("#ent-metier"), tel: v("#ent-tel"), email: v("#ent-email") };
       if (!e1.nom) { fond.querySelector(".ndm-etat").textContent = "Indique le nom de la société."; return; }
       if (ficheEntreprise(e1.nom)) return fermer(ficheEntreprise(e1.nom));
       e.target.disabled = true; fond.querySelector(".ndm-etat").textContent = "⏳ Enregistrement…";
@@ -98,51 +97,6 @@ function ouvrirNouvelleEntreprise() {
     document.body.appendChild(fond);
     fond.querySelector("#ent-nom").focus();
   });
-}
-
-// Gestion de la liste (superviseurs) : nom, descriptif, téléphone, mail,
-// + suggestions tirées des contacts « Externe » déjà saisis sur les demandes.
-function ouvrirGestionEntreprises(lignes) {
-  let liste = ent.liste.map(e => ({ ...e }));
-  const fond = document.createElement("div"); fond.className = "ndm-fond";
-  const suggestions = () => {
-    const compte = new Map();
-    lignes.forEach(l => { const n = (l.attribueA === "ext" ? l.attribueANom : /externe/i.test(l.categorieIntervenant) ? l.intervenant : "") || ""; const k = cleEnt(n); if (k.length >= 3 && !liste.some(e => cleEnt(e.nom) === k)) { const c = compte.get(k) || { nom: n.trim(), n: 0 }; c.n++; compte.set(k, c); } });
-    return [...compte.values()].sort((a, b) => b.n - a.n).slice(0, 20);
-  };
-  const lire = () => { fond.querySelectorAll(".ent-ligne:not(.ent-entete)").forEach((r, i) => { ["nom", "contact", "metier", "tel", "email"].forEach(k => { liste[i][k] = r.querySelector(`[data-k="${k}"]`).value; }); }); };
-  const dessiner = () => {
-    const sug = suggestions();
-    fond.innerHTML = `<div class="ndm ent-gestion">
-      <div class="ndm-tete"><h3>🏢 Entreprises extérieures <small>(${liste.length})</small></h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
-      <p class="gaf-aide">La liste proposée dans « Attribuée à » sur chaque demande. Le descriptif s'affiche à côté du nom.</p>
-      <div class="ent-liste">${liste.length ? `<div class="ent-ligne ent-entete"><span>Société</span><span>Contact</span><span>Descriptif / métier</span><span>Téléphone</span><span>Mail</span><span></span></div>` : ""}${liste.map((e, i) => `
-        <div class="ent-ligne">
-          <label class="ent-champ" data-c="nom"><span>Société</span><input data-k="nom" value="${esc(e.nom)}" placeholder="Nom de la société *" aria-label="Société"></label>
-          <label class="ent-champ" data-c="contact"><span>Contact</span><input data-k="contact" value="${esc(e.contact || "")}" placeholder="Contact (personne)" aria-label="Contact"></label>
-          <label class="ent-champ" data-c="metier"><span>Descriptif / métier</span><input data-k="metier" value="${esc(e.metier || "")}" placeholder="Descriptif / métier"></label>
-          <label class="ent-champ" data-c="tel"><span>Téléphone</span><input data-k="tel" value="${esc(e.tel || "")}" placeholder="Téléphone" type="tel"></label>
-          <label class="ent-champ" data-c="email"><span>Mail</span><input data-k="email" value="${esc(e.email || "")}" placeholder="Mail" type="email"></label>
-          <button type="button" class="ent-suppr" data-suppr="${i}" title="Retirer">🗑</button>
-        </div>`).join("") || `<div class="dps-vide">Aucune entreprise pour l'instant.</div>`}</div>
-      <button type="button" class="dps-mail-btn" id="ent-ajout">➕ Ajouter une entreprise</button>
-      ${sug.length ? `<div class="ent-sug"><b>Déjà utilisées sur les demandes :</b> ${sug.map(x => `<button type="button" data-sug="${esc(x.nom)}">+ ${esc(x.nom)} <small>${x.n}</small></button>`).join("")}</div>` : ""}
-      <div class="ndm-etat"></div>
-      <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Fermer</button><button type="button" class="dps-enregistrer" id="ent-ok">💾 Enregistrer</button></div>
-    </div>`;
-    fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", () => fond.remove()));
-    fond.querySelector("#ent-ajout").addEventListener("click", () => { lire(); liste.push({ nom: "", contact: "", metier: "", tel: "", email: "" }); dessiner(); const r = fond.querySelectorAll(".ent-ligne"); r[r.length - 1]?.querySelector("input").focus(); });
-    fond.querySelectorAll("[data-suppr]").forEach(b => b.addEventListener("click", () => { lire(); liste.splice(+b.dataset.suppr, 1); dessiner(); }));
-    fond.querySelectorAll("[data-sug]").forEach(b => b.addEventListener("click", () => { lire(); liste.push({ nom: b.dataset.sug, contact: "", metier: "", tel: "", email: "" }); dessiner(); }));
-    fond.querySelector("#ent-ok").addEventListener("click", async (e) => {
-      lire(); e.target.disabled = true; fond.querySelector(".ndm-etat").textContent = "⏳ Enregistrement…";
-      try { await saveEntreprises(liste); window.toast?.("✓ Liste des entreprises enregistrée"); fond.remove(); }
-      catch (err) { console.error(err); fond.querySelector(".ndm-etat").textContent = "❌ " + (err?.message || err); e.target.disabled = false; }
-    });
-  };
-  dessiner();
-  document.body.appendChild(fond);
-  fond.addEventListener("click", (e) => { if (e.target === fond) fond.remove(); });
 }
 
 // ---------- Sites favoris ----------
@@ -529,8 +483,6 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   };
   const brancherAttrib = () => {
     container.querySelectorAll("[data-attrib]").forEach(sel => sel.addEventListener("change", () => { const l = toutesLignes.find(x => x.id === sel.dataset.attrib); if (l) attribuer(l, sel.value, sel); }));
-    container.querySelector("#dps-gerer-ent")?.addEventListener("click", () => ouvrirGestionEntreprises(toutesLignes));
-    container.querySelector("#dps-recap-ent")?.addEventListener("click", async () => { const { ouvrirRecapEntreprises } = await import("./demandes-recap-entreprises.js"); ouvrirRecapEntreprises({ lignes: toutesLignes, entreprises: ent.liste }); });
     container.querySelectorAll("[data-attrib-rapide]").forEach(b => b.addEventListener("click", () => { const [id, v] = b.dataset.attribRapide.split("|"); const l = toutesLignes.find(x => x.id === id); if (l) { b.disabled = true; attribuer(l, v, null); } }));
   };
   const q = sa(st.q.trim());
@@ -672,8 +624,6 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <label class="dps-recherche"><span>🔎</span><input id="dps-q" type="search" placeholder="Rechercher un site, un N° (SG-623) ou un mot…" value="${esc(st.q)}"></label>
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
         ${perms.isEditor && techs.length ? `<button type="button" class="dps-gerer-affect" id="dps-gerer-affect">👷 Attribuer des sites…</button>` : ""}
-        ${perms.isEditor ? `<button type="button" class="dps-gerer-affect" id="dps-gerer-ent">🏢 Entreprises extérieures…</button>` : ""}
-        ${perms.isEditor ? `<button type="button" class="dps-gerer-affect" id="dps-recap-ent">📋 Récap entreprises</button>` : ""}
         ${!estTech && techs.length ? `<label class="dps-tech-filtre">👷<select id="dps-tech"><option value="">Tous les techniciens</option>${techs.map(t => `<option value="${esc(t.uid)}" ${st.tech === t.uid ? "selected" : ""}>${esc(t.nom || t.email)} (${(n => `${n} site${n > 1 ? "s" : ""}`)(Object.values(aff.data).filter(l => l.includes(t.uid)).length)})</option>`).join("")}</select></label>` : ""}
         <label class="dps-case"><input type="checkbox" id="dps-traitees" ${st.voirTraitees ? "checked" : ""}> Sites sans demande en attente</label>
       </div>

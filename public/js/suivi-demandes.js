@@ -28,6 +28,7 @@ import { differerSiSaisieDate } from "./saisie-dates.js";
 import { esc } from "./astreinte-logic.js";
 import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
+import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
@@ -497,6 +498,15 @@ function renderVue(container) {
     return;
   }
   if (ui.vue === "tableau") return renderTableau(container);
+  if (ui.vue === "prestataires" && permsUtilisateur().isEditor) {
+    return renderPrestataires(container, state.demandes === null ? null : toutesLesLignes(), {
+      toggleHTML: toggleVueHTML(), onToggle: () => attacherToggleVue(container),
+      maj: async (id, champs) => { await updateDemande(id, champs); planifierDepotAuto(); },
+      utilisateur: identite().nom,
+      rafraichir: () => render(container),
+      ouvrirDemande: (id, site) => { ouvrirDemandeSeule(id, site); ui.vue = "sites"; ui.vueChoisie = true; render(container); container.scrollIntoView({ block: "start" }); },
+    });
+  }
   if (ui.vue === "sites") {
     const perms = permsUtilisateur();
     return renderParSite(container, state.demandes === null ? null : toutesLesLignes(), {
@@ -563,6 +573,7 @@ function toggleVueHTML() {
       <button type="button" class="demandes-vue-btn ${ui.vue === "tableau" ? "active" : ""}" data-vue="tableau">📋 Tableau des demandes</button>
       <button type="button" class="demandes-vue-btn ${ui.vue === "stats" ? "active" : ""}" data-vue="stats">📊 Statistiques</button>
       ${btnActions}
+      ${permsUtilisateur().isEditor ? `<button type="button" class="demandes-vue-btn ${ui.vue === "prestataires" ? "active" : ""}" data-vue="prestataires">🏢 Prestataires</button>` : ""}
     </div>`;
 }
 
