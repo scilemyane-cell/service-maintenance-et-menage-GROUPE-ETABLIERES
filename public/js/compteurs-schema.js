@@ -53,32 +53,47 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
   const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
   const unite = uniteValeur({ type: st.energie });
 
-  const carte = (c, niveau) => {
-    const b = brut(c), p = enfants(c.id).length ? propre(c) : null;
-    const bloque = st.lier && (st.lier === c.id || descendants(st.lier).has(c.id));
-    const cible = st.lier && !bloque;
-    return `<div class="sc-carte ${st.lier === c.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && st.lier !== c.id ? "bloque" : ""}" data-sc-id="${c.id}" style="--e:${E.couleur}">
-      <div class="sc-ic">${E.icone}</div>
-      <div class="sc-txt"><b>${esc(c.nom || E.label)}</b><small>${esc(nomCourt(c.dossierNom))}${c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
-        <span class="sc-conso">${b !== null ? `${fmt(b, b < 10 ? 2 : 0)} ${unite}<em> sur 30 j</em>` : `<em>pas encore de consommation</em>`}${p !== null ? ` · <span class="${p < 0 ? "neg" : "propre"}" title="Consommation propre = ce compteur moins ses sous-compteurs">propre ${fmt(p, Math.abs(p) < 10 ? 2 : 0)} ${unite}</span>` : ""}</span>
-        ${p !== null && p < 0 ? `<span class="sc-alerte">⚠️ Les sous-compteurs mesurent plus que ce compteur : relevés à vérifier</span>` : ""}
-      </div>
-      ${peutModifier && !st.lier ? `<div class="sc-act">
-        <button type="button" data-sc-lier="${c.id}" title="Relier ce compteur à celui qui l'alimente">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>
-        ${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}" title="Ce compteur n'est plus un sous-compteur">✂ Détacher</button>` : ""}
-      </div>` : ""}
-      ${cible ? `<div class="sc-cible-txt">↳ Cliquer ici : il alimente ${esc(liste.find(x => x.id === st.lier)?.nom || "")}</div>` : ""}
+  // Compteur dessiné comme un cadran : le niveau de liquide = part du compteur
+  // dans le réseau (100 % pour un compteur général), débit au centre.
+  const jours = 30;
+  const dial = (c, part, opts = {}) => {
+    const b = opts.virtuel ? opts.valeur : brut(c);
+    const parJour = b === null ? null : b / jours;
+    const bloque = !opts.virtuel && st.lier && (st.lier === c.id || descendants(st.lier).has(c.id));
+    const cible = !opts.virtuel && st.lier && !bloque;
+    const niveau = Math.max(6, Math.min(100, part ?? 55));
+    const vitesse = parJour ? Math.max(0.8, 6 - Math.log10(1 + parJour) * 2.2) : 0; // plus ça coule, plus le flux va vite
+    return `<div class="sx-c ${opts.virtuel ? "virtuel" : ""} ${st.lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && st.lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
+      <div class="sx-dial"><div class="sx-eau"><i></i><i></i></div>
+        <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
+        ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
+      <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}${!opts.virtuel && c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
+        <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt(b, b < 10 ? 2 : 0)} ${unite} sur ${jours} j`}</span>
+        ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
+      ${!opts.virtuel && peutModifier && !st.lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
+      ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === st.lier)?.nom || "")}</div>` : ""}
     </div>`;
   };
-  const arbre = (c, niveau = 0) => {
+  // Réseau : compteur → tuyaux animés → sous-compteurs (+ la part « propre »).
+  const reseau = (c, part = 100, racine = true) => {
     const e = enfants(c.id);
-    return `<li>${carte(c, niveau)}${e.length ? `<ul>${e.map(x => arbre(x, niveau + 1)).join("")}</ul>` : ""}</li>`;
+    if (!e.length) return dial(c, part, { racine });
+    const b = brut(c), p = propre(c);
+    const pc = (x) => b ? Math.max(0, Math.min(100, (x || 0) / b * 100)) : null;
+    const branches = e.map(x => `<div class="sx-branche">${reseau(x, pc(brut(x)), false)}</div>`).join("")
+      + `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: "Consommation propre", sous: `${nomCourt(c.dossierNom)} (hors sous-compteurs)`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`;
+    const debit = b ? b / jours : 0;
+    return `<div class="sx-net" style="--v:${debit ? Math.max(0.8, 6 - Math.log10(1 + debit) * 2.2) : 0}s">
+      <div class="sx-tete">${dial(c, part, { racine })}</div>
+      <div class="sx-tuyau ${debit ? "coule" : ""}"></div>
+      <div class="sx-enfants">${branches}</div>
+    </div>`;
   };
   const racines = liste.filter(c => !parentDe(c));
   const avecEnfants = racines.filter(c => enfants(c.id).length), seuls = racines.filter(c => !enfants(c.id).length);
 
   container.innerHTML = `
-  <div class="sc">
+  <div class="sc" style="--e:${E.couleur}">
     <div class="sc-entete">
       <button class="nav-btn" id="sc-retour">← Retour</button>
       <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui : un sous-compteur est déduit de son compteur général. La consommation « propre » d'un compteur = son index moins ses sous-compteurs.</p></div>
@@ -86,8 +101,8 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général). <button type="button" id="sc-annuler">Annuler</button></div>`
       : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur général qui l'alimente (ex. le lycée).</p>` : ""}
-    ${avecEnfants.length ? `<section class="sc-zone"><h3>Réseaux</h3>${avecEnfants.map(c => `<ul class="sc-arbre">${arbre(c)}</ul>`).join("")}</section>` : ""}
-    ${seuls.length ? `<section class="sc-zone"><h3>${avecEnfants.length ? "Compteurs indépendants" : "Compteurs (aucun lien pour l'instant)"}</h3><div class="sc-seuls">${seuls.map(c => carte(c, 0)).join("")}</div></section>` : ""}
+    ${avecEnfants.length ? `<section class="sx-zone"><h3>Réseaux <small>le niveau d'eau = part de chaque compteur · le flux s'accélère avec le débit</small></h3>${avecEnfants.map(c => `<div class="sx-scroll">${reseau(c)}</div>`).join("")}</section>` : ""}
+    ${seuls.length ? `<section class="sx-zone"><h3>${avecEnfants.length ? "Compteurs indépendants" : "Compteurs (aucun lien pour l'instant)"}</h3><div class="sx-seuls">${seuls.map(c => dial(c, null, { racine: true })).join("")}</div></section>` : ""}
     ${!liste.length ? `<p class="hint">Aucun compteur de ce type.</p>` : ""}
   </div>`;
 
@@ -101,5 +116,5 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
     catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
   };
   container.querySelectorAll("[data-sc-detacher]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); enregistrer(b.dataset.scDetacher, null); }));
-  container.querySelectorAll(".sc-carte.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
+  container.querySelectorAll(".sx-c.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
 }

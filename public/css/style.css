@@ -3057,3 +3057,61 @@ body.clo-ouvert{overflow:hidden}
 .sc-act button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:9px;padding:5px 9px;font:700 12px system-ui,sans-serif;cursor:pointer}
 .sc-cible-txt{flex-basis:100%;font-size:12px;font-weight:700;color:#1a4fb4}
 @media (max-width:600px){.sc-arbre ul{margin-left:10px;padding-left:12px}.sc-arbre ul>li::before{left:-12px;width:10px}}
+/* ---- Schéma : cadrans et tuyaux animés ---- */
+.sx-zone{position:relative;overflow:hidden;padding:18px;border-radius:20px;color:#e6f1ff;border:1px solid rgba(80,180,255,.22);
+  background:radial-gradient(600px 240px at 0% 0%,rgba(0,190,255,.16),transparent 60%),linear-gradient(160deg,#07111f,#0b1a30 60%,#0a1426)}
+.sx-zone::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(120,190,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,190,255,.05) 1px,transparent 1px);background-size:24px 24px;pointer-events:none}
+.sx-zone>*{position:relative}
+.sx-zone h3{margin:0 0 14px;font-size:15px;color:#fff}.sx-zone h3 small{font-weight:400;color:#8fb0d4;font-size:12px;margin-left:6px}
+.sx-scroll{overflow-x:auto;padding-bottom:6px}
+.sx-net{display:flex;align-items:center;min-width:max-content}
+.sx-tuyau{width:44px;height:8px;border-radius:8px;background:rgba(120,190,255,.15);position:relative;overflow:hidden}
+.sx-enfants{position:relative;display:flex;flex-direction:column;gap:14px;padding-left:34px}
+.sx-branche{position:relative;display:flex;align-items:center}
+.sx-branche::before{content:"";position:absolute;left:-34px;width:34px;height:8px;top:calc(50% - 4px);border-radius:8px;background:rgba(120,190,255,.15)}
+.sx-branche::after{content:"";position:absolute;left:-34px;width:8px;top:-7px;bottom:-7px;background:rgba(120,190,255,.15)}
+.sx-branche:first-child::after{top:calc(50% - 4px);border-radius:8px 8px 0 0}
+.sx-branche:last-child::after{bottom:calc(50% - 4px);border-radius:0 0 8px 8px}
+.sx-branche:only-child::after{display:none}
+/* flux d'eau qui avance dans les tuyaux */
+.sx-tuyau.coule::after,.sx-net .sx-branche::before,.sx-net .sx-branche::after{background-image:repeating-linear-gradient(90deg,rgba(95,212,255,.95) 0 10px,rgba(95,212,255,.15) 10px 22px);background-size:44px 100%;animation:sx-flux var(--v,3s) linear infinite}
+.sx-net .sx-branche::after{background-image:repeating-linear-gradient(180deg,rgba(95,212,255,.95) 0 10px,rgba(95,212,255,.15) 10px 22px);background-size:100% 44px;animation-name:sx-flux-v}
+.sx-tuyau.coule::after{content:"";position:absolute;inset:0}
+@keyframes sx-flux{from{background-position:0 0}to{background-position:44px 0}}
+@keyframes sx-flux-v{from{background-position:0 0}to{background-position:0 44px}}
+/* cadran */
+.sx-c{display:flex;align-items:center;gap:12px;padding:10px 14px 10px 10px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(95,212,255,.22);min-width:270px;max-width:340px;position:relative}
+.sx-c.virtuel{border-style:dashed;background:rgba(62,240,160,.05);border-color:rgba(62,240,160,.35)}
+.sx-c.virtuel .sx-eau{--c1:#3ef0a0;--c2:#16b979}
+.sx-c.alerte{border-color:#ff5a6a;box-shadow:0 0 18px rgba(255,90,106,.35)}
+.sx-c.lie{outline:3px solid #5fd4ff}
+.sx-c.cible{cursor:pointer;border:2px dashed #5fd4ff;animation:sx-cible 1.4s ease-in-out infinite}
+@keyframes sx-cible{50%{box-shadow:0 0 22px rgba(95,212,255,.45)}}
+.sx-c.bloque{opacity:.35}
+.sx-dial{position:relative;flex:none;width:92px;height:92px;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 50% 35%,#16304f,#0a1626 70%);border:3px solid rgba(95,212,255,.55);box-shadow:inset 0 0 18px rgba(0,0,0,.6),0 0 16px rgba(95,212,255,.25)}
+.sx-eau{--c1:#5fd4ff;--c2:#2a78d6;position:absolute;left:0;right:0;bottom:0;height:var(--niv);background:linear-gradient(180deg,var(--c1),var(--c2));transition:height .8s}
+.sx-eau i{position:absolute;left:-100%;width:300%;height:14px;top:-7px;background:radial-gradient(14px 8px at 50% 100%,var(--c1) 98%,transparent) 0 0/28px 14px repeat-x;opacity:.9;animation:sx-vague 3.5s linear infinite}
+.sx-eau i+i{opacity:.5;top:-5px;animation-duration:5s;animation-direction:reverse;background-position:14px 0}
+@keyframes sx-vague{from{transform:translateX(0)}to{transform:translateX(28px)}}
+.sx-centre{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.sx-centre b{font:800 19px system-ui,sans-serif;color:#fff}.sx-centre small{font:600 9.5px system-ui,sans-serif;color:#e0f2ff}
+.sx-part{position:absolute;top:6px;left:50%;transform:translateX(-50%);font:800 10px system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.45);padding:1px 6px;border-radius:999px}
+.sx-nom{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sx-nom b{color:#fff;font-size:14px}.sx-nom small{color:#8fb0d4;font-size:12px}
+.sx-tot{font-size:12px;color:#cfe1f5}.sx-al{font-size:11.5px;color:#ff8f9a}
+.sx-act{position:absolute;right:8px;bottom:8px;display:flex;gap:4px}
+.sx-act button{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#dcecff;border-radius:8px;padding:3px 8px;font:700 11px system-ui,sans-serif;cursor:pointer}
+.sx-cible{position:absolute;right:10px;bottom:6px;font-size:11px;font-weight:800;color:#5fd4ff}
+.sx-seuls{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.sx-seuls .sx-c{max-width:none}
+@media (max-width:700px){
+  .sx-net{flex-direction:column;align-items:flex-start;min-width:0}
+  .sx-tuyau{width:8px;height:28px;margin-left:46px}
+  .sx-tuyau.coule::after{background-image:repeating-linear-gradient(180deg,rgba(95,212,255,.95) 0 10px,rgba(95,212,255,.15) 10px 22px);background-size:100% 44px;animation-name:sx-flux-v}
+  .sx-enfants{margin-left:46px;padding-left:22px}
+  .sx-branche::before{left:-22px;width:22px}
+  .sx-branche::after{left:-22px}
+  .sx-branche:first-child::after{top:-14px;border-radius:0}
+  .sx-c{min-width:0;max-width:none;width:100%}
+}
+@media (prefers-reduced-motion:reduce){.sx-eau i,.sx-tuyau::after,.sx-branche::before,.sx-branche::after,.sx-c.cible{animation:none!important}}
