@@ -499,7 +499,6 @@ function renderInterne() {
       </div>
 
       ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Fiche marquée comme terminée pour cette semaine</div>` : ""}
-      ${data.copieDe ? `<div class="stat-chip" style="width:fit-content;background:#eef2ff;color:#33449a">📋 Pré-remplie à partir de la semaine du ${fmtShort(new Date(data.copieDe.semaine))} — vérifie et décoche ce qui n'a pas été fait.</div>` : ""}
       ${(() => {
         // Super admin : reprendre le remplissage de la semaine précédente (même site, même agent), puis corriger.
         if (mountedUser?.role !== "super_admin" || Object.values(data.cells || {}).some(Boolean)) return "";
