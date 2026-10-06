@@ -499,6 +499,13 @@ function renderInterne() {
       </div>
 
       ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Fiche marquée comme terminée pour cette semaine</div>` : ""}
+      ${data.copieDe ? `<div class="stat-chip" style="width:fit-content;background:#eef2ff;color:#33449a">📋 Pré-remplie à partir de la semaine du ${fmtShort(new Date(data.copieDe.semaine))} — vérifie et décoche ce qui n'a pas été fait.</div>` : ""}
+      ${(() => {
+        // Super admin : reprendre le remplissage de la semaine précédente (même site, même agent), puis corriger.
+        if (mountedUser?.role !== "super_admin" || Object.values(data.cells || {}).some(Boolean)) return "";
+        const prec = state.fiches.find(f => f.id === ficheId(ui.siteId, dateKey(addDays(new Date(ui.weekStart + "T00:00:00"), -7)), data.agentUid));
+        return prec && Object.values(prec.cells || {}).some(Boolean) ? `<button type="button" class="nav-btn" id="fc-copier-prec" style="width:fit-content;border:1px dashed #33449a;background:#eef2ff;color:#33449a;font-weight:700">📋 Reprendre le remplissage de la semaine du ${fmtShort(new Date(prec.weekStart))}</button>` : "";
+      })()}
       ${data.reconstituee ? `<div class="stat-chip" style="width:fit-content;background:#fff1d6;color:#8a5a00">🧾 Fiche reconstituée (${esc(data.reconstituee.motif || "fiche papier disparue")}) — coche seulement ce qui a réellement été fait cette semaine-là.</div>` : ""}
       ${(() => {
         // Superviseur : pré-cocher d'après le planning prévu toutes les fiches reconstituées
@@ -641,6 +648,17 @@ function renderInterne() {
     setSaveStatus("saving");
     try { await sauverFiche(id, data); setSaveStatus("ok"); }
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
+  });
+  document.getElementById("fc-copier-prec")?.addEventListener("click", async (e) => {
+    const semPrec = dateKey(addDays(new Date(ui.weekStart + "T00:00:00"), -7));
+    const prec = state.fiches.find(f => f.id === ficheId(ui.siteId, semPrec, data.agentUid));
+    if (!prec) return;
+    if (!confirm(`Reprendre les cases cochées de la semaine du ${fmtShort(new Date(semPrec))} ?\n\nTu pourras ensuite décocher ce qui n'a pas été fait cette semaine. La fiche indiquera qu'elle a été pré-remplie.`)) return;
+    e.target.disabled = true;
+    data.cells = { ...(prec.cells || {}) };
+    data.copieDe = { semaine: semPrec, le: dateKey(new Date()), par: mountedUser?.nom || mountedUser?.email || "" };
+    try { await sauverFiche(id, data); render(); window.toast?.("✓ Semaine précédente reprise — à vérifier"); }
+    catch (err) { console.error(err); window.toast?.("Échec : " + (err?.message || err)); e.target.disabled = false; }
   });
   document.getElementById("fc-precocher")?.addEventListener("click", async (e) => {
     const vides = fichesReconstitueesVides(data.agentUid);

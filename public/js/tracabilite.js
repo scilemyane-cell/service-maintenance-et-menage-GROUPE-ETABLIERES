@@ -41,6 +41,10 @@ function mountInternal(container, user) {
 
 // Mention de reconstitution / saisie tardive (liste et impression).
 function mentionHTML(f, court = false) {
+  const copie = f.copieDe ? (court ? `<span class="tag" style="background:#eef2ff;color:#33449a" title="Pré-remplie à partir de la semaine du ${fmtShort(new Date(f.copieDe.semaine))}">📋 Pré-remplie</span>` : `Fiche pré-remplie le ${fmtShort(new Date(f.copieDe.le))} à partir de la semaine du ${fmtShort(new Date(f.copieDe.semaine))}${f.copieDe.par ? ` (par ${esc(f.copieDe.par)})` : ""}, puis vérifiée. `) : "";
+  return copie + mentionBase(f, court);
+}
+function mentionBase(f, court = false) {
   if (f.reconstituee) return court ? `<span class="tag" style="background:#fff1d6;color:#8a5a00" title="${esc(f.reconstituee.motif || "")}">🧾 Reconstituée</span>`
     : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.${f.saisieTardiveLe ? ` Complétée le ${fmtShort(new Date(f.saisieTardiveLe))}.` : ""}`;
   if (f.saisieTardiveLe) return court ? `<span class="tag" style="background:#eef2ff;color:#33449a" title="Remplie après la fin de la semaine">✍️ Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}</span>`
