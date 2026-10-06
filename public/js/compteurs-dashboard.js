@@ -15,7 +15,7 @@
 // (bleu) pour la période, gris pour N-1, vert = baisse, rouge = hausse.
 
 import { esc } from "./astreinte-logic.js";
-import { estEnRetard, motRetard, uniteValeur, clesIndex } from "./compteurs-data.js";
+import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve } from "./compteurs-data.js";
 
 const ENERGIES = [
   { id: "elec", label: "Électricité", couleur: "#eda100" },
@@ -38,20 +38,36 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   const parCompteur = new Map();
   releves.forEach(r => { if (!r.createdAt) return; (parCompteur.get(r.compteurId) || parCompteur.set(r.compteurId, []).get(r.compteurId)).push(r); });
   parCompteur.forEach(l => l.sort((a, b) => a.createdAt - b.createdAt));
-  const valeurAvant = (c, ms) => {
-    const liste = parCompteur.get(c.id) || [], cles = clesIndex(c);
-    let derniere = null;
-    for (const r of liste) {
-      if (r.createdAt >= ms) break;
-      let t = 0, ok = false;
-      cles.forEach(k => { if (r.illisibles?.[k]) return; const v = parseFloat(String(r.valeurs?.[k] ?? "").replace(",", ".")); if (!isNaN(v)) { t += v; ok = true; } });
-      if (ok) derniere = t;
-    }
-    return derniere;
+  // Relevés exploitables PAR INDEX (un compteur multi-tarif n'affiche souvent
+  // qu'un index à la fois : chaque index a sa propre série), chronologiques.
+  const seriesCache = new Map();
+  const series = (c) => {
+    if (seriesCache.has(c.id)) return seriesCache.get(c.id);
+    const out = clesIndex(c).map(k => (parCompteur.get(c.id) || [])
+      .map(r => [r.createdAt, r.illisibles?.[k] ? NaN : parseFloat(String(r.valeurs?.[k] ?? "").replace(",", "."))])
+      .filter(([, v]) => Number.isFinite(v)));
+    seriesCache.set(c.id, out); return out;
   };
+  // Index estimé à une date : interpolé entre les deux relevés qui l'encadrent
+  // (un relevé du 2 octobre compte donc surtout pour septembre).
+  const interpoler = (pts, ms) => {
+    for (let i = 1; i < pts.length; i++) {
+      if (ms <= pts[i][0]) { const [ta, va] = pts[i - 1], [tb, vb] = pts[i]; return tb === ta ? vb : va + (vb - va) * (ms - ta) / (tb - ta); }
+    }
+    return pts[pts.length - 1][1];
+  };
+  // Consommation entre t0 et t1 : somme des index ; bornée aux relevés connus
+  // (avant le premier ou après le dernier relevé, on ne devine rien).
   const conso = (c, t0, t1) => {
-    const a = valeurAvant(c, t0), b = valeurAvant(c, t1);
-    return a === null || b === null || b < a ? null : b - a;
+    let total = 0, ok = false;
+    series(c).forEach(pts => {
+      if (pts.length < 2) return;
+      const deb = Math.max(t0, pts[0][0]), fin = Math.min(t1, pts[pts.length - 1][0]);
+      if (fin <= deb) return;
+      const a = interpoler(pts, deb), b = interpoler(pts, fin);
+      if (b >= a) { total += b - a; ok = true; }
+    });
+    return ok ? total : null;
   };
   const somme = (liste, t0, t1) => {
     let s = 0, ok = false;
@@ -78,9 +94,13 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   const kpis = energiesPresentes.map(e => {
     const l = compteurs.filter(c => c.type === e.id);
     const v = somme(l, t0, fin), vp = somme(l, t0p, t1p);
-    return { ...e, v, vp, d: pct(v, vp), unite: uniteValeur({ type: e.id }) };
+    const spark = []; for (let i = 12; i >= 1; i--) { // 12 mois COMPLETS (le mois en cours, partiel, fausserait la tendance)
+      const d = new Date(auj.getFullYear(), auj.getMonth() - i, 1), d2 = new Date(auj.getFullYear(), auj.getMonth() - i + 1, 1); spark.push(somme(l, d.getTime(), Math.min(d2.getTime(), fin))); }
+    const connus = spark.filter(x => x !== null);
+    return { ...e, v, vp, d: pct(v, vp), unite: uniteValeur({ type: e.id }), spark, moy: connus.length ? connus.reduce((a, b) => a + b, 0) / connus.length : null };
   });
   const enRetard = compteurs.filter(estEnRetard);
+  const fen = fenetreReleve(), faitsFen = compteurs.filter(c => (c.dernierReleve?.at || 0) >= fen.debut.getTime()).length;
   const tauxAJour = compteurs.length ? Math.round(((compteurs.length - enRetard.length) / compteurs.length) * 100) : null;
 
   // ---------- Graphique mensuel (12 derniers mois, énergie choisie) ----------
@@ -173,11 +193,12 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
             <div class="pe-lab"><i style="background:${x.couleur}"></i>${x.label} · ${libPeriode}</div>
             <div class="pe-val">${fmt(x.v)}<small>${x.unite}</small></div>
             ${ecart(x.d)}<span class="pe-sous">${x.vp === null ? "pas de donnée N-1" : "vs N-1"}</span>
+            <div class="pe-kpi-spark">${sparkline(x.spark, x.couleur, 150, 34)}<span class="pe-sous">${x.moy !== null ? `≈ ${fmt(x.moy)} ${x.unite}/mois` : ""}</span></div>
           </div>`).join("")}
-        <div class="pe-carte pe-kpi">
-          <div class="pe-lab">Relevés à jour</div>
-          <div class="pe-val">${tauxAJour ?? "—"}<small>%</small></div>
-          ${enRetard.length ? `<span class="pe-delta pe-hausse">${enRetard.length} compteur${enRetard.length > 1 ? "s" : ""} ${motRetard()}</span>` : `<span class="pe-delta pe-baisse">✓ tout est à jour</span>`}
+        <div class="pe-carte pe-kpi pe-kpi-rel">
+          <div class="pe-lab">Relevés ${fen.ouverte ? "de la période en cours" : "du mois"}</div>
+          <div class="pe-rel">${anneau(compteurs.length ? Math.round(faitsFen / compteurs.length * 100) : 0)}<div><div class="pe-val">${faitsFen}<small>/ ${compteurs.length}</small></div><span class="pe-sous">${fen.libelle}</span></div></div>
+          ${enRetard.length ? `<span class="pe-delta pe-hausse">${enRetard.length} compteur${enRetard.length > 1 ? "s" : ""} ${motRetard()}</span>` : `<span class="pe-delta pe-baisse">✓ tout est relevé</span>`}
         </div>
       </div>
 
@@ -187,8 +208,8 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
             <div><h2>Consommation ${eG ? `${eG.id === "eau" ? "d'" : "de "}${eG.label.toLowerCase()}` : ""} par mois</h2><p class="pe-st">${f.ug || "Tous sites"} · ${eG ? uniteValeur({ type: eG.id }) : ""} · comparaison avec l'année précédente</p></div>
             <div class="pe-chips">${energiesPresentes.map(e => `<button data-pe-graphe="${e.id}" class="${e.id === f.energieGraphe ? "pe-on" : ""}"><i style="background:${e.couleur}"></i>${e.label}</button>`).join("")}</div>
           </div>
-          <div class="pe-legende"><span><i style="background:${BLEU}"></i>12 derniers mois</span><span><i style="background:${GRIS}"></i>Année précédente</span></div>
-          ${graphe(mois, eG ? uniteValeur({ type: eG.id }) : "")}
+          <div class="pe-legende"><span><i style="background:${eG?.couleur || BLEU}"></i>12 derniers mois</span><span><i style="background:${GRIS}"></i>Année précédente</span></div>
+          ${graphe(mois, eG ? uniteValeur({ type: eG.id }) : "", eG?.couleur)}
           <details class="pe-table-vue"><summary>Voir les valeurs</summary>
             <table><thead><tr><th>Mois</th><th class="n">Période</th><th class="n">N-1</th><th class="n">Écart</th></tr></thead>
             <tbody>${mois.map(m => `<tr><td>${esc(m.long)}</td><td class="n">${fmt(m.n)}</td><td class="n">${fmt(m.p)}</td><td class="n">${ecart(pct(m.n, m.p))}</td></tr>`).join("")}</tbody></table>
@@ -203,6 +224,21 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
             </div>`).join("")}
         </div>
       </div>
+
+      ${(() => {
+        const rows = lignes.map(l => ({ s: l.s, v: l.parE[f.energieGraphe]?.v ?? null, vp: l.parE[f.energieGraphe]?.vp ?? null })).filter(r => r.v !== null).sort((a, b) => b.v - a.v);
+        if (!rows.length || !eG) return "";
+        const max = Math.max(...rows.map(r => Math.max(r.v, r.vp || 0))) || 1, tot = rows.reduce((t, r) => t + r.v, 0);
+        return `<div class="pe-carte">
+        <div class="pe-titre-graphe"><div><h2>Qui consomme le plus ? — ${esc(eG.label)}</h2><p class="pe-st">${libPeriode} · ${uniteValeur({ type: eG.id })} · le trait gris = même période l'an dernier · clic sur un site pour l'ouvrir</p></div>
+          <div class="pe-chips">${energiesPresentes.map(e => `<button data-pe-graphe="${e.id}" class="${e.id === f.energieGraphe ? "pe-on" : ""}"><i style="background:${e.couleur}"></i>${e.label}</button>`).join("")}</div></div>
+        <div class="pe-classement">${rows.slice(0, 12).map((r, i) => { const d = pct(r.v, r.vp); return `
+          <div class="pe-cl pe-clic" data-pe-site="${r.s.id}" title="${esc(nomCourt(r.s.nom))} : ${fmt(r.v)} ${uniteValeur({ type: eG.id })}${r.vp !== null ? ` (N-1 : ${fmt(r.vp)})` : ""}">
+            <span class="pe-cl-r">${i + 1}</span><span class="pe-cl-n">${esc(nomCourt(r.s.nom))}</span>
+            <span class="pe-cl-b"><i style="width:${(r.v / max) * 100}%;background:${eG.couleur}"></i>${r.vp !== null ? `<em style="left:${(r.vp / max) * 100}%"></em>` : ""}</span>
+            <b>${fmt(r.v)}</b><small>${Math.round(r.v / tot * 100)} %</small>${ecart(d)}
+          </div>`; }).join("")}</div>
+      </div>`; })()}
 
       <div class="pe-carte">
         <h2>Détail par site</h2>
@@ -259,7 +295,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
 
 // Barres groupées (période en bleu, N-1 en gris), un seul axe, extrémités
 // arrondies ancrées sur la ligne de base ; zone de survol par mois entier.
-function graphe(mois, unite) {
+function graphe(mois, unite, couleur) {
   const W = 760, H = 280, L = 58, B = 30, T = 12;
   const vals = mois.flatMap(m => [m.n, m.p]).filter(v => v !== null);
   if (!vals.length) return `<p class="pe-muet" style="padding:40px 0;text-align:center">Pas encore assez d'historique de relevés pour tracer les consommations mensuelles.</p>`;
@@ -279,7 +315,8 @@ function graphe(mois, unite) {
   };
   mois.forEach((m, i) => {
     const x0 = L + i * cw + cw / 2 - bw - 1;
-    s += barre(x0, m.p, GRIS) + barre(x0 + bw + 2, m.n, BLEU);
+    s += barre(x0, m.p, GRIS) + barre(x0 + bw + 2, m.n, couleur || BLEU);
+    if (m.n !== null && m.n > 0) { const hy = H - B - Math.max(1, (H - T - B) * m.n / max); s += `<text x="${x0 + bw + 2 + bw / 2}" y="${hy - 4}" font-size="10" text-anchor="middle" fill="#52514e">${fmt(m.n)}</text>`; }
     s += `<text x="${L + i * cw + cw / 2}" y="${H - 10}" font-size="11" text-anchor="middle" fill="#52514e">${esc(m.label)}</text>`;
     s += `<rect class="pe-hit" data-i="${i}" x="${L + i * cw}" y="${T}" width="${cw}" height="${H - T - B}" fill="transparent"/>`;
   });
@@ -287,8 +324,14 @@ function graphe(mois, unite) {
   return `<svg viewBox="0 0 ${W} ${H}" class="pe-graphe" role="img" aria-label="Consommation mensuelle en ${esc(unite)}">${s}</svg>`;
 }
 
-function sparkline(valeurs) {
-  const W = 92, H = 26, v = valeurs.map(x => x === null ? null : x);
+function anneau(p, t = 64, ep = 8) {
+  const r = (t - ep) / 2, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, p));
+  const col = v >= 90 ? "#0ca30c" : v >= 50 ? "#eda100" : "#d03b3b";
+  return `<svg width="${t}" height="${t}" viewBox="0 0 ${t} ${t}"><circle cx="${t / 2}" cy="${t / 2}" r="${r}" fill="none" stroke="#EEF0F3" stroke-width="${ep}"/><circle cx="${t / 2}" cy="${t / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="${ep}" stroke-linecap="round" stroke-dasharray="${(v / 100) * c} ${c}" transform="rotate(-90 ${t / 2} ${t / 2})"/><text x="50%" y="50%" dy=".35em" text-anchor="middle" font-size="14" font-weight="800" fill="currentColor">${v}%</text></svg>`;
+}
+
+function sparkline(valeurs, couleur = BLEU, W = 92, H = 26) {
+  const v = valeurs.map(x => x === null ? null : x);
   const connus = v.filter(x => x !== null);
   if (connus.length < 2) return `<span class="pe-muet">—</span>`;
   const max = Math.max(...connus) || 1, min = Math.min(...connus);
@@ -296,5 +339,5 @@ function sparkline(valeurs) {
   let d = "", enCours = false;
   pts.forEach(p => { if (!p) { enCours = false; return; } d += (enCours ? " L" : " M") + p[0].toFixed(1) + "," + p[1].toFixed(1); enCours = true; });
   const dernier = [...pts].reverse().find(Boolean);
-  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="${BLEU}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${dernier[0]}" cy="${dernier[1]}" r="2.5" fill="${BLEU}"/></svg>`;
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="${couleur}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${dernier[0]}" cy="${dernier[1]}" r="2.5" fill="${couleur}"/></svg>`;
 }

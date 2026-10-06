@@ -2967,3 +2967,15 @@ body.clo-ouvert{overflow:hidden}
 .dst-col.sel text.dst-axe{font-weight:800;fill:var(--dst-ink)}
 @media (max-width:1000px){.dst-mkpis{grid-template-columns:repeat(3,minmax(0,1fr))}.dst-mgrille{grid-template-columns:1fr}}
 @media (max-width:600px){.dst-mkpis{grid-template-columns:1fr 1fr}.dst-mkpis b{font-size:22px}}
+/* Pilotage énergie : compléments */
+.pe-kpi-spark{display:flex;align-items:center;gap:8px;margin-top:8px}
+.pe-kpi-rel .pe-rel{display:flex;align-items:center;gap:12px;margin:4px 0}
+.pe-classement{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.pe-cl{display:grid;grid-template-columns:22px minmax(120px,1.1fr) minmax(0,2fr) 70px 42px 80px;gap:10px;align-items:center;font-size:13px}
+.pe-cl-r{color:#8A8D93;font-weight:700;text-align:center}
+.pe-cl-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.pe-cl-b{position:relative;height:12px;border-radius:99px;background:#EEF0F3}
+.pe-cl-b i{display:block;height:100%;border-radius:99px;min-width:3px}
+.pe-cl-b em{position:absolute;top:-3px;bottom:-3px;width:2px;background:#6b6e75;border-radius:2px}
+.pe-cl b{text-align:right}.pe-cl small{color:#8A8D93;text-align:right}
+@media (max-width:700px){.pe-cl{grid-template-columns:18px minmax(0,1fr) 60px 70px}.pe-cl-b,.pe-cl small{display:none}}
