@@ -100,6 +100,18 @@ function effectiveAgent() {
   return { uid: mountedUser.uid, nom: mountedUser.nom || mountedUser.email };
 }
 
+// Cases du planning prévu : tâches quotidiennes (sans fréquence) sur les jours où la pièce est prévue.
+function cellsPlanning(site) {
+  const c = {};
+  (site?.rooms || []).forEach((room, ri) => room.tasks.forEach((t, ti) => { if (!(typeof t === "object" && t.freq)) room.days.forEach(d => { c[`${ri}-${ti}-${d}`] = true; }); }));
+  return c;
+}
+function fichesReconstitueesVides(agentUid) {
+  const sitesDisp = new Set(state.sites.filter(s => siteDispositif(s) === ui.dispositif).map(s => s.id));
+  return state.fiches.filter(f => f.reconstituee && f.agentUid === agentUid && sitesDisp.has(f.siteId) && !Object.values(f.cells || {}).some(Boolean))
+    .sort((a, b) => String(a.weekStart).localeCompare(String(b.weekStart)));
+}
+
 function currentFiche() {
   const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
   const agent = effectiveAgent();
@@ -479,6 +491,13 @@ function render() {
 
       ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Fiche marquée comme terminée pour cette semaine</div>` : ""}
       ${data.reconstituee ? `<div class="stat-chip" style="width:fit-content;background:#fff1d6;color:#8a5a00">🧾 Fiche reconstituée (${esc(data.reconstituee.motif || "fiche papier disparue")}) — coche seulement ce qui a réellement été fait cette semaine-là.</div>` : ""}
+      ${(() => {
+        // Superviseur : pré-cocher d'après le planning prévu toutes les fiches reconstituées
+        // encore VIDES de cet agent (dispositif affiché), à corriger ensuite avec lui.
+        if (!isEditorUser(mountedUser)) return "";
+        const vides = fichesReconstitueesVides(data.agentUid);
+        return vides.length ? `<button type="button" class="nav-btn" id="fc-precocher" style="width:fit-content;border:1px dashed #b07a00;background:#fff8e6;color:#8a5a00;font-weight:700">☑ Pré-cocher d'après le planning les ${vides.length} fiche${vides.length > 1 ? "s" : ""} reconstituée${vides.length > 1 ? "s" : ""} vide${vides.length > 1 ? "s" : ""} de ${esc(data.agentNom || "cet agent")}</button>` : "";
+      })()}
 
       ${ui.vue === "jour" ? vueJourHTML(site, data) : vueSemaineHTML(site, data)}
 
@@ -613,6 +632,21 @@ function render() {
     setSaveStatus("saving");
     try { await saveFiche(id, data); setSaveStatus("ok"); }
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
+  });
+  document.getElementById("fc-precocher")?.addEventListener("click", async (e) => {
+    const vides = fichesReconstitueesVides(data.agentUid);
+    if (!vides.length) return;
+    if (!confirm(`Pré-cocher ${vides.length} fiche(s) reconstituée(s) d'après le planning prévu ?\n\nSont cochées les tâches prévues chaque jour (pas celles à fréquence 1X/mois, 2X/semaine…).\nÀ revoir ensuite avec l'agent : décocher ce qui n'a pas été fait.\nLa fiche indiquera qu'elle a été pré-cochée.`)) return;
+    e.target.disabled = true; e.target.textContent = "⏳ Pré-cochage…";
+    try {
+      for (const f of vides) {
+        const site = state.sites.find(x => x.id === f.siteId);
+        const motif = String(f.reconstituee.motif || "Fiche papier disparue").replace(/ — pré-cochée.*$/, "") + " — pré-cochée d'après le planning prévu, à corriger avec l'agent";
+        const { id: _id, majLe: _m, supprimeLe: _s, ...reste } = f;
+        await saveFiche(f.id, { ...reste, cells: cellsPlanning(site), reconstituee: { ...f.reconstituee, motif, preCochee: true, preCocheeLe: dateKey(new Date()) } });
+      }
+      window.toast?.(`✓ ${vides.length} fiche(s) pré-cochée(s) — à corriger avec l'agent`);
+    } catch (err) { console.error(err); window.toast?.("Échec : " + (err?.message || err)); e.target.disabled = false; }
   });
   document.getElementById("fc-submit").addEventListener("click", async () => {
     data.submitted = !data.submitted;
