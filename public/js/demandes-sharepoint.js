@@ -323,7 +323,9 @@ function dejaDansFichier(l, r) {
   // 13 statut, 14 date statut, 15 commentaire, 16 validation, 17 date validation, 18 validé par.
   return egalStatut(l.statut, r[13]) && egalDate(l.dateIntervention, r[12]) && egalDate(l.dateStatut, r[14])
     && egalTexte(l.categorieIntervenant, r[10]) && egalTexte(l.intervenant, r[11]) && egalTexte(l.commentaire, r[15])
-    && egalTexte(l.urgence, r[8]) && egalTexte(l.validation, r[16]) && egalDate(l.dateValidation, r[17]) && egalTexte(l.validePar, r[18]);
+    && egalTexte(l.urgence, r[8]) && egalTexte(l.validation, r[16]) && egalDate(l.dateValidation, r[17]);
+  // « Validé par » n'est pas comparé : si le flux ne remplit pas cette colonne,
+  // la demande serait renvoyée à chaque fois pour rien (il part quand même avec les autres changements).
 }
 
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
