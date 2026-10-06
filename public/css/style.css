@@ -432,6 +432,18 @@ select{ max-width:100%; }
   .print-fiche tr{ page-break-inside:avoid; break-inside:avoid; }
   .print-fiche h3{ color:#000 !important; }
 
+  /* Fiche de traçabilité ménage : A4 portrait, compacte (moins de pages). */
+  .print-trac{ border:none !important; border-radius:0 !important; padding:0 !important; }
+  .print-trac img{ height:38px !important; }
+  .print-trac > div:first-child{ margin-bottom:6px !important; }
+  .print-trac > p{ font-size:11px !important; margin:0 0 2px !important; }
+  .print-trac .trac-piece{ break-inside:avoid; page-break-inside:avoid; }
+  .print-trac .trac-titre{ font-size:10px !important; margin:7px 0 2px !important; }
+  .print-trac table{ font-size:8.5px !important; margin-bottom:2px !important; }
+  .print-trac th, .print-trac td{ padding:1px 4px !important; font-size:8.5px !important; line-height:1.25; }
+  .print-trac td.trac-coche{ font-size:11px !important; font-weight:700; }
+  .print-trac th{ background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
   /* Impression d'un QR isolé — voir printQrCard() dans qr-logo.js, qui
      clone la carte QR dans #qr-print-root (ajouté à <body>) et ajoute
      cette classe juste avant window.print(). Le reste de l'application

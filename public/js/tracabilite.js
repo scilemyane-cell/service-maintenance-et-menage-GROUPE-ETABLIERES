@@ -176,7 +176,7 @@ function render() {
         <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
       </div>
-      <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
+      <div class="print-fiche print-trac" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
           <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
         </div>
@@ -187,8 +187,10 @@ function render() {
         ${openedSite ? openedSite.rooms.map((room, ri) => {
           const dayNames = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" };
           return `
-          <p style="font-size:13px;font-weight:700;margin:16px 0 6px">${esc(room.name).toUpperCase()}</p>
+          <div class="trac-piece">
+          <p class="trac-titre" style="font-size:13px;font-weight:700;margin:16px 0 6px">${esc(room.name).toUpperCase()}</p>
           <table class="print-fiche-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
+            <colgroup><col style="width:34%">${room.days.map(() => `<col style="width:${(48 / Math.max(1, room.days.length)).toFixed(2)}%">`).join("")}<col style="width:18%"></colgroup>
             <thead><tr>
               <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">TÂCHE</th>
               ${room.days.map(d => `<th style="border:1px solid #999;padding:4px 6px;font-size:11px">${dayNames[d]}</th>`).join("")}
@@ -198,12 +200,12 @@ function render() {
               ${room.tasks.map((task, ti) => `
                 <tr>
                   <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(task.label)}${task.freq ? ` (${esc(task.freq)})` : ""}</td>
-                  ${room.days.map(d => `<td style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center">${(opened.cells && opened.cells[`${ri}-${ti}-${d}`]) ? "✓" : ""}</td>`).join("")}
+                  ${room.days.map(d => `<td class="trac-coche" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center;font-weight:700">${(opened.cells && opened.cells[`${ri}-${ti}-${d}`]) ? "✓" : ""}</td>`).join("")}
                   <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc((opened.obs && opened.obs[`${ri}-${ti}`]) || "")}</td>
                 </tr>
               `).join("")}
             </tbody>
-          </table>`;
+          </table></div>`;
         }).join("") : ""}
 
         ${opened.chambres && opened.chambres.length ? `
@@ -242,7 +244,16 @@ function render() {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
   document.getElementById("tr-reconst")?.addEventListener("click", ouvrirReconstitution);
-  document.getElementById("tr-print")?.addEventListener("click", () => { window.print(); });
+  document.getElementById("tr-print")?.addEventListener("click", () => {
+    // Fiche en A4 portrait (le reste de l'appli imprime en paysage).
+    const st = document.createElement("style");
+    st.textContent = "@page{size:A4 portrait;margin:9mm 9mm 11mm 9mm}";
+    document.head.appendChild(st);
+    const fin = () => { st.remove(); window.removeEventListener("afterprint", fin); };
+    window.addEventListener("afterprint", fin);
+    window.print();
+    setTimeout(fin, 60000);
+  });
   document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
     if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
