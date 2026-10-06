@@ -308,6 +308,16 @@ async function lignesCopieParNumero(token) {
 const egalTexte = (a, b) => sa(a).replace(/\s+/g, " ") === sa(b).replace(/\s+/g, " ");
 const egalDate = (a, b) => (versIso(a) || "") === (versIso(b) || "");
 const egalStatut = (a, b) => { const n = (v) => { const t = sa(v); return t.startsWith("realis") ? "realise" : t.startsWith("annul") ? "annule" : t; }; return n(a) === n(b); };
+// Liste des colonnes qui diffèrent (diagnostic affiché après le dépôt).
+function champsDifferents(l, r) {
+  const d = [];
+  if (!egalStatut(l.statut, r[13])) d.push("statut"); if (!egalDate(l.dateIntervention, r[12])) d.push("date intervention");
+  if (!egalDate(l.dateStatut, r[14])) d.push("date statut"); if (!egalTexte(l.categorieIntervenant, r[10])) d.push("intervenant");
+  if (!egalTexte(l.intervenant, r[11])) d.push("contact"); if (!egalTexte(l.commentaire, r[15])) d.push("commentaire");
+  if (!egalTexte(l.urgence, r[8])) d.push("urgence"); if (!egalTexte(l.validation, r[16])) d.push("validation");
+  if (!egalDate(l.dateValidation, r[17])) d.push("date validation"); if (!egalTexte(l.validePar, r[18])) d.push("validé par");
+  return d;
+}
 function dejaDansFichier(l, r) {
   // Colonnes : 8 urgence, 10 intervenant (catégorie), 11 contact, 12 date intervention,
   // 13 statut, 14 date statut, 15 commentaire, 16 validation, 17 date validation, 18 validé par.
@@ -357,7 +367,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   }));
   // Comparaison avec la copie du fichier : on retire ce qui y est déjà
   // (inutile de le réécrire) et les N° absents du fichier (le flux échouerait).
-  let dejaAJour = 0, absentsFichier = [];
+  let dejaAJour = 0, absentsFichier = []; const diffs = {}; let exemple = null;
   try {
     onProgress("Comparaison avec le fichier Excel…");
     const copie = await lignesCopieParNumero(token);
@@ -366,6 +376,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
         const rows = copie.get(String(lignes[i].numero).trim());
         if (!rows) { absentsFichier.push(lignes[i].numero); lignes.splice(i, 1); }
         else if (rows.length === 1 && dejaDansFichier(lignes[i], rows[0])) { dejaAJour++; lignes.splice(i, 1); }
+        else if (rows.length === 1) { const c = champsDifferents(lignes[i], rows[0]); c.forEach(k => { diffs[k] = (diffs[k] || 0) + 1; }); if (!exemple && c.length) exemple = { numero: lignes[i].numero, champ: c[0], app: String(({ "statut": lignes[i].statut, "date intervention": lignes[i].dateIntervention, "date statut": lignes[i].dateStatut, "intervenant": lignes[i].categorieIntervenant, "contact": lignes[i].intervenant, "commentaire": lignes[i].commentaire, "urgence": lignes[i].urgence, "validation": lignes[i].validation, "date validation": lignes[i].dateValidation, "validé par": lignes[i].validePar })[c[0]] ?? "").slice(0, 60), fichier: String(rows[0][({ "statut": 13, "date intervention": 12, "date statut": 14, "intervenant": 10, "contact": 11, "commentaire": 15, "urgence": 8, "validation": 16, "date validation": 17, "validé par": 18 })[c[0]]] ?? "").slice(0, 60) }; }
       }
     }
   } catch (e) { console.warn("Comparaison avec la copie impossible :", e); }
@@ -379,7 +390,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
   await remplacerPetitFichier(fichier, token, DOSSIER, FICHIER_MAJ);
   await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)], dernierTraitementFlux: depuisTraite || null, dernierDepotDejaAJour: dejaAJour, dernierDepotAbsents: absentsFichier.slice(0, 50) }, { merge: true });
-  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)], dejaAJour, absentsFichier };
+  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)], dejaAJour, absentsFichier, diffs, exemple };
 }
 
 export async function lireDerniereSynchro() {
