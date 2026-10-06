@@ -505,6 +505,8 @@ function renderInterne() {
         const prec = state.fiches.find(f => f.id === ficheId(ui.siteId, dateKey(addDays(new Date(ui.weekStart + "T00:00:00"), -7)), data.agentUid));
         return prec && Object.values(prec.cells || {}).some(Boolean) ? `<button type="button" class="nav-btn" id="fc-copier-prec" style="width:fit-content;border:1px dashed #33449a;background:#eef2ff;color:#33449a;font-weight:700">📋 Reprendre le remplissage de la semaine du ${fmtShort(new Date(prec.weekStart))}</button>` : "";
       })()}
+      ${data.saisieTardiveLe && isEditorUser(mountedUser) ? `<label style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--text-dim)">✍️ Saisie le ${fmtShort(new Date(data.saisieTardiveLe))} — motif :
+        <input id="fc-motif-retard" type="text" value="${esc(data.motifRetard || "")}" placeholder="ex. recopiée depuis la fiche papier" style="flex:1;min-width:180px;padding:4px 8px"></label>` : ""}
       ${data.reconstituee ? `<div class="stat-chip" style="width:fit-content;background:#fff1d6;color:#8a5a00">🧾 Fiche reconstituée (${esc(data.reconstituee.motif || "fiche papier disparue")}) — coche seulement ce qui a réellement été fait cette semaine-là.</div>` : ""}
       ${(() => {
         // Superviseur : pré-cocher d'après le planning prévu toutes les fiches reconstituées
@@ -647,6 +649,10 @@ function renderInterne() {
     setSaveStatus("saving");
     try { await sauverFiche(id, data); setSaveStatus("ok"); }
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
+  });
+  document.getElementById("fc-motif-retard")?.addEventListener("change", async (e) => {
+    data.motifRetard = e.target.value.trim();
+    try { await sauverFiche(id, data); window.toast?.("✓ Motif enregistré"); } catch (err) { window.toast?.("Échec : " + (err?.message || err)); }
   });
   document.getElementById("fc-copier-prec")?.addEventListener("click", async (e) => {
     const semPrec = dateKey(addDays(new Date(ui.weekStart + "T00:00:00"), -7));

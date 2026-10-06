@@ -45,9 +45,9 @@ function mentionHTML(f, court = false) {
 }
 function mentionBase(f, court = false) {
   if (f.reconstituee) return court ? `<span class="tag" style="background:#fff1d6;color:#8a5a00" title="${esc(f.reconstituee.motif || "")}">🧾 Reconstituée</span>`
-    : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.${f.saisieTardiveLe ? ` Complétée le ${fmtShort(new Date(f.saisieTardiveLe))}.` : ""}`;
+    : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.${f.saisieTardiveLe ? ` Complétée le ${fmtShort(new Date(f.saisieTardiveLe))}${f.motifRetard ? ` — ${esc(f.motifRetard)}` : ""}.` : ""}`;
   if (f.saisieTardiveLe) return court ? `<span class="tag" style="background:#eef2ff;color:#33449a" title="Remplie après la fin de la semaine">✍️ Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}</span>`
-    : `Fiche complétée après la semaine concernée, le ${fmtShort(new Date(f.saisieTardiveLe))}.`;
+    : `Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}${f.motifRetard ? ` — ${esc(f.motifRetard)}` : ""}.`;
   return "";
 }
 
@@ -227,12 +227,11 @@ function render() {
         </table>` : ""}
 
         <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
-        ${mentionHTML(opened) ? `<p style="font-size:11px;margin-top:10px;padding:6px 8px;border:1px dashed #999;font-style:italic">${mentionHTML(opened)}</p>` : ""}
-
         <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
           <span>SIGNATURE AGENT</span>
           <span>SIGNATURE + NOM ÉDUCATEUR</span>
         </div>
+        ${mentionHTML(opened) ? `<p style="font-size:9px;margin-top:28px;color:#777">${mentionHTML(opened)}</p>` : ""}
       </div>` : ""}
     </div>
   `;
