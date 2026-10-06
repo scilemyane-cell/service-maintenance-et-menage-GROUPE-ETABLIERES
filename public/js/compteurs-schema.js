@@ -64,7 +64,7 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
     const niveau = Math.max(6, Math.min(100, part ?? 55));
     const vitesse = parJour ? Math.max(0.8, 6 - Math.log10(1 + parJour) * 2.2) : 0; // plus ça coule, plus le flux va vite
     return `<div class="sx-c ${opts.virtuel ? "virtuel" : ""} ${st.lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && st.lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
-      <div class="sx-dial"><div class="sx-eau"><i></i><i></i></div>
+      <div class="sx-dial"><span class="sx-motif">${E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
         <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
       <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}${!opts.virtuel && c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
@@ -93,7 +93,7 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
   const avecEnfants = racines.filter(c => enfants(c.id).length), seuls = racines.filter(c => !enfants(c.id).length);
 
   container.innerHTML = `
-  <div class="sc" style="--e:${E.couleur}">
+  <div class="sc sx-e-${E.id}" style="--e:${E.couleur}">
     <div class="sc-entete">
       <button class="nav-btn" id="sc-retour">← Retour</button>
       <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui : un sous-compteur est déduit de son compteur général. La consommation « propre » d'un compteur = son index moins ses sous-compteurs.</p></div>
@@ -101,7 +101,7 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général). <button type="button" id="sc-annuler">Annuler</button></div>`
       : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur général qui l'alimente (ex. le lycée).</p>` : ""}
-    ${avecEnfants.length ? `<section class="sx-zone"><h3>Réseaux <small>le niveau d'eau = part de chaque compteur · le flux s'accélère avec le débit</small></h3>${avecEnfants.map(c => `<div class="sx-scroll">${reseau(c)}</div>`).join("")}</section>` : ""}
+    ${avecEnfants.length ? `<section class="sx-zone"><h3>Réseaux <small>le niveau = part de chaque compteur dans le réseau · le flux s'accélère avec la consommation</small></h3>${avecEnfants.map(c => `<div class="sx-scroll">${reseau(c)}</div>`).join("")}</section>` : ""}
     ${seuls.length ? `<section class="sx-zone"><h3>${avecEnfants.length ? "Compteurs indépendants" : "Compteurs (aucun lien pour l'instant)"}</h3><div class="sx-seuls">${seuls.map(c => dial(c, null, { racine: true })).join("")}</div></section>` : ""}
     ${!liste.length ? `<p class="hint">Aucun compteur de ce type.</p>` : ""}
   </div>`;
