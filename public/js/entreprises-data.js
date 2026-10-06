@@ -12,7 +12,7 @@ export function watchEntreprises(callback) {
 }
 
 export async function saveEntreprises(liste) {
-  const propre = liste.map(e => ({ nom: String(e.nom || "").trim(), metier: String(e.metier || "").trim(), tel: String(e.tel || "").trim(), email: String(e.email || "").trim() }))
+  const propre = liste.map(e => ({ nom: String(e.nom || "").trim(), contact: String(e.contact || "").trim(), metier: String(e.metier || "").trim(), tel: String(e.tel || "").trim(), email: String(e.email || "").trim() }))
     .filter(e => e.nom).sort((a, b) => a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" }));
   await setDoc(REF, { liste: propre, majLe: Date.now() });
 }

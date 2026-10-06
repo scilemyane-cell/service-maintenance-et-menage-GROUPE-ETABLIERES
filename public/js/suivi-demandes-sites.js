@@ -76,7 +76,8 @@ function ouvrirNouvelleEntreprise() {
     const fond = document.createElement("div"); fond.className = "ndm-fond";
     fond.innerHTML = `<div class="ndm ent-fiche">
       <div class="ndm-tete"><h3>🏢 Nouvelle entreprise extérieure</h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
-      <label>Nom de l'entreprise<input id="ent-nom" placeholder="ex. Plomberie Martin"></label>
+      <label>Nom de la société *<input id="ent-nom" placeholder="ex. SARL Plomberie Martin"></label>
+      <label>Contact (personne)<input id="ent-contact" placeholder="ex. M. Martin"></label>
       <label>Descriptif / métier<input id="ent-metier" placeholder="ex. Plomberie, chauffage — dépannage sous 48 h"></label>
       <div class="ent-2"><label>Téléphone<input id="ent-tel" type="tel" placeholder="06…"></label><label>Mail<input id="ent-email" type="email" placeholder="contact@…"></label></div>
       <div class="ndm-etat"></div>
@@ -87,8 +88,8 @@ function ouvrirNouvelleEntreprise() {
     fond.addEventListener("click", (e) => { if (e.target === fond) fermer(null); });
     fond.querySelector("#ent-ok").addEventListener("click", async (e) => {
       const v = (id) => fond.querySelector(id).value.trim();
-      const e1 = { nom: v("#ent-nom"), metier: v("#ent-metier"), tel: v("#ent-tel"), email: v("#ent-email") };
-      if (!e1.nom) { fond.querySelector(".ndm-etat").textContent = "Indique le nom de l'entreprise."; return; }
+      const e1 = { nom: v("#ent-nom"), contact: v("#ent-contact"), metier: v("#ent-metier"), tel: v("#ent-tel"), email: v("#ent-email") };
+      if (!e1.nom) { fond.querySelector(".ndm-etat").textContent = "Indique le nom de la société."; return; }
       if (ficheEntreprise(e1.nom)) return fermer(ficheEntreprise(e1.nom));
       e.target.disabled = true; fond.querySelector(".ndm-etat").textContent = "⏳ Enregistrement…";
       try { await saveEntreprises([...ent.liste, e1]); fermer(e1); }
@@ -109,18 +110,19 @@ function ouvrirGestionEntreprises(lignes) {
     lignes.forEach(l => { const n = (l.attribueA === "ext" ? l.attribueANom : /externe/i.test(l.categorieIntervenant) ? l.intervenant : "") || ""; const k = cleEnt(n); if (k.length >= 3 && !liste.some(e => cleEnt(e.nom) === k)) { const c = compte.get(k) || { nom: n.trim(), n: 0 }; c.n++; compte.set(k, c); } });
     return [...compte.values()].sort((a, b) => b.n - a.n).slice(0, 20);
   };
-  const lire = () => { fond.querySelectorAll(".ent-ligne").forEach((r, i) => { ["nom", "metier", "tel", "email"].forEach(k => { liste[i][k] = r.querySelector(`[data-k="${k}"]`).value; }); }); };
+  const lire = () => { fond.querySelectorAll(".ent-ligne:not(.ent-entete)").forEach((r, i) => { ["nom", "contact", "metier", "tel", "email"].forEach(k => { liste[i][k] = r.querySelector(`[data-k="${k}"]`).value; }); }); };
   const dessiner = () => {
     const sug = suggestions();
     fond.innerHTML = `<div class="ndm ent-gestion">
       <div class="ndm-tete"><h3>🏢 Entreprises extérieures <small>(${liste.length})</small></h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
       <p class="gaf-aide">La liste proposée dans « Attribuée à » sur chaque demande. Le descriptif s'affiche à côté du nom.</p>
-      <div class="ent-liste">${liste.map((e, i) => `
+      <div class="ent-liste">${liste.length ? `<div class="ent-ligne ent-entete"><span>Société</span><span>Contact</span><span>Descriptif / métier</span><span>Téléphone</span><span>Mail</span><span></span></div>` : ""}${liste.map((e, i) => `
         <div class="ent-ligne">
-          <input data-k="nom" value="${esc(e.nom)}" placeholder="Nom">
-          <input data-k="metier" value="${esc(e.metier || "")}" placeholder="Descriptif / métier">
-          <input data-k="tel" value="${esc(e.tel || "")}" placeholder="Téléphone" type="tel">
-          <input data-k="email" value="${esc(e.email || "")}" placeholder="Mail" type="email">
+          <label class="ent-champ" data-c="nom"><span>Société</span><input data-k="nom" value="${esc(e.nom)}" placeholder="Nom de la société *" aria-label="Société"></label>
+          <label class="ent-champ" data-c="contact"><span>Contact</span><input data-k="contact" value="${esc(e.contact || "")}" placeholder="Contact (personne)" aria-label="Contact"></label>
+          <label class="ent-champ" data-c="metier"><span>Descriptif / métier</span><input data-k="metier" value="${esc(e.metier || "")}" placeholder="Descriptif / métier"></label>
+          <label class="ent-champ" data-c="tel"><span>Téléphone</span><input data-k="tel" value="${esc(e.tel || "")}" placeholder="Téléphone" type="tel"></label>
+          <label class="ent-champ" data-c="email"><span>Mail</span><input data-k="email" value="${esc(e.email || "")}" placeholder="Mail" type="email"></label>
           <button type="button" class="ent-suppr" data-suppr="${i}" title="Retirer">🗑</button>
         </div>`).join("") || `<div class="dps-vide">Aucune entreprise pour l'instant.</div>`}</div>
       <button type="button" class="dps-mail-btn" id="ent-ajout">➕ Ajouter une entreprise</button>
@@ -129,9 +131,9 @@ function ouvrirGestionEntreprises(lignes) {
       <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Fermer</button><button type="button" class="dps-enregistrer" id="ent-ok">💾 Enregistrer</button></div>
     </div>`;
     fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", () => fond.remove()));
-    fond.querySelector("#ent-ajout").addEventListener("click", () => { lire(); liste.push({ nom: "", metier: "", tel: "", email: "" }); dessiner(); const r = fond.querySelectorAll(".ent-ligne"); r[r.length - 1]?.querySelector("input").focus(); });
+    fond.querySelector("#ent-ajout").addEventListener("click", () => { lire(); liste.push({ nom: "", contact: "", metier: "", tel: "", email: "" }); dessiner(); const r = fond.querySelectorAll(".ent-ligne"); r[r.length - 1]?.querySelector("input").focus(); });
     fond.querySelectorAll("[data-suppr]").forEach(b => b.addEventListener("click", () => { lire(); liste.splice(+b.dataset.suppr, 1); dessiner(); }));
-    fond.querySelectorAll("[data-sug]").forEach(b => b.addEventListener("click", () => { lire(); liste.push({ nom: b.dataset.sug, metier: "", tel: "", email: "" }); dessiner(); }));
+    fond.querySelectorAll("[data-sug]").forEach(b => b.addEventListener("click", () => { lire(); liste.push({ nom: b.dataset.sug, contact: "", metier: "", tel: "", email: "" }); dessiner(); }));
     fond.querySelector("#ent-ok").addEventListener("click", async (e) => {
       lire(); e.target.disabled = true; fond.querySelector(".ndm-etat").textContent = "⏳ Enregistrement…";
       try { await saveEntreprises(liste); window.toast?.("✓ Liste des entreprises enregistrée"); fond.remove(); }
@@ -501,7 +503,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         ${ent.liste.map(e => `<option value="ext:${esc(e.nom)}" ${l.attribueA === "ext" && cleEnt(l.attribueANom) === cleEnt(e.nom) ? "selected" : ""}>🏢 ${esc(e.nom)}${e.metier ? ` — ${esc(e.metier)}` : ""}</option>`).join("")}
         <option value="ext">➕ Nouvelle entreprise…</option>
       </optgroup>
-    </select></label>${l.attribueA === "ext" && ficheEntreprise(l.attribueANom) ? (f => `<small class="dps-attrib-ent">${f.metier ? esc(f.metier) : ""}${f.tel ? ` · <a href="tel:${esc(f.tel.replace(/\s/g, ""))}">📞 ${esc(f.tel)}</a>` : ""}${f.email ? ` · <a href="mailto:${esc(f.email)}">✉️</a>` : ""}</small>`)(ficheEntreprise(l.attribueANom)) : ""}`;
+    </select></label>${l.attribueA === "ext" && ficheEntreprise(l.attribueANom) ? (f => `<small class="dps-attrib-ent"><b>${esc(f.nom)}</b>${f.contact ? ` · 👤 ${esc(f.contact)}` : ""}${f.metier ? ` · ${esc(f.metier)}` : ""}${f.tel ? ` · <a href="tel:${esc(f.tel.replace(/\s/g, ""))}">📞 ${esc(f.tel)}</a>` : ""}${f.email ? ` · <a href="mailto:${esc(f.email)}">✉️</a>` : ""}</small>`)(ficheEntreprise(l.attribueANom)) : ""}`;
   };
   const attribBlocHTML = (l) => perms.isEditor && !TRAITE(l.statut) && !EN_ATTENTE_VALID(l.statut) ? `<div class="dps-attrib">${selectAttribHTML(l)}</div>`
     : l.attribueANom ? `<div class="dps-attrib lu">${iconeAttrib(l)} Attribuée à <b>${esc(l.attribueANom)}</b>${l.attribueA === "ext" && ficheEntreprise(l.attribueANom)?.metier ? ` <small>(${esc(ficheEntreprise(l.attribueANom).metier)})</small>` : ""}${l.attribuePar ? ` <small>par ${esc(l.attribuePar)}${l.attribueLe ? ` le ${fr(l.attribueLe)}` : ""}</small>` : ""}</div>` : "";
