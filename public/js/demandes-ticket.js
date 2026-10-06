@@ -59,30 +59,71 @@ async function imageTicket(params) {
   const [html] = await Promise.all([construireTicket(params), chargerCapture()]);
   const ifr = document.createElement("iframe");
   ifr.setAttribute("aria-hidden", "true");
-  ifr.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;height:1400px;border:0;visibility:hidden";
+  ifr.style.cssText = "position:fixed;left:-10000px;top:0;width:700px;height:1400px;border:0;visibility:hidden";
   document.body.append(ifr);
   try {
     const d = ifr.contentDocument;
     d.open(); d.write(html.replace(/<script[\s\S]*?<\/script>/g, "")); d.close();
     await Promise.all([...d.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-    d.body.classList.add("capture");
-    const c = await window.html2canvas(d.querySelector(".page"), { scale: 2, backgroundColor: "#ffffff", logging: false, useCORS: true });
+    d.body.classList.add("capture", "mail");
+    // Largeur « mail » (640 px) : l'image collée garde une taille normale dans le message.
+    const c = await window.html2canvas(d.querySelector(".page"), { scale: 1, backgroundColor: "#ffffff", logging: false, useCORS: true });
     return await new Promise((ok, ko) => c.toBlob(b => b ? ok(b) : ko(new Error("image vide")), "image/png"));
   } finally { ifr.remove(); }
 }
 
-// Renvoie une promesse : "copie" (dans le presse-papiers) ou "telecharge" (fichier PNG).
-export function copierTicketImage(params) {
-  const image = imageTicket(params);
+function copierImage(image, nom) {
   const telecharger = async () => {
     const b = await image, a = document.createElement("a");
-    a.href = URL.createObjectURL(b); a.download = `ticket-${String(params.ligne.n).replace(/[^\w-]+/g, "_")}.png`; a.click();
+    a.href = URL.createObjectURL(b); a.download = `ticket-${String(nom).replace(/[^\w-]+/g, "_")}.png`; a.click();
     return "telecharge";
   };
   try {
     if (!navigator.clipboard?.write || !window.ClipboardItem) return telecharger();
     return navigator.clipboard.write([new ClipboardItem({ "image/png": image })]).then(() => "copie", (e) => { console.warn("Presse-papiers :", e); return telecharger(); });
   } catch (e) { return telecharger(); }
+}
+// Copie directe (sans fenêtre). Renvoie "copie" ou "telecharge".
+export function copierTicketImage(params) { return copierImage(imageTicket(params), params.ligne.n); }
+
+// Fenêtre « Ticket pour mail » : message à la personne + ticket en image.
+// Le ticket est copié, puis la messagerie s'ouvre avec le message ; il reste
+// à coller le ticket sous le texte.
+export function ouvrirTicketMail(params, { email: dest = "", contact = "" } = {}) {
+  const l = params.ligne, moi = params.utilisateur || "";
+  const image = imageTicket(params); image.catch(() => {});
+  const fond = document.createElement("div"); fond.className = "ndm-fond";
+  const message = `Bonjour${contact ? ` ${contact}` : ""},\n\nPourriez-vous intervenir pour la demande ci-dessous (${l.n} — ${l.site}${l.local ? `, ${l.local}` : ""}) ?\nMerci de me confirmer votre date de passage.\n\nCordialement,\n${moi}`;
+  fond.innerHTML = `<div class="ndm tkm">
+    <div class="ndm-tete"><h3>📋 Ticket ${esc(l.n)} pour un mail</h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
+    <label>À<input id="tkm-a" type="email" value="${esc(dest)}" placeholder="adresse du prestataire (facultatif)"></label>
+    <label>Objet<input id="tkm-objet" value="${esc(`Demande d'intervention ${l.n} — ${l.site}`)}"></label>
+    <label>Message<textarea id="tkm-msg" rows="7">${esc(message)}</textarea></label>
+    <p class="tkm-aide">1. Clique sur <b>« ✉️ Copier et ouvrir le mail »</b> — 2. Dans le mail, sous ton texte, <b>colle le ticket</b> (Ctrl+V, ou appui long › Coller).</p>
+    <div class="tkm-etat" aria-live="polite">⏳ Préparation du ticket…</div>
+    <div class="ndm-btns"><button type="button" class="dps-annuler" id="tkm-seul">📋 Copier le ticket seulement</button><button type="button" class="dps-enregistrer" id="tkm-go">✉️ Copier et ouvrir le mail</button></div>
+  </div>`;
+  document.body.append(fond);
+  const etat = fond.querySelector(".tkm-etat");
+  image.then(() => { if (etat.textContent.startsWith("⏳ Prép")) etat.textContent = "✓ Ticket prêt."; }, (e) => { etat.textContent = "❌ " + (e?.message || e); });
+  const fermer = () => fond.remove();
+  fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", fermer));
+  fond.addEventListener("click", (e) => { if (e.target === fond) fermer(); });
+  const copier = (puis) => {
+    const btns = fond.querySelectorAll(".ndm-btns button"); btns.forEach(b => b.disabled = true);
+    etat.textContent = "⏳ Copie du ticket…";
+    copierImage(image, l.n).then((r) => {
+      etat.textContent = r === "copie" ? "✓ Ticket copié : colle-le dans le mail (Ctrl+V)." : "⬇️ Ticket téléchargé en image : ajoute-le en pièce jointe.";
+      puis?.(r);
+    }).catch(e => { etat.textContent = "❌ " + (e?.message || e); btns.forEach(b => b.disabled = false); });
+  };
+  fond.querySelector("#tkm-seul").addEventListener("click", () => copier(() => setTimeout(fermer, 1600)));
+  fond.querySelector("#tkm-go").addEventListener("click", () => copier(() => {
+    const v = (id) => fond.querySelector(id).value;
+    const corps = v("#tkm-msg").replace(/\s+$/, "") + "\n\n";
+    location.href = `mailto:${encodeURIComponent(v("#tkm-a").trim())}?subject=${encodeURIComponent(v("#tkm-objet"))}&body=${encodeURIComponent(corps)}`;
+    setTimeout(fermer, 1500);
+  }));
 }
 
 async function construireTicket({ ligne: l, adresse = "", utilisateur = "", email = "" }) {
@@ -128,6 +169,7 @@ footer{margin-top:18px;font-size:10.5px;color:#777;text-align:center}
 .ed:empty::before{content:attr(data-ph);color:#9aa7ba;font-style:italic}
 .capture .ed,.capture .ed.bloc{border-color:transparent}.capture .ed.bloc{border:1px solid #d5dbe5}.capture .ed:empty::before{content:""}.capture .ed:focus{background:none}
 .capture .page{box-shadow:none;margin:0}
+.mail .page{width:640px;max-width:640px;padding:22px 24px;font-size:12px}
 .barre button.copie{background:#1a4fb4}
 .barre .msg{font-weight:700;color:#1d6b35}
 @media print{

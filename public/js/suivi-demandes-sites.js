@@ -4,7 +4,7 @@
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
 import { esc } from "./astreinte-logic.js";
 import { ouvrirImpressionSite } from "./demandes-impression.js";
-import { preparerFenetre, copierTicketImage, prechargerCaptureTicket } from "./demandes-ticket.js";
+import { preparerFenetre, ouvrirTicketMail, prechargerCaptureTicket } from "./demandes-ticket.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -861,11 +861,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   container.querySelectorAll("[data-ticket-copie]").forEach(b => b.addEventListener("click", () => {
     const l = lignes.find(x => x.id === b.dataset.ticketCopie); if (!l) return;
     const fiche = (fav.fiches || []).find(f => memeSite(l.site, f.nom));
-    b.disabled = true; b.textContent = "⏳ Copie…";
-    copierTicketImage({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "" })
-      .then(r => { b.textContent = r === "copie" ? "✓ Copié !" : "⬇️ Image téléchargée"; window.toast?.(r === "copie" ? `✓ Ticket ${l.n} copié : colle-le dans ton mail (Ctrl+V ou appui long › Coller)` : `Ticket ${l.n} téléchargé en image : ajoute-le au mail en pièce jointe`); })
-      .catch(e => { console.error(e); b.textContent = "❌ Échec"; alert("Copie impossible : " + (e?.message || e)); })
-      .finally(() => setTimeout(() => { b.disabled = false; b.textContent = "📋 Ticket pour mail"; }, 2500));
+    const ent = l.attribueA === "ext" ? ficheEntreprise(l.attribueANom) : null;
+    ouvrirTicketMail({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "" }, { email: ent?.email || "", contact: ent?.contact || "" });
   }));
   brancherAttrib();
   container.querySelectorAll("[data-urgence]").forEach(sel => sel.addEventListener("change", async () => {
