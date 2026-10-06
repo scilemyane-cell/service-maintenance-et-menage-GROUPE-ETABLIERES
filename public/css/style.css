@@ -3020,3 +3020,7 @@ body.clo-ouvert{overflow:hidden}
 .vf-actions button:hover{background:rgba(255,255,255,.12)}
 @media (max-width:600px){.vf-resume span{min-width:70px;font-size:22px}.vf h2{font-size:20px}}
 @media print{.vf{background:#fff!important;color:#000}.vf-fuite{animation:none}}
+.vf-resume .c{color:#5fa8ff}
+.vf-histo{justify-content:flex-start}.vf-histo i{flex:0 1 28px}
+.vf-normal{display:block;width:100%;margin-top:10px;border:1px solid rgba(62,240,160,.45);background:rgba(62,240,160,.10);color:#bfffe2;border-radius:10px;padding:8px 10px;font:700 12.5px system-ui,sans-serif;cursor:pointer}
+@media (max-width:600px){.vf-resume{flex-wrap:wrap}.vf-c-corps{gap:8px}.vf-jauge{width:96px;height:96px}}
