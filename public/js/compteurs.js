@@ -149,6 +149,7 @@ function render() {
   if (ui.rapideSiteId) return renderRapide();
   if (ui.rapportSiteId) return renderRapportSite();
   if (ui.screen === "stats") return renderStats();
+  if (ui.screen === "schema") return renderSchemaCompteurs();
   renderListe();
 }
 
@@ -343,6 +344,7 @@ function renderListe() {
           <div class="${nbRetardTotal ? "sdw-kpi-alerte" : ""}"><b>${nbRetardTotal}</b><small>${motRetard()}</small></div>
           <div class="sdw-actions">
             <button class="add-btn" id="cpt-voir-stats">📊 Tableau de bord</button>
+            <button class="nav-btn" id="cpt-voir-schema" title="Relier les compteurs généraux et leurs sous-compteurs">🔗 Schéma</button>
             ${peutAntidater(mountedUser) ? `
             <details class="sdw-outils"><summary class="nav-btn" title="Outils">⚙️</summary>
               <div class="sdw-outils-pop">
@@ -443,6 +445,7 @@ function renderListe() {
     }
   });
   document.getElementById("cpt-voir-stats")?.addEventListener("click", () => { ui.screen = "stats"; render(); });
+  document.getElementById("cpt-voir-schema")?.addEventListener("click", () => { ui.screen = "schema"; render(); });
   mountedContainer.querySelectorAll("[data-toggle-site]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.toggleSite;
     // Présentation mosaïque : ▲ / clic sur le titre referme le détail
@@ -1159,6 +1162,21 @@ const COULEURS_CPT = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B
 function detruireGraphiquesStats() {
   Object.values(graphiquesStats).forEach(c => c.destroy());
   graphiquesStats = {};
+}
+
+async function renderSchemaCompteurs() {
+  mountedContainer.innerHTML = `<div class="stack"><p class="hint">⏳ Chargement des compteurs…</p></div>`;
+  if (!statsReleves) {
+    try { statsReleves = await listerTousLesReleves(); }
+    catch (e) { mountedContainer.innerHTML = `<div class="stack"><p class="hint" style="color:var(--red)">❌ ${esc(e.message || String(e))}</p></div>`; return; }
+  }
+  if (ui.screen !== "schema") return;
+  const { renderSchema } = await import("./compteurs-schema.js");
+  renderSchema(mountedContainer, {
+    compteurs: state.compteurs, releves: statsReleves, peutModifier: isEditorUser(mountedUser),
+    onRetour: () => { ui.screen = "liste"; render(); },
+    onOuvrirSite: (id) => { ui.screen = "liste"; ui.siteSelectionne = id; ui.focusSiteId = id; render(); },
+  });
 }
 
 async function renderStats() {

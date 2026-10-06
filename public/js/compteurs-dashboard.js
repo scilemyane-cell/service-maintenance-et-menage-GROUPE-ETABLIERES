@@ -81,6 +81,8 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
     });
     const debits = [];
     for (let i = 1; i < pts.length; i++) { const j = (pts[i][0] - pts[i - 1][0]) / JOUR; if (j >= 0.5 && pts[i][1] >= pts[i - 1][1]) debits.push({ du: pts[i - 1][0], au: pts[i][0], j, v: (pts[i][1] - pts[i - 1][1]) / j }); }
+    const enf = enfantsDe(c);
+    if (enf.length) debits.forEach(d => { const sous = enf.reduce((t, x) => t + (conso(x, d.du, d.au) || 0), 0); d.v = Math.max(0, d.v - sous / d.j); d.net = true; });
     const dernier = debits[debits.length - 1] || null;
     const precedents = debits.slice(0, -1).map(d => d.v).sort((a, b) => a - b);
     const med = precedents.length ? precedents[Math.floor(precedents.length / 2)] : null;
@@ -92,9 +94,13 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
     return { c, debits, dernier, ref, refManuelle: seuil !== null, ratio, etat, age };
   }).sort((a, b) => ({ fuite: 0, surveiller: 1, ok: 2, construction: 3, attente: 4 }[a.etat] - { fuite: 0, surveiller: 1, ok: 2, construction: 3, attente: 4 }[b.etat]) || (b.ratio || 0) - (a.ratio || 0));
 
+  // Sous-compteurs (Schéma des compteurs) : un compteur général compte sa
+  // consommation PROPRE = son index − ce que mesurent ses sous-compteurs.
+  const enfantsDe = (c) => tousCompteurs.filter(x => x.compteurParentId === c.id && x.type === c.type && x.id !== c.id);
+  const consoPropre = (c, t0, t1) => { const v = conso(c, t0, t1); if (v === null) return null; const e = enfantsDe(c); return e.length ? Math.max(0, v - e.reduce((t, x) => t + (conso(x, t0, t1) || 0), 0)) : v; };
   const somme = (liste, t0, t1) => {
     let s = 0, ok = false;
-    liste.forEach(c => { const v = conso(c, t0, t1); if (v !== null) { s += v; ok = true; } });
+    liste.forEach(c => { const v = consoPropre(c, t0, t1); if (v !== null) { s += v; ok = true; } });
     return ok ? s : null;
   };
 
@@ -241,7 +247,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
             <div class="vf-resume"><span class="f">${nb("fuite")}<small>fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span>${nb("construction") + nb("attente") ? `<span class="c">${nb("construction") + nb("attente")}<small>référence à définir</small></span>` : ""}</div></div>
           <div class="vf-grille">${V.map(x => `
             <div class="vf-c vf-${x.etat}">
-              <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || "Eau")}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
+              <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || "Eau")}${x.dernier?.net ? " · propre (hors sous-compteurs)" : ""}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
               <div class="vf-c-corps">${jauge(x)}
                 <div class="vf-c-info">
                   ${x.ratio !== null ? `<div class="vf-ratio">${x.ratio >= 1 ? "+" : ""}${fmt((x.ratio - 1) * 100)} %<small>vs normal</small></div>` : ""}
