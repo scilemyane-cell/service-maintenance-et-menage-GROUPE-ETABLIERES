@@ -288,7 +288,10 @@ export async function regrouperDoublonsImport(demandesApp) {
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return { envoyees: 0 };
-  const fr = (isoDate) => (isoDate ? isoDate.slice(0, 10).split("-").reverse().join("/") : "");
+  // Dates envoyées au format AAAA-MM-JJ : Excel les reconnaît comme de vraies
+  // dates quelle que soit la langue du classeur (« 06/10/2026 » pouvait être
+  // lu 10 juin, ou rester du texte, sur un classeur réglé en anglais).
+  const fr = (isoDate) => (isoDate && /^\d{4}-\d{2}-\d{2}/.test(isoDate) ? isoDate.slice(0, 10) : "");
   // Seulement les demandes modifiées dans l'appli ces 7 derniers jours : le
   // flux Power Automate reste léger (quota d'actions quotidien) tout en
   // rattrapant largement un envoi manqué.
@@ -313,7 +316,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
     dateStatut: fr(d.dateStatut),
-    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.urgenceCorrigee ? `⚠️ Urgence requalifiée : ${d.urgenceCorrigee}${d.urgenceCorrigeePar ? ` (${d.urgenceCorrigeePar})` : ""}` : "", d.commentaireTech ? `💬 ${d.commentaireTechPar ? `${nomPropre(d.commentaireTechPar)}${d.commentaireTechLe ? " (" + fr(d.commentaireTechLe).slice(0, 5) + ")" : ""} : ` : ""}${d.commentaireTech}` : "", texteAction(d)].filter(Boolean).join("\n"),
+    commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.urgenceCorrigee ? `⚠️ Urgence requalifiée : ${d.urgenceCorrigee}${d.urgenceCorrigeePar ? ` (${d.urgenceCorrigeePar})` : ""}` : "", d.commentaireTech ? `💬 ${d.commentaireTechPar ? `${nomPropre(d.commentaireTechPar)}${d.commentaireTechLe ? " (" + String(d.commentaireTechLe).slice(0, 10).split("-").reverse().join("/").slice(0, 5) + ")" : ""} : ` : ""}${d.commentaireTech}` : "", texteAction(d)].filter(Boolean).join("\n"),
   }));
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
