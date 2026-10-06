@@ -187,6 +187,16 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         </div>
       </div>
 
+      ${(() => {
+        // Historique récent : les consommations démarrent au PREMIER relevé (index de départ = zéro).
+        const premiers = compteurs.map(c => (parCompteur.get(c.id) || [])[0]?.createdAt).filter(Boolean);
+        if (!premiers.length) return "";
+        const p0 = new Date(Math.min(...premiers));
+        if (Date.now() - p0.getTime() > 400 * JOUR) return "";
+        const moisFr = (d) => d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+        return `<div class="pe-carte pe-info">ℹ️ Les relevés ont démarré en <b>${moisFr(p0)}</b> : ce premier index sert de point de départ (zéro). Les consommations sont calculées entre deux relevés successifs — un relevé fait du 27 au 3 clôture le mois qui se termine. La comparaison avec l'année précédente sera disponible à partir de ${moisFr(new Date(p0.getFullYear() + 1, p0.getMonth(), 1))}.</div>`;
+      })()}
+
       <div class="pe-kpis">
         ${kpis.map(x => `
           <div class="pe-carte pe-kpi">

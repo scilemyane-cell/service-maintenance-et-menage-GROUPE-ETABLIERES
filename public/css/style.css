@@ -2979,3 +2979,4 @@ body.clo-ouvert{overflow:hidden}
 .pe-cl-b em{position:absolute;top:-3px;bottom:-3px;width:2px;background:#6b6e75;border-radius:2px}
 .pe-cl b{text-align:right}.pe-cl small{color:#8A8D93;text-align:right}
 @media (max-width:700px){.pe-cl{grid-template-columns:18px minmax(0,1fr) 60px 70px}.pe-cl-b,.pe-cl small{display:none}}
+.pe-info{font-size:13.5px;line-height:1.45;background:#eef5ff;border-color:#c8dcf7;margin-bottom:12px}
