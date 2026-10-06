@@ -15,7 +15,7 @@
 // (bleu) pour la période, gris pour N-1, vert = baisse, rouge = hausse.
 
 import { esc } from "./astreinte-logic.js";
-import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve } from "./compteurs-data.js";
+import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur } from "./compteurs-data.js";
 
 const ENERGIES = [
   { id: "elec", label: "Électricité", couleur: "#eda100" },
@@ -69,6 +69,29 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
     });
     return ok ? total : null;
   };
+  // ---------- Veille fuites d'eau ----------
+  // Débit moyen (m³/jour) entre chaque paire de relevés ; le dernier intervalle
+  // est comparé à la référence : « conso normale » saisie, sinon médiane des
+  // intervalles précédents.
+  const veilleEau = () => tousCompteurs.filter(c => c.type === "eau" && (!f.ug || ugDe(c) === f.ug)).map(c => {
+    const pts = []; // total des index par relevé (tous index lisibles)
+    (parCompteur.get(c.id) || []).forEach(r => {
+      let t = 0, ok = true; clesIndex(c).forEach(k => { const v = parseFloat(String(r.valeurs?.[k] ?? "").replace(",", ".")); if (r.illisibles?.[k] || !Number.isFinite(v)) ok = false; else t += v; });
+      if (ok) pts.push([r.createdAt, t]);
+    });
+    const debits = [];
+    for (let i = 1; i < pts.length; i++) { const j = (pts[i][0] - pts[i - 1][0]) / JOUR; if (j >= 0.5 && pts[i][1] >= pts[i - 1][1]) debits.push({ du: pts[i - 1][0], au: pts[i][0], j, v: (pts[i][1] - pts[i - 1][1]) / j }); }
+    const dernier = debits[debits.length - 1] || null;
+    const precedents = debits.slice(0, -1).map(d => d.v).sort((a, b) => a - b);
+    const med = precedents.length ? precedents[Math.floor(precedents.length / 2)] : null;
+    const seuil = Number.isFinite(parseFloat(c.consoNormaleJour)) ? parseFloat(c.consoNormaleJour) : null;
+    const ref = seuil ?? med;
+    const ratio = dernier && ref ? dernier.v / ref : null;
+    const etat = !dernier ? "attente" : ratio === null ? "construction" : ratio > 1.8 ? "fuite" : ratio > 1.3 ? "surveiller" : "ok";
+    const age = c.dernierReleve?.at ? Math.round((Date.now() - c.dernierReleve.at) / JOUR) : null;
+    return { c, debits, dernier, ref, refManuelle: seuil !== null, ratio, etat, age };
+  }).sort((a, b) => ({ fuite: 0, surveiller: 1, ok: 2, construction: 3, attente: 4 }[a.etat] - { fuite: 0, surveiller: 1, ok: 2, construction: 3, attente: 4 }[b.etat]) || (b.ratio || 0) - (a.ratio || 0));
+
   const somme = (liste, t0, t1) => {
     let s = 0, ok = false;
     liste.forEach(c => { const v = conso(c, t0, t1); if (v !== null) { s += v; ok = true; } });
@@ -197,6 +220,41 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         return `<div class="pe-carte pe-info">ℹ️ Les relevés ont démarré en <b>${moisFr(p0)}</b> : ce premier index sert de point de départ (zéro). Les consommations sont calculées entre deux relevés successifs — un relevé fait du 27 au 3 clôture le mois qui se termine. La comparaison avec l'année précédente sera disponible à partir de ${moisFr(new Date(p0.getFullYear() + 1, p0.getMonth(), 1))}.</div>`;
       })()}
 
+      ${(() => {
+        const V = veilleEau(); if (!V.length) return "";
+        const nb = (e) => V.filter(x => x.etat === e).length;
+        const libEtat = { fuite: "Fuite probable", surveiller: "À surveiller", ok: "Normal", construction: "Référence à définir", attente: "En attente de 2 relevés" };
+        const jauge = (x) => {
+          const r = 42, c = 2 * Math.PI * r, arc = 0.75 * c; // jauge sur 270°
+          const p = x.ratio === null ? 0 : Math.min(1, x.ratio / 2.5);
+          const repere = x.ref ? Math.min(1, 1 / 2.5) : null;
+          return `<svg viewBox="0 0 110 110" class="vf-jauge"><circle cx="55" cy="55" r="${r}" class="vf-piste" stroke-dasharray="${arc} ${c}" transform="rotate(135 55 55)"/>
+            <circle cx="55" cy="55" r="${r}" class="vf-niveau" stroke-dasharray="${arc * p} ${c}" transform="rotate(135 55 55)"/>
+            ${repere !== null ? (() => { const ang = (135 + 270 * repere) * Math.PI / 180; return `<circle cx="${55 + r * Math.cos(ang)}" cy="${55 + r * Math.sin(ang)}" r="4.5" class="vf-repere"/>`; })() : ""}
+            <text x="55" y="52" text-anchor="middle" class="vf-val">${x.dernier ? fmt(x.dernier.v, x.dernier.v < 10 ? 2 : 1) : "—"}</text><text x="55" y="68" text-anchor="middle" class="vf-unite">m³ / jour</text></svg>`;
+        };
+        const barres = (x) => { const d = x.debits.slice(-8); if (!d.length) return ""; const m = Math.max(...d.map(z => z.v), x.ref || 0) || 1;
+          return `<div class="vf-histo" title="Débit moyen entre deux relevés (8 derniers)">${d.map((z, i) => `<i style="height:${Math.max(6, z.v / m * 100)}%" class="${i === d.length - 1 ? "der" : ""}" title="${new Date(z.du).toLocaleDateString("fr-FR")} → ${new Date(z.au).toLocaleDateString("fr-FR")} : ${fmt(z.v, 2)} m³/j"></i>`).join("")}${x.ref ? `<b style="bottom:${x.ref / m * 100}%"></b>` : ""}</div>`; };
+        return `<section class="vf">
+          <div class="vf-tete"><div><span class="vf-sur">Surveillance en continu</span><h2>💧 Veille fuites d'eau</h2>
+            <p>Chaque compteur d'eau compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale. Au-delà de +30 % : à surveiller ; au-delà de +80 % : fuite probable.</p></div>
+            <div class="vf-resume"><span class="f">${nb("fuite")}<small>fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span></div></div>
+          <div class="vf-grille">${V.map(x => `
+            <div class="vf-c vf-${x.etat}">
+              <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || "Eau")}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
+              <div class="vf-c-corps">${jauge(x)}
+                <div class="vf-c-info">
+                  ${x.ratio !== null ? `<div class="vf-ratio">${x.ratio >= 1 ? "+" : ""}${fmt((x.ratio - 1) * 100)} %<small>vs normal</small></div>` : ""}
+                  <div>Normal : <b>${x.ref ? `${fmt(x.ref, x.ref < 10 ? 2 : 1)} m³/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
+                  ${x.dernier ? `<div class="vf-mute">du ${new Date(x.dernier.du).toLocaleDateString("fr-FR")} au ${new Date(x.dernier.au).toLocaleDateString("fr-FR")}</div>` : `<div class="vf-mute">Il faut 2 relevés pour mesurer un débit.</div>`}
+                  ${x.age !== null && x.age > 10 ? `<div class="vf-mute">⏱ dernier relevé il y a ${x.age} j — un relevé intermédiaire affinerait la mesure</div>` : ""}
+                </div></div>
+              ${barres(x)}
+              <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-val="${x.ref ?? ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
+            </div>`).join("")}</div>
+        </section>`;
+      })()}
+
       <div class="pe-kpis">
         ${kpis.map(x => `
           <div class="pe-carte pe-kpi">
@@ -291,6 +349,13 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
     const c = th.dataset.peTri; if (f.tri === c) f.sens *= -1; else { f.tri = c; f.sens = c === "nom" || c === "ug" ? 1 : -1; } rerendre();
   }));
   container.querySelectorAll("[data-pe-site]").forEach(el => el.addEventListener("click", () => onOuvrirSite(el.dataset.peSite)));
+  container.querySelectorAll("[data-vf-ref]").forEach(b => b.addEventListener("click", async () => {
+    const v = prompt("Consommation NORMALE de ce compteur, en m³ par jour (ex. 1,5).\nLaisse vide pour revenir au calcul automatique.", b.dataset.vfVal ? String(Math.round(parseFloat(b.dataset.vfVal) * 100) / 100).replace(".", ",") : "");
+    if (v === null) return;
+    const n = parseFloat(v.replace(",", "."));
+    try { await modifierCompteur(b.dataset.vfRef, { consoNormaleJour: v.trim() === "" ? null : (Number.isFinite(n) && n > 0 ? n : null) }); const c = tousCompteurs.find(x => x.id === b.dataset.vfRef); if (c) c.consoNormaleJour = v.trim() === "" ? null : n; rerendre(); }
+    catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
+  }));
   container.querySelectorAll("[data-pe-relever]").forEach(b => b.addEventListener("click", () => onRelever(b.dataset.peRelever)));
   const tip = container.querySelector("#pe-tip");
   container.querySelectorAll(".pe-hit").forEach(r => {
