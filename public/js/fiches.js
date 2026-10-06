@@ -29,7 +29,12 @@ function saisieEnCours() {
   const a = document.activeElement;
   return !!(a && mountedContainer && mountedContainer.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && a.type !== "checkbox")));
 }
+// Une coche enregistrée revient aussitôt par l'écoute (copie locale) : l'écran
+// affiche déjà la bonne valeur, inutile de tout redessiner (la page sautait).
+let ignorerJusqua = 0;
+function sauverFiche(id, data) { ignorerJusqua = Date.now() + 4000; return saveFiche(id, data); }
 function renderSiLibre() {
+  if (Date.now() < ignorerJusqua) return;
   if (saisieEnCours()) { renderEnAttente = true; return; }
   render();
 }
@@ -135,7 +140,7 @@ function scheduleSave(id, data) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     try {
-      await saveFiche(id, data);
+      await sauverFiche(id, data);
       setSaveStatus("ok");
     } catch (e) {
       console.error("Erreur d'enregistrement de la fiche:", e);
@@ -443,6 +448,10 @@ function render() {
   if (!mountedContainer) return;
   if (!document.contains(mountedContainer)) { cleanup(); return; }
   if (differerSiSaisieDate(mountedContainer, render)) return;
+  const y = window.scrollY;
+  try { renderInterne(); } finally { if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y); requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y); }); }
+}
+function renderInterne() {
   if (state.sites.length === 0) { mountedContainer.innerHTML = `<div class="hint">Chargement des sites…</div>`; return; }
   const disps = dispositifs();
   const sitesInDisp = state.sites.filter(s => siteDispositif(s) === ui.dispositif);
@@ -615,13 +624,13 @@ function render() {
   document.getElementById("fc-add-chambre")?.addEventListener("click", async () => {
     data.chambres.push({ chambre: "", date: "", observation: "" });
     render();
-    try { await saveFiche(id, data); } catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
+    try { await sauverFiche(id, data); } catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
   });
   mountedContainer.querySelectorAll("[data-del-chambre]").forEach(btn => {
     btn.addEventListener("click", async () => {
       data.chambres.splice(parseInt(btn.dataset.delChambre, 10), 1);
       render();
-      try { await saveFiche(id, data); } catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
+      try { await sauverFiche(id, data); } catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
     });
   });
   document.getElementById("fc-obs-generales").addEventListener("input", (e) => {
@@ -630,7 +639,7 @@ function render() {
   });
   document.getElementById("fc-save").addEventListener("click", async () => {
     setSaveStatus("saving");
-    try { await saveFiche(id, data); setSaveStatus("ok"); }
+    try { await sauverFiche(id, data); setSaveStatus("ok"); }
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
   });
   document.getElementById("fc-precocher")?.addEventListener("click", async (e) => {
@@ -643,14 +652,14 @@ function render() {
         const site = state.sites.find(x => x.id === f.siteId);
         const motif = String(f.reconstituee.motif || "Fiche papier disparue").replace(/ — pré-cochée.*$/, "") + " — pré-cochée d'après le planning prévu, à corriger avec l'agent";
         const { id: _id, majLe: _m, supprimeLe: _s, ...reste } = f;
-        await saveFiche(f.id, { ...reste, cells: cellsPlanning(site), reconstituee: { ...f.reconstituee, motif, preCochee: true, preCocheeLe: dateKey(new Date()) } });
+        await sauverFiche(f.id, { ...reste, cells: cellsPlanning(site), reconstituee: { ...f.reconstituee, motif, preCochee: true, preCocheeLe: dateKey(new Date()) } });
       }
       window.toast?.(`✓ ${vides.length} fiche(s) pré-cochée(s) — à corriger avec l'agent`);
     } catch (err) { console.error(err); window.toast?.("Échec : " + (err?.message || err)); e.target.disabled = false; }
   });
   document.getElementById("fc-submit").addEventListener("click", async () => {
     data.submitted = !data.submitted;
-    try { await saveFiche(id, data); render(); }
+    try { await sauverFiche(id, data); render(); }
     catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
   });
 }
