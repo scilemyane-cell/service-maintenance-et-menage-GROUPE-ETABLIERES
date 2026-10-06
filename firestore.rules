@@ -208,9 +208,23 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow read, delete: if isSuperAdmin();
     }
+    // Journal de la date de saisie : date initiale figée, historique jamais
+    // raccourci ni réécrit, correction de la date réservée aux admins.
+    function auditFicheOk() {
+      let avant = resource.data;
+      let apres = request.resource.data;
+      let hAvant = avant.get('historiqueSaisie', []);
+      let hApres = apres.get('historiqueSaisie', []);
+      return (avant.get('saisieInitialeLe', null) == null || apres.get('saisieInitialeLe', null) == avant.get('saisieInitialeLe', null))
+        && hApres.size() >= hAvant.size()
+        && (hAvant.size() == 0 || hApres[0:hAvant.size()] == hAvant)
+        && (avant.get('saisieTardiveLe', null) == null || apres.get('saisieTardiveLe', null) == avant.get('saisieTardiveLe', null)
+            || (isAdminLevel() && hApres.size() == hAvant.size() + 1));
+    }
     match /fiches/{docId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);
+      allow create: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);
+      allow update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid) && auditFicheOk();
       allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
     }
     // ---- Répartition hebdomadaire des heures par tâche ----

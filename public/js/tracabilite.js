@@ -43,11 +43,16 @@ function mountInternal(container, user) {
 function mentionHTML(f, court = false) {
   return mentionBase(f, court);
 }
+// Dernière correction de la date de saisie (le détail complet reste dans l'historique).
+function correctionTxt(f) {
+  const h = f.historiqueSaisie || []; const e = h[h.length - 1];
+  return e ? ` (date corrigée le ${fmtShort(new Date(e.le))} — motif : ${esc(e.motif)})` : "";
+}
 function mentionBase(f, court = false) {
   if (f.reconstituee) return court ? `<span class="tag" style="background:#fff1d6;color:#8a5a00" title="${esc(f.reconstituee.motif || "")}">🧾 Reconstituée</span>`
-    : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.${f.saisieTardiveLe ? ` Complétée le ${fmtShort(new Date(f.saisieTardiveLe))}${f.motifRetard ? ` — ${esc(f.motifRetard)}` : ""}.` : ""}`;
+    : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.${f.saisieTardiveLe ? ` Complétée le ${fmtShort(new Date(f.saisieTardiveLe))}${correctionTxt(f)}${f.motifRetard ? ` — ${esc(f.motifRetard)}` : ""}.` : ""}`;
   if (f.saisieTardiveLe) return court ? `<span class="tag" style="background:#eef2ff;color:#33449a" title="Remplie après la fin de la semaine">✍️ Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}</span>`
-    : `Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}${f.motifRetard ? ` — ${esc(f.motifRetard)}` : ""}.`;
+    : `Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}${correctionTxt(f)}${f.motifRetard ? ` — ${esc(f.motifRetard)}` : ""}.`;
   return "";
 }
 

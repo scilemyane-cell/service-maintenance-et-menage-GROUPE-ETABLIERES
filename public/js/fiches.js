@@ -1,7 +1,7 @@
 import { differerSiSaisieDate } from "./saisie-dates.js";
 import { addDays, dateKey, fmtShort, esc, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
-import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
+import { watchFiches, saveFiche, ficheId, corrigerDateSaisie } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
 import { watchAccess, hasAccess } from "./access-data.js";
 
@@ -505,8 +505,27 @@ function renderInterne() {
         const prec = state.fiches.find(f => f.id === ficheId(ui.siteId, dateKey(addDays(new Date(ui.weekStart + "T00:00:00"), -7)), data.agentUid));
         return prec && Object.values(prec.cells || {}).some(Boolean) ? `<button type="button" class="nav-btn" id="fc-copier-prec" style="width:fit-content;border:1px dashed #33449a;background:#eef2ff;color:#33449a;font-weight:700">📋 Reprendre le remplissage de la semaine du ${fmtShort(new Date(prec.weekStart))}</button>` : "";
       })()}
-      ${data.saisieTardiveLe && isEditorUser(mountedUser) ? `<label style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--text-dim)">✍️ Saisie le ${fmtShort(new Date(data.saisieTardiveLe))} — motif :
-        <input id="fc-motif-retard" type="text" value="${esc(data.motifRetard || "")}" placeholder="ex. recopiée depuis la fiche papier" style="flex:1;min-width:180px;padding:4px 8px"></label>` : ""}
+      ${data.saisieTardiveLe ? (() => {
+        const admin = ["admin", "super_admin"].includes(mountedUser?.role);
+        const h = data.historiqueSaisie || [];
+        const fd = (x) => x ? fmtShort(new Date(x)) : "—";
+        return `<div class="fc-saisie" style="font-size:13px;color:var(--text-dim);display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">✍️ Saisie le <b>${fd(data.saisieTardiveLe)}</b>${h.length ? ` <span class="tag" style="background:#eef2ff;color:#33449a">corrigée ${h.length > 1 ? `${h.length} fois` : ""}</span>` : ""}
+            ${admin ? `<button type="button" class="nav-btn" id="fc-corr-date" style="padding:3px 10px;font-size:12px">✏️ Corriger la date</button>` : ""}</div>
+          ${isEditorUser(mountedUser) ? `<label style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">Motif du retard :
+            <input id="fc-motif-retard" type="text" value="${esc(data.motifRetard || "")}" placeholder="ex. recopiée depuis la fiche papier" style="flex:1;min-width:180px;padding:4px 8px"></label>` : ""}
+          <form id="fc-corr-form" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;padding:8px;border:1px dashed var(--border);border-radius:8px">
+            Nouvelle date <input type="date" name="d" required min="${esc(data.weekStart)}" max="${dateKey(new Date())}" value="${esc(data.saisieTardiveLe)}">
+            <input type="text" name="m" required placeholder="Motif de la correction (obligatoire)" style="flex:1;min-width:200px;padding:4px 8px">
+            <button type="submit" class="add-btn" style="padding:5px 12px">Enregistrer</button>
+          </form>
+          ${h.length || data.saisieInitialeLe ? `<details><summary style="cursor:pointer">Historique de la date de saisie</summary>
+            <ol style="margin:6px 0 0;padding-left:18px;font-size:12px">
+              <li>Date initiale : <b>${fd(data.saisieInitialeLe || h[0]?.ancienne || data.saisieTardiveLe)}</b></li>
+              ${h.map(e => `<li>${fd(e.ancienne)} → <b>${fd(e.nouvelle)}</b> · par ${esc(e.par || "?")} le ${new Date(e.le).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })} · motif : ${esc(e.motif)}</li>`).join("")}
+            </ol></details>` : ""}
+        </div>`;
+      })() : ""}
       ${data.reconstituee ? `<div class="stat-chip" style="width:fit-content;background:#fff1d6;color:#8a5a00">🧾 Fiche reconstituée (${esc(data.reconstituee.motif || "fiche papier disparue")}) — coche seulement ce qui a réellement été fait cette semaine-là.</div>` : ""}
       ${(() => {
         // Superviseur : pré-cocher d'après le planning prévu toutes les fiches reconstituées
@@ -649,6 +668,17 @@ function renderInterne() {
     setSaveStatus("saving");
     try { await sauverFiche(id, data); setSaveStatus("ok"); }
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
+  });
+  document.getElementById("fc-corr-date")?.addEventListener("click", () => { const f = document.getElementById("fc-corr-form"); const ouvrir = f.style.display === "none"; f.style.display = ouvrir ? "flex" : "none"; if (ouvrir) f.m.focus(); });
+  document.getElementById("fc-corr-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = e.target, d = f.d.value, m = f.m.value.trim();
+    if (!d || !m) return;
+    f.querySelector("button").disabled = true;
+    try {
+      await corrigerDateSaisie(id, d, m, mountedUser);
+      render(); window.toast?.("✓ Date corrigée — enregistrée dans l'historique");
+    } catch (err) { alert("Correction impossible : " + (err?.message || err)); f.querySelector("button").disabled = false; }
   });
   document.getElementById("fc-motif-retard")?.addEventListener("change", async (e) => {
     data.motifRetard = e.target.value.trim();
