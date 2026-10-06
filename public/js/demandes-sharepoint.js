@@ -18,6 +18,10 @@ import { doc, getDoc, getDocs, query, where, setDoc, collection, writeBatch, ser
 const DOSSIER = "Demandes";
 const COPIE = "SG_Suivi_Demandes_GroupeEtablieres.xlsx";
 const FICHIER_MAJ = "mises-a-jour-demandes.json";
+// Accusé de traitement écrit par le flux Power Automate n° 2 à la fin de son
+// passage (copie du fichier traité) : on n'envoie ensuite que ce qui a changé
+// depuis → quelques lignes au lieu de centaines (quota d'actions du flux).
+const FICHIER_TRAITE = "mises-a-jour-traitees.json";
 const REF_SYNCHRO = doc(db, "config", "demandes-synchro");
 // Empreinte de chaque ligne du fichier au dernier import : la synchro auto
 // ne relit dans Firestore que les demandes dont la ligne a changé (quota).
@@ -298,7 +302,13 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   // 10 jours : le fichier déposé est REMPLACÉ à chaque envoi et le flux
   // Power Automate ne tourne qu'à heure fixe — une modification du vendredi
   // doit encore y être le lundi (avant : 36 h seulement → mises à jour perdues).
-  const depuis = Date.now() - 10 * 86400000;
+  let depuis = Date.now() - 10 * 86400000, depuisTraite = 0;
+  try {
+    const buf = await telechargerFichierDrive(`${DOSSIER}/${FICHIER_TRAITE}`, token);
+    const g = buf ? Date.parse(JSON.parse(new TextDecoder().decode(buf)).genereLe || "") : NaN;
+    // 15 min de marge (horloges, modifications pendant le dépôt).
+    if (g) { depuisTraite = g; depuis = Math.max(depuis, g - 15 * 60000); }
+  } catch (e) { console.warn("Accusé du flux illisible :", e); }
   const ms = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds ? d.dateMaj.seconds * 1000 : 0);
   // N° porté par plusieurs demandes : le flux retrouve la ligne Excel par le
   // N° seul et écrirait les deux suivis sur la même ligne (le dernier gagne)
@@ -327,7 +337,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)${nouvelles.length ? ` et ${nouvelles.length} nouvelle(s)` : ""}…`);
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
   await remplacerPetitFichier(fichier, token, DOSSIER, FICHIER_MAJ);
-  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)] }, { merge: true });
+  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)], dernierTraitementFlux: depuisTraite || null }, { merge: true });
   return { envoyees: lignes.length, ignorees: [...new Set(ignorees)] };
 }
 
