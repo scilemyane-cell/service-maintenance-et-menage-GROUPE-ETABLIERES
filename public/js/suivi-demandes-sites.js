@@ -530,6 +530,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const brancherAttrib = () => {
     container.querySelectorAll("[data-attrib]").forEach(sel => sel.addEventListener("change", () => { const l = toutesLignes.find(x => x.id === sel.dataset.attrib); if (l) attribuer(l, sel.value, sel); }));
     container.querySelector("#dps-gerer-ent")?.addEventListener("click", () => ouvrirGestionEntreprises(toutesLignes));
+    container.querySelector("#dps-recap-ent")?.addEventListener("click", async () => { const { ouvrirRecapEntreprises } = await import("./demandes-recap-entreprises.js"); ouvrirRecapEntreprises({ lignes: toutesLignes, entreprises: ent.liste }); });
     container.querySelectorAll("[data-attrib-rapide]").forEach(b => b.addEventListener("click", () => { const [id, v] = b.dataset.attribRapide.split("|"); const l = toutesLignes.find(x => x.id === id); if (l) { b.disabled = true; attribuer(l, v, null); } }));
   };
   const q = sa(st.q.trim());
@@ -672,6 +673,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
         ${perms.isEditor && techs.length ? `<button type="button" class="dps-gerer-affect" id="dps-gerer-affect">👷 Attribuer des sites…</button>` : ""}
         ${perms.isEditor ? `<button type="button" class="dps-gerer-affect" id="dps-gerer-ent">🏢 Entreprises extérieures…</button>` : ""}
+        ${perms.isEditor ? `<button type="button" class="dps-gerer-affect" id="dps-recap-ent">📋 Récap entreprises</button>` : ""}
         ${!estTech && techs.length ? `<label class="dps-tech-filtre">👷<select id="dps-tech"><option value="">Tous les techniciens</option>${techs.map(t => `<option value="${esc(t.uid)}" ${st.tech === t.uid ? "selected" : ""}>${esc(t.nom || t.email)} (${(n => `${n} site${n > 1 ? "s" : ""}`)(Object.values(aff.data).filter(l => l.includes(t.uid)).length)})</option>`).join("")}</select></label>` : ""}
         <label class="dps-case"><input type="checkbox" id="dps-traitees" ${st.voirTraitees ? "checked" : ""}> Sites sans demande en attente</label>
       </div>

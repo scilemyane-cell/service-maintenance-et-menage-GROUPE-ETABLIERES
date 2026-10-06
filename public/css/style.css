@@ -2833,3 +2833,26 @@ body.clo-ouvert{overflow:hidden}
 .ent-sug{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;margin-top:8px}
 .ent-sug button{border:1px dashed var(--border);background:var(--panel);border-radius:999px;padding:4px 10px;cursor:pointer}
 @media (max-width:700px){.ent-entete{display:none}.ent-ligne{grid-template-columns:1fr 1fr;padding:8px;border:1px solid var(--border);border-radius:10px}.ent-champ>span{display:block}.ent-ligne [data-c="nom"],.ent-ligne [data-c="metier"]{grid-column:1/-1}.ent-ligne [data-k="nom"]{font-weight:700}.ent-2{grid-template-columns:1fr}}
+/* Récap par entreprise extérieure */
+.rce{max-width:980px}
+.rce-liste{display:flex;flex-direction:column;gap:8px;max-height:65vh;overflow:auto;margin-top:8px}
+.rce-ent{border:1px solid var(--border);border-radius:12px;background:var(--panel);overflow:hidden}
+.rce-ent.ouvert{border-color:#1a4fb4}
+.rce-tete{width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:0;background:none;color:var(--text);cursor:pointer;text-align:left;font:inherit}
+.rce-nom{display:flex;flex-direction:column}
+.rce-nom small{color:var(--text-dim)}
+.rce-chiffres{display:flex;gap:6px;flex-wrap:wrap;font-size:12px}
+.rce-chiffres span{padding:3px 9px;border-radius:999px;background:var(--panel-2,rgba(0,0,0,.05))}
+.rce-chiffres .af{background:#1a4fb4;color:#fff}
+.rce-chiffres .va{background:#fff1d6;color:#8a5a00}
+.rce-chiffres .ok{background:#e3f6e8;color:#1d6b35}
+.rce-corps{padding:0 12px 12px}
+.rce-coord{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;margin-bottom:8px}
+.rce-coord a{color:#1a4fb4;font-weight:700;text-decoration:none}
+.rce-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.rce-table th,.rce-table td{border-bottom:1px solid var(--border);padding:6px;text-align:left;vertical-align:top}
+.rce-table th{font-size:11px;text-transform:uppercase;color:var(--text-dim)}
+.rce-table tr.urg td:first-child{border-left:3px solid #d93025}
+.rce-faites{margin-top:8px;font-size:12.5px}
+.rce-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+@media (max-width:700px){.rce-table thead{display:none}.rce-table tr{display:block;padding:6px 0;border-bottom:1px solid var(--border)}.rce-table td{display:inline;border:0;padding:0 4px 0 0}.rce-table td:nth-child(3){display:block}}

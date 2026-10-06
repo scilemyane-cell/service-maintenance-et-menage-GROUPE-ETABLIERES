@@ -16,17 +16,17 @@ function suivi(l) {
   return t.join("<br>");
 }
 
-function tableau(titre, liste, parLocal) {
+function tableau(titre, liste, parLocal, avecSite = false) {
   if (!liste.length) return "";
   const tri = [...liste].sort((a, b) => parLocal
     ? (a.local || "zzz").localeCompare(b.local || "zzz", "fr", { numeric: true }) || String(a.n).localeCompare(String(b.n), "fr", { numeric: true })
     : (ORDRE_URG[a.urgence] ?? 5) - (ORDRE_URG[b.urgence] ?? 5) || (a.date || "").localeCompare(b.date || ""));
   return `<h2>${titre} <span>(${liste.length})</span></h2>
-  <table><thead><tr><th class="c-n">N°</th><th class="c-d">Date</th><th class="c-l">Logement / local</th><th>Demande</th><th class="c-u">Urgence</th><th class="c-s">Statut</th><th class="c-sv">Suivi</th><th class="c-f">Fait / notes</th></tr></thead>
+  <table><thead><tr><th class="c-n">N°</th><th class="c-d">Date</th><th class="c-l">${avecSite ? "Site / local" : "Logement / local"}</th><th>Demande</th><th class="c-u">Urgence</th><th class="c-s">Statut</th><th class="c-sv">Suivi</th><th class="c-f">Fait / notes</th></tr></thead>
   <tbody>${tri.map(l => `<tr class="${l.urgence === "Critique" ? "crit" : l.urgence === "Urgent" ? "urg" : ""}">
     <td class="c-n"><b>${esc(l.n)}</b></td>
     <td class="c-d">${fr(l.date)}</td>
-    <td class="c-l"><b>${esc(l.local || "—")}</b>${l.logementOccupe ? `<br><small>Occupé : ${esc(l.logementOccupe)}</small>` : ""}</td>
+    <td class="c-l">${avecSite ? `<b>${esc(l.site)}</b><br>` : ""}<b>${esc(l.local || "—")}</b>${l.logementOccupe ? `<br><small>Occupé : ${esc(l.logementOccupe)}</small>` : ""}</td>
     <td>${l.type ? `<small class="type">${esc(l.type)}</small><br>` : ""}${esc(l.descr)}${l.demandeur ? `<br><small>Demandeur : ${esc(l.demandeur)}</small>` : ""}</td>
     <td class="c-u">${esc(l.urgence === "Non renseignée" ? "" : l.urgence)}</td>
     <td class="c-s">${esc(l.statut)}</td>
@@ -34,7 +34,7 @@ function tableau(titre, liste, parLocal) {
     <td class="c-f"></td></tr>`).join("")}</tbody></table>`;
 }
 
-function pageHTML({ site, techs, sections, parLocal }) {
+function pageHTML({ site, techs, sections, parLocal, sousTitre = "", avecSite = false }) {
   const total = sections.reduce((n, s) => n + s.liste.length, 0);
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Demandes – ${esc(site)}</title>
@@ -65,12 +65,23 @@ footer{margin-top:10px;color:#666;font-size:10px}
 @media print{.imp{display:none}body{padding:0}}
 </style></head><body>
 <div class="imp"><button onclick="window.print()">🖨 Imprimer</button><button class="sec" onclick="window.close()">Fermer</button></div>
-<header><div><h1>${esc(site)}</h1><p>Récapitulatif des demandes — ${total} demande${total > 1 ? "s" : ""}${techs ? ` · 👷 ${esc(techs)}` : ""}${parLocal ? " · classées par logement" : " · classées par urgence"}</p></div>
+<header><div><h1>${esc(site)}</h1><p>${sousTitre ? `${sousTitre}<br>` : ""}Récapitulatif des demandes — ${total} demande${total > 1 ? "s" : ""}${techs ? ` · 👷 ${esc(techs)}` : ""}${parLocal ? " · classées par logement" : " · classées par urgence"}</p></div>
 <p>Groupe Établières — Service Maintenance<br>Imprimé le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p></header>
-${sections.map(s => tableau(s.titre, s.liste, parLocal)).join("") || "<p>Aucune demande.</p>"}
+${sections.map(s => tableau(s.titre, s.liste, parLocal, avecSite)).join("") || "<p>Aucune demande.</p>"}
 <footer>Document généré depuis l'appli Service Maintenance et Ménage.</footer>
 <script>window.addEventListener("load",()=>setTimeout(()=>{try{window.print()}catch(e){}},400));</script>
 </body></html>`;
+}
+
+// Page imprimable d'une liste quelconque (ex. récap d'une entreprise extérieure).
+// `fenetre` : fenêtre ouverte dans le clic (téléphones), sinon on en ouvre une.
+export function imprimerListe({ titre, sousTitre = "", sections, fenetre = null }) {
+  const html = pageHTML({ site: titre, sousTitre, sections: sections.filter(s => s.liste.length), parLocal: false, avecSite: true });
+  const w = fenetre || window.open("", "_blank");
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = `demandes-${titre.replace(/[^\w-]+/g, "_")}.html`; a.click();
 }
 
 // Petite fenêtre de choix, puis ouverture de la page à imprimer.
