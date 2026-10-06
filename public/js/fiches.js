@@ -478,6 +478,7 @@ function render() {
       </div>
 
       ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Fiche marquée comme terminée pour cette semaine</div>` : ""}
+      ${data.reconstituee ? `<div class="stat-chip" style="width:fit-content;background:#fff1d6;color:#8a5a00">🧾 Fiche reconstituée (${esc(data.reconstituee.motif || "fiche papier disparue")}) — coche seulement ce qui a réellement été fait cette semaine-là.</div>` : ""}
 
       ${ui.vue === "jour" ? vueJourHTML(site, data) : vueSemaineHTML(site, data)}
 

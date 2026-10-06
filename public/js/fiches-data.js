@@ -31,7 +31,18 @@ function watchFichesBrut(callback) {
   }, (err) => { console.error("watchFiches:", err); callback([]); });
 }
 
+// Traçabilité honnête : une fiche remplie après la fin de sa semaine (+3 j)
+// garde la date de cette saisie tardive (affichée sur la fiche et à l'impression).
+function marquerSaisieTardive(data) {
+  if (!data || data.saisieTardiveLe || !data.weekEnd) return data;
+  const limite = new Date(String(data.weekEnd).slice(0, 10) + "T00:00:00"); limite.setDate(limite.getDate() + 3);
+  const contenu = Object.values(data.cells || {}).some(Boolean) || Object.values(data.obs || {}).some(Boolean) || (data.chambres || []).length || data.observationsGenerales;
+  if (Date.now() > limite.getTime() && contenu) { const d = new Date(); data.saisieTardiveLe = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+  return data;
+}
+
 export async function saveFiche(id, data) {
+  marquerSaisieTardive(data);
   majLocale("fiches", id, { ...data, majLe: Timestamp.now(), supprimeLe: null });
   await setDoc(doc(db, "fiches", id), { ...data, majLe: serverTimestamp(), supprimeLe: deleteField() }, { merge: true });
 }

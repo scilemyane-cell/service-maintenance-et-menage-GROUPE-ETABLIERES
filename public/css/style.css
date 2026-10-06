@@ -2933,3 +2933,10 @@ body.clo-ouvert{overflow:hidden}
 .dps-vf-btns{display:flex;justify-content:flex-end;margin-top:8px}
 .dps-vf-aide{margin:6px 0 0;font-size:12px;color:var(--text-dim)}
 @media (max-width:700px){.dps-vf-champs{grid-template-columns:1fr}}
+/* Reconstitution des fiches de traçabilité */
+.rcs{max-width:560px}
+.rcs label{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px;margin-top:8px}
+.rcs input,.rcs select{padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);font:14px system-ui,sans-serif}
+.rcs-sites{border:1px solid var(--border);border-radius:10px;margin-top:10px;max-height:200px;overflow:auto;padding:6px 10px}
+.rcs-sites label{flex-direction:row;align-items:center;gap:8px;font-weight:400;margin:4px 0}
+.rcs-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px}

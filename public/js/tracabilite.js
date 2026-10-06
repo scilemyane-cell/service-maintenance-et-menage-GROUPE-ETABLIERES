@@ -1,8 +1,9 @@
-import { fmtShort, esc } from "./astreinte-logic.js";
+import { fmtShort, esc, dateKey, addDays } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
-import { watchFiches, deleteFiche } from "./fiches-data.js";
+import { watchFiches, deleteFiche, saveFiche, ficheId } from "./fiches-data.js";
+import { watchUsers } from "./users-data.js";
 
-let state = { fiches: [], sites: [] };
+let state = { fiches: [], sites: [], agents: [] };
 let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null };
 let unsubs = [];
 let mountedContainer = null;
@@ -35,6 +36,62 @@ function mountInternal(container, user) {
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
+  unsubs.push(watchUsers((u) => { state.agents = u.filter(x => ["menage", "mi_temps"].includes(x.role)); }));
+}
+
+// Mention de reconstitution / saisie tardive (liste et impression).
+function mentionHTML(f, court = false) {
+  if (f.reconstituee) return court ? `<span class="tag" style="background:#fff1d6;color:#8a5a00" title="${esc(f.reconstituee.motif || "")}">🧾 Reconstituée</span>`
+    : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.${f.saisieTardiveLe ? ` Complétée le ${fmtShort(new Date(f.saisieTardiveLe))}.` : ""}`;
+  if (f.saisieTardiveLe) return court ? `<span class="tag" style="background:#eef2ff;color:#33449a" title="Remplie après la fin de la semaine">✍️ Saisie le ${fmtShort(new Date(f.saisieTardiveLe))}</span>`
+    : `Fiche complétée après la semaine concernée, le ${fmtShort(new Date(f.saisieTardiveLe))}.`;
+  return "";
+}
+
+// Ouvre des fiches VIDES pour les semaines dont la fiche papier a disparu :
+// l'agent coche ensuite ce qu'il a réellement fait ; chaque fiche porte la
+// mention « reconstituée » (date, qui l'a ouverte, motif).
+function ouvrirReconstitution() {
+  const sites = state.sites.filter(s => !lockedDispositif || siteDispositif(s) === lockedDispositif).sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
+  const lundi = (d) => addDays(d, -((d.getDay() + 6) % 7));
+  const finDefaut = dateKey(addDays(lundi(new Date()), -7));
+  const fond = document.createElement("div"); fond.className = "ndm-fond";
+  fond.innerHTML = `<div class="ndm rcs">
+    <div class="ndm-tete"><h3>🧾 Reconstituer des fiches disparues</h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
+    <p class="gaf-aide">Crée une fiche <b>vide</b> par semaine manquante. L'agent y coche ensuite ce qu'il a réellement fait, puis tu valides. Chaque fiche porte la mention « reconstituée a posteriori » avec la date et le motif (visible à l'impression).</p>
+    <label>Agent<select id="rcs-agent"><option value="">— choisir —</option>${state.agents.sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr")).map(a => `<option value="${esc(a.uid)}">${esc(a.nom || a.email)}</option>`).join("")}</select></label>
+    <fieldset class="rcs-sites"><legend>Sites</legend>${sites.map(s => `<label><input type="checkbox" value="${esc(s.id)}"> ${esc(s.name)}</label>`).join("") || "<i>Aucun site</i>"}</fieldset>
+    <div class="rcs-dates"><label>Du<input type="date" id="rcs-du" value="2026-09-01"></label><label>Au<input type="date" id="rcs-au" value="${finDefaut}"></label></div>
+    <label>Motif<input id="rcs-motif" value="Fiche papier disparue"></label>
+    <div class="ndm-etat"></div>
+    <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Annuler</button><button type="button" class="dps-enregistrer" id="rcs-ok">🧾 Créer les fiches à compléter</button></div>
+  </div>`;
+  document.body.append(fond);
+  const etat = fond.querySelector(".ndm-etat");
+  fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", () => fond.remove()));
+  fond.addEventListener("click", (e) => { if (e.target === fond) fond.remove(); });
+  fond.querySelector("#rcs-ok").addEventListener("click", async (e) => {
+    const uid = fond.querySelector("#rcs-agent").value, agent = state.agents.find(a => a.uid === uid);
+    const ids = [...fond.querySelectorAll(".rcs-sites input:checked")].map(i => i.value);
+    const du = fond.querySelector("#rcs-du").value, au = fond.querySelector("#rcs-au").value, motif = fond.querySelector("#rcs-motif").value.trim() || "Fiche papier disparue";
+    if (!agent || !ids.length || !du || !au || au < du) { etat.textContent = "Choisis l'agent, au moins un site et une période valide."; return; }
+    const semaines = []; for (let d = lundi(new Date(du + "T00:00:00")); dateKey(d) <= au; d = addDays(d, 7)) semaines.push(dateKey(d));
+    const aCreer = [];
+    ids.forEach(sid => semaines.forEach(w => { const id = ficheId(sid, w, uid); if (!state.fiches.some(f => f.id === id)) aCreer.push({ id, sid, w }); }));
+    if (!aCreer.length) { etat.textContent = "Toutes ces semaines ont déjà une fiche."; return; }
+    if (!confirm(`Créer ${aCreer.length} fiche(s) vide(s) « reconstituée » pour ${agent.nom || agent.email} ?\nL'agent devra cocher ce qu'il a réellement fait.`)) return;
+    e.target.disabled = true; etat.textContent = "⏳ Création…";
+    const auj = dateKey(new Date()), par = mountedUser?.nom || mountedUser?.email || "";
+    try {
+      for (const x of aCreer) {
+        const site = state.sites.find(s => s.id === x.sid);
+        await saveFiche(x.id, { siteId: x.sid, siteName: site?.name || "", weekStart: x.w, weekEnd: dateKey(addDays(new Date(x.w + "T00:00:00"), 4)),
+          agentUid: uid, agentNom: agent.nom || agent.email, cells: {}, obs: {}, periodiques: {}, chambres: [], observationsGenerales: "", submitted: false,
+          reconstituee: { le: auj, par, motif } });
+      }
+      window.toast?.(`✓ ${aCreer.length} fiche(s) à compléter créée(s)`); fond.remove();
+    } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); e.target.disabled = false; }
+  });
 }
 
 function taskCompletion(fiche, site) {
@@ -73,6 +130,7 @@ function render() {
         ${!lockedDispositif ? `<label>Dispositif<select id="tr-disp">${dispositifs.map(d => `<option ${ui.filterDispositif === d ? 'selected' : ''}>${esc(d)}</option>`).join("")}</select></label>` : ""}
         <label>Site<select id="tr-site">${siteNames.map(s => `<option ${ui.filterSite === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}</select></label>
         <label>Agent<select id="tr-agent">${agents.map(a => `<option ${ui.filterAgent === a ? 'selected' : ''}>${esc(a)}</option>`).join("")}</select></label>
+        ${isEditorUser(mountedUser) ? `<button type="button" class="nav-btn" id="tr-reconst" style="align-self:flex-end">🧾 Reconstituer des fiches disparues</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -88,7 +146,7 @@ function render() {
                   <td>${esc(f.siteName)}</td>
                   <td>${esc(f.agentNom)}</td>
                   <td>${done}/${total}</td>
-                  <td>${f.submitted ? `<span class="tag" style="background:var(--teal)">Terminée</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">En cours</span>`}</td>
+                  <td>${f.submitted ? `<span class="tag" style="background:var(--teal)">Terminée</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">${f.reconstituee && !done ? "À compléter" : "En cours"}</span>`} ${mentionHTML(f, true)}</td>
                   <td style="white-space:nowrap">
                     <button class="nav-btn" data-open="${f.id}" style="padding:4px 10px;font-size:11px">Voir</button>
                     ${isEditorUser(mountedUser) ? `<button class="del-btn" data-del-fiche="${f.id}">🗑️</button>` : ""}
@@ -156,6 +214,7 @@ function render() {
         </table>` : ""}
 
         <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
+        ${mentionHTML(opened) ? `<p style="font-size:11px;margin-top:10px;padding:6px 8px;border:1px dashed #999;font-style:italic">${mentionHTML(opened)}</p>` : ""}
 
         <div style="margin-top:36px;display:flex;justify-content:space-between;font-size:12px">
           <span>SIGNATURE AGENT</span>
@@ -171,6 +230,7 @@ function render() {
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
+  document.getElementById("tr-reconst")?.addEventListener("click", ouvrirReconstitution);
   document.getElementById("tr-print")?.addEventListener("click", () => { window.print(); });
   document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
