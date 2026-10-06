@@ -179,7 +179,6 @@ function render() {
       <div class="print-fiche" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
           <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
-          <span style="font-size:13px">Le ${fmtShort(new Date())}</span>
         </div>
         <p style="font-size:14px;margin:0 0 6px">FICHE DE TRAÇABILITÉ – AGENT D'ENTRETIEN${lockedDispositif ? ` (${esc(lockedDispositif).toUpperCase()})` : ""}</p>
         <p style="font-size:13px;margin:0 0 6px">Structure : ${esc(opened.siteName).toUpperCase()}</p>
