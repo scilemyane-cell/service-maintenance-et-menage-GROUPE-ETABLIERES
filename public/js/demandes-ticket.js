@@ -32,7 +32,60 @@ export function preparerFenetre() {
   return w;
 }
 
-export async function ouvrirTicketPrestataire({ ligne: l, adresse = "", utilisateur = "", email = "", fenetre = null }) {
+export async function ouvrirTicketPrestataire(params) {
+  const html = await construireTicket(params);
+  const l = params.ligne, w = params.fenetre || window.open("", "_blank");
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = `demande-${String(l.n).replace(/[^\w-]+/g, "_")}.html`; a.click();
+}
+
+// ---- Copie du ticket en IMAGE en un clic (à coller dans un mail) ----
+// À appeler DIRECTEMENT dans le clic : le presse-papiers n'accepte l'écriture
+// que pendant le geste de l'utilisateur (l'image se prépare ensuite).
+let h2c = null;
+const chargerCapture = () => window.html2canvas ? Promise.resolve() : (h2c || (h2c = new Promise((ok, ko) => {
+  const sc = document.createElement("script");
+  sc.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+  const echec = () => { h2c = null; ko(new Error("outil de capture non chargé (connexion ?)")); };
+  const t = setTimeout(echec, 15000);
+  sc.onload = () => { clearTimeout(t); ok(); }; sc.onerror = () => { clearTimeout(t); echec(); };
+  document.head.append(sc);
+})));
+export function prechargerCaptureTicket() { chargerCapture().catch(() => {}); }
+
+async function imageTicket(params) {
+  const [html] = await Promise.all([construireTicket(params), chargerCapture()]);
+  const ifr = document.createElement("iframe");
+  ifr.setAttribute("aria-hidden", "true");
+  ifr.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;height:1400px;border:0;visibility:hidden";
+  document.body.append(ifr);
+  try {
+    const d = ifr.contentDocument;
+    d.open(); d.write(html.replace(/<script[\s\S]*?<\/script>/g, "")); d.close();
+    await Promise.all([...d.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+    d.body.classList.add("capture");
+    const c = await window.html2canvas(d.querySelector(".page"), { scale: 2, backgroundColor: "#ffffff", logging: false, useCORS: true });
+    return await new Promise((ok, ko) => c.toBlob(b => b ? ok(b) : ko(new Error("image vide")), "image/png"));
+  } finally { ifr.remove(); }
+}
+
+// Renvoie une promesse : "copie" (dans le presse-papiers) ou "telecharge" (fichier PNG).
+export function copierTicketImage(params) {
+  const image = imageTicket(params);
+  const telecharger = async () => {
+    const b = await image, a = document.createElement("a");
+    a.href = URL.createObjectURL(b); a.download = `ticket-${String(params.ligne.n).replace(/[^\w-]+/g, "_")}.png`; a.click();
+    return "telecharge";
+  };
+  try {
+    if (!navigator.clipboard?.write || !window.ClipboardItem) return telecharger();
+    return navigator.clipboard.write([new ClipboardItem({ "image/png": image })]).then(() => "copie", (e) => { console.warn("Presse-papiers :", e); return telecharger(); });
+  } catch (e) { return telecharger(); }
+}
+
+async function construireTicket({ ligne: l, adresse = "", utilisateur = "", email = "" }) {
   const urg = l.urgence && l.urgence !== "Non renseignée" ? l.urgence : "";
   const travaux = l.commentaireTech || "Diagnostic et remise en état.";
   const aujourd = new Date().toLocaleDateString("fr-FR");
@@ -170,10 +223,5 @@ document.getElementById("copier").addEventListener("click",async()=>{
 });
 </script>
 </body></html>`;
-
-  const w = fenetre || window.open("", "_blank");
-  if (w) { w.document.open(); w.document.write(html); w.document.close(); return; }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-  a.download = `demande-${String(l.n).replace(/[^\w-]+/g, "_")}.html`; a.click();
+  return html;
 }

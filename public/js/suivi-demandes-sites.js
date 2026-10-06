@@ -4,7 +4,7 @@
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
 import { esc } from "./astreinte-logic.js";
 import { ouvrirImpressionSite } from "./demandes-impression.js";
-import { preparerFenetre } from "./demandes-ticket.js";
+import { preparerFenetre, copierTicketImage, prechargerCaptureTicket } from "./demandes-ticket.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
 import { watchFavoris, saveFavorisDemandes } from "./favoris-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -715,6 +715,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-carte-tete">
         <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${pastilleAttribHTML(l)}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
+        ${perms.peutTraiter && !TRAITE(l.statut) ? `<button type="button" class="dps-tk-copie" data-ticket-copie="${esc(l.id)}" title="Copie le ticket prestataire en image : colle-le ensuite dans ton mail (Ctrl+V ou appui long › Coller)">📋 Ticket pour mail</button>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>
       ${l.validation === "REFUSEE" && !TRAITE(l.statut) ? `<div class="dps-refus">↩ <b>Clôture refusée</b>${l.refusPar ? ` par ${esc(l.refusPar)}` : ""}${l.refusLe ? ` le ${fr(l.refusLe)}` : ""}${l.refusMotif ? ` : « ${esc(l.refusMotif)} »` : ""}<small>Complète puis renvoie la clôture.</small></div>` : ""}
@@ -855,6 +856,16 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const { ouvrirTicketPrestataire } = await import("./demandes-ticket.js");
     const fiche = (fav.fiches || []).find(f => memeSite(l.site, f.nom));
     ouvrirTicketPrestataire({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "", fenetre });
+  }));
+  if (container.querySelector("[data-ticket-copie]")) prechargerCaptureTicket();
+  container.querySelectorAll("[data-ticket-copie]").forEach(b => b.addEventListener("click", () => {
+    const l = lignes.find(x => x.id === b.dataset.ticketCopie); if (!l) return;
+    const fiche = (fav.fiches || []).find(f => memeSite(l.site, f.nom));
+    b.disabled = true; b.textContent = "⏳ Copie…";
+    copierTicketImage({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "" })
+      .then(r => { b.textContent = r === "copie" ? "✓ Copié !" : "⬇️ Image téléchargée"; window.toast?.(r === "copie" ? `✓ Ticket ${l.n} copié : colle-le dans ton mail (Ctrl+V ou appui long › Coller)` : `Ticket ${l.n} téléchargé en image : ajoute-le au mail en pièce jointe`); })
+      .catch(e => { console.error(e); b.textContent = "❌ Échec"; alert("Copie impossible : " + (e?.message || e)); })
+      .finally(() => setTimeout(() => { b.disabled = false; b.textContent = "📋 Ticket pour mail"; }, 2500));
   }));
   brancherAttrib();
   container.querySelectorAll("[data-urgence]").forEach(sel => sel.addEventListener("change", async () => {
