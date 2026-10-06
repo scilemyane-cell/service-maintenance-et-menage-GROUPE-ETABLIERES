@@ -289,6 +289,33 @@ export async function regrouperDoublonsImport(demandesApp) {
   return ops.filter(o => o[1].doublonImport).length;
 }
 
+// Contenu actuel de la copie du fichier Excel, ligne brute par N° (pour
+// n'envoyer au flux que ce qui DIFFÈRE vraiment du fichier).
+async function lignesCopieParNumero(token) {
+  const buf = await telechargerFichierDrive(`${DOSSIER}/${COPIE}`, token);
+  if (!buf) return null;
+  const XLSX = await window.chargerLib("XLSX");
+  const wb = XLSX.read(buf, { type: "array" });
+  const nomFeuille = wb.SheetNames.find(n => sa(n).includes("suivi des demandes")) || wb.SheetNames[0];
+  const lignes = XLSX.utils.sheet_to_json(wb.Sheets[nomFeuille], { header: 1, raw: true, defval: null });
+  const iEntete = lignes.findIndex(r => /^n.{0,2}demande/.test(sa(r?.[0])));
+  if (iEntete < 0) return null;
+  const m = new Map();
+  lignes.slice(iEntete + 1).forEach(r => { const n = String(r?.[0] ?? "").trim(); if (n) m.set(n, [...(m.get(n) || []), r]); });
+  return m;
+}
+// Même valeur côté appli et côté fichier ? (dates comparées en AAAA-MM-JJ, textes sans accents/espaces)
+const egalTexte = (a, b) => sa(a).replace(/\s+/g, " ") === sa(b).replace(/\s+/g, " ");
+const egalDate = (a, b) => (versIso(a) || "") === (versIso(b) || "");
+const egalStatut = (a, b) => { const n = (v) => { const t = sa(v); return t.startsWith("realis") ? "realise" : t.startsWith("annul") ? "annule" : t; }; return n(a) === n(b); };
+function dejaDansFichier(l, r) {
+  // Colonnes : 8 urgence, 10 intervenant (catégorie), 11 contact, 12 date intervention,
+  // 13 statut, 14 date statut, 15 commentaire, 16 validation, 17 date validation, 18 validé par.
+  return egalStatut(l.statut, r[13]) && egalDate(l.dateIntervention, r[12]) && egalDate(l.dateStatut, r[14])
+    && egalTexte(l.categorieIntervenant, r[10]) && egalTexte(l.intervenant, r[11]) && egalTexte(l.commentaire, r[15])
+    && egalTexte(l.urgence, r[8]) && egalTexte(l.validation, r[16]) && egalDate(l.dateValidation, r[17]) && egalTexte(l.validePar, r[18]);
+}
+
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return { envoyees: 0 };
@@ -328,6 +355,20 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
     dateStatut: fr(d.dateStatut),
     commentaire: [d.lieeANumero ? `🔗 Doublon de ${d.lieeANumero}` : "", d.urgenceCorrigee ? `⚠️ Urgence requalifiée : ${d.urgenceCorrigee}${d.urgenceCorrigeePar ? ` (${d.urgenceCorrigeePar})` : ""}` : "", d.commentaireTech ? `💬 ${d.commentaireTechPar ? `${nomPropre(d.commentaireTechPar)}${d.commentaireTechLe ? " (" + String(d.commentaireTechLe).slice(0, 10).split("-").reverse().join("/").slice(0, 5) + ")" : ""} : ` : ""}${d.commentaireTech}` : "", texteAction(d)].filter(Boolean).join("\n"),
   }));
+  // Comparaison avec la copie du fichier : on retire ce qui y est déjà
+  // (inutile de le réécrire) et les N° absents du fichier (le flux échouerait).
+  let dejaAJour = 0, absentsFichier = [];
+  try {
+    onProgress("Comparaison avec le fichier Excel…");
+    const copie = await lignesCopieParNumero(token);
+    if (copie) {
+      for (let i = lignes.length - 1; i >= 0; i--) {
+        const rows = copie.get(String(lignes[i].numero).trim());
+        if (!rows) { absentsFichier.push(lignes[i].numero); lignes.splice(i, 1); }
+        else if (rows.length === 1 && dejaDansFichier(lignes[i], rows[0])) { dejaAJour++; lignes.splice(i, 1); }
+      }
+    }
+  } catch (e) { console.warn("Comparaison avec la copie impossible :", e); }
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
     numero: d.numero, dateDemande: fr(d.dateDemande), association: d.association === "École" ? "Ecole" : (d.association || ""), site: d.site || "",
@@ -337,8 +378,8 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   onProgress(`Dépôt de ${lignes.length} demande(s) modifiée(s)${nouvelles.length ? ` et ${nouvelles.length} nouvelle(s)` : ""}…`);
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
   await remplacerPetitFichier(fichier, token, DOSSIER, FICHIER_MAJ);
-  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)], dernierTraitementFlux: depuisTraite || null }, { merge: true });
-  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)] };
+  await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)], dernierTraitementFlux: depuisTraite || null, dernierDepotDejaAJour: dejaAJour, dernierDepotAbsents: absentsFichier.slice(0, 50) }, { merge: true });
+  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)], dejaAJour, absentsFichier };
 }
 
 export async function lireDerniereSynchro() {

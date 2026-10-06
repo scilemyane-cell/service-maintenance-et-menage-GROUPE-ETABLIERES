@@ -904,7 +904,7 @@ function renderTableau(container) {
     e.target.disabled = true;
     try {
       const r = await deposerMisesAJour(state.demandes || [], { onProgress: (t) => msg(esc(t)) });
-      msg(`✓ Fichier des mises à jour déposé : ${r.envoyees} demande(s) modifiée(s) ces 10 derniers jours. Power Automate les reportera dans l'Excel à sa prochaine exécution.${r.ignorees?.length ? ` <span style="color:var(--red)">⚠️ Non envoyées car le N° existe en double : ${esc(r.ignorees.join(", "))} — à corriger dans l'Excel (N° unique).</span>` : ""}`);
+      msg(`✓ Fichier des mises à jour déposé : ${r.envoyees} demande(s) à reporter dans l'Excel${r.dejaAJour ? ` (${r.dejaAJour} déjà à jour dans le fichier, non renvoyée${r.dejaAJour > 1 ? "s" : ""})` : ""}. Power Automate les reportera à sa prochaine exécution.${r.absentsFichier?.length ? ` <span style="color:var(--red)">⚠️ Absentes du fichier Excel (non envoyées) : ${esc(r.absentsFichier.slice(0, 20).join(", "))}${r.absentsFichier.length > 20 ? "…" : ""} — N° modifié ou ligne supprimée dans l'Excel ?</span>` : ""}${r.ignorees?.length ? ` <span style="color:var(--red)">⚠️ Non envoyées car le N° existe en double : ${esc(r.ignorees.join(", "))} — à corriger dans l'Excel (N° unique).</span>` : ""}`);
     } catch (err) { console.error("Dépôt demandes :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
