@@ -307,6 +307,8 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
     numero: d.numero,
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation === "OUI" ? "OUI" : "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
+    // Urgence réelle (requalifiée dans l'appli si besoin), au format du fichier.
+    urgence: ({ "Critique": "CRITIQUE", "Urgent": "URGENT", "Normal": "NORMAL", "À planifier": "A PLANIFIER" })[d.urgenceCorrigee || d.urgence] || "",
     categorieIntervenant: d.categorieIntervenant || "",
     intervenant: d.intervenant || d.contact || "",
     dateIntervention: fr(d.dateIntervention),
