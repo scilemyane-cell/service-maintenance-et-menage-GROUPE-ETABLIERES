@@ -108,6 +108,8 @@ const TRAITE = (s) => s === "Réalisé" || s === "Annulé";
 export const A_VALIDER = "Réalisé – à valider";
 const EN_ATTENTE_VALID = (s) => s === A_VALIDER;
 const A_TRAITER = (s) => !TRAITE(s) && !EN_ATTENTE_VALID(s);
+// Les demandes arrivées à partir de cette date passent par « À attribuer » (superviseurs).
+const DEBUT_ATTRIBUTION = new Date("2026-10-01T00:00:00").getTime();
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
 // Jours calendaires écoulés (aujourd'hui = 0, hier = 1), quelle que soit l'heure.
 const joursDepuis = (iso) => { if (!iso) return null; const d = new Date(String(iso).slice(0, 10) + "T12:00:00"); if (isNaN(d)) return null; const auj = new Date(); auj.setHours(12, 0, 0, 0); return Math.max(0, Math.round((auj - d) / 86400000)); };
@@ -349,7 +351,7 @@ function marquerSiteVu(uid, site) {
 }
 const estNouvelle = (l, depuis) => !!l.importeMs && l.importeMs > depuis && !TRAITE(l.statut) && l.statut !== A_VALIDER;
 
-const st = { site: null, q: "", association: "", voirTraitees: false, brouillons: {}, tech: "", tri: "urgence", qSite: "" };
+const st = { site: null, q: "", association: "", voirTraitees: false, toutVoir: false, brouillons: {}, tech: "", tri: "urgence", qSite: "" };
 // Tri des demandes d'un site (mémorisé sur l'appareil).
 try { st.tri = localStorage.getItem("etablieres-dps-tri") || "urgence"; } catch {}
 const ORDRE_AVANCEMENT = { "Non renseigné": 0, "Pris en compte": 1, "Intervenant sollicité": 2, "Demande de devis": 3, "Planifié": 4, "Commande en cours": 5, "Autre": 6 };
@@ -385,7 +387,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   suivreAffectations();
   suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
-  const rerender = () => renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir, quitterFocus });
+  const toutesLignes = lignes;
+  const rerender = () => renderParSite(container, toutesLignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir, quitterFocus });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
   phr.rerender = () => { if (container.isConnected && st.site) rerender(); };
@@ -396,6 +399,49 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     .sort((a, b) => ((ORDRE_ROLE[a.role] ?? 0) - (ORDRE_ROLE[b.role] ?? 0)) || String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
   const nomDe = (id) => { const u = utilisateurs.find(x => x.uid === id); return u ? (u.nom || u.email) : ""; };
   const estTech = perms.isTech && !perms.isEditor;
+  // ---------- Attribution d'une demande (technicien ou entreprise) ----------
+  // Une demande attribuée ne concerne que son attributaire ; sans attribution,
+  // elle suit le(s) technicien(s) du site (ancien fonctionnement).
+  const concerneMoi = (l) => l.attribueA ? l.attribueA === uid : (techsDuSite(l.site).includes(uid) || l.actionPour === uid);
+  if (estTech && uid && !st.toutVoir) lignes = lignes.filter(l => concerneMoi(l) || l.actionPour === uid || (l.lieeA && toutesLignes.some(p => p.id === l.lieeA && concerneMoi(p))));
+  const iconeAttrib = (l) => l.attribueA === "ext" ? "🏢" : "👷";
+  const pastilleAttribHTML = (l) => l.attribueANom ? `<span class="dps-pastille attrib ${l.attribueA === uid ? "moi" : ""}" title="Attribuée${l.attribuePar ? ` par ${esc(l.attribuePar)}` : ""}${l.attribueLe ? ` le ${fr(l.attribueLe)}` : ""}">${iconeAttrib(l)} ${l.attribueA === uid ? "Pour moi" : esc(l.attribueANom)}</span>` : "";
+  const selectAttribHTML = (l) => {
+    const duSite = techsDuSite(l.site).map(nomDe).filter(Boolean);
+    return `<label class="dps-attrib-sel">Attribuée à<select data-attrib="${esc(l.id)}">
+      <option value="">— Personne${duSite.length ? ` (suit le site : ${esc(duSite.join(", "))})` : ""} —</option>
+      ${techs.map(t => `<option value="${esc(t.uid)}" ${l.attribueA === t.uid ? "selected" : ""}>👷 ${esc(t.nom || t.email)}${techsDuSite(l.site).includes(t.uid) ? " ★" : ""}</option>`).join("")}
+      <option value="ext" ${l.attribueA === "ext" ? "selected" : ""}>🏢 ${l.attribueA === "ext" ? `Entreprise : ${esc(l.attribueANom)}` : "Entreprise extérieure…"}</option>
+    </select></label>${l.attribueA === "ext" ? `<button type="button" class="dps-attrib-modif" data-attrib-ent="${esc(l.id)}" title="Changer le nom de l'entreprise">✏️</button>` : ""}`;
+  };
+  const attribBlocHTML = (l) => perms.isEditor && !TRAITE(l.statut) && !EN_ATTENTE_VALID(l.statut) ? `<div class="dps-attrib">${selectAttribHTML(l)}</div>`
+    : l.attribueANom ? `<div class="dps-attrib lu">${iconeAttrib(l)} Attribuée à <b>${esc(l.attribueANom)}</b>${l.attribuePar ? ` <small>par ${esc(l.attribuePar)}${l.attribueLe ? ` le ${fr(l.attribueLe)}` : ""}</small>` : ""}</div>` : "";
+  const entreprisesConnues = () => [...new Set(toutesLignes.filter(x => x.attribueA === "ext" && x.attribueANom).map(x => x.attribueANom))].slice(0, 8);
+  const attribuer = async (l, valeur, sel) => {
+    let champs;
+    if (!valeur) champs = { attribueA: "", attribueANom: "", attribueLe: "", attribuePar: "" };
+    else {
+      let nom;
+      if (valeur === "ext") {
+        const connues = entreprisesConnues();
+        nom = prompt(`Nom de l'entreprise extérieure ?${connues.length ? `\n(déjà utilisées : ${connues.join(", ")})` : ""}`, l.attribueA === "ext" ? l.attribueANom : "");
+        if (nom === null || !nom.trim()) { if (sel) sel.value = l.attribueA || ""; return; }
+        nom = nom.trim();
+      } else nom = nomDe(valeur);
+      champs = { attribueA: valeur, attribueANom: nom, attribueLe: aujourdhui(), attribuePar: utilisateur, categorieIntervenant: valeur === "ext" ? "Externe SG" : "Interne SG" };
+      // Le contact / entreprise suit l'attribution s'il était vide ou reprenait l'ancienne.
+      if (!l.intervenant || l.intervenant === l.attribueANom) champs.intervenant = nom;
+      if (!l.statut || l.statut === "Non renseigné") champs.statut = "Pris en compte";
+    }
+    if (sel) sel.disabled = true;
+    try { await majP(l.id, champs); window.toast?.(valeur ? `${l.n} attribuée à ${champs.attribueANom}` : `${l.n} : attribution retirée`); }
+    catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); if (sel) sel.disabled = false; }
+  };
+  const brancherAttrib = () => {
+    container.querySelectorAll("[data-attrib]").forEach(sel => sel.addEventListener("change", () => { const l = toutesLignes.find(x => x.id === sel.dataset.attrib); if (l) attribuer(l, sel.value, sel); }));
+    container.querySelectorAll("[data-attrib-ent]").forEach(b => b.addEventListener("click", () => { const l = toutesLignes.find(x => x.id === b.dataset.attribEnt); if (l) attribuer(l, "ext", null); }));
+    container.querySelectorAll("[data-attrib-rapide]").forEach(b => b.addEventListener("click", () => { const [id, v] = b.dataset.attribRapide.split("|"); const l = toutesLignes.find(x => x.id === id); if (l) { b.disabled = true; attribuer(l, v, null); } }));
+  };
   const q = sa(st.q.trim());
   const carteValidation = (l) => `
     <article class="dps-carte a-valider" data-id="${esc(l.id)}">
@@ -508,7 +554,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${toggleHTML}
       <section class="dps-hero">
         <div><span class="dps-sur">Traitement sur le terrain</span><h2>Demandes <em>par site</em></h2>
-          <p>Choisis un site pour voir et traiter ses demandes.</p>${perms.peutTraiter ? `<button type="button" class="dps-nouvelle" data-nouvelle-demande>➕ Nouvelle demande</button>` : ""}</div>
+          <p>${estTech && !st.toutVoir ? "Seulement les demandes qui te sont attribuées (ou de tes sites)." : "Choisis un site pour voir et traiter ses demandes."}</p>${perms.peutTraiter ? `<button type="button" class="dps-nouvelle" data-nouvelle-demande>➕ Nouvelle demande</button>` : ""}</div>
         <div class="dps-hero-chiffres"><div><b>${totOuv}</b><span>à traiter</span></div><div class="urg"><b>${totUrg}</b><span>urgentes</span></div><div><b>${affiches.length}</b><span>sites</span></div></div>
       </section>
       ${perms.isEditor ? (() => { const av = lignes.filter(l => EN_ATTENTE_VALID(l.statut) && !l.lieeA).sort((a, b) => (a.dateIntervention || "").localeCompare(b.dateIntervention || "")); return av.length ? `
@@ -516,6 +562,21 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div class="dps-valid-tete"><h3>⏳ ${av.length} demande${av.length > 1 ? "s" : ""} à valider</h3><p>Déclarées réalisées par les techniciens — vérifie et valide.</p></div>
         <div class="dps-cartes">${av.map(l => carteValidation(l)).join("")}</div>
       </section>` : ""; })() : ""}
+      ${perms.isEditor ? (() => {
+        // Nouvelles demandes (arrivées depuis la mise en place de l'attribution) sans attributaire.
+        const aa = toutesLignes.filter(l => !l.lieeA && !l.attribueA && l.importeMs >= DEBUT_ATTRIBUTION && A_TRAITER(l.statut) && filtreAssoc(l))
+          .sort((a, b) => ((ORDRE_URG[a.urgence] ?? 9) - (ORDRE_URG[b.urgence] ?? 9)) || b.importeMs - a.importeMs);
+        return aa.length ? `
+      <section class="dps-a-attribuer">
+        <div class="dps-valid-tete"><h3>🆕 ${aa.length} demande${aa.length > 1 ? "s" : ""} à attribuer</h3><p>Choisis le technicien ou l'entreprise : le technicien ne verra que les demandes qui lui sont attribuées.</p></div>
+        <div class="dps-aa-liste">${aa.slice(0, 30).map(l => `
+          <div class="dps-aa" data-id="${esc(l.id)}">
+            <div class="dps-aa-txt"><span class="dps-num">${esc(l.n)}</span>${badgeUrg(l.urgence)}<b>${esc(l.site)}</b>${l.local ? ` <small>📍 ${esc(l.local)}</small>` : ""}<p>${esc((l.descr || "").slice(0, 140)) || "<i>Sans descriptif</i>"}</p></div>
+            <div class="dps-aa-choix">${techsDuSite(l.site).filter(id => techs.some(t => t.uid === id)).map(id => `<button type="button" class="dps-aa-rapide" data-attrib-rapide="${esc(l.id)}|${esc(id)}">👷 ${esc(nomDe(id))}</button>`).join("")}${selectAttribHTML(l)}</div>
+          </div>`).join("")}${aa.length > 30 ? `<div class="hint">+ ${aa.length - 30} autre(s)</div>` : ""}</div>
+      </section>` : "";
+      })() : ""}
+      ${estTech ? `<label class="dps-case dps-toutvoir"><input type="checkbox" id="dps-toutvoir" ${st.toutVoir ? "checked" : ""}> 👀 Voir aussi les demandes des autres</label>` : ""}
       <div class="dps-barre">
         <label class="dps-recherche"><span>🔎</span><input id="dps-q" type="search" placeholder="Rechercher un site, un N° (SG-623) ou un mot…" value="${esc(st.q)}"></label>
         <div class="dps-seg">${[["", "Toutes"], ["Agropolis", "Agropolis"], ["École", "École"], ["Armonia", "Armonia"]].map(([k, l]) => `<button data-dps-asso="${esc(k)}" class="${st.association === k ? "on" : ""}">${l}</button>`).join("")}</div>
@@ -561,6 +622,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelector("#dps-gerer-affect")?.addEventListener("click", () => ouvrirGestionAffectations(Object.values(parSiteTous), techs));
     container.querySelector("#dps-tech")?.addEventListener("change", (e) => { st.tech = e.target.value; rerender(); });
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
+    container.querySelector("#dps-toutvoir")?.addEventListener("change", (e) => { st.toutVoir = e.target.checked; rerender(); });
+    brancherAttrib();
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
     container.querySelectorAll("[data-ouvrir-dem]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.ouvrirSite; st.q = ""; st.vuAvant = null; st.focusId = b.dataset.ouvrirDem; rerender(); container.scrollIntoView({ block: "start" }); }));
     container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" }); }));
@@ -607,7 +670,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} ${lieesDe(l.id).length ? "a-liees" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${pastilleAttribHTML(l)}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
       </div>
@@ -616,6 +679,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
         : l.urgenceCorrigee ? `<div class="dps-urg-edit"><small>Urgence requalifiée (demandée « ${esc(l.urgenceDemandee)} »)</small></div>` : ""}
+      ${attribBlocHTML(l)}
       ${lieesHTML(l)}${suggestionHTML(l)}
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
@@ -749,6 +813,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const fiche = (fav.fiches || []).find(f => memeSite(l.site, f.nom));
     ouvrirTicketPrestataire({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "", fenetre });
   }));
+  brancherAttrib();
   container.querySelectorAll("[data-urgence]").forEach(sel => sel.addEventListener("change", async () => {
     const l = lignes.find(x => x.id === sel.dataset.urgence), v = sel.value;
     const champs = v === l.urgenceDemandee ? { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" } : { urgenceCorrigee: v, urgenceCorrigeePar: utilisateur, urgenceCorrigeeLe: aujourdhui() };

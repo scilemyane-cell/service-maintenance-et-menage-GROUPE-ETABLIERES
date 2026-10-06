@@ -2802,3 +2802,20 @@ body.clo-ouvert{overflow:hidden}
 .dps-trouvee em{font-style:normal;font-weight:700;font-size:12px;color:#8a5a00;white-space:nowrap}
 .dps-trouvee em.fini{color:#1b7a3d}
 @media (max-width:560px){.dps-trouvee{grid-template-columns:auto 1fr}.dps-trouvee em{grid-column:1/-1}}
+
+/* ---- Attribution d'une demande (technicien / entreprise) ---- */
+.dps-attrib{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--text-dim)}
+.dps-attrib.lu{padding:6px 10px;border-radius:10px;background:var(--panel-2,rgba(0,0,0,.04))}
+.dps-attrib-sel{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--text);font-size:12.5px}
+.dps-attrib-sel select{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font:700 12.5px system-ui,sans-serif;max-width:100%}
+.dps-attrib-modif{border:1px solid var(--border);background:var(--panel);border-radius:8px;padding:5px 8px;cursor:pointer}
+.dps-pastille.attrib{background:#e8f0fe;color:#1a4fb4}
+.dps-pastille.attrib.moi{background:#1a4fb4;color:#fff}
+.dps-a-attribuer{border:2px solid #1a4fb4;border-radius:14px;padding:12px;background:color-mix(in srgb,#1a4fb4 5%,var(--panel))}
+.dps-aa-liste{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.dps-aa{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--panel)}
+.dps-aa-txt{flex:1 1 260px;min-width:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.dps-aa-txt p{flex-basis:100%;margin:2px 0 0;font-size:13px;color:var(--text-dim)}
+.dps-aa-choix{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.dps-aa-rapide{border:none;border-radius:999px;padding:7px 12px;background:#1a4fb4;color:#fff;font-weight:700;cursor:pointer}
+.dps-toutvoir{align-self:flex-start}

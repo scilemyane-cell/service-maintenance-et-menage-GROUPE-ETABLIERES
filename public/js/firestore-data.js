@@ -180,7 +180,7 @@ export function watchUrgencesOuvertes(callback) {
   return deriverDemandes("urgences", (liste) => liste.filter(x => {
     const urg = x.urgenceCorrigee || x.urgence;
     return ["Urgent", "Critique"].includes(urg) && !x.lieeA && !["Réalisé", "Annulé", "Réalisé – à valider"].includes(x.statut);
-  }).map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, dateDemande: x.dateDemande, importeMs: msDe(x.importeLe), action: resumeAction(x) })), callback);
+  }).map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, dateDemande: x.dateDemande, importeMs: msDe(x.importeLe), attribueA: x.attribueA || "", action: resumeAction(x) })), callback);
 }
 // Nouvelles demandes (importées ou créées dans l'appli depuis 7 jours) — bandeau superviseur.
 export function watchNouvellesDemandes(callback) {
@@ -188,7 +188,7 @@ export function watchNouvellesDemandes(callback) {
     const depuis = Date.now() - 7 * 86400000, limiteDate = Date.now() - 10 * 86400000;
     return liste.filter(x => msDe(x.importeLe) >= depuis && !x.lieeA && !["Réalisé", "Annulé"].includes(x.statut)
         && !(x.dateDemande && new Date(x.dateDemande + "T00:00:00").getTime() < limiteDate))
-      .map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: msDe(x.importeLe), creeDansApp: !!x.creeDansApp, action: resumeAction(x) }))
+      .map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, descriptif: x.descriptif, urgence: x.urgenceCorrigee || x.urgence, statut: x.statut, importeMs: msDe(x.importeLe), creeDansApp: !!x.creeDansApp, attribueANom: x.attribueANom || "", action: resumeAction(x) }))
       .sort((a, b) => b.importeMs - a.importeMs);
   }, callback);
 }

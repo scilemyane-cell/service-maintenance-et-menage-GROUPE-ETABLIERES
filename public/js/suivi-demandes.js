@@ -596,6 +596,7 @@ function ligneDepuisDoc(d) {
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
     actionPar: d.actionPar || "", actionParUid: d.actionParUid || "", actionFil: Array.isArray(d.actionFil) ? d.actionFil : [], actionReponseNonLue: !!d.actionReponseNonLue, actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
     actionImmediate: !!d.actionImmediate,
+    attribueA: d.attribueA || "", attribueANom: d.attribueANom || "", attribueLe: d.attribueLe || "", attribuePar: d.attribuePar || "",
   };
 }
 

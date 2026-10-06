@@ -92,7 +92,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
-  urgences = [];
+  urgences = []; uidTechSeul = user.role === "technicien" ? user.uid : null;
   unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; scheduleRender(); }));
   nouvelles = []; uidVues = user.uid || null;
   // Actions immédiates : pour moi, et sur un poste partagé pour la personne choisie.
@@ -322,7 +322,7 @@ function moisACloturer() {
 // Demandes Critiques encore ouvertes + Urgentes arrivées depuis 3 jours.
 // Chacun peut masquer une alerte (« Vu ») — mémorisé dans Firestore
 // (favoris-sites/{uid}), avec le navigateur comme cache.
-let urgences = [];
+let urgences = [], uidTechSeul = null; // technicien : on cache les urgences attribuées à un autre
 let nouvelles = [];
 let uidVues = null;
 const CLE_URG_VUES = "etablieres-urgences-vues";
@@ -348,7 +348,7 @@ function marquerVus(cle, champ, ids) {
 function urgencesAAfficher() {
   const vuesU = vues(CLE_URG_VUES), limite = Date.now() - 3 * 86400000;
   const recente = (u) => (u.importeMs && u.importeMs >= limite) || (u.dateDemande && new Date(u.dateDemande + "T00:00:00").getTime() >= limite);
-  return urgences.filter(u => !vuesU.has(u.id) && (u.urgence === "Critique" || recente(u)))
+  return urgences.filter(u => !vuesU.has(u.id) && !(uidTechSeul && u.attribueA && u.attribueA !== uidTechSeul) && (u.urgence === "Critique" || recente(u)))
     .sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
 }
 function bandeauUrgencesHTML() {
