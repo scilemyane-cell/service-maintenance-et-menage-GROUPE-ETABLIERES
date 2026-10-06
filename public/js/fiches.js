@@ -660,7 +660,7 @@ function renderInterne() {
     const i = state.fiches.findIndex(f => f.id === id);
     if (i >= 0) state.fiches[i] = { ...state.fiches[i], ...data, id }; else state.fiches.push({ ...data, id });
     render();
-    try { await sauverFiche(id, data); window.toast?.("✓ Semaine précédente reprise — décoche ce qui n'a pas été fait"); }
+    try { await sauverFiche(id, data); ignorerJusqua = 0; render(); window.toast?.("✓ Semaine précédente reprise — décoche ce qui n'a pas été fait"); }
     catch (err) { console.error(err); window.toast?.("Échec : " + (err?.message || err)); e.target.disabled = false; }
   });
   document.getElementById("fc-precocher")?.addEventListener("click", async (e) => {
