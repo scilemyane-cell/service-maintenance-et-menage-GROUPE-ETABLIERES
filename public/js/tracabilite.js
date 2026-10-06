@@ -2,6 +2,8 @@ import { fmtShort, esc, dateKey, addDays } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, deleteFiche, saveFiche, ficheId } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
+import { mentionHTML, taskCompletion, ficheHTML, imprimerFiche } from "./tracabilite-rendu.js";
+import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 
 let state = { fiches: [], sites: [], agents: [] };
 let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null };
@@ -37,14 +39,6 @@ function mountInternal(container, user) {
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
   unsubs.push(watchUsers((u) => { state.agents = u.filter(x => ["menage", "mi_temps"].includes(x.role)); }));
-}
-
-// Mention de reconstitution (liste et impression). La date de saisie n'est
-// plus affichée dans la traçabilité (les données restent enregistrées).
-function mentionHTML(f, court = false) {
-  if (f.reconstituee) return court ? `<span class="tag" style="background:#fff1d6;color:#8a5a00" title="${esc(f.reconstituee.motif || "")}">🧾 Reconstituée</span>`
-    : `Fiche reconstituée a posteriori le ${fmtShort(new Date(f.reconstituee.le))}${f.reconstituee.par ? ` (ouverte par ${esc(f.reconstituee.par)})` : ""} — motif : ${esc(f.reconstituee.motif || "fiche papier disparue")}.`;
-  return "";
 }
 
 // Cases du planning prévu : chaque tâche quotidienne (sans fréquence
@@ -103,18 +97,40 @@ function ouvrirReconstitution() {
   });
 }
 
-function taskCompletion(fiche, site) {
-  if (!site) return { done: 0, total: 0 };
-  let done = 0, total = 0;
-  site.rooms.forEach((room, ri) => {
-    room.tasks.forEach((task, ti) => {
-      room.days.forEach(d => {
-        total++;
-        if (fiche.cells && fiche.cells[`${ri}-${ti}-${d}`]) done++;
-      });
-    });
-  });
-  return { done, total };
+// QR code par site : ouvre, sans compte, la consultation en LECTURE SEULE
+// de toutes les fiches de traçabilité de ce site (tracabilite-guest.html).
+// Le lien suit l'adresse courante : imprimé depuis la version de test, il
+// pointe vers la version de test ; depuis la version validée, vers celle-ci.
+function lienLectureSite(siteId) {
+  return new URL(`tracabilite-guest.html?site=${encodeURIComponent(siteId)}`, window.location.href).href;
+}
+function ouvrirQrLecture() {
+  const sites = state.sites.filter(s => !lockedDispositif || siteDispositif(s) === lockedDispositif).sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
+  const pre = sites.find(s => s.name === ui.filterSite)?.id || sites[0]?.id || "";
+  const fond = document.createElement("div"); fond.className = "ndm-fond";
+  fond.innerHTML = `<div class="ndm">
+    <div class="ndm-tete"><h3>📱 QR code — consultation en lecture seule</h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
+    <p class="gaf-aide">À imprimer et afficher sur le site. Scanné avec l'appareil photo d'un téléphone, il ouvre toutes les fiches de traçabilité de ce site, <b>sans compte</b> et <b>sans pouvoir rien modifier</b>.</p>
+    <label>Site<select id="qrl-site">${sites.map(s => `<option value="${esc(s.id)}" ${s.id === pre ? "selected" : ""}>${esc(s.name)}</option>`).join("") || "<option value=''>Aucun site</option>"}</select></label>
+    <div class="qr-print-card" id="qrl-carte" style="background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:280px;margin:12px auto 0">
+      <div id="qrl-qr" style="width:220px;height:220px;margin:0 auto"></div>
+      <p id="qrl-txt" style="color:#111;font-size:12px;margin:8px 0 0"></p>
+    </div>
+    <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Fermer</button><button type="button" class="dps-enregistrer" id="qrl-print">🖨️ Imprimer</button></div>
+  </div>`;
+  document.body.append(fond);
+  fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", () => fond.remove()));
+  fond.addEventListener("click", (e) => { if (e.target === fond) fond.remove(); });
+  const sel = fond.querySelector("#qrl-site");
+  const dessiner = () => {
+    const site = sites.find(s => s.id === sel.value);
+    if (!site) { fond.querySelector("#qrl-qr").innerHTML = ""; return; }
+    fond.querySelector("#qrl-txt").innerHTML = `Traçabilité ménage — <b>${esc(site.name)}</b><br>Consultation en lecture seule`;
+    renderQrWithLogo(fond.querySelector("#qrl-qr"), lienLectureSite(site.id), 220);
+  };
+  sel.addEventListener("change", dessiner);
+  fond.querySelector("#qrl-print").addEventListener("click", () => printQrCard(fond.querySelector("#qrl-carte")));
+  dessiner();
 }
 
 function render() {
@@ -139,7 +155,7 @@ function render() {
         ${!lockedDispositif ? `<label>Dispositif<select id="tr-disp">${dispositifs.map(d => `<option ${ui.filterDispositif === d ? 'selected' : ''}>${esc(d)}</option>`).join("")}</select></label>` : ""}
         <label>Site<select id="tr-site">${siteNames.map(s => `<option ${ui.filterSite === s ? 'selected' : ''}>${esc(s)}</option>`).join("")}</select></label>
         <label>Agent<select id="tr-agent">${agents.map(a => `<option ${ui.filterAgent === a ? 'selected' : ''}>${esc(a)}</option>`).join("")}</select></label>
-        ${isEditorUser(mountedUser) ? `<button type="button" class="nav-btn" id="tr-reconst" style="align-self:flex-end">🧾 Reconstituer des fiches disparues</button>` : ""}
+        ${isEditorUser(mountedUser) ? `<button type="button" class="nav-btn" id="tr-reconst" style="align-self:flex-end">🧾 Reconstituer des fiches disparues</button><button type="button" class="nav-btn" id="tr-qr" style="align-self:flex-end">📱 QR lecture seule</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -172,60 +188,7 @@ function render() {
         <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
       </div>
-      <div class="print-fiche print-trac" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
-          <img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px">
-        </div>
-        <p style="font-size:14px;margin:0 0 6px">FICHE DE TRAÇABILITÉ – AGENT D'ENTRETIEN${lockedDispositif ? ` (${esc(lockedDispositif).toUpperCase()})` : ""}</p>
-        <p style="font-size:13px;margin:0 0 6px">Structure : ${esc(opened.siteName).toUpperCase()}</p>
-        <p style="font-size:13px;margin:0 0 18px">Date du ${fmtShort(new Date(opened.weekStart))} au ${fmtShort(new Date(opened.weekEnd))} &nbsp;&nbsp;&nbsp; Nom de l'agent : ${esc(opened.agentNom)}</p>
-
-        ${openedSite ? openedSite.rooms.map((room, ri) => {
-          const dayNames = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" };
-          return `
-          <div class="trac-piece">
-          <p class="trac-titre" style="font-size:13px;font-weight:700;margin:16px 0 6px">${esc(room.name).toUpperCase()}</p>
-          <table class="print-fiche-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
-            <colgroup><col style="width:34%">${room.days.map(() => `<col style="width:${(48 / Math.max(1, room.days.length)).toFixed(2)}%">`).join("")}<col style="width:18%"></colgroup>
-            <thead><tr>
-              <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">TÂCHE</th>
-              ${room.days.map(d => `<th style="border:1px solid #999;padding:4px 6px;font-size:11px">${dayNames[d]}</th>`).join("")}
-              <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">OBSERVATIONS</th>
-            </tr></thead>
-            <tbody>
-              ${room.tasks.map((task, ti) => `
-                <tr>
-                  <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(task.label)}${task.freq ? ` (${esc(task.freq)})` : ""}</td>
-                  ${room.days.map(d => `<td class="trac-coche" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center;font-weight:700">${(opened.cells && opened.cells[`${ri}-${ti}-${d}`]) ? "✓" : ""}</td>`).join("")}
-                  <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc((opened.obs && opened.obs[`${ri}-${ti}`]) || "")}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table></div>`;
-        }).join("") : ""}
-
-        ${opened.chambres && opened.chambres.length ? `
-        <p style="font-size:13px;font-weight:700;margin:16px 0 6px">LITERIE SUR DEMANDE</p>
-        <table class="print-fiche-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
-          <thead><tr>
-            <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">CHAMBRE</th>
-            <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">DATE</th>
-            <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">OBSERVATIONS</th>
-          </tr></thead>
-          <tbody>
-            ${opened.chambres.map(c => `
-              <tr>
-                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(c.chambre)}</td>
-                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${c.date ? fmtShort(new Date(c.date)) : ""}</td>
-                <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(c.observation)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>` : ""}
-
-        <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
-        ${mentionHTML(opened) ? `<p style="font-size:9px;margin-top:28px;color:#777">${mentionHTML(opened)}</p>` : ""}
-      </div>` : ""}
+${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
     </div>
   `;
 
@@ -236,16 +199,8 @@ function render() {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
   document.getElementById("tr-reconst")?.addEventListener("click", ouvrirReconstitution);
-  document.getElementById("tr-print")?.addEventListener("click", () => {
-    // Fiche en A4 portrait (le reste de l'appli imprime en paysage).
-    const st = document.createElement("style");
-    st.textContent = "@page{size:A4 portrait;margin:9mm 9mm 11mm 9mm}";
-    document.head.appendChild(st);
-    const fin = () => { st.remove(); window.removeEventListener("afterprint", fin); };
-    window.addEventListener("afterprint", fin);
-    window.print();
-    setTimeout(fin, 60000);
-  });
+  document.getElementById("tr-qr")?.addEventListener("click", ouvrirQrLecture);
+  document.getElementById("tr-print")?.addEventListener("click", imprimerFiche);
   document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
     if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {

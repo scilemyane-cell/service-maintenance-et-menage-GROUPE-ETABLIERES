@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traçabilité ménage — Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@500&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+
+<script type="module">
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { mountGuestTracabilite } from "./js/tracabilite-guest.js";
+
+  const params = new URLSearchParams(location.search);
+  const siteId = params.get("site");
+  const app = document.getElementById("app");
+
+  function showError(msg) {
+    app.innerHTML = `
+      <div class="login-screen">
+        <div class="login-card">
+          <div class="login-eyebrow">Accès invalide</div>
+          <h1>Impossible d'accéder</h1>
+          <p class="hint">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  if (!siteId) {
+    showError("Ce lien ne contient pas de site valide. Scanne le QR code affiché sur le site.");
+  } else {
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        // Consultation en lecture seule, sans compte ni mot de passe —
+        // connexion anonyme automatique (aucune information saisie ici
+        // n'est modifiable).
+        try { await signInAnonymously(auth); } catch (e) { showError("Connexion impossible. Réessaie plus tard."); }
+        return;
+      }
+      app.innerHTML = `
+        <header class="topbar">
+          <div class="topbar-title">
+            <span class="topbar-eyebrow">Groupe Établières · Traçabilité ménage</span>
+            <h1>Consultation (lecture seule)</h1>
+          </div>
+        </header>
+        <main class="content" id="content"></main>
+      `;
+      mountGuestTracabilite(document.getElementById("content"), siteId);
+    });
+  }
+</script>
+</body>
+</html>
