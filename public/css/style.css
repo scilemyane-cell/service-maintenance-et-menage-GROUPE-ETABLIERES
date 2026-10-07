@@ -3204,3 +3204,12 @@ body.clo-ouvert{overflow:hidden}
 .sx-badge-chaude{display:inline-block;margin:2px 0;padding:2px 8px;border-radius:999px;background:rgba(255,100,60,.18);color:#ffb39e;font:700 11px system-ui,sans-serif}
 .sx-badge-general{display:inline-block;margin:2px 0;padding:2px 8px;border-radius:999px;background:rgba(95,212,255,.16);color:#9fe3ff;font:700 11px system-ui,sans-serif}
 .sx-c:has(.sx-act):has(.sx-badge-chaude,.sx-badge-general) .sx-nom{padding-bottom:26px}
+/* Schéma : toutes les vignettes de la même taille */
+.sx-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:stretch}
+.sx-item{flex:none;max-width:none}
+.sx-item-net{grid-column:1/-1}
+.sx-item:not(.sx-item-net)>.sx-c{height:100%;min-height:124px}
+.sx-c .sx-nom b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sx-c .sx-nom small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx-c{min-height:124px;box-sizing:border-box}
+.sx-c .sx-nom{padding-bottom:22px}

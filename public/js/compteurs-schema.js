@@ -72,7 +72,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
       <div class="sx-dial"><span class="sx-motif">${chaude ? "♨️" : E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
         <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
-      <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}${!opts.virtuel && c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
+      <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}</small>
         ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt(b, b < 10 ? 2 : 0)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
