@@ -48,6 +48,11 @@ export function calculConso(releves) {
 // d'eau chaude. Reconnu par son nom (« Eau chaude », « ECS ») ou le champ eauChaude.
 export const estEauChaude = (c) => !!c && c.type === "eau" && (c.eauChaude === true || /eau\s*chaude|\becs\b/i.test(`${c.nom || ""} ${c.emplacement || ""}`));
 
+// Sous-compteur DÉDUIT du compteur au-dessus (cas normal) ou seulement pour
+// INFO (ex. eau chaude : c'est de l'eau que le site consomme quand même).
+// Par défaut, l'eau chaude n'est pas déduite ; réglable compteur par compteur.
+export const estDeduit = (c) => c.nonDeduit === true ? false : c.nonDeduit === false ? true : !estEauChaude(c);
+
 // Ordre choisi par glisser-déposer (champ « ordre » du compteur), sinon alphabétique.
 const lgt = (c) => String(c.logement || "").trim();
 export const cmpCompteurs = (a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || (!lgt(a) !== !lgt(b) ? (lgt(a) ? 1 : -1) : 0) || (lgt(a) && lgt(b) ? lgt(a).localeCompare(lgt(b), "fr", { numeric: true }) : 0) || nomCourt(a.dossierNom + " " + a.nom).localeCompare(nomCourt(b.dossierNom + " " + b.nom), "fr", { numeric: true });
@@ -71,7 +76,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
       + [...new Set(autres.map(x => x.dossierNom))].map(n => `<optgroup label="${esc(nomCourt(n))}">${autres.filter(x => x.dossierNom === n).map(opt).join("")}</optgroup>`).join("");
   };
   const brut = (c) => conso(c, debut, fin);
-  const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
+  const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).filter(estDeduit).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
   const unite = uniteValeur({ type: E.id });
 
   // Cadran : le niveau = part du compteur dans le réseau, débit au centre.
@@ -91,6 +96,8 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
         ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt2(b)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
+      ${!opts.virtuel && parentDe(c) && !estDeduit(c) ? `<span class="sx-badge-info">ℹ️ pour info — non déduit</span>` : ""}
+      ${!opts.virtuel && peutModifier && parentDe(c) ? `<label class="sx-deduit"><input type="checkbox" data-sx-deduit="${c.id}" ${estDeduit(c) ? "checked" : ""}> Déduire du compteur au-dessus</label>` : ""}
       ${!opts.virtuel && peutModifier ? `<label class="sx-parent" title="Le compteur qui alimente celui-ci (en amont)">↳ Alimenté par <select data-sx-parent="${c.id}">${optionsParent(c)}</select></label>` : ""}
       ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === lier)?.nom || "")}</div>` : ""}
     </div>`;
@@ -102,7 +109,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const b = brut(c), p = propre(c);
     const pc = (x) => b ? Math.max(0, Math.min(100, (x || 0) / b * 100)) : null;
     const branches = e.map(x => `<div class="sx-branche">${reseau(x, pc(brut(x)), false)}</div>`).join("")
-      + `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: `Reste consommé — ${nomCourt(c.dossierNom)}`, sous: `hors ${e.map(x => estEauChaude(x) ? "eau chaude" : nomCourt(x.dossierNom) !== nomCourt(c.dossierNom) ? nomCourt(x.dossierNom) : (x.nom || "sous-compteur")).join(", ")}`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`;
+      + (!e.some(estDeduit) ? "" : `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: `Reste consommé — ${nomCourt(c.dossierNom)}`, sous: `hors ${e.filter(estDeduit).map(x => estEauChaude(x) ? "eau chaude" : nomCourt(x.dossierNom) !== nomCourt(c.dossierNom) ? nomCourt(x.dossierNom) : (x.nom || "sous-compteur")).join(", ")}`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`);
     const debit = b ? b / jours : 0;
     return `<div class="sx-net" style="--v:${debit ? Math.max(0.8, 6 - Math.log10(1 + debit) * 2.2) : 0}s">
       <div class="sx-tete">${dial(c, part, { racine, general: E.id === "eau" && e.some(estEauChaude) })}</div>
@@ -176,6 +183,14 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
   };
   container.querySelectorAll("[data-sc-detacher]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); enregistrer(b.dataset.scDetacher, null); }));
   container.querySelectorAll(".sx-c.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
+  container.querySelectorAll("[data-sx-deduit]").forEach(cb => {
+    cb.addEventListener("pointerdown", (e) => e.stopPropagation());
+    cb.addEventListener("change", async () => {
+      const id = cb.dataset.sxDeduit;
+      try { await modifierCompteur(id, { nonDeduit: !cb.checked }); const c = compteurs.find(x => x.id === id); if (c) c.nonDeduit = !cb.checked; rerendre(); window.toast?.(cb.checked ? "✓ Déduit du compteur au-dessus" : "✓ Compteur pour info (non déduit)"); }
+      catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
+    });
+  });
   container.querySelectorAll("[data-sx-parent]").forEach(sel => {
     sel.addEventListener("click", (e) => e.stopPropagation());
     sel.addEventListener("pointerdown", (e) => e.stopPropagation());

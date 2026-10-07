@@ -16,7 +16,7 @@
 
 import { esc } from "./astreinte-logic.js";
 import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur } from "./compteurs-data.js";
-import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA } from "./compteurs-schema.js";
+import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA, estDeduit } from "./compteurs-schema.js";
 import { trierGroupes } from "./associations-data.js";
 
 const ENERGIES = [
@@ -99,11 +99,13 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
 
   // Sous-compteurs (Schéma des compteurs) : un compteur général compte sa
   // consommation PROPRE = son index − ce que mesurent ses sous-compteurs.
-  const enfantsDe = (c) => tousCompteurs.filter(x => x.compteurParentId === c.id && x.type === c.type && x.id !== c.id);
+  // Seuls les sous-compteurs DÉDUITS sont retirés du compteur au-dessus ; un sous-compteur « pour info » (eau chaude…) n'est pas recompté dans les totaux.
+  const enfantsDe = (c) => tousCompteurs.filter(x => x.compteurParentId === c.id && x.type === c.type && x.id !== c.id && estDeduit(x));
+  const pourInfo = (c) => !!c.compteurParentId && tousCompteurs.some(p => p.id === c.compteurParentId && p.type === c.type) && !estDeduit(c);
   const consoPropre = (c, t0, t1) => { const v = conso(c, t0, t1); if (v === null) return null; const e = enfantsDe(c); return e.length ? Math.max(0, v - e.reduce((t, x) => t + (conso(x, t0, t1) || 0), 0)) : v; };
   const somme = (liste, t0, t1) => {
     let s = 0, ok = false;
-    liste.forEach(c => { const v = consoPropre(c, t0, t1); if (v !== null) { s += v; ok = true; } });
+    liste.forEach(c => { if (pourInfo(c)) return; const v = consoPropre(c, t0, t1); if (v !== null) { s += v; ok = true; } });
     return ok ? s : null;
   };
 

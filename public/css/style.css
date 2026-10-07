@@ -3270,3 +3270,7 @@ body.clo-ouvert{overflow:hidden}
 .sx-c.sx-survol{outline:3px solid #5fd4ff;box-shadow:0 0 24px rgba(95,212,255,.55)}
 .sx-zone-general{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1100;padding:16px 28px;border-radius:16px;border:2px dashed #9fe3ff;background:rgba(10,22,40,.92);color:#e6f1ff;font:800 14px system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .sx-zone-general.sx-survol{background:#1a4fb4;border-style:solid}
+/* Schéma : sous-compteur déduit ou pour info */
+.sx-deduit{flex-basis:100%;display:flex;align-items:center;gap:6px;font:700 11.5px system-ui,sans-serif;color:#cfe3ff;cursor:pointer}
+.sx-deduit input{width:16px;height:16px;accent-color:#5fd4ff}
+.sx-badge-info{flex-basis:100%;font:700 11px system-ui,sans-serif;color:#ffd68a}
