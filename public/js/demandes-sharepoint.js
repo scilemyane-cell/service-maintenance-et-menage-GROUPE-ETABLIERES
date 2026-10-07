@@ -384,7 +384,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   const compteNum = {}; (demandesApp || []).filter(d => !d.lieeA).forEach(d => { compteNum[d.numero] = (compteNum[d.numero] || 0) + 1; });
   const ignorees = [];
   const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier))
-    .filter(d => { if (!d.lieeA && compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
+    .filter(d => { if (d.lieeA) return false; /* doublon relié : la demande gardée porte le suivi pour ce N° */ if (compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
     numero: d.numero,
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation === "OUI" ? "OUI" : "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
