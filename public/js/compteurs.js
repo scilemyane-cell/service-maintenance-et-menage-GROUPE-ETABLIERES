@@ -181,6 +181,8 @@ function exporterPdfSite(siteId) {
   const ligneCompteur = (c) => `
     <tr>
       <td>${esc(c.nom)}</td>
+      <td style="font-weight:700">${esc(c.logement || "—")}</td>
+      <td style="font-variant-numeric:tabular-nums;white-space:nowrap">${esc(c.pdl ? fmtPdl(c.pdl) : "—")}</td>
       <td>${esc(c.emplacement || "—")}</td>
       <td>${formatDate(c.dernierReleve?.at)}</td>
       <td>${formatValeurs(c)}</td>
@@ -196,6 +198,8 @@ function exporterPdfSite(siteId) {
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr>
           <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Compteur</th>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">N° logement</th>
+          <th style="text-align:left;border-bottom:1px solid #999;padding:4px">${type === "elec" ? "PDL" : type === "gaz" ? "PCE" : "N° / référence"}</th>
           <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Emplacement</th>
           <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Dernier relevé</th>
           <th style="text-align:left;border-bottom:1px solid #999;padding:4px">Valeur(s)</th>
@@ -216,6 +220,7 @@ function exporterPdfSite(siteId) {
       ${tableauType("eau", "Eau")}
       ${tableauType("gaz", "Gaz")}
       ${tableauType("elec", "Électricité")}
+      ${tableauType("chauffage", "Chauffage urbain")}
       ${compteurs.length === 0 ? `<p>Aucun compteur configuré sur ce site.</p>` : ""}
     </div>
   `;
