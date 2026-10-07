@@ -17,6 +17,7 @@
 import { esc } from "./astreinte-logic.js";
 import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur } from "./compteurs-data.js";
 import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA } from "./compteurs-schema.js";
+import { trierGroupes } from "./associations-data.js";
 
 const ENERGIES = [
   { id: "elec", label: "Électricité", couleur: "#eda100" },
@@ -32,7 +33,7 @@ const decalerAn = (d, n) => { const x = new Date(d); x.setFullYear(x.getFullYear
 const pct = (a, b) => (a === null || b === null || !b) ? null : ((a - b) / b) * 100;
 
 // État des filtres, conservé tant que l'onglet reste ouvert.
-const f = { periode: "12mois", ug: "", energie: "", energieGraphe: null, energieReseau: null, tri: "nom", sens: 1 };
+const f = { periode: "12mois", ug: "", energie: "", energieGraphe: null, energieReseau: null, tri: "asso", sens: 1 };
 
 export function renderPilotage(container, { compteurs: tousCompteurs, sites, associations, releves, onRetour, onRelever, onOuvrirSite }) {
   // ---------- Index des relevés par compteur (chronologique) ----------
@@ -107,6 +108,22 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
 
   // ---------- Filtres ----------
   const siteParId = new Map(sites.map(s => [s.id, s]));
+  // Ordre des dossiers de site : association (ordre habituel) → groupe → nom.
+  const rangAsso = (n) => { const i = associations.findIndex(a => a.nom === n); return i < 0 ? 999 : i; };
+  const groupesTries = trierGroupes([...new Set(sites.map(s => s.groupe).filter(Boolean))]);
+  const rangGroupe = (g) => g ? 1 + groupesTries.indexOf(g) : 0;
+  const cleOrdreSite = (s) => [rangAsso(s?.association), rangGroupe(s?.groupe), nomCourt(s?.nom).toLowerCase()];
+  const cmpOrdre = (a, b) => { const x = cleOrdreSite(a), y = cleOrdreSite(b); for (let i = 0; i < 3; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return 0; };
+  // Regroupe une liste par association puis groupe : [{ assoc, groupe, items }].
+  const parAssoGroupe = (items, siteDe) => {
+    const out = [];
+    [...items].sort((a, b) => cmpOrdre(siteDe(a), siteDe(b))).forEach(it => {
+      const s = siteDe(it), as = s?.association || "Sans association", g = s?.groupe || "";
+      const der = out[out.length - 1];
+      if (der && der.assoc === as && der.groupe === g) der.items.push(it); else out.push({ assoc: as, groupe: g, items: [it] });
+    });
+    return out;
+  };
   const ugDe = c => siteParId.get(c.dossierId)?.association || "";
   const compteurs = tousCompteurs.filter(c => (!f.ug || ugDe(c) === f.ug) && (!f.energie || c.type === f.energie));
   const energiesPresentes = ENERGIES.filter(e => compteurs.some(c => c.type === e.id));
@@ -166,6 +183,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
     return { s, cs, parE, tendance, retard, illisible, couverture: cs.length ? (cs.length - retard) / cs.length : 0, dRef: parE[f.energieGraphe]?.d ?? null };
   });
   const cleTri = {
+    asso: l => cleOrdreSite(l.s).map(v => typeof v === "number" ? String(v).padStart(4, "0") : v).join("|"),
     nom: l => nomCourt(l.s.nom).toLowerCase(), ug: l => l.s.association || "", ecart: l => l.dRef ?? -Infinity,
     couverture: l => l.couverture, etat: l => l.retard * 10 + (l.illisible ? 1 : 0),
     ...Object.fromEntries(energiesPresentes.map(e => [e.id, l => l.parE[e.id]?.v ?? -Infinity])),
@@ -248,7 +266,8 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
           <div class="vf-tete"><div><span class="vf-sur">Surveillance en continu</span><h2>💧 Veille fuites d'eau</h2>
             <p>Chaque compteur d'eau compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale. Au-delà de +30 % : à surveiller ; au-delà de +80 % : fuite probable.</p></div>
             <div class="vf-resume"><span class="f">${nb("fuite")}<small>fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span>${nb("construction") + nb("attente") ? `<span class="c">${nb("construction") + nb("attente")}<small>référence à définir</small></span>` : ""}</div></div>
-          <div class="vf-grille">${V.map(x => `
+          ${parAssoGroupe(V, x => siteParId.get(x.c.dossierId)).map((G, gi, T) => `${gi === 0 || T[gi - 1].assoc !== G.assoc ? `<div class="vf-asso">🏢 ${esc(G.assoc)}</div>` : ""}${G.groupe ? `<div class="vf-groupe">${esc(G.groupe)}</div>` : ""}
+          <div class="vf-grille">${[...G.items].sort((a, b) => V.indexOf(a) - V.indexOf(b)).map(x => `
             <div class="vf-c vf-${x.etat}">
               <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || "Eau")}${x.dernier?.net ? " · propre (hors sous-compteurs)" : ""}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
               <div class="vf-c-corps">${jauge(x)}
@@ -261,7 +280,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
               ${barres(x)}
               ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}">✓ ${fmt(x.dernier.v, x.dernier.v < 10 ? 2 : 1)} m³/jour, c'est normal pour ce site</button>` : ""}
               <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-val="${x.ref ?? ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
-            </div>`).join("")}</div>
+            </div>`).join("")}</div>`).join("")}
         </section>`;
       })()}
 
@@ -338,12 +357,12 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         <p class="pe-st">Consommation sur ${libPeriode}, écart avec la même période de l'année précédente, tendance mensuelle (${eG ? eG.label.toLowerCase() : ""}), relevés — clic sur un en-tête pour trier, sur un site pour l'ouvrir</p>
         <div class="pe-scroll"><table class="pe-table">
           <thead><tr>
-            <th data-pe-tri="nom">Site${flecheTri("nom")}</th><th data-pe-tri="ug">UG${flecheTri("ug")}</th>
+            <th data-pe-tri="nom">Site${flecheTri("nom")}</th><th data-pe-tri="asso">UG${flecheTri("asso")}</th>
             ${energiesPresentes.map(e => `<th class="n" data-pe-tri="${e.id}">${e.label} (${uniteValeur({ type: e.id })})${flecheTri(e.id)}</th>`).join("")}
             <th class="n" data-pe-tri="ecart">vs N-1${flecheTri("ecart")}</th><th>Tendance 12 mois</th>
             <th data-pe-tri="couverture">Relevés à jour${flecheTri("couverture")}</th><th data-pe-tri="etat">État${flecheTri("etat")}</th>
           </tr></thead>
-          <tbody>${lignes.map(l => `
+          <tbody>${lignes.map((l, i) => `${f.tri === "asso" && (i === 0 || (lignes[i - 1].s.association || "") !== (l.s.association || "") || (lignes[i - 1].s.groupe || "") !== (l.s.groupe || "")) ? `<tr class="pe-gr"><td colspan="${6 + energiesPresentes.length}">${i === 0 || (lignes[i - 1].s.association || "") !== (l.s.association || "") ? `🏢 ${esc(l.s.association || "Sans association")}` : ""}${l.s.groupe ? ` <small>${esc(l.s.groupe)}</small>` : ""}</td></tr>` : ""}
             <tr data-pe-site="${l.s.id}" class="pe-clic">
               <td><b>${esc(nomCourt(l.s.nom))}</b></td><td>${esc(l.s.association || "—")}</td>
               ${energiesPresentes.map(e => `<td class="n">${l.parE[e.id] ? fmt(l.parE[e.id].v) : `<span class="pe-muet">·</span>`}</td>`).join("")}
@@ -372,7 +391,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   container.querySelectorAll("[data-pe-graphe]").forEach(b => b.addEventListener("click", () => { f.energieGraphe = b.dataset.peGraphe; rerendre(); }));
   container.querySelectorAll("[data-pe-reseau]").forEach(b => b.addEventListener("click", () => { f.energieReseau = b.dataset.peReseau; rerendre(); }));
   container.querySelectorAll("[data-pe-tri]").forEach(th => th.addEventListener("click", () => {
-    const c = th.dataset.peTri; if (f.tri === c) f.sens *= -1; else { f.tri = c; f.sens = c === "nom" || c === "ug" ? 1 : -1; } rerendre();
+    const c = th.dataset.peTri; if (f.tri === c) f.sens *= -1; else { f.tri = c; f.sens = c === "nom" || c === "ug" || c === "asso" ? 1 : -1; } rerendre();
   }));
   container.querySelectorAll("[data-pe-site]").forEach(el => el.addEventListener("click", () => onOuvrirSite(el.dataset.peSite)));
   container.querySelectorAll("[data-vf-fixe]").forEach(b => b.addEventListener("click", async () => {
