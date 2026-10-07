@@ -196,11 +196,36 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     sel.addEventListener("pointerdown", (e) => e.stopPropagation());
     sel.addEventListener("change", () => enregistrer(sel.dataset.sxParent, sel.value || null));
   });
+  // Téléphone : les cartes restent compactes (lecture) ; toucher un compteur
+  // ouvre une fenêtre en bas avec « Alimenté par » et « Déduire ».
+  const surTel = () => window.matchMedia("(max-width:700px)").matches;
+  if (peutModifier) container.querySelectorAll(".sx-c[data-sc-id]").forEach(carte => carte.addEventListener("click", (e) => {
+    if (!surTel() || e.target.closest("select,input,label,button")) return;
+    const id = carte.dataset.scId, c = compteurs.find(x => x.id === id); if (!c) return;
+    const sel = carte.querySelector(".sx-parent select"), cb = carte.querySelector("[data-sx-deduit]");
+    const fond = document.createElement("div"); fond.className = "sx-feuille-fond";
+    fond.innerHTML = `<div class="sx-feuille"><div class="sx-feuille-tete"><b>${esc(c.nom || "")}</b><small>${esc(nomCourt(c.dossierNom))}${c.logement ? ` · Logement ${esc(c.logement)}` : ""}</small><button type="button" data-f-x>✕</button></div>
+      <label class="sx-f-l">↳ Alimenté par (le compteur juste au-dessus)<select data-f-parent>${sel ? sel.innerHTML : ""}</select></label>
+      ${cb ? `<label class="sx-f-c"><input type="checkbox" data-f-deduit ${cb.checked ? "checked" : ""}> Déduire du compteur au-dessus <small>(décoche pour un compteur « pour info », ex. eau chaude)</small></label>` : ""}
+      <button type="button" class="sx-f-ok" data-f-x>Fermer</button></div>`;
+    document.body.append(fond);
+    const fermer = () => fond.remove();
+    fond.addEventListener("click", (ev) => { if (ev.target === fond) fermer(); });
+    fond.querySelectorAll("[data-f-x]").forEach(b => b.addEventListener("click", fermer));
+    const fs = fond.querySelector("[data-f-parent]"); if (sel) fs.value = sel.value;
+    fs.addEventListener("change", () => { fermer(); enregistrer(id, fs.value || null); });
+    fond.querySelector("[data-f-deduit]")?.addEventListener("change", async (ev) => {
+      const v = ev.target.checked;
+      try { await modifierCompteur(id, { nonDeduit: !v }); c.nonDeduit = !v; fermer(); rerendre(); window.toast?.(v ? "✓ Déduit du compteur au-dessus" : "✓ Compteur pour info (non déduit)"); }
+      catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
+    });
+  }));
   // Brancher par glisser-déposer : on attrape le CADRAN d'un compteur et on le
   // lâche sur le compteur qui l'alimente (ou sur la zone « compteur général »).
   if (peutModifier) container.querySelectorAll(".sx-c[data-sc-id] .sx-dial").forEach(dialEl => {
     const carte = dialEl.closest(".sx-c"), id = carte.dataset.scId;
     dialEl.style.cursor = "grab"; dialEl.style.touchAction = "none"; dialEl.title = "Glisser sur le compteur qui alimente celui-ci";
+    if (window.matchMedia("(max-width:700px)").matches) { dialEl.style.touchAction = ""; dialEl.style.cursor = ""; return; }
     dialEl.addEventListener("pointerdown", (e) => {
       if (e.button !== undefined && e.button !== 0) return;
       const x0 = e.clientX, y0 = e.clientY; let fantome = null, zone = null, cible = null;
