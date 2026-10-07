@@ -3263,3 +3263,10 @@ body.clo-ouvert{overflow:hidden}
 .sx-parent{flex-basis:100%;display:flex;align-items:center;gap:6px;font:700 11.5px system-ui,sans-serif;color:#8fb0d4;margin-top:2px}
 .sx-parent select{flex:1;min-width:0;padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#e6f1ff;font:600 12px system-ui,sans-serif}
 .sx-parent select option,.sx-parent select optgroup{color:#111;background:#fff}
+/* Schéma : brancher un compteur en glissant son cadran */
+.sx-fantome{position:fixed!important;z-index:1200;pointer-events:none;width:80px!important;height:80px!important;transform:translate(-50%,-50%) scale(.9);opacity:.9;box-shadow:0 12px 30px rgba(0,0,0,.5)!important}
+.sx-c.sx-possible{outline:2px dashed rgba(95,212,255,.55);outline-offset:2px}
+.sx-c.sx-interdit{opacity:.35}
+.sx-c.sx-survol{outline:3px solid #5fd4ff;box-shadow:0 0 24px rgba(95,212,255,.55)}
+.sx-zone-general{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1100;padding:16px 28px;border-radius:16px;border:2px dashed #9fe3ff;background:rgba(10,22,40,.92);color:#e6f1ff;font:800 14px system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.sx-zone-general.sx-survol{background:#1a4fb4;border-style:solid}

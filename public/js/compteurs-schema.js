@@ -139,7 +139,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     </section>`;
   }).join("");
   const chips = nomsAssoc.length > 1 ? `<div class="sx-assocs">${["", ...nomsAssoc.filter(Boolean)].map(n => `<button type="button" data-sx-assoc="${esc(n)}" class="${assoc === n ? "on" : ""}">${esc(n || "Toutes")}</button>`).join("")}</div>` : "";
-  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips, listes };
+  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips, listes, descendants };
 }
 
 export function renderSchema(container, { compteurs, releves, sites = [], associations = [], peutModifier, onRetour, onOuvrirSite }) {
@@ -160,7 +160,7 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? "" : r.chips}
     ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général, ou un sous-compteur). <button type="button" id="sc-annuler">Annuler</button></div>`
-      : peutModifier ? `<p class="sc-aide">Sur chaque compteur, choisis dans <b>« ↳ Alimenté par »</b> le compteur qui est juste au-dessus de lui (ex. le self est alimenté par le compteur général du lycée). L'arborescence se redessine toute seule. Laisse « Personne » pour un compteur général. Pour ranger : maintiens <b>☰</b> et fais glisser.</p>` : ""}
+      : peutModifier ? `<p class="sc-aide">Pour brancher un compteur : <b>attrape son cadran rond et lâche-le sur le compteur qui l'alimente</b> (ex. le self sur le compteur général du lycée). Pour en refaire un compteur général : lâche-le sur la zone « Compteur général » qui apparaît en bas. La liste « ↳ Alimenté par » fait la même chose. Pour ranger : maintiens <b>☰</b> et fais glisser.</p>` : ""}
     ${r.html}
   </div>`;
 
@@ -180,6 +180,45 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     sel.addEventListener("click", (e) => e.stopPropagation());
     sel.addEventListener("pointerdown", (e) => e.stopPropagation());
     sel.addEventListener("change", () => enregistrer(sel.dataset.sxParent, sel.value || null));
+  });
+  // Brancher par glisser-déposer : on attrape le CADRAN d'un compteur et on le
+  // lâche sur le compteur qui l'alimente (ou sur la zone « compteur général »).
+  if (peutModifier) container.querySelectorAll(".sx-c[data-sc-id] .sx-dial").forEach(dialEl => {
+    const carte = dialEl.closest(".sx-c"), id = carte.dataset.scId;
+    dialEl.style.cursor = "grab"; dialEl.style.touchAction = "none"; dialEl.title = "Glisser sur le compteur qui alimente celui-ci";
+    dialEl.addEventListener("pointerdown", (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      const x0 = e.clientX, y0 = e.clientY; let fantome = null, zone = null, cible = null;
+      const interdits = r.descendants(id); interdits.add(id);
+      const demarrer = () => {
+        fantome = dialEl.cloneNode(true); fantome.className += " sx-fantome"; document.body.append(fantome);
+        zone = document.createElement("div"); zone.className = "sx-zone-general"; zone.textContent = "⬇ Lâcher ici = compteur général (sans compteur au-dessus)"; container.querySelector(".sc").append(zone);
+        container.querySelectorAll(".sx-c[data-sc-id]").forEach(c => c.classList.add(interdits.has(c.dataset.scId) ? "sx-interdit" : "sx-possible"));
+        document.body.style.userSelect = "none";
+      };
+      const bouger = (ev) => {
+        if (!fantome && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+        if (!fantome) demarrer();
+        ev.preventDefault();
+        fantome.style.left = ev.clientX + "px"; fantome.style.top = ev.clientY + "px";
+        const sous = document.elementFromPoint(ev.clientX, ev.clientY);
+        const c = sous?.closest?.(".sx-c[data-sc-id]"); const z = sous?.closest?.(".sx-zone-general");
+        container.querySelectorAll(".sx-survol").forEach(x => x.classList.remove("sx-survol"));
+        cible = z ? "GENERAL" : (c && !interdits.has(c.dataset.scId) ? c.dataset.scId : null);
+        if (z) z.classList.add("sx-survol"); else if (cible) c.classList.add("sx-survol");
+      };
+      const lacher = () => {
+        document.removeEventListener("pointermove", bouger); document.removeEventListener("pointerup", lacher); document.removeEventListener("pointercancel", lacher);
+        if (!fantome) return;
+        fantome.remove(); zone?.remove(); document.body.style.userSelect = "";
+        container.querySelectorAll(".sx-possible,.sx-interdit,.sx-survol").forEach(x => x.classList.remove("sx-possible", "sx-interdit", "sx-survol"));
+        const actuel = compteurs.find(x => x.id === id)?.compteurParentId || null;
+        if (cible === "GENERAL") { if (actuel) enregistrer(id, null); }
+        else if (cible && cible !== actuel) enregistrer(id, cible);
+      };
+      document.addEventListener("pointermove", bouger, { passive: false });
+      document.addEventListener("pointerup", lacher); document.addEventListener("pointercancel", lacher);
+    });
   });
   // Rangement par glisser-déposer, dans chaque association/groupe.
   if (peutModifier && !st.lier) container.querySelectorAll("[data-sx-liste]").forEach(el => {
