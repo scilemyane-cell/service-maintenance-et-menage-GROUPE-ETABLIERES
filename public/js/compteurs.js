@@ -469,7 +469,7 @@ function renderListe() {
                   const r = retardDe(site.id);
                   const etat = nb === 0 ? "vide" : r > 0 ? "retard" : "ok";
                   const cat = categorieSite(site);
-                  return `<button class="sdw-tuile sdw-cpt sdw-${etat} ${site.id === ui.siteSelectionne ? "sdw-sel" : ""}" data-select-site="${site.id}" style="--c:${cat.couleur}">
+                  return `<button class="sdw-tuile sdw-cpt sdw-${etat} " data-select-site="${site.id}" style="--c:${cat.couleur}">
                     <span class="sdw-statut" title="${nb === 0 ? "Aucun compteur" : r > 0 ? `${r} compteur(s) ${motRetard()}` : "Tous les relevés sont à jour"}">${nb === 0 ? "–" : r > 0 ? r : "✓"}</span>
                     <span class="sdw-tag"><i></i>${esc(cat.cle === "autre" ? (site.association || "Autre") : cat.label)}</span>
                     <b class="sdw-nom" title="${esc(site.nom)}">${esc(nomPropre(site.nom))}</b>
