@@ -3213,3 +3213,8 @@ body.clo-ouvert{overflow:hidden}
 .sx-c .sx-nom small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sx-c{min-height:124px;box-sizing:border-box}
 .sx-c .sx-nom{padding-bottom:22px}
+/* Champ PDL/PCE + lecture sur photo */
+.pdl-ligne{display:flex;gap:6px;align-items:stretch}
+.pdl-ligne input{flex:1;min-width:0}
+.pdl-photo{padding:6px 10px!important;font-size:16px!important;flex:none}
+.pdl-statut{display:block;font-size:12px;font-weight:400;margin-top:4px;min-height:0}

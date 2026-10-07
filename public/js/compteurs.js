@@ -746,6 +746,56 @@ function verifPdl(type, v) {
   return /^\d{14}$/.test(v) ? "" : `Le ${libPdl(type)} doit faire 14 chiffres (${v.length} saisi${v.length > 1 ? "s" : ""}).`;
 }
 
+// Lecture du PDL/PCE sur une photo (facture, étiquette, écran du compteur) :
+// reconnaissance de texte DANS LE NAVIGATEUR (Tesseract.js, rien n'est envoyé
+// ailleurs), puis recherche d'une suite de 14 chiffres. L'utilisateur vérifie.
+async function imagePourOcr(fichier) {
+  const img = await createImageBitmap(fichier);
+  const echelle = Math.min(1, 1800 / Math.max(img.width, img.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(img.width * echelle); cv.height = Math.round(img.height * echelle);
+  const g = cv.getContext("2d");
+  g.filter = "grayscale(1) contrast(1.6)";
+  g.drawImage(img, 0, 0, cv.width, cv.height);
+  return cv;
+}
+export function numerosPdlDansTexte(texte) {
+  const vus = new Set();
+  const re = /(?<!\d)(?:\d[ .\-]?){13}\d(?!\d)/g;
+  let m; while ((m = re.exec(String(texte || "")))) { const n = m[0].replace(/\D/g, ""); if (n.length === 14) vus.add(n); }
+  String(texte || "").split(/\n/).forEach(l => { const n = l.replace(/[^\d]/g, ""); if (n.length === 14) vus.add(n); });
+  return [...vus];
+}
+function attacherScanPdl(prefix, onValeur) {
+  const btn = mountedContainer.querySelector(`[data-pdl-photo="${prefix}"]`);
+  const fichier = mountedContainer.querySelector(`[data-pdl-fichier="${prefix}"]`);
+  const statut = mountedContainer.querySelector(`[data-pdl-statut="${prefix}"]`);
+  const champ = document.getElementById(`${prefix}-pdl`);
+  if (!btn || !fichier || !champ) return;
+  const poser = (n) => { champ.value = fmtPdl(n); onValeur?.(champ.value); statut.innerHTML = `<span style="color:var(--gold)">✓ Lu : <b>${esc(fmtPdl(n))}</b> — vérifie avant d'enregistrer.</span>`; };
+  btn.addEventListener("click", () => fichier.click());
+  fichier.addEventListener("change", async () => {
+    const f = fichier.files?.[0]; fichier.value = ""; if (!f) return;
+    btn.disabled = true;
+    statut.innerHTML = `<span style="color:var(--text-dim)">⏳ Lecture de la photo…${window.Tesseract ? "" : " (première fois : téléchargement du lecteur, ~5 Mo)"}</span>`;
+    let worker = null;
+    try {
+      const T = await window.chargerLib("Tesseract");
+      worker = await T.createWorker("eng");
+      await worker.setParameters({ tessedit_char_whitelist: "0123456789 .-PDLCEpdlce:" });
+      const { data } = await worker.recognize(await imagePourOcr(f));
+      const nums = numerosPdlDansTexte(data?.text);
+      if (!nums.length) { statut.innerHTML = `<span style="color:var(--red)">Aucun numéro de 14 chiffres trouvé sur la photo. Reprends-la de plus près, bien éclairée, ou tape-le.</span>`; return; }
+      if (nums.length === 1) { poser(nums[0]); return; }
+      statut.innerHTML = `<span style="color:var(--text-dim)">Plusieurs numéros trouvés, choisis :</span> ${nums.map(n => `<button type="button" class="nav-btn" data-pdl-choix="${n}" style="padding:3px 8px;font-size:12px">${esc(fmtPdl(n))}</button>`).join(" ")}`;
+      statut.querySelectorAll("[data-pdl-choix]").forEach(b => b.addEventListener("click", () => poser(b.dataset.pdlChoix)));
+    } catch (e) {
+      console.error("Lecture PDL :", e);
+      statut.innerHTML = `<span style="color:var(--red)">❌ Lecture impossible : ${esc(e?.message || String(e))}</span>`;
+    } finally { btn.disabled = false; try { await worker?.terminate(); } catch { /* */ } }
+  });
+}
+
 function renderAddForm(site) {
   const suggestions = (ui.sectionsParSite[site.id] || []).map(s => s.titre).filter(Boolean);
   const freq = ui.addingFrequence || "mensuel";
@@ -770,7 +820,7 @@ function renderAddForm(site) {
           </datalist>
         </label>
         <label>Emplacement (optionnel)<input id="cpt-new-emplacement" value="${esc(ui.addingEmplacement || "")}" placeholder="ex. sous-sol, local technique…"></label>
-        <label>${libPdl(type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(type)})</small><input id="cpt-new-pdl" inputmode="numeric" value="${esc(ui.addingPdl || "")}" placeholder="${type === "elec" || type === "gaz" ? "ex. 1234 5678 9012 34" : ""}"></label>
+        <label>${libPdl(type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(type)})</small><span class="pdl-ligne"><input id="cpt-new-pdl" inputmode="numeric" value="${esc(ui.addingPdl || "")}" placeholder="${type === "elec" || type === "gaz" ? "ex. 1234 5678 9012 34" : ""}"><button type="button" class="nav-btn pdl-photo" data-pdl-photo="cpt-new" title="Lire le numéro sur une photo">📷</button><input type="file" accept="image/*" capture="environment" hidden data-pdl-fichier="cpt-new"></span><span class="pdl-statut" data-pdl-statut="cpt-new"></span></label>
       </div>
       ${type === "elec" ? `
         <div class="form-grid" style="margin-top:10px">
@@ -875,7 +925,7 @@ function renderEditForm(c) {
       <div class="form-grid">
         <label>Nom<input id="cpt-edit-nom" value="${esc(c.nom)}"></label>
         <label>Emplacement (optionnel)<input id="cpt-edit-emplacement" value="${esc(c.emplacement || '')}"></label>
-        <label>${libPdl(c.type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(c.type)})</small><input id="cpt-edit-pdl" inputmode="numeric" value="${esc(fmtPdl(c.pdl || ''))}"></label>
+        <label>${libPdl(c.type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(c.type)})</small><span class="pdl-ligne"><input id="cpt-edit-pdl" inputmode="numeric" value="${esc(fmtPdl(c.pdl || ''))}"><button type="button" class="nav-btn pdl-photo" data-pdl-photo="cpt-edit" title="Lire le numéro sur une photo">📷</button><input type="file" accept="image/*" capture="environment" hidden data-pdl-fichier="cpt-edit"></span><span class="pdl-statut" data-pdl-statut="cpt-edit"></span></label>
       </div>
       ${c.type === "elec" ? `
         <div class="form-grid" style="margin-top:10px">
@@ -916,6 +966,7 @@ function attachEditFormListeners() {
   if (c.nbIndex === "custom") {
     attacherIndexPersonnalisesListeners("cpt-edit", () => c.indexPersonnalises, render);
   }
+  attacherScanPdl("cpt-edit");
   document.getElementById("cpt-edit-cancel").addEventListener("click", () => { ui.editingCompteurId = null; render(); });
   document.getElementById("cpt-edit-save").addEventListener("click", async () => {
     const statusEl = document.getElementById("cpt-edit-status");
@@ -958,6 +1009,7 @@ function attachAddFormListeners() {
   document.getElementById("cpt-new-nom").addEventListener("input", (e) => { ui.addingNom = e.target.value; });
   document.getElementById("cpt-new-emplacement").addEventListener("input", (e) => { ui.addingEmplacement = e.target.value; });
   document.getElementById("cpt-new-pdl")?.addEventListener("input", (e) => { ui.addingPdl = e.target.value; });
+  attacherScanPdl("cpt-new", (v) => { ui.addingPdl = v; });
   typeSelect.addEventListener("change", (e) => {
     // Capture la saisie actuelle avant de changer de type, pour ne rien
     // perdre si l'utilisateur avait déjà modifié le nom/emplacement.
