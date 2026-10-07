@@ -462,3 +462,69 @@ export async function relierDoublonsDecalage(liens) {
 export async function reprendreSynchro() {
   await setDoc(REF_SYNCHRO, { suspendu: null }, { merge: true });
 }
+
+// Recalage de l'appli sur le fichier Excel PAR LE CONTENU (site + descriptif
+// + local), quand les N° ont été décalés / ressaisis dans l'Excel :
+//  • la demande de l'appli qui correspond à une ligne prend le N° de la ligne ;
+//  • les copies en trop (même contenu) sont RELIÉES comme doublons à celle
+//    gardée (masquées, non comptées, réversible avec « Délier ») ;
+//  • ce qui ne correspond à aucune ligne est seulement listé (à vérifier).
+// Fonction pure (testable) : ne modifie rien.
+export function recalerSurFichier(fichier, demandesApp) {
+  const emp = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const loc = (x) => sa(x.local).replace(/\s+/g, "");
+  const cle = (x) => `${sa(x.site)}|${emp(x)}`;
+  const score = (d) => (d.dateMaj ? 100 : 0) + (d.actionPour ? 50 : 0) + (d.commentaireTech ? 20 : 0) + (sa(d.statut) && sa(d.statut) !== "non renseigne" ? 5 : 0);
+  const app = (demandesApp || []).filter(d => !d.lieeA && !(d.creeDansApp && !d.vuDansFichier));
+  const lignes = fichier.filter(f => emp(f));
+  const pris = new Set(), gardeDe = new Map(); // id app -> ligne
+  const renumeros = [], liens = [];
+  // Chaque ligne du fichier prend la demande de l'appli au même contenu qui a
+  // le PLUS de suivi (commentaire, action, statut…) ; à égalité, celle qui a
+  // déjà le bon N°, puis la même date. Lignes ayant déjà leur N° traitées d'abord.
+  const parCle = new Map(); app.forEach(d => { const k = cle(d); parCle.set(k, [...(parCle.get(k) || []), d]); });
+  const compatibles = (f) => (parCle.get(cle(f)) || []).filter(d => !pris.has(d.id) && (!loc(f) || !loc(d) || loc(d) === loc(f)));
+  const aSonNumero = (f) => app.some(d => d.numero === f.numero && cle(d) === cle(f));
+  const ordre = [...lignes.filter(aSonNumero), ...lignes.filter(f => !aSonNumero(f))];
+  const ambigues = [], lignesFaites = new Set();
+  ordre.forEach(f => {
+    const c = compatibles(f);
+    if (!c.length) return; // vraie nouvelle ligne pas encore importée
+    const exacte = c.some(d => d.numero === f.numero);
+    const memesLignes = lignes.filter(x => x !== f && cle(x) === cle(f) && (!loc(f) || !loc(x) || loc(x) === loc(f)) && !lignesFaites.has(x));
+    if (!exacte && memesLignes.length && c.length > 1) { ambigues.push(f); return; }
+    const g = [...c].sort((a, b) => score(b) - score(a) || (b.numero === f.numero) - (a.numero === f.numero) || (sa(b.dateDemande) === sa(f.dateDemande)) - (sa(a.dateDemande) === sa(f.dateDemande)))[0];
+    pris.add(g.id); gardeDe.set(g.id, f); lignesFaites.add(f);
+    if (g.numero !== f.numero) renumeros.push({ demande: g, ancien: g.numero, nouveau: f.numero, ligne: f });
+  });
+  // 3) Copies restantes d'une demande gardée (même contenu) → doublons.
+  const gardees = app.filter(d => pris.has(d.id));
+  const orphelines = [];
+  app.filter(d => !pris.has(d.id)).forEach(d => {
+    const g = gardees.find(x => cle(x) === cle(d) && (!loc(d) || !loc(x) || loc(x) === loc(d)));
+    if (g && emp(d)) liens.push({ doublon: d, garde: g, numero: gardeDe.get(g.id)?.numero || g.numero });
+    else orphelines.push(d);
+  });
+  return { renumeros, liens, orphelines, ambigues };
+}
+export async function lireFichierDemandes() {
+  const token = await getGraphToken(); if (!token) return null;
+  const buf = await telechargerFichierDrive(`${DOSSIER}/${COPIE}`, token);
+  if (!buf) throw new Error(`Copie introuvable : appsmm › ${DOSSIER} › ${COPIE}.`);
+  const XLSX = await window.chargerLib("XLSX");
+  return demandesDepuisClasseur(XLSX.read(buf, { type: "array" }), XLSX);
+}
+export async function appliquerRecalage({ renumeros, liens }) {
+  const ops = [
+    ...renumeros.map(r => [r.demande.id, { numero: r.nouveau, ancienNumero: r.ancien, recaleLe: Date.now() }]),
+    ...liens.map(l => [l.doublon.id, { lieeA: l.garde.id, lieeANumero: l.numero, doublonImport: true, doublonDecalage: true }]),
+  ];
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(db);
+    ops.slice(i, i + 400).forEach(([id, d]) => batch.update(doc(db, "demandes", id), { ...d, importMajLe: serverTimestamp() }));
+    await batch.commit();
+  }
+  // Empreintes effacées : la prochaine synchro relit tout proprement.
+  try { await setDoc(REF_EMPREINTES, { e: null, le: Date.now() }); } catch { /* */ }
+  return ops.length;
+}

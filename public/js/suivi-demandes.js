@@ -33,7 +33,7 @@ import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
-import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier, doublonsDecalage, relierDoublonsDecalage, reprendreSynchro } from "./demandes-sharepoint.js";
+import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier, doublonsDecalage, relierDoublonsDecalage, reprendreSynchro, recalerSurFichier, lireFichierDemandes, appliquerRecalage } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
@@ -740,7 +740,7 @@ function renderTableau(container) {
     <div class="stack">
       <div class="demandes-source-note">
         📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
-        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn" id="demandes-doublons-decalage" title="Relier les demandes créées en double par le décalage des N° du fichier Excel">🚑 Doublons du décalage</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><span id="demandes-suspendu"></span><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn" id="demandes-doublons-decalage" title="Recaler l'appli sur le fichier Excel par le contenu (N° décalés, copies en double)">🚑 Doublons du décalage</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><span id="demandes-suspendu"></span><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -912,19 +912,35 @@ function renderTableau(container) {
   document.getElementById("demandes-doublons-decalage")?.addEventListener("click", async (e) => {
     e.target.disabled = true;
     try {
-      const jour = prompt("Demandes importées depuis le (JJ/MM/AAAA) :", "06/10/2026");
-      if (!jour) return;
-      const [j, mo, a] = jour.split("/").map(Number); const depuis = new Date(a, mo - 1, j).getTime();
-      if (!depuis) { msg("Date invalide."); return; }
-      msg("⏳ Recherche des doublons (rien n'est modifié)…");
+      msg("⏳ Lecture du fichier Excel et des demandes (aperçu, rien n'est modifié)…");
+      const fichier = await lireFichierDemandes(); if (!fichier) { msg(""); return; }
       const toutes = await toutesLesDemandesPourOutil();
-      const { liens, gardees } = doublonsDecalage(toutes, depuis);
-      if (!liens.length) { msg(`✓ Aucun doublon trouvé parmi les ${gardees.length} demande(s) importée(s) depuis le ${esc(jour)}.`); return; }
-      const apercu = liens.slice(0, 25).map(l => `• ${l.doublon.numero} « ${String(l.doublon.descriptif).slice(0, 35)} » = ${l.garde.numero}`).join("\n");
-      if (!confirm(`${liens.length} demande(s) créée(s) en double depuis le ${jour} (même site + même descriptif qu'une demande plus ancienne).\n${gardees.length} vraie(s) nouvelle(s) gardée(s).\n\n${apercu}${liens.length > 25 ? "\n…" : ""}\n\nLes relier comme doublons ? (sauvegarde téléchargée d'abord, réversible avec « Délier »)`)) { msg(""); return; }
-      sauvegarderDemandes(toutes);
-      const n = await relierDoublonsDecalage(liens);
-      msg(`✓ ${n} doublon(s) relié(s) — ils ne sont plus comptés. ${gardees.length} vraie(s) nouvelle(s) gardée(s).`);
+      const r = recalerSurFichier(fichier, toutes);
+      const aTraiter = (d) => !["Réalisé", "Annulé", "Réalisé – à valider"].includes(d.statut);
+      msg(`🚑 Aperçu : ${r.renumeros.length} N° à recaler, ${r.liens.length} doublon(s) à relier (${r.liens.filter(l => aTraiter(l.doublon)).length} « à traiter »), ${r.orphelines.length} à vérifier.`);
+      const court = (t, n = 55) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
+      const m = document.createElement("div"); m.className = "ndm-fond";
+      m.innerHTML = `<div class="ndm" style="max-width:760px;max-height:88vh;overflow:auto">
+        <div class="ndm-tete"><h3>🚑 Recaler l'appli sur le fichier Excel — aperçu</h3><button type="button" class="ndm-x" data-x>✕</button></div>
+        <p class="hint">🔒 Rien n'est modifié tant que tu n'as pas validé. Une sauvegarde complète est téléchargée avant. Le rapprochement se fait sur le <b>contenu</b> (site + descriptif + local), pas sur le N°.</p>
+        <details open><summary><b>🔗 ${r.liens.length} copie(s) en double à relier</b> — masquées et non comptées, réversible avec « Délier »</summary><ul style="font-size:12px">${r.liens.map(l => `<li><b>${esc(l.doublon.numero)}</b> · ${esc(l.doublon.site)} — ${esc(court(l.doublon.descriptif))} <i>(${esc(l.doublon.statut || "")})</i> → gardée : <b>${esc(l.numero)}</b></li>`).join("")}</ul></details>
+        <details><summary><b>🔢 ${r.renumeros.length} N° à recaler</b> sur celui de l'Excel (le suivi reste sur la demande)</summary><ul style="font-size:12px">${r.renumeros.map(x => `<li>${esc(x.ancien)} → <b>${esc(x.nouveau)}</b> · ${esc(x.demande.site)} — ${esc(court(x.demande.descriptif))}</li>`).join("")}</ul></details>
+        <details><summary><b>❓ ${r.orphelines.length} demande(s) sans ligne dans l'Excel</b> — non touchées (ligne supprimée ou descriptif modifié dans l'Excel)</summary><ul style="font-size:12px">${r.orphelines.map(d => `<li><b>${esc(d.numero)}</b> · ${esc(d.site)} — ${esc(court(d.descriptif))} <i>(${esc(d.statut || "")})</i></li>`).join("")}</ul></details>
+        ${r.ambigues.length ? `<p class="hint">⚠️ ${r.ambigues.length} ligne(s) de l'Excel au contenu identique à d'autres, non rapprochées (à voir à la main).</p>` : ""}
+        <div class="ndm-btns"><button type="button" class="dps-annuler" data-x>Fermer sans rien changer</button>${r.liens.length || r.renumeros.length ? `<button type="button" class="dps-enregistrer" data-ok>🚑 Valider le recalage</button>` : ""}</div>
+      </div>`;
+      document.body.append(m);
+      m.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => m.remove()));
+      m.querySelector("[data-ok]")?.addEventListener("click", async (ev) => {
+        if (!confirm(`Confirmer ?\n• Sauvegarde téléchargée d'abord\n• ${r.liens.length} doublon(s) reliés\n• ${r.renumeros.length} N° recalés`)) return;
+        ev.target.disabled = true; ev.target.textContent = "⏳ Recalage…";
+        try {
+          sauvegarderDemandes(toutes);
+          const n = await appliquerRecalage(r);
+          m.remove();
+          msg(`✓ Recalage fait (${n} modification(s)) : ${r.liens.length} doublon(s) relié(s), ${r.renumeros.length} N° recalé(s). Sauvegarde téléchargée. Relance « 🔍 Comparer » pour vérifier.`);
+        } catch (err) { console.error(err); ev.target.disabled = false; ev.target.textContent = "🚑 Valider le recalage"; alert("❌ " + (err?.message || err)); }
+      });
     } catch (err) { console.error(err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
