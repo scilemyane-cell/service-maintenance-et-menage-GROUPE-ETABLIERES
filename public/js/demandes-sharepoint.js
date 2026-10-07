@@ -193,7 +193,26 @@ export async function comparerAvecFichier(demandesApp, { onProgress = () => {} }
 
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
 // des demandes que personne n'a encore touchées dans l'appli.
-export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false } = {}) {
+// Frein de sécurité : le fichier Excel a déjà vu ses N° « glisser » d'une
+// ligne à l'autre (ligne insérée/supprimée/triée → SG-685 porte soudain le
+// descriptif de SG-622). L'import créait alors une demande par ligne décalée
+// (+58 demandes le 07/10). On compte ces signes de décalage : nouvelle
+// demande dont le N° existe déjà dans l'appli, ou descriptif d'une demande
+// existante qui change.
+export const SEUIL_DECALAGE = 3;
+export function signesDecalage(nouvelles, majs, demandesApp) {
+  const nums = new Set((demandesApp || []).map(d => d.numero));
+  const conflits = nouvelles.filter(n => nums.has(n.numero));
+  const descrChanges = majs.filter(([, d]) => "descriptif" in d);
+  const parId = new Map((demandesApp || []).map(d => [d.id, d]));
+  const exemples = [
+    ...conflits.slice(0, 5).map(n => `${n.numero} : « ${String(n.descriptif || "").slice(0, 40)} » (N° déjà pris par « ${String((demandesApp.find(d => d.numero === n.numero) || {}).descriptif || "").slice(0, 40)} »)`),
+    ...descrChanges.slice(0, 5).map(([id, d]) => `${parId.get(id)?.numero || id} : « ${String(parId.get(id)?.descriptif || "").slice(0, 40)} » → « ${String(d.descriptif || "").slice(0, 40)} »`),
+  ];
+  return { total: conflits.length + descrChanges.length, conflits: conflits.length, descrChanges: descrChanges.length, exemples };
+}
+
+export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false, forcer = false } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return null;
   onProgress("Lecture de la copie SharePoint…");
@@ -225,6 +244,13 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
   }
   const { nouvelles, majs } = rapprocherLignes(fichier, demandesApp);
   if (simulation) return { nouvelles, majs, total: fichier.length }; // aperçu : rien n'est écrit
+  // Décalage des N° détecté : on n'écrit RIEN et on suspend la synchro auto
+  // (import ET envoi vers le fichier, qui écrirait sur les mauvaises lignes).
+  const decalage = signesDecalage(nouvelles, majs, demandesApp);
+  if (!forcer && decalage.total >= SEUIL_DECALAGE) {
+    await setDoc(REF_SYNCHRO, { suspendu: { le: Date.now(), ...decalage, nouvelles: nouvelles.length } }, { merge: true });
+    return { suspendu: true, ...decalage, nouvelles: nouvelles.length, misesAJour: majs.length, total: fichier.length };
+  }
   const ops = [...nouvelles.map(n => ["set", n]), ...majs.map(([id, d]) => ["update", id, d])];
   for (let i = 0; i < ops.length; i += 400) {
     onProgress(`Enregistrement ${Math.min(i + 400, ops.length)} / ${ops.length}…`);
@@ -329,6 +355,9 @@ function dejaDansFichier(l, r) {
 }
 
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
+  // N° décalés dans le fichier : un envoi écrirait les suivis sur les MAUVAISES lignes.
+  const etatSynchro = (await getDoc(REF_SYNCHRO).catch(() => null))?.data();
+  if (etatSynchro?.suspendu) throw new Error("Envoi bloqué : la synchro est suspendue (N° décalés dans le fichier Excel). Vérifie l'Excel puis « Reprendre la synchro ».");
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return { envoyees: 0 };
   // Dates envoyées au format AAAA-MM-JJ : Excel les reconnaît comme de vraies
@@ -397,4 +426,39 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
 
 export async function lireDerniereSynchro() {
   try { const s = await getDoc(REF_SYNCHRO); return s.exists() ? s.data() : null; } catch { return null; }
+}
+
+// Nettoyage après un import décalé : une demande importée depuis « depuisMs »
+// dont le site + le descriptif (et le local s'il est rempli des deux côtés)
+// sont ceux d'une demande PLUS ANCIENNE de l'appli est un doublon créé par le
+// décalage des N° → on la RELIE à l'ancienne (masquée, non comptée,
+// réversible avec « Délier »). Rien n'est supprimé.
+export function doublonsDecalage(demandesApp, depuisMs) {
+  const msT = (t) => (t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : 0));
+  const emp = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const actives = (demandesApp || []).filter(d => !d.lieeA);
+  const anciennes = actives.filter(d => !(msT(d.importeLe) >= depuisMs));
+  const recentes = actives.filter(d => msT(d.importeLe) >= depuisMs && !d.creeDansApp);
+  const parCle = new Map();
+  anciennes.forEach(d => { const e = emp(d); if (!e) return; const c = `${sa(d.site)}|${e}`; parCle.set(c, [...(parCle.get(c) || []), d]); });
+  const liens = [], gardees = [];
+  recentes.forEach(r => {
+    const e = emp(r);
+    const cands = e ? (parCle.get(`${sa(r.site)}|${e}`) || []).filter(a => !(sa(a.local) && sa(r.local) && sa(a.local) !== sa(r.local))) : [];
+    if (!cands.length) { gardees.push(r); return; }
+    const cible = [...cands].sort((a, b) => (b.dateMaj ? 1 : 0) - (a.dateMaj ? 1 : 0))[0];
+    liens.push({ doublon: r, garde: cible });
+  });
+  return { liens, gardees };
+}
+export async function relierDoublonsDecalage(liens) {
+  for (let i = 0; i < liens.length; i += 400) {
+    const batch = writeBatch(db);
+    liens.slice(i, i + 400).forEach(({ doublon, garde }) => batch.update(doc(db, "demandes", doublon.id), { lieeA: garde.id, lieeANumero: garde.numero, doublonImport: true, doublonDecalage: true, importMajLe: serverTimestamp() }));
+    await batch.commit();
+  }
+  return liens.length;
+}
+export async function reprendreSynchro() {
+  await setDoc(REF_SYNCHRO, { suspendu: null }, { merge: true });
 }

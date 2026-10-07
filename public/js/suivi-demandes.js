@@ -33,7 +33,7 @@ import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
-import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier } from "./demandes-sharepoint.js";
+import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier, doublonsDecalage, relierDoublonsDecalage, reprendreSynchro } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
@@ -740,7 +740,7 @@ function renderTableau(container) {
     <div class="stack">
       <div class="demandes-source-note">
         📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
-        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn" id="demandes-doublons-decalage" title="Relier les demandes créées en double par le décalage des N° du fichier Excel">🚑 Doublons du décalage</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><span id="demandes-suspendu"></span><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -840,7 +840,13 @@ function renderTableau(container) {
   document.getElementById("demandes-recuperer-sp")?.addEventListener("click", async (e) => {
     e.target.disabled = true;
     try {
-      const r = await recupererDepuisCopie(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg(esc(t)) });
+      const toutes = await toutesLesDemandesPourOutil();
+      let r = await recupererDepuisCopie(toutes, { onProgress: (t) => msg(esc(t)) });
+      if (r?.suspendu) {
+        const t = `⚠️ ${r.total} ligne(s) du fichier ont un N° qui ne correspond plus à la même demande (N° décalés dans l'Excel ?).\n\n${r.exemples.join("\n")}\n\nRien n'a été importé. Importer QUAND MÊME (risque de doublons) ?`;
+        if (!confirm(t)) { msg(`⛔ Import annulé : ${r.total} N° décalé(s) dans le fichier. Vérifie l'Excel d'abord.`); return; }
+        r = await recupererDepuisCopie(toutes, { forcer: true, onProgress: (x) => msg(esc(x)) });
+      }
       msg(`✓ ${r.nouvelles} nouvelle(s) demande(s), ${r.misesAJour} mise(s) à jour depuis le fichier (${r.total} lignes lues).`);
     } catch (err) { console.error("Récupération demandes :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
@@ -891,6 +897,35 @@ function renderTableau(container) {
         msg(`↩ Réparation annulée (${n} échange(s) défait(s)).`);
       });
     } catch (err) { console.error("Réparation :", err); msg(erreurSp(err)); }
+    finally { e.target.disabled = false; }
+  });
+  // Synchro auto suspendue (N° décalés) : bandeau + bouton pour relancer.
+  const elSusp = document.getElementById("demandes-suspendu");
+  if (elSusp) lireDerniereSynchro().then(d => {
+    const su = d?.suspendu; if (!su || !document.contains(elSusp)) return;
+    elSusp.innerHTML = `<div style="margin-top:8px;padding:10px;border-radius:8px;background:var(--red);color:#fff;font-size:13px">⛔ <b>Synchro auto avec l'Excel suspendue</b> le ${fmtQuand(su.le)} : ${su.total} N° décalé(s) (${su.conflits} N° déjà pris, ${su.descrChanges} descriptif(s) qui changent). Rien n'est importé ni envoyé au fichier.<br><small>${(su.exemples || []).map(esc).join("<br>")}</small><br><button type="button" class="dsp-btn" id="demandes-reprendre" style="margin-top:6px">▶ Reprendre la synchro (Excel vérifié)</button></div>`;
+    document.getElementById("demandes-reprendre")?.addEventListener("click", async () => {
+      if (!confirm("Le fichier Excel a été vérifié / corrigé ? La synchro automatique reprend (import + envoi).")) return;
+      await reprendreSynchro(); elSusp.innerHTML = ""; msg("▶ Synchro automatique relancée.");
+    });
+  });
+  document.getElementById("demandes-doublons-decalage")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      const jour = prompt("Demandes importées depuis le (JJ/MM/AAAA) :", "06/10/2026");
+      if (!jour) return;
+      const [j, mo, a] = jour.split("/").map(Number); const depuis = new Date(a, mo - 1, j).getTime();
+      if (!depuis) { msg("Date invalide."); return; }
+      msg("⏳ Recherche des doublons (rien n'est modifié)…");
+      const toutes = await toutesLesDemandesPourOutil();
+      const { liens, gardees } = doublonsDecalage(toutes, depuis);
+      if (!liens.length) { msg(`✓ Aucun doublon trouvé parmi les ${gardees.length} demande(s) importée(s) depuis le ${esc(jour)}.`); return; }
+      const apercu = liens.slice(0, 25).map(l => `• ${l.doublon.numero} « ${String(l.doublon.descriptif).slice(0, 35)} » = ${l.garde.numero}`).join("\n");
+      if (!confirm(`${liens.length} demande(s) créée(s) en double depuis le ${jour} (même site + même descriptif qu'une demande plus ancienne).\n${gardees.length} vraie(s) nouvelle(s) gardée(s).\n\n${apercu}${liens.length > 25 ? "\n…" : ""}\n\nLes relier comme doublons ? (sauvegarde téléchargée d'abord, réversible avec « Délier »)`)) { msg(""); return; }
+      sauvegarderDemandes(toutes);
+      const n = await relierDoublonsDecalage(liens);
+      msg(`✓ ${n} doublon(s) relié(s) — ils ne sont plus comptés. ${gardees.length} vraie(s) nouvelle(s) gardée(s).`);
+    } catch (err) { console.error(err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
   document.getElementById("demandes-doublons-import")?.addEventListener("click", async (e) => {

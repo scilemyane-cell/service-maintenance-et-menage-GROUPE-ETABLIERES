@@ -17,7 +17,7 @@ import { recupererDepuisCopie, deposerMisesAJour } from "./demandes-sharepoint.j
 const REF = doc(db, "config", "demandes-synchro");
 const CHEMIN_COPIE = "Demandes/SG_Suivi_Demandes_GroupeEtablieres.xlsx";
 const PERIODE = 5 * 60000;
-let timer = null, enCours = false;
+let timer = null, enCours = false, avertiSuspendu = false;
 
 async function prendreVerrou(cle) {
   return runTransaction(db, async (tx) => {
@@ -36,6 +36,12 @@ async function tour() {
     const token = await getGraphTokenSilentOnly();
     if (!token) return; // pas de session Microsoft ouverte : on ne dérange pas
     const synchro = (await getDoc(REF)).data() || {};
+    // Synchro suspendue (décalage des N° détecté dans le fichier) : on ne
+    // touche à rien tant qu'un responsable n'a pas vérifié et relancé.
+    if (synchro.suspendu) {
+      if (!avertiSuspendu) { avertiSuspendu = true; window.toast?.(`⛔ Synchro avec le fichier Excel suspendue : N° décalés détectés (${synchro.suspendu.total}). Voir Suivi des demandes.`); }
+      return;
+    }
 
     // 1) Import si la copie a changé
     const meta = await metadonneesFichierDrive(CHEMIN_COPIE, token);
@@ -43,6 +49,7 @@ async function tour() {
     if (meta && empreinte !== synchro.derniereEmpreinte && await prendreVerrou("verrouImport")) {
       // null = mode économe (ne relit que les demandes dont la ligne a changé)
       const r = await recupererDepuisCopie(null, { interactif: false });
+      if (r?.suspendu) { window.toast?.(`⛔ Import arrêté : ${r.total} demande(s) aux N° décalés dans le fichier Excel. Synchro suspendue, rien n'a été créé.`); return; }
       if (r) {
         const { setDoc } = await import("./firestore-compte.js");
         await setDoc(REF, { derniereEmpreinte: empreinte, verrouImport: 0 }, { merge: true });
