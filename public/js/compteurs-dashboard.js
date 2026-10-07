@@ -267,7 +267,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
             <p>Chaque compteur d'eau compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale. Au-delà de +30 % : à surveiller ; au-delà de +80 % : fuite probable.</p></div>
             <div class="vf-resume"><span class="f">${nb("fuite")}<small>fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span>${nb("construction") + nb("attente") ? `<span class="c">${nb("construction") + nb("attente")}<small>référence à définir</small></span>` : ""}</div></div>
           ${parAssoGroupe(V, x => siteParId.get(x.c.dossierId)).map((G, gi, T) => `${gi === 0 || T[gi - 1].assoc !== G.assoc ? `<div class="vf-asso">🏢 ${esc(G.assoc)}</div>` : ""}${G.groupe ? `<div class="vf-groupe">${esc(G.groupe)}</div>` : ""}
-          <div class="vf-grille">${[...G.items].sort((a, b) => V.indexOf(a) - V.indexOf(b)).map(x => `
+          <div class="vf-grille">${[...G.items].sort((a, b) => (a.c.ordre ?? 1e9) - (b.c.ordre ?? 1e9) || V.indexOf(a) - V.indexOf(b)).map(x => `
             <div class="vf-c vf-${x.etat}">
               <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || "Eau")}${x.dernier?.net ? " · propre (hors sous-compteurs)" : ""}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
               <div class="vf-c-corps">${jauge(x)}

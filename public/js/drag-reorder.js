@@ -68,7 +68,7 @@ export function activerGlisserDeposer(container, selector, onReorder) {
         placeholder.appendChild(td);
       } else {
         const cs = getComputedStyle(item);
-        placeholder.style.cssText = `height:${rect.height}px;border:2px dashed var(--gold);border-radius:${cs.borderRadius};margin:${cs.marginTop} 0 ${cs.marginBottom}`;
+        placeholder.style.cssText = `height:${rect.height}px;max-width:100%;width:${rect.width}px;box-sizing:border-box;flex:none;border:2px dashed var(--gold);border-radius:${cs.borderRadius};margin:${cs.marginTop} 0 ${cs.marginBottom}`;
       }
       item.parentNode.insertBefore(placeholder, item);
       item.style.display = "none";
@@ -78,13 +78,26 @@ export function activerGlisserDeposer(container, selector, onReorder) {
         item.dataset.dragMoved = "1";
         ghostWrapper.style.top = (rect.top + (ev.clientY - startY)) + "px";
         ghostWrapper.style.left = (rect.left + (ev.clientX - startX)) + "px";
-        for (const el of items()) {
-          if (el === item) continue;
-          const r = el.getBoundingClientRect();
-          if (ev.clientY > r.top && ev.clientY < r.bottom) {
-            if (ev.clientY < r.top + r.height / 2) el.parentNode.insertBefore(placeholder, el);
-            else el.parentNode.insertBefore(placeholder, el.nextSibling);
-            break;
+        // Grille (plusieurs éléments par ligne) : l'élément sous le pointeur,
+        // avant/après selon la moitié gauche/droite ; liste : moitié haut/bas.
+        // Pointeur déjà sur l'emplacement réservé : on ne bouge rien (évite l'aller-retour).
+        const rp = placeholder.getBoundingClientRect();
+        if (ev.clientX >= rp.left && ev.clientX <= rp.right && ev.clientY >= rp.top && ev.clientY <= rp.bottom) return;
+        const autres = items().filter(el => el !== item);
+        const sous = autres.find(el => { const r = el.getBoundingClientRect(); return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom; });
+        if (sous) {
+          const r = sous.getBoundingClientRect();
+          const enGrille = autres.some(o => o !== sous && Math.abs(o.getBoundingClientRect().top - r.top) < 4);
+          const avant = enGrille ? ev.clientX < r.left + r.width / 2 : ev.clientY < r.top + r.height / 2;
+          sous.parentNode.insertBefore(placeholder, avant ? sous : sous.nextSibling);
+        } else {
+          for (const el of autres) {
+            const r = el.getBoundingClientRect();
+            if (ev.clientY > r.top && ev.clientY < r.bottom) {
+              if (ev.clientY < r.top + r.height / 2) el.parentNode.insertBefore(placeholder, el);
+              else el.parentNode.insertBefore(placeholder, el.nextSibling);
+              break;
+            }
           }
         }
       };

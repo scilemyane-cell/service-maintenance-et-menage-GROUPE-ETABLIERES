@@ -5,6 +5,7 @@
 // Lien stocké sur le sous-compteur : compteurParentId.
 import { esc } from "./astreinte-logic.js";
 import { trierGroupes } from "./associations-data.js";
+import { activerGlisserDeposer } from "./drag-reorder.js";
 import { modifierCompteur, clesIndex, uniteValeur } from "./compteurs-data.js";
 
 export const ENERGIES = [
@@ -41,11 +42,14 @@ export function calculConso(releves) {
 // dossiers de site). Réutilisé par le Schéma (relier) et par Pilotage énergie
 // (lecture seule, sur la période choisie).
 //  conso(c, t0, t1) → consommation interpolée ; debut/fin = fenêtre mesurée.
-export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associations = [], peutModifier = false, lier = null, assoc = "" }) {
+// Ordre choisi par glisser-déposer (champ « ordre » du compteur), sinon alphabétique.
+export const cmpCompteurs = (a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || nomCourt(a.dossierNom + a.nom).localeCompare(nomCourt(b.dossierNom + b.nom), "fr");
+
+export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associations = [], peutModifier = false, lier = null, assoc = "", glisser = false }) {
   const jours = Math.max(1, Math.round((fin - debut) / JOUR));
   const parId = new Map(liste.map(c => [c.id, c]));
   const parentDe = (c) => c.compteurParentId && parId.has(c.compteurParentId) && c.compteurParentId !== c.id ? c.compteurParentId : null;
-  const enfants = (id) => liste.filter(c => parentDe(c) === id).sort((a, b) => nomCourt(a.dossierNom + a.nom).localeCompare(nomCourt(b.dossierNom + b.nom), "fr"));
+  const enfants = (id) => liste.filter(c => parentDe(c) === id).sort(cmpCompteurs);
   const descendants = (id, acc = new Set()) => { enfants(id).forEach(e => { if (!acc.has(e.id)) { acc.add(e.id); descendants(e.id, acc); } }); return acc; };
   const brut = (c) => conso(c, debut, fin);
   const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
@@ -94,23 +98,27 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
   const nomsAssoc = [...associations.map(a => a.nom).filter(n => racines.some(c => assocDe(c) === n))];
   if (racines.some(c => !nomsAssoc.includes(assocDe(c)))) nomsAssoc.push("");
   const affichees = assoc ? nomsAssoc.filter(n => n === assoc) : nomsAssoc;
-  const bloc = (l) => {
-    const avec = l.filter(c => enfants(c.id).length), seuls = l.filter(c => !enfants(c.id).length);
-    return `${avec.map(c => `<div class="sx-scroll">${reseau(c)}</div>`).join("")}${seuls.length ? `<div class="sx-seuls">${seuls.map(c => dial(c, null, { racine: true })).join("")}</div>` : ""}`;
+  // Une liste par association/groupe, dans l'ordre choisi ; ☰ pour glisser.
+  const listes = new Map();
+  const bloc = (l, cle) => {
+    listes.set(cle, l);
+    return `<div class="sx-liste" data-sx-liste="${esc(cle)}">${l.map((c, i) => enfants(c.id).length
+      ? `<div class="sx-item sx-item-net" ${glisser ? `data-drag-index="${i}"` : ""}>${glisser ? `<span class="sx-poignee" data-drag-handle title="Glisser pour ranger">☰</span>` : ""}<div class="sx-scroll">${reseau(c)}</div></div>`
+      : `<div class="sx-item" ${glisser ? `data-drag-index="${i}"` : ""}>${glisser ? `<span class="sx-poignee" data-drag-handle title="Glisser pour ranger">☰</span>` : ""}${dial(c, null, { racine: true })}</div>`).join("")}</div>`;
   };
-  const tri = (l) => [...l].sort((a, b) => nomCourt(a.dossierNom + a.nom).localeCompare(nomCourt(b.dossierNom + b.nom), "fr"));
+  const tri = (l) => [...l].sort(cmpCompteurs);
   const html = affichees.map(n => {
     const l = racines.filter(c => (n ? assocDe(c) === n : !nomsAssoc.slice(0, -1).includes(assocDe(c)) || !assocDe(c)));
     const nb = l.reduce((t, c) => t + 1 + descendants(c.id).size, 0);
     const sansG = tri(l.filter(c => !groupeDe(c)));
     const groupes = trierGroupes([...new Set(l.map(groupeDe).filter(Boolean))]);
     return `<section class="sx-zone sx-assoc"><h3>🏢 ${esc(n || "Sans association")} <small>${nb} compteur${nb > 1 ? "s" : ""}</small></h3>
-      ${sansG.length ? bloc(sansG) : ""}
-      ${groupes.map(g => `<div class="sx-groupe">${esc(g)}</div>${bloc(tri(l.filter(c => groupeDe(c) === g)))}`).join("")}
+      ${sansG.length ? bloc(sansG, `${n}|`) : ""}
+      ${groupes.map(g => `<div class="sx-groupe">${esc(g)}</div>${bloc(tri(l.filter(c => groupeDe(c) === g)), `${n}|${g}`)}`).join("")}
     </section>`;
   }).join("");
   const chips = nomsAssoc.length > 1 ? `<div class="sx-assocs">${["", ...nomsAssoc.filter(Boolean)].map(n => `<button type="button" data-sx-assoc="${esc(n)}" class="${assoc === n ? "on" : ""}">${esc(n || "Toutes")}</button>`).join("")}</div>` : "";
-  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips };
+  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips, listes };
 }
 
 export function renderSchema(container, { compteurs, releves, sites = [], associations = [], peutModifier, onRetour, onOuvrirSite }) {
@@ -120,7 +128,7 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
   const liste = compteurs.filter(c => c.type === st.energie);
   // Consommation des 30 derniers jours connus.
   const fin = Date.now(), debut = fin - 30 * JOUR;
-  const r = reseauxHTML({ liste, E, conso: calculConso(releves), debut, fin, sites, associations, peutModifier, lier: st.lier, assoc: st.lier ? "" : st.assoc });
+  const r = reseauxHTML({ liste, E, conso: calculConso(releves), debut, fin, sites, associations, peutModifier, lier: st.lier, assoc: st.lier ? "" : st.assoc, glisser: peutModifier && !st.lier });
 
   container.innerHTML = `
   <div class="sc sx-e-${E.id}" style="--e:${E.couleur}">
@@ -131,7 +139,7 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? "" : r.chips}
     ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général, ou un sous-compteur). <button type="button" id="sc-annuler">Annuler</button></div>`
-      : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur qui l'alimente (ex. le lycée). Un sous-compteur peut lui-même avoir des sous-compteurs.</p>` : ""}
+      : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur qui l'alimente (ex. le lycée). Un sous-compteur peut lui-même avoir des sous-compteurs. Pour ranger : maintiens <b>☰</b> et fais glisser — l'ordre est repris dans Pilotage énergie.</p>` : ""}
     ${r.html}
   </div>`;
 
@@ -147,4 +155,17 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
   };
   container.querySelectorAll("[data-sc-detacher]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); enregistrer(b.dataset.scDetacher, null); }));
   container.querySelectorAll(".sx-c.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
+  // Rangement par glisser-déposer, dans chaque association/groupe.
+  if (peutModifier && !st.lier) container.querySelectorAll("[data-sx-liste]").forEach(el => {
+    const l = r.listes.get(el.dataset.sxListe); if (!l) return;
+    activerGlisserDeposer(el, ":scope > [data-drag-index]", async (nouvelOrdre) => {
+      const ordonnes = nouvelOrdre.map(i => l[i]);
+      try {
+        for (let i = 0; i < ordonnes.length; i++) if (ordonnes[i].ordre !== i) { await modifierCompteur(ordonnes[i].id, { ordre: i }); ordonnes[i].ordre = i; }
+        ordonnes.forEach((c, i) => { c.ordre = i; });
+        el.querySelectorAll(":scope > [data-drag-index]").forEach((it, i) => { it.dataset.dragIndex = i; });
+        l.splice(0, l.length, ...ordonnes);
+      } catch (err) { alert("Enregistrement de l'ordre impossible : " + (err?.message || err)); }
+    });
+  });
 }

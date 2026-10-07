@@ -3188,3 +3188,12 @@ body.clo-ouvert{overflow:hidden}
 .vf-grille+.vf-asso,.vf-grille+.vf-groupe{margin-top:16px}
 .pe-table tr.pe-gr td{background:#F4F6F9;font-weight:800;color:#0b0b0b;padding-top:10px}
 .pe-table tr.pe-gr td small{font-weight:700;color:#52514e;text-transform:uppercase;letter-spacing:.06em;font-size:11px;margin-left:6px}
+/* Schéma : compteurs rangés librement (glisser-déposer ☰) */
+.sx-liste{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.sx-item{position:relative;flex:1 1 290px;max-width:440px;min-width:0}
+.sx-item>.sx-c{max-width:none;width:100%;box-sizing:border-box}
+.sx-item-net{flex-basis:100%;max-width:none}
+.sx-poignee{position:absolute;top:6px;left:6px;z-index:3;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;background:rgba(255,255,255,.12);color:#cfe3ff;font-size:14px;cursor:grab;user-select:none}
+.sx-poignee:hover{background:rgba(255,255,255,.25)}
+.sx-item:has(>.sx-poignee)>.sx-c{padding-left:34px}
+.sx-item-net:has(>.sx-poignee) .sx-tete .sx-c{padding-left:34px}
