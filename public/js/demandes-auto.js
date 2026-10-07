@@ -56,7 +56,10 @@ async function tour() {
     const empreinte = meta?.file?.hashes?.quickXorHash || `${meta?.size}-${meta?.lastModifiedDateTime}`;
     if (meta && empreinte !== synchro.derniereEmpreinte && await prendreVerrou("verrouImport")) {
       // null = mode économe (ne relit que les demandes dont la ligne a changé)
-      const r = await recupererDepuisCopie(null, { interactif: false });
+      // Copie locale complète (aucune lecture Firestore) pour ne jamais recréer une demande existante.
+      const { watchDemandes: wd } = await import("./firestore-data.js");
+      const reference = await new Promise((ok) => { let u = null, fini = false; u = wd((l) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(l); }); });
+      const r = await recupererDepuisCopie(null, { interactif: false, reference });
       if (r?.suspendu) { window.toast?.(`⛔ Import arrêté : ${r.total} demande(s) aux N° décalés dans le fichier Excel. Synchro suspendue, rien n'a été créé.`); return; }
       if (r) {
         const { setDoc } = await import("./firestore-compte.js");

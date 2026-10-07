@@ -102,6 +102,25 @@ const CHAMPS_DEMANDEUR = ["dateDemande", "site", "association", "type", "descrip
 // encore été touchée dans l'appli (sinon c'est l'appli qui fait foi).
 const CHAMPS_TRAITEMENT = ["statut", "intervenant", "contact", "categorieIntervenant", "dateIntervention", "dateStatut", "commentaireTech"];
 
+// Lignes « nouvelles » dont la demande existe déjà dans l'appli (même site +
+// début du descriptif + même local quand il est renseigné des deux côtés).
+export function sansJumeaux(nouvelles, demandesApp) {
+  const emp = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const loc = (x) => sa(x.local).replace(/\s+/g, "");
+  const idx = new Map();
+  (demandesApp || []).forEach(d => { const e = emp(d); if (!e) return; const k = `${sa(d.site)}|${e}`; idx.set(k, [...(idx.get(k) || []), d]); });
+  const gardees = [], ecartees = [];
+  (nouvelles || []).forEach(f => {
+    // Une demande identique CLOSE avant la date de cette ligne = vraie nouvelle demande (ça recasse) : on la garde.
+    const close = (d) => /^(realis|annul)/.test(sa(d.statut));
+    const fin = (d) => String(d.dateValidation || d.dateStatut || d.dateIntervention || "");
+    const e = emp(f); const c = e ? (idx.get(`${sa(f.site)}|${e}`) || []).filter(d => !(loc(d) && loc(f) && loc(d) !== loc(f))
+      && !(close(d) && f.dateDemande && fin(d) && String(f.dateDemande) > fin(d))) : [];
+    (c.length ? ecartees : gardees).push(f);
+  });
+  return { gardees, ecartees };
+}
+
 // Rapprochement lignes du fichier ↔ demandes de l'appli (fonction pure, testable).
 export function rapprocherLignes(fichier, demandesApp) {
   const parNumero = new Map((demandesApp || []).map(d => [d.numero, d]));
@@ -212,7 +231,7 @@ export function signesDecalage(nouvelles, majs, demandesApp) {
   return { total: conflits.length + descrChanges.length, conflits: conflits.length, descrChanges: descrChanges.length, exemples };
 }
 
-export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false, forcer = false } = {}) {
+export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false, forcer = false, reference = null } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return null;
   onProgress("Lecture de la copie SharePoint…");
@@ -242,7 +261,13 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
       }
     }
   }
-  const { nouvelles, majs } = rapprocherLignes(fichier, demandesApp);
+  const r0 = rapprocherLignes(fichier, demandesApp);
+  // Ne JAMAIS recréer une demande qui existe déjà dans l'appli sous un autre N°
+  // (même site + même descriptif + même local) : c'est ce qui faisait « revenir »
+  // des interventions déjà validées quand un N° ou un texte bougeait dans l'Excel.
+  const { gardees: nouvelles, ecartees } = sansJumeaux(r0.nouvelles, reference || demandesApp);
+  const majs = r0.majs;
+  if (ecartees.length) { try { await setDoc(REF_SYNCHRO, { dernieresEcartees: ecartees.slice(0, 30).map(f => `${f.numero} · ${f.site} · ${String(f.descriptif || "").slice(0, 40)}`), dernieresEcarteesLe: Date.now() }, { merge: true }); } catch { /* */ } }
   if (simulation) return { nouvelles, majs, total: fichier.length }; // aperçu : rien n'est écrit
   // Décalage des N° détecté : on n'écrit RIEN et on suspend la synchro auto
   // (import ET envoi vers le fichier, qui écrirait sur les mauvaises lignes).
@@ -505,12 +530,26 @@ export function recalerSurFichier(fichier, demandesApp) {
     if (g && emp(d)) liens.push({ doublon: d, garde: g, numero: gardeDe.get(g.id)?.numero || g.numero });
     else orphelines.push(d);
   });
+  // Demandes « revenues » : ouvertes, jamais travaillées, copie d'une demande
+  // déjà réalisée/annulée (même site + descriptif + local) et plus anciennes
+  // que sa clôture → reliées comme doublons de la demande close.
+  const FINIS = ["réalisé", "annulé"];
+  const fini = (d) => FINIS.includes(String(d.statut || "").toLowerCase());
+  const ouverteNeuve = (d) => !fini(d) && d.statut !== "Réalisé – à valider" && !d.dateMaj && !d.actionPour && !d.commentaireTech;
+  const dejaLie = new Set(liens.map(l => l.doublon.id));
+  const revenantes = [];
+  app.filter(d => ouverteNeuve(d) && !dejaLie.has(d.id) && emp(d)).forEach(d => {
+    const close = app.find(x => x.id !== d.id && fini(x) && cle(x) === cle(d) && !(loc(x) && loc(d) && loc(x) !== loc(d))
+      && (!d.dateDemande || String(d.dateDemande) <= String(x.dateValidation || x.dateStatut || x.dateIntervention || "9999")));
+    if (close) { revenantes.push({ doublon: d, garde: close, numero: gardeDe.get(close.id)?.numero || close.numero }); dejaLie.add(d.id); }
+  });
+  liens.push(...revenantes);
   // Étiquettes « doublon de SG-… » périmées : la demande gardée a changé de N°.
   const nouveauNum = new Map((demandesApp || []).map(d => [d.id, d.numero]));
   renumeros.forEach(r => nouveauNum.set(r.demande.id, r.nouveau));
   const etiquettes = (demandesApp || []).filter(d => d.lieeA && nouveauNum.has(d.lieeA) && d.lieeANumero !== nouveauNum.get(d.lieeA))
     .map(d => ({ demande: d, ancien: d.lieeANumero, nouveau: nouveauNum.get(d.lieeA) }));
-  return { renumeros, liens, orphelines, ambigues, etiquettes };
+  return { renumeros, liens, orphelines: orphelines.filter(d => !dejaLie.has(d.id)), ambigues, etiquettes, revenantes };
 }
 export async function lireFichierDemandes() {
   const token = await getGraphToken(); if (!token) return null;
