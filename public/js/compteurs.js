@@ -484,7 +484,7 @@ function renderListe() {
   mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
     const siteId = btn.dataset.openAdd;
     ui.addingSiteId = siteId; ui.addingType = "eau"; ui.addingNbIndex = null;
-    ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
+    ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null; ui.addingPdl = null;
     if (!ui.sectionsParSite[siteId]) {
       try {
         const dossier = await getDossierUnique(siteId);
@@ -542,6 +542,7 @@ function renderCompteurRow(c) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div>
           <p style="margin:0;font-weight:700">${esc(c.nom)}${c.emplacement ? ` <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(c.emplacement)}</span>` : ""}</p>
+          ${c.pdl ? `<p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">🔌 ${libPdl(c.type)} : <b style="color:var(--text);font-variant-numeric:tabular-nums;user-select:all">${esc(fmtPdl(c.pdl))}</b></p>` : ""}
           <p style="margin:2px 0 0;font-size:12px;${retard ? 'color:var(--red);font-weight:700' : 'color:var(--text-dim)'}">${retard ? '⚠️ ' : '✓ '}${formatDate(c.dernierReleve?.at)}${c.dernierReleve ? ` — ${c.dernierReleve.releveParNom}` : ""}</p>
           <p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">${formatValeurs(c)}</p>
           <p style="margin:2px 0 0;font-size:11px;color:var(--text-dim)">🔁 Relevé attendu ${prochaineEcheanceLabel(c)}</p>
@@ -735,6 +736,16 @@ function appliquerAutoRemplissage(siteId, type) {
   ui.addingAutoEmplacement = suggestionEmplacement;
 }
 
+// PDL (électricité) / PCE (gaz) : identifiant du point de livraison, 14 chiffres.
+const libPdl = (type) => type === "elec" ? "PDL" : type === "gaz" ? "PCE" : "N° / référence";
+const aidePdl = (type) => type === "elec" ? "14 chiffres — sur la facture ou le Linky (touche +)" : type === "gaz" ? "14 chiffres — sur la facture de gaz" : "optionnel";
+const normPdl = (v) => String(v || "").replace(/\s+/g, "");
+const fmtPdl = (v) => /^\d{14}$/.test(v || "") ? v.replace(/(\d{4})(\d{4})(\d{4})(\d{2})/, "$1 $2 $3 $4") : (v || "");
+function verifPdl(type, v) {
+  if (!v || (type !== "elec" && type !== "gaz")) return "";
+  return /^\d{14}$/.test(v) ? "" : `Le ${libPdl(type)} doit faire 14 chiffres (${v.length} saisi${v.length > 1 ? "s" : ""}).`;
+}
+
 function renderAddForm(site) {
   const suggestions = (ui.sectionsParSite[site.id] || []).map(s => s.titre).filter(Boolean);
   const freq = ui.addingFrequence || "mensuel";
@@ -759,6 +770,7 @@ function renderAddForm(site) {
           </datalist>
         </label>
         <label>Emplacement (optionnel)<input id="cpt-new-emplacement" value="${esc(ui.addingEmplacement || "")}" placeholder="ex. sous-sol, local technique…"></label>
+        <label>${libPdl(type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(type)})</small><input id="cpt-new-pdl" inputmode="numeric" value="${esc(ui.addingPdl || "")}" placeholder="${type === "elec" || type === "gaz" ? "ex. 1234 5678 9012 34" : ""}"></label>
       </div>
       ${type === "elec" ? `
         <div class="form-grid" style="margin-top:10px">
@@ -863,6 +875,7 @@ function renderEditForm(c) {
       <div class="form-grid">
         <label>Nom<input id="cpt-edit-nom" value="${esc(c.nom)}"></label>
         <label>Emplacement (optionnel)<input id="cpt-edit-emplacement" value="${esc(c.emplacement || '')}"></label>
+        <label>${libPdl(c.type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(c.type)})</small><input id="cpt-edit-pdl" inputmode="numeric" value="${esc(fmtPdl(c.pdl || ''))}"></label>
       </div>
       ${c.type === "elec" ? `
         <div class="form-grid" style="margin-top:10px">
@@ -909,7 +922,10 @@ function attachEditFormListeners() {
     const nom = document.getElementById("cpt-edit-nom").value.trim();
     const emplacement = document.getElementById("cpt-edit-emplacement").value.trim();
     const frequence = document.getElementById("cpt-edit-frequence").value;
-    const patch = { nom: nom || c.nom, emplacement, frequence };
+    const pdl = normPdl(document.getElementById("cpt-edit-pdl")?.value);
+    const errPdl = verifPdl(c.type, pdl);
+    if (errPdl) { statusEl.innerHTML = `<span style="color:var(--red)">${esc(errPdl)}</span>`; return; }
+    const patch = { nom: nom || c.nom, emplacement, frequence, pdl };
     if (c.type === "elec") {
       const nbIndexVal = document.getElementById("cpt-edit-nbindex")?.value;
       patch.nbIndex = nbIndexVal === "custom" ? "custom" : (parseInt(nbIndexVal, 10) || 4);
@@ -941,6 +957,7 @@ function attachAddFormListeners() {
   if (!typeSelect) return;
   document.getElementById("cpt-new-nom").addEventListener("input", (e) => { ui.addingNom = e.target.value; });
   document.getElementById("cpt-new-emplacement").addEventListener("input", (e) => { ui.addingEmplacement = e.target.value; });
+  document.getElementById("cpt-new-pdl")?.addEventListener("input", (e) => { ui.addingPdl = e.target.value; });
   typeSelect.addEventListener("change", (e) => {
     // Capture la saisie actuelle avant de changer de type, pour ne rien
     // perdre si l'utilisateur avait déjà modifié le nom/emplacement.
@@ -975,6 +992,10 @@ function attachAddFormListeners() {
     const emplacement = document.getElementById("cpt-new-emplacement").value.trim();
     const frequence = document.getElementById("cpt-new-frequence").value;
     const compteur = nouveauCompteur(type);
+    const pdl = normPdl(document.getElementById("cpt-new-pdl")?.value);
+    const errPdl = verifPdl(type, pdl);
+    if (errPdl) { statusEl.innerHTML = `<span style="color:var(--red)">${esc(errPdl)}</span>`; return; }
+    if (pdl) compteur.pdl = pdl;
     if (nomInput) compteur.nom = nomInput;
     compteur.emplacement = emplacement;
     if (type === "elec") {
@@ -1000,7 +1021,7 @@ function attachAddFormListeners() {
       creerSectionDossierPourCompteur(site.id, type, compteur.nom).catch(e => console.error("Ajout équipement dossier de site échoué :", e));
       ui.addingSiteId = null;
       ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null; ui.addingNbIndex = null;
-      ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null;
+      ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null; ui.addingPdl = null;
       ui.addingIndexPersonnalises = null;
       await load();
     } catch (e) {
