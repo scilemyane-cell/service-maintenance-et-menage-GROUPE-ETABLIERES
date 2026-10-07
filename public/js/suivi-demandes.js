@@ -734,7 +734,8 @@ function renderTableau(container) {
 
   const lignes = lignesFiltrees();
   const total = state.demandes.length;
-  const aTraiterTotal = toutesLesLignes().filter(l => !STATUTS_TRAITES.includes(l.statut)).length;
+  // Même calcul que le compteur du bandeau : sans les doublons reliés ni les « à valider ».
+  const aTraiterTotal = toutesLesLignes().filter(l => !l.lieeA && !STATUTS_TRAITES.includes(l.statut) && l.statut !== "Réalisé – à valider").length;
 
   container.innerHTML = `
     <div class="stack">
