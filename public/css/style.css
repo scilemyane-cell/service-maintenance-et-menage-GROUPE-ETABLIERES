@@ -3274,3 +3274,43 @@ body.clo-ouvert{overflow:hidden}
 .sx-deduit{flex-basis:100%;display:flex;align-items:center;gap:6px;font:700 11.5px system-ui,sans-serif;color:#cfe3ff;cursor:pointer}
 .sx-deduit input{width:16px;height:16px;accent-color:#5fd4ff}
 .sx-badge-info{flex-basis:100%;font:700 11px system-ui,sans-serif;color:#ffd68a}
+/* Schéma des compteurs sur téléphone : arbre vertical compact, une colonne */
+@media (max-width:700px){
+  .sc{gap:10px}
+  .sc-entete h1{font-size:18px}.sc-entete p,.sc-aide{font-size:12px}
+  .sc-onglets button,.sx-assocs button{padding:6px 10px;font-size:12px}
+  .sx-zone{padding:10px;border-radius:14px}
+  .sx-zone h3{font-size:14px;margin-bottom:8px}
+  .sx-liste{grid-template-columns:1fr!important;gap:8px}
+  .sx-item{max-width:none}
+  .sx-poignee{display:none}
+  .sx-item>.sx-c,.sx-item-net .sx-tete .sx-c{padding-left:10px!important}
+  .sx-scroll{overflow:visible}
+  .sx-net{width:100%}
+  .sx-tete{width:100%}
+  .sx-tuyau{height:14px;margin-left:28px}
+  .sx-enfants{margin-left:28px;padding-left:12px;gap:8px;width:calc(100% - 28px);box-sizing:border-box}
+  .sx-branche{width:100%}
+  .sx-branche::before{left:-12px;width:12px}
+  .sx-branche::after{left:-12px}
+  .sx-c{min-height:0!important;padding:8px 10px;gap:8px;border-radius:14px}
+  .sx-dial{width:58px;height:58px;border-width:2px}
+  .sx-centre b{font-size:13px!important}.sx-centre small{font-size:8px!important}
+  .sx-part{font-size:9px!important;padding:1px 4px!important}
+  .sx-motif{font-size:18px!important}
+  .sx-nom b{font-size:13px;-webkit-line-clamp:1!important}.sx-nom small{font-size:11px}
+  .sx-tot{font-size:11px}
+  .sx-c .sx-nom{padding-bottom:0!important}
+  .sx-badge-chaude,.sx-badge-general,.sx-badge-info{font-size:10px}
+  .sx-parent{font-size:11px}.sx-parent select{font-size:13px;padding:7px 8px}
+  .sx-deduit{font-size:11.5px}
+  .sx-zone-general{left:12px;right:12px;transform:none;bottom:12px;padding:14px;font-size:13px;text-align:center}
+}
+@media (max-width:700px){
+  .sx-dial .sx-part{display:none}
+  .sx-parent{flex-wrap:wrap;gap:4px}
+  .sx-parent select{flex-basis:100%;width:100%;box-sizing:border-box}
+  .sx-c{box-sizing:border-box;max-width:100%}
+  .sx-enfants .sx-enfants{margin-left:14px;padding-left:10px;width:calc(100% - 14px)}
+  .sc-entete p,.sc-aide{display:none}
+}
