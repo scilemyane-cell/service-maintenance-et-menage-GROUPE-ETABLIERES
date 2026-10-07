@@ -36,6 +36,14 @@ async function tour() {
     const token = await getGraphTokenSilentOnly();
     if (!token) return; // pas de session Microsoft ouverte : on ne dérange pas
     const synchro = (await getDoc(REF)).data() || {};
+    // Incident du 07/10 (N° décalés dans l'Excel, déjà absorbés par l'import) :
+    // suspension une seule fois, jusqu'à vérification de l'Excel par un responsable.
+    if (!synchro.verifDecalage0710) {
+      const { setDoc } = await import("./firestore-compte.js");
+      const suspendu = { le: Date.now(), total: 0, conflits: 0, descrChanges: 0, exemples: ["Incident du 07/10 : vérifie la numérotation du fichier Excel (lignes insérées / supprimées / triées) avant de relancer."] };
+      await setDoc(REF, { verifDecalage0710: true, suspendu }, { merge: true });
+      synchro.suspendu = suspendu;
+    }
     // Synchro suspendue (décalage des N° détecté dans le fichier) : on ne
     // touche à rien tant qu'un responsable n'a pas vérifié et relancé.
     if (synchro.suspendu) {
