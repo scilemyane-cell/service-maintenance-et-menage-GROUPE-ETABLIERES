@@ -918,7 +918,7 @@ function renderTableau(container) {
       const toutes = await toutesLesDemandesPourOutil();
       const r = recalerSurFichier(fichier, toutes);
       const aTraiter = (d) => !["Réalisé", "Annulé", "Réalisé – à valider"].includes(d.statut);
-      msg(`🚑 Aperçu : ${r.renumeros.length} N° à recaler, ${r.liens.length} doublon(s) à relier (${r.liens.filter(l => aTraiter(l.doublon)).length} « à traiter »), ${r.orphelines.length} à vérifier.`);
+      msg(`🚑 Aperçu : ${r.renumeros.length} N° à recaler, ${r.etiquettes.length} étiquette(s) à corriger, ${r.liens.length} doublon(s) à relier (${r.liens.filter(l => aTraiter(l.doublon)).length} « à traiter »), ${r.orphelines.length} à vérifier.`);
       const court = (t, n = 55) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
       const m = document.createElement("div"); m.className = "ndm-fond";
       m.innerHTML = `<div class="ndm" style="max-width:760px;max-height:88vh;overflow:auto">
@@ -927,13 +927,14 @@ function renderTableau(container) {
         <details open><summary><b>🔗 ${r.liens.length} copie(s) en double à relier</b> — masquées et non comptées, réversible avec « Délier »</summary><ul style="font-size:12px">${r.liens.map(l => `<li><b>${esc(l.doublon.numero)}</b> · ${esc(l.doublon.site)} — ${esc(court(l.doublon.descriptif))} <i>(${esc(l.doublon.statut || "")})</i> → gardée : <b>${esc(l.numero)}</b></li>`).join("")}</ul></details>
         <details><summary><b>🔢 ${r.renumeros.length} N° à recaler</b> sur celui de l'Excel (le suivi reste sur la demande)</summary><ul style="font-size:12px">${r.renumeros.map(x => `<li>${esc(x.ancien)} → <b>${esc(x.nouveau)}</b> · ${esc(x.demande.site)} — ${esc(court(x.demande.descriptif))}</li>`).join("")}</ul></details>
         <details><summary><b>❓ ${r.orphelines.length} demande(s) sans ligne dans l'Excel</b> — non touchées (ligne supprimée ou descriptif modifié dans l'Excel)</summary><ul style="font-size:12px">${r.orphelines.map(d => `<li><b>${esc(d.numero)}</b> · ${esc(d.site)} — ${esc(court(d.descriptif))} <i>(${esc(d.statut || "")})</i></li>`).join("")}</ul></details>
+        ${r.etiquettes.length ? `<details open><summary><b>🏷️ ${r.etiquettes.length} étiquette(s) « doublon de … » à corriger</b> (la demande gardée a changé de N°)</summary><ul style="font-size:12px">${r.etiquettes.map(x => `<li>${esc(x.demande.numero)} : doublon de ${esc(x.ancien || "?")} → <b>${esc(x.nouveau)}</b></li>`).join("")}</ul></details>` : ""}
         ${r.ambigues.length ? `<p class="hint">⚠️ ${r.ambigues.length} ligne(s) de l'Excel au contenu identique à d'autres, non rapprochées (à voir à la main).</p>` : ""}
-        <div class="ndm-btns"><button type="button" class="dps-annuler" data-x>Fermer sans rien changer</button>${r.liens.length || r.renumeros.length ? `<button type="button" class="dps-enregistrer" data-ok>🚑 Valider le recalage</button>` : ""}</div>
+        <div class="ndm-btns"><button type="button" class="dps-annuler" data-x>Fermer sans rien changer</button>${r.liens.length || r.renumeros.length || r.etiquettes.length ? `<button type="button" class="dps-enregistrer" data-ok>🚑 Valider le recalage</button>` : ""}</div>
       </div>`;
       document.body.append(m);
       m.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => m.remove()));
       m.querySelector("[data-ok]")?.addEventListener("click", async (ev) => {
-        if (!confirm(`Confirmer ?\n• Sauvegarde téléchargée d'abord\n• ${r.liens.length} doublon(s) reliés\n• ${r.renumeros.length} N° recalés`)) return;
+        if (!confirm(`Confirmer ?\n• Sauvegarde téléchargée d'abord\n• ${r.liens.length} doublon(s) reliés\n• ${r.renumeros.length} N° recalés\n• ${r.etiquettes.length} étiquette(s) corrigée(s)`)) return;
         ev.target.disabled = true; ev.target.textContent = "⏳ Recalage…";
         try {
           sauvegarderDemandes(toutes);

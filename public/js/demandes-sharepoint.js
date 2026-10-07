@@ -505,7 +505,12 @@ export function recalerSurFichier(fichier, demandesApp) {
     if (g && emp(d)) liens.push({ doublon: d, garde: g, numero: gardeDe.get(g.id)?.numero || g.numero });
     else orphelines.push(d);
   });
-  return { renumeros, liens, orphelines, ambigues };
+  // Étiquettes « doublon de SG-… » périmées : la demande gardée a changé de N°.
+  const nouveauNum = new Map((demandesApp || []).map(d => [d.id, d.numero]));
+  renumeros.forEach(r => nouveauNum.set(r.demande.id, r.nouveau));
+  const etiquettes = (demandesApp || []).filter(d => d.lieeA && nouveauNum.has(d.lieeA) && d.lieeANumero !== nouveauNum.get(d.lieeA))
+    .map(d => ({ demande: d, ancien: d.lieeANumero, nouveau: nouveauNum.get(d.lieeA) }));
+  return { renumeros, liens, orphelines, ambigues, etiquettes };
 }
 export async function lireFichierDemandes() {
   const token = await getGraphToken(); if (!token) return null;
@@ -514,10 +519,11 @@ export async function lireFichierDemandes() {
   const XLSX = await window.chargerLib("XLSX");
   return demandesDepuisClasseur(XLSX.read(buf, { type: "array" }), XLSX);
 }
-export async function appliquerRecalage({ renumeros, liens }) {
+export async function appliquerRecalage({ renumeros, liens, etiquettes }) {
   const ops = [
     ...renumeros.map(r => [r.demande.id, { numero: r.nouveau, ancienNumero: r.ancien, recaleLe: Date.now() }]),
     ...liens.map(l => [l.doublon.id, { lieeA: l.garde.id, lieeANumero: l.numero, doublonImport: true, doublonDecalage: true }]),
+    ...(etiquettes || []).map(e => [e.demande.id, { lieeANumero: e.nouveau }]),
   ];
   for (let i = 0; i < ops.length; i += 400) {
     const batch = writeBatch(db);
