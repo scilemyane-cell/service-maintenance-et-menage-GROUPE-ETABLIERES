@@ -73,7 +73,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
         <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
       <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}${!opts.virtuel && c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
-        ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : ""}
+        ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt(b, b < 10 ? 2 : 0)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
       ${!opts.virtuel && peutModifier && !lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
@@ -87,10 +87,10 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const b = brut(c), p = propre(c);
     const pc = (x) => b ? Math.max(0, Math.min(100, (x || 0) / b * 100)) : null;
     const branches = e.map(x => `<div class="sx-branche">${reseau(x, pc(brut(x)), false)}</div>`).join("")
-      + `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: e.some(estEauChaude) ? "Eau froide consommée" : "Consommation propre", sous: `${nomCourt(c.dossierNom)} (hors sous-compteurs)`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`;
+      + `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: `Reste consommé — ${nomCourt(c.dossierNom)}`, sous: `hors ${e.map(x => estEauChaude(x) ? "eau chaude" : nomCourt(x.dossierNom) !== nomCourt(c.dossierNom) ? nomCourt(x.dossierNom) : (x.nom || "sous-compteur")).join(", ")}`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`;
     const debit = b ? b / jours : 0;
     return `<div class="sx-net" style="--v:${debit ? Math.max(0.8, 6 - Math.log10(1 + debit) * 2.2) : 0}s">
-      <div class="sx-tete">${dial(c, part, { racine })}</div>
+      <div class="sx-tete">${dial(c, part, { racine, general: E.id === "eau" && e.some(estEauChaude) })}</div>
       <div class="sx-tuyau ${debit ? "coule" : ""}"></div>
       <div class="sx-enfants">${branches}</div>
     </div>`;
