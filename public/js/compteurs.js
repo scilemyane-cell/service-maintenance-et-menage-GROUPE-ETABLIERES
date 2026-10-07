@@ -452,7 +452,7 @@ function renderListe() {
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a les compteurs activés pour l'instant. Coche "Ce site a des compteurs à relever" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : `
-      <div class="cpt-split">
+      <div class="cpt-split cpt-seul">
         <div class="cpt-mosaique">
           ${groupes.map(g => `
             <h3 class="sdw-assoc" style="--c:${categorieSite(g.groups[0]?.sites[0] || {}).couleur}">${esc(g.assocLabel)} <em>${g.groups.reduce((n, x) => n + x.sites.length, 0)} site(s)</em></h3>
@@ -479,9 +479,7 @@ function renderListe() {
             `).join("")}
           `).join("")}
         </div>
-        <div class="cpt-detail" id="cpt-detail">
-          ${siteDetail ? renderSiteCard(siteDetail) : `<p class="hint">Choisis un site pour voir ses compteurs.</p>`}
-        </div>
+
       </div>`}
     </div>
   `;
