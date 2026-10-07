@@ -58,6 +58,18 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
   const parentDe = (c) => c.compteurParentId && parId.has(c.compteurParentId) && c.compteurParentId !== c.id ? c.compteurParentId : null;
   const enfants = (id) => liste.filter(c => parentDe(c) === id).sort(cmpCompteurs);
   const descendants = (id, acc = new Set()) => { enfants(id).forEach(e => { if (!acc.has(e.id)) { acc.add(e.id); descendants(e.id, acc); } }); return acc; };
+  // Liste « Alimenté par » : aucun (compteur général) ou un autre compteur de
+  // la même énergie (jamais lui-même ni un de ses sous-compteurs : pas de boucle).
+  const libC = (x) => `${x.logement ? `Logt ${x.logement} · ` : ""}${x.nom || E.label}`;
+  const optionsParent = (c) => {
+    const interdits = descendants(c.id); interdits.add(c.id);
+    const possibles = liste.filter(x => !interdits.has(x.id)).sort(cmpCompteurs);
+    const meme = possibles.filter(x => x.dossierId === c.dossierId), autres = possibles.filter(x => x.dossierId !== c.dossierId);
+    const opt = (x) => `<option value="${x.id}" ${parentDe(c) === x.id ? "selected" : ""}>${esc(libC(x))}</option>`;
+    return `<option value="">— Personne (compteur général)</option>`
+      + (meme.length ? `<optgroup label="${esc(nomCourt(c.dossierNom) || "Même site")}">${meme.map(opt).join("")}</optgroup>` : "")
+      + [...new Set(autres.map(x => x.dossierNom))].map(n => `<optgroup label="${esc(nomCourt(n))}">${autres.filter(x => x.dossierNom === n).map(opt).join("")}</optgroup>`).join("");
+  };
   const brut = (c) => conso(c, debut, fin);
   const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
   const unite = uniteValeur({ type: E.id });
@@ -79,7 +91,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
         ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt2(b)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
-      ${!opts.virtuel && peutModifier && !lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
+      ${!opts.virtuel && peutModifier ? `<label class="sx-parent" title="Le compteur qui alimente celui-ci (en amont)">↳ Alimenté par <select data-sx-parent="${c.id}">${optionsParent(c)}</select></label>` : ""}
       ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === lier)?.nom || "")}</div>` : ""}
     </div>`;
   };
@@ -148,7 +160,7 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? "" : r.chips}
     ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général, ou un sous-compteur). <button type="button" id="sc-annuler">Annuler</button></div>`
-      : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur qui l'alimente (ex. le lycée). Un sous-compteur peut lui-même avoir des sous-compteurs. Pour ranger : maintiens <b>☰</b> et fais glisser — l'ordre est repris dans Pilotage énergie.</p>` : ""}
+      : peutModifier ? `<p class="sc-aide">Sur chaque compteur, choisis dans <b>« ↳ Alimenté par »</b> le compteur qui est juste au-dessus de lui (ex. le self est alimenté par le compteur général du lycée). L'arborescence se redessine toute seule. Laisse « Personne » pour un compteur général. Pour ranger : maintiens <b>☰</b> et fais glisser.</p>` : ""}
     ${r.html}
   </div>`;
 
@@ -164,6 +176,11 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
   };
   container.querySelectorAll("[data-sc-detacher]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); enregistrer(b.dataset.scDetacher, null); }));
   container.querySelectorAll(".sx-c.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
+  container.querySelectorAll("[data-sx-parent]").forEach(sel => {
+    sel.addEventListener("click", (e) => e.stopPropagation());
+    sel.addEventListener("pointerdown", (e) => e.stopPropagation());
+    sel.addEventListener("change", () => enregistrer(sel.dataset.sxParent, sel.value || null));
+  });
   // Rangement par glisser-déposer, dans chaque association/groupe.
   if (peutModifier && !st.lier) container.querySelectorAll("[data-sx-liste]").forEach(el => {
     const l = r.listes.get(el.dataset.sxListe); if (!l) return;

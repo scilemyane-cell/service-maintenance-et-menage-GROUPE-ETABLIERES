@@ -3257,3 +3257,9 @@ body.clo-ouvert{overflow:hidden}
 .cd-x{border:0;background:var(--panel-alt,#eef0f3);color:var(--text);width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;flex:none}
 .cd-fenetre .form-card{margin-bottom:0!important;box-shadow:none}
 @media (max-width:600px){.cd-fond{align-items:flex-end;padding:0}.cd-fenetre{border-radius:18px 18px 0 0;max-height:88vh}}
+/* Schéma : « Alimenté par » (remplace Relier / Changer) */
+.sx-c:has(.sx-parent){flex-wrap:wrap}
+.sx-c:has(.sx-parent) .sx-nom{padding-bottom:0;flex:1}
+.sx-parent{flex-basis:100%;display:flex;align-items:center;gap:6px;font:700 11.5px system-ui,sans-serif;color:#8fb0d4;margin-top:2px}
+.sx-parent select{flex:1;min-width:0;padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#e6f1ff;font:600 12px system-ui,sans-serif}
+.sx-parent select option,.sx-parent select optgroup{color:#111;background:#fff}
