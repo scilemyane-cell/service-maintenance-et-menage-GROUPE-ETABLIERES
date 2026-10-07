@@ -212,10 +212,11 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         <div class="pe-filtres">
           <div class="pe-seg">${[["mois", "Mois"], ["12mois", "12 mois"], ["scolaire", "Année scolaire"]].map(([v, l]) => `<button data-pe-periode="${v}" class="${f.periode === v ? "pe-on" : ""}">${l}</button>`).join("")}</div>
           <select id="pe-ug"><option value="">Toutes les UG</option>${associations.map(a => `<option ${f.ug === a.nom ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}</select>
-          <select id="pe-energie"><option value="">Toutes énergies</option>${ENERGIES.filter(e => tousCompteurs.some(c => c.type === e.id)).map(e => `<option value="${e.id}" ${f.energie === e.id ? "selected" : ""}>${e.label}</option>`).join("")}</select>
           <button id="pe-pdf">⤓ Exporter PDF</button>
         </div>
       </div>
+
+      <div class="pe-energies">${[{ id: "", label: "Toutes énergies", icone: "📊", couleur: "#52514e" }, ...ENERGIES_SCHEMA.filter(e => tousCompteurs.some(c => c.type === e.id))].map(e => `<button type="button" data-pe-en="${e.id}" class="${f.energie === e.id ? "on" : ""}" style="--e:${e.couleur}"><span>${e.icone}</span>${e.label}<small>${e.id ? tousCompteurs.filter(c => c.type === e.id && (!f.ug || ugDe(c) === f.ug)).length + " compteur(s)" : ""}</small></button>`).join("")}</div>
 
       ${(() => {
         // Historique récent : les consommations démarrent au PREMIER relevé (index de départ = zéro).
@@ -228,6 +229,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
       })()}
 
       ${(() => {
+        if (f.energie && f.energie !== "eau") return "";
         const V = veilleEau(); if (!V.length) return "";
         const nb = (e) => V.filter(x => x.etat === e).length;
         const libEtat = { fuite: "Fuite probable", surveiller: "À surveiller", ok: "Normal", construction: "Référence à définir", attente: "En attente de 2 relevés" };
@@ -267,12 +269,13 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         // Réseaux de compteurs (même graphique que « Schéma des compteurs ») : suivi par énergie, période choisie.
         const ens = ENERGIES_SCHEMA.filter(e => compteurs.some(c => c.type === e.id));
         if (!ens.length) return "";
+        if (f.energie && ens.some(e => e.id === f.energie)) f.energieReseau = f.energie;
         if (!f.energieReseau || !ens.some(e => e.id === f.energieReseau)) f.energieReseau = (ens.find(e => e.id === "elec") || ens[0]).id;
         const E = ens.find(e => e.id === f.energieReseau);
         const r = reseauxHTML({ liste: compteurs.filter(c => c.type === E.id), E, conso, debut: Math.max(t0, Math.min(...compteurs.map(c => (parCompteur.get(c.id) || [])[0]?.createdAt || Infinity))), fin: Date.now(), sites, associations });
         return `<section class="pe-reseaux sx-e-${E.id}">
           <div class="pe-titre-graphe"><div><h2>${E.icone} Réseaux de compteurs — ${esc(E.label)}</h2><p class="pe-st">Même vue que le Schéma des compteurs, sur ${libPeriode} · débit moyen par jour au centre · le niveau = part de chaque compteur dans son réseau · rangé par association</p></div>
-            <div class="pe-chips">${ens.map(e => `<button data-pe-reseau="${e.id}" class="${e.id === E.id ? "pe-on" : ""}"><i style="background:${e.couleur}"></i>${e.icone} ${e.label}</button>`).join("")}</div></div>
+            ${f.energie ? "" : `<div class="pe-chips">${ens.map(e => `<button data-pe-reseau="${e.id}" class="${e.id === E.id ? "pe-on" : ""}"><i style="background:${e.couleur}"></i>${e.icone} ${e.label}</button>`).join("")}</div>`}</div>
           ${r.html}
         </section>`;
       })()}
@@ -365,7 +368,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   container.querySelector("#pe-pdf")?.addEventListener("click", () => window.print());
   container.querySelectorAll("[data-pe-periode]").forEach(b => b.addEventListener("click", () => { f.periode = b.dataset.pePeriode; rerendre(); }));
   container.querySelector("#pe-ug")?.addEventListener("change", e => { f.ug = e.target.value; rerendre(); });
-  container.querySelector("#pe-energie")?.addEventListener("change", e => { f.energie = e.target.value; if (e.target.value) f.energieGraphe = e.target.value; rerendre(); });
+  container.querySelectorAll("[data-pe-en]").forEach(b => b.addEventListener("click", () => { f.energie = b.dataset.peEn; if (f.energie) { f.energieGraphe = f.energie; f.energieReseau = f.energie; } rerendre(); }));
   container.querySelectorAll("[data-pe-graphe]").forEach(b => b.addEventListener("click", () => { f.energieGraphe = b.dataset.peGraphe; rerendre(); }));
   container.querySelectorAll("[data-pe-reseau]").forEach(b => b.addEventListener("click", () => { f.energieReseau = b.dataset.peReseau; rerendre(); }));
   container.querySelectorAll("[data-pe-tri]").forEach(th => th.addEventListener("click", () => {
