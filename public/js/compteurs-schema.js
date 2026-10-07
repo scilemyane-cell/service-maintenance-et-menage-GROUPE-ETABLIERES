@@ -17,6 +17,8 @@ export const ENERGIES = [
 const JOUR = 86400000;
 const st = { energie: null, lier: null, assoc: "" }; // lier = id du compteur qu'on est en train de relier ; assoc = filtre association
 const fmt = (n, d = 1) => n === null || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: d }).format(n);
+// Toujours 2 chiffres après la virgule (ex. 15,90 · 0,20 · 477,00).
+const fmt2 = (n) => n === null || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const nomCourt = n => String(n || "").replace(/\S+@\S+/g, "").replace(/\s{2,}/g, " ").trim();
 
 // Consommation entre deux dates (interpolée entre relevés, index par index).
@@ -70,11 +72,11 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const chaude = !opts.virtuel && estEauChaude(c);
     return `<div class="sx-c ${chaude ? "chaude" : ""} ${opts.virtuel ? "virtuel" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
       <div class="sx-dial"><span class="sx-motif">${chaude ? "♨️" : E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
-        <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
+        <div class="sx-centre"><b>${parJour === null ? "—" : fmt2(parJour)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
       <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}</small>
         ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
-        <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt(b, b < 10 ? 2 : 0)} ${unite} sur ${jours} j`}</span>
+        <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt2(b)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
       ${!opts.virtuel && peutModifier && !lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
       ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === lier)?.nom || "")}</div>` : ""}

@@ -29,6 +29,7 @@ const JOUR = 86400000;
 const BLEU = "#2a78d6", GRIS = "#C9CCD2";
 const fmt = (n, d = 0) => n === null || n === undefined || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: d }).format(n);
 const nomCourt = n => String(n || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\S+@\S+/g, "").replace(/\s{2,}/g, " ").trim();
+const fmt2 = (n) => n === null || n === undefined || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const decalerAn = (d, n) => { const x = new Date(d); x.setFullYear(x.getFullYear() + n); return x; };
 const pct = (a, b) => (a === null || b === null || !b) ? null : ((a - b) / b) * 100;
 
@@ -258,7 +259,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
           return `<svg viewBox="0 0 110 110" class="vf-jauge"><circle cx="55" cy="55" r="${r}" class="vf-piste" stroke-dasharray="${arc} ${c}" transform="rotate(135 55 55)"/>
             <circle cx="55" cy="55" r="${r}" class="vf-niveau" stroke-dasharray="${arc * p} ${c}" transform="rotate(135 55 55)"/>
             ${repere !== null ? (() => { const ang = (135 + 270 * repere) * Math.PI / 180; return `<circle cx="${55 + r * Math.cos(ang)}" cy="${55 + r * Math.sin(ang)}" r="4.5" class="vf-repere"/>`; })() : ""}
-            <text x="55" y="52" text-anchor="middle" class="vf-val">${x.dernier ? fmt(x.dernier.v, x.dernier.v < 10 ? 2 : 1) : "—"}</text><text x="55" y="68" text-anchor="middle" class="vf-unite">m³ / jour</text></svg>`;
+            <text x="55" y="52" text-anchor="middle" class="vf-val">${x.dernier ? fmt2(x.dernier.v) : "—"}</text><text x="55" y="68" text-anchor="middle" class="vf-unite">m³ / jour</text></svg>`;
         };
         const barres = (x) => { const d = x.debits.slice(-8); if (d.length < 2) return ""; const m = Math.max(...d.map(z => z.v), x.ref || 0) || 1;
           return `<div class="vf-histo" title="Débit moyen entre deux relevés (8 derniers)">${d.map((z, i) => `<i style="height:${Math.max(6, z.v / m * 100)}%" class="${i === d.length - 1 ? "der" : ""}" title="${new Date(z.du).toLocaleDateString("fr-FR")} → ${new Date(z.au).toLocaleDateString("fr-FR")} : ${fmt(z.v, 2)} m³/j"></i>`).join("")}${x.ref ? `<b style="bottom:${x.ref / m * 100}%"></b>` : ""}</div>`; };
@@ -273,12 +274,12 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
               <div class="vf-c-corps">${jauge(x)}
                 <div class="vf-c-info">
                   ${x.ratio !== null ? `<div class="vf-ratio">${x.ratio >= 1 ? "+" : ""}${fmt((x.ratio - 1) * 100)} %<small>vs normal</small></div>` : ""}
-                  <div>Normal : <b>${x.ref ? `${fmt(x.ref, x.ref < 10 ? 2 : 1)} m³/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
+                  <div>Normal : <b>${x.ref ? `${fmt2(x.ref)} m³/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
                   ${x.dernier ? `<div class="vf-mute">du ${new Date(x.dernier.du).toLocaleDateString("fr-FR")} au ${new Date(x.dernier.au).toLocaleDateString("fr-FR")}</div>` : `<div class="vf-mute">Il faut 2 relevés pour mesurer un débit.</div>`}
                   ${x.age !== null && x.age > 10 ? `<div class="vf-mute">⏱ dernier relevé il y a ${x.age} j — un relevé intermédiaire affinerait la mesure</div>` : ""}
                 </div></div>
               ${barres(x)}
-              ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}">✓ ${fmt(x.dernier.v, x.dernier.v < 10 ? 2 : 1)} m³/jour, c'est normal pour ce site</button>` : ""}
+              ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}">✓ ${fmt2(x.dernier.v)} m³/jour, c'est normal pour ce site</button>` : ""}
               <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-val="${x.ref ?? ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
             </div>`).join("")}</div>`).join("")}
         </section>`;
