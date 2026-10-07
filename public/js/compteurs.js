@@ -304,6 +304,91 @@ function renderSiteCard(site) {
   `;
 }
 
+// =================================================================
+// Page d'un site : tous ses compteurs en dessins (Linky, compteur d'eau,
+// gaz, chauffage), par logement. Un clic ouvre la fiche du compteur
+// (relever, historique, QR, modifier) en haut de la page.
+// =================================================================
+function valeurCourte(c) {
+  const v = c.dernierReleve?.valeurs; if (!v) return "- - - -";
+  const cles = clesIndex(c);
+  const k = cles.length > 1 ? cles[0] : "valeur";
+  if (c.dernierReleve?.illisibles?.[k]) return "illisible";
+  const x = v[k]; return x == null || x === "" ? "- - - -" : String(x).slice(0, 9);
+}
+function dessinCompteur(c) {
+  const val = esc(valeurCourte(c));
+  if (c.type === "elec") return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
+    <rect x="4" y="4" width="112" height="142" rx="16" fill="#c9d628"/><rect x="4" y="4" width="112" height="142" rx="16" fill="url(#cdBrill)" opacity=".35"/>
+    <rect x="16" y="14" width="88" height="86" rx="12" fill="#f4f5f0"/>
+    <rect x="22" y="34" width="76" height="30" rx="3" fill="#8fd3e0" stroke="#5aa9b8"/>
+    <text x="60" y="54" text-anchor="middle" font-family="monospace" font-size="${val.length > 7 ? 10 : 12}" font-weight="700" fill="#1d3d6b">${val}</text>
+    <rect x="30" y="80" width="26" height="10" rx="3" fill="#9a9a9a"/><rect x="64" y="80" width="26" height="10" rx="3" fill="#9a9a9a"/>
+    <rect x="26" y="112" width="68" height="20" rx="4" fill="#b3bf1f"/><text x="60" y="126" text-anchor="middle" font-family="system-ui" font-size="9" font-weight="800" fill="#4a5200">LINKY</text>
+    <defs><linearGradient id="cdBrill" x1="0" x2="1"><stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs></svg>`;
+  if (c.type === "eau") return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
+    <rect x="50" y="4" width="20" height="18" rx="3" fill="#8a9bb0"/><rect x="50" y="128" width="20" height="18" rx="3" fill="#8a9bb0"/>
+    <circle cx="60" cy="75" r="54" fill="#2a78d6"/><circle cx="60" cy="75" r="45" fill="#f7fbff" stroke="#9cc3ef" stroke-width="3"/>
+    <rect x="28" y="56" width="64" height="20" rx="3" fill="#1b1f27"/>
+    <text x="60" y="71" text-anchor="middle" font-family="monospace" font-size="${val.length > 7 ? 10 : 12}" font-weight="700" fill="#fff">${val}</text>
+    <text x="60" y="92" text-anchor="middle" font-family="system-ui" font-size="9" font-weight="700" fill="#2a78d6">m³</text>
+    <circle cx="60" cy="104" r="7" fill="none" stroke="#d63b3b" stroke-width="2"/><line x1="60" y1="104" x2="65" y2="99" stroke="#d63b3b" stroke-width="2"/></svg>`;
+  if (c.type === "gaz") return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
+    <rect x="34" y="2" width="16" height="16" rx="3" fill="#c9a227"/><rect x="70" y="2" width="16" height="16" rx="3" fill="#c9a227"/>
+    <rect x="8" y="14" width="104" height="132" rx="12" fill="#eceef1" stroke="#c4c8ce" stroke-width="2"/>
+    <rect x="20" y="30" width="80" height="42" rx="6" fill="#ffd34d"/>
+    <rect x="26" y="40" width="68" height="22" rx="3" fill="#1b1f27"/>
+    <text x="60" y="56" text-anchor="middle" font-family="monospace" font-size="${val.length > 7 ? 10 : 12}" font-weight="700" fill="#fff">${val}</text>
+    <text x="60" y="94" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="800" fill="#eb6834">GAZ · m³</text>
+    <circle cx="60" cy="118" r="9" fill="#eb6834"/><path d="M60 110 q6 8 0 14 q-6 -6 0 -14" fill="#ffd34d"/></svg>`;
+  return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
+    <rect x="8" y="10" width="104" height="130" rx="12" fill="#e87ba4"/><rect x="18" y="22" width="84" height="58" rx="8" fill="#fff"/>
+    <rect x="24" y="38" width="72" height="22" rx="3" fill="#1b1f27"/>
+    <text x="60" y="54" text-anchor="middle" font-family="monospace" font-size="${val.length > 7 ? 10 : 12}" font-weight="700" fill="#fff">${val}</text>
+    <text x="60" y="104" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="800" fill="#fff">♨ kWh</text></svg>`;
+}
+function renderPageSite(site) {
+  const tous = state.compteurs.filter(c => c.dossierId === site.id);
+  const types = TYPES_COMPTEUR.filter(t => tous.some(c => c.type === t));
+  if (ui.pageType && !types.includes(ui.pageType)) ui.pageType = "";
+  const q = (ui.pageRecherche || "").trim().toLowerCase();
+  const liste = tous.filter(c => (!ui.pageType || c.type === ui.pageType) && (!q || `${c.nom} ${c.logement || ""} ${c.pdl || ""}`.toLowerCase().includes(q)))
+    .sort((a, b) => TYPES_COMPTEUR.indexOf(a.type) - TYPES_COMPTEUR.indexOf(b.type) || cmpCompteursSite(a, b));
+  const enRetard = tous.filter(estEnRetard).length;
+  const detail = tous.find(c => c.id === ui.detailCompteurId);
+  return `
+  <div class="stack cd-page">
+    <div class="cd-tete">
+      <button class="nav-btn" data-page-retour>← Tous les sites</button>
+      <div class="cd-titre"><small>${esc([site.association, site.groupe].filter(Boolean).join(" · "))}</small><h2>${esc(nomPropre(site.nom))}</h2></div>
+      <div class="cd-kpis"><span><b>${tous.length}</b> compteur${tous.length > 1 ? "s" : ""}</span>${enRetard ? `<span class="r"><b>${enRetard}</b> ${motRetard()}</span>` : tous.length ? `<span class="ok">✓ à jour</span>` : ""}</div>
+    </div>
+    <div class="cd-actions">
+      <button class="add-btn" data-rapide-site="${site.id}" ${tous.length === 0 || mountedUser?.lectureSeule ? 'disabled style="opacity:.4"' : ''}>🚀 Relever en mode rapide</button>
+      <button class="nav-btn" data-voir-rapport="${site.id}" ${tous.length === 0 ? 'disabled style="opacity:.4"' : ''}>📊 Rapport</button>
+      <button class="nav-btn" data-export-pdf="${site.id}" ${tous.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ PDF</button>
+      <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 SharePoint</button>
+      ${isEditorUser(mountedUser) ? `<button class="nav-btn" data-open-add="${site.id}">➕ Ajouter un compteur</button>` : ""}
+    </div>
+    ${ui.addingSiteId === site.id ? renderAddForm(site) : ""}
+    ${detail ? `<div class="cd-detail" id="cd-detail"><div class="cd-detail-tete"><b>${TYPE_ICONE[detail.type]} ${esc(detail.nom)}${detail.logement ? ` — Logement ${esc(detail.logement)}` : ""}</b><button class="nav-btn" data-cpt-detail="${detail.id}">✕ Fermer</button></div>${renderCompteurRow(detail)}</div>` : ""}
+    ${tous.length ? `<div class="cd-filtres">
+      ${types.length > 1 ? `<div class="cd-chips">${["", ...types].map(t => `<button data-page-type="${t}" class="${(ui.pageType || "") === t ? "on" : ""}">${t ? `${TYPE_ICONE[t]} ${TYPE_LABEL[t]} <small>${tous.filter(c => c.type === t).length}</small>` : `Tous <small>${tous.length}</small>`}</button>`).join("")}</div>` : ""}
+      <input type="search" id="cd-recherche" placeholder="🔎 Logement, nom, PDL…" value="${esc(ui.pageRecherche || "")}">
+    </div>` : `<p class="hint">Aucun compteur sur ce site pour l'instant.</p>`}
+    <div class="cd-grille">${liste.map(c => {
+      const retard = estEnRetard(c), jamais = !c.dernierReleve;
+      return `<button type="button" class="cd-carte ${retard ? "retard" : jamais ? "jamais" : "ok"} ${ui.detailCompteurId === c.id ? "sel" : ""}" data-cpt-detail="${c.id}">
+        <span class="cd-pastille">${retard ? "!" : jamais ? "–" : "✓"}</span>
+        ${dessinCompteur(c)}
+        <b class="cd-nom">${c.logement ? `Logement ${esc(c.logement)}` : esc(c.nom)}</b>
+        <small class="cd-sous">${c.logement ? esc(c.nom) : esc(TYPE_LABEL[c.type] || "")}</small>
+        ${c.pdl ? `<small class="cd-pdl">${libPdl(c.type)} ${esc(fmtPdl(c.pdl))}</small>` : ""}
+        <small class="cd-date">${jamais ? "jamais relevé" : `relevé le ${formatDate(c.dernierReleve.at)}`}</small>
+      </button>`; }).join("") || (tous.length ? `<p class="hint">Aucun compteur ne correspond.</p>` : "")}</div>
+  </div>`;
+}
+
 function renderListe() {
   const trierParRetard = (sites) => [...sites].sort((a, b) => {
     const aRetard = state.compteurs.filter(c => c.dossierId === a.id && estEnRetard(c)).length;
@@ -323,12 +408,14 @@ function renderListe() {
     const ordre = groupes.flatMap(g => g.groups.flatMap(sub => trierParRetard(sub.sites)));
     ui.siteSelectionne = (ordre.find(x => retardDe(x.id) > 0) || ordre[0])?.id || null;
   }
+  if (ui.focusSiteId) { ui.pageSiteId = ui.focusSiteId; ui.focusSiteId = null; }
+  const pageSite = state.sites.find(x => x.id === ui.pageSiteId) || null;
   const siteDetail = state.sites.find(x => x.id === ui.siteSelectionne) || null;
   if (siteDetail) ui.ouverts.add(siteDetail.id);
 
   const nbRetardTotal = state.compteurs.filter(c => state.sites.some(x => x.id === c.dossierId) && estEnRetard(c)).length;
   const nbCompteursTotal = state.compteurs.filter(c => state.sites.some(x => x.id === c.dossierId)).length;
-  mountedContainer.innerHTML = `
+  mountedContainer.innerHTML = pageSite ? renderPageSite(pageSite) : `
     <div class="stack sdw">
       <div class="sdw-hero">
         <div>
@@ -399,16 +486,20 @@ function renderListe() {
     </div>
   `;
 
+  // Page du site : retour, filtres, fiche d'un compteur.
+  mountedContainer.querySelector("[data-page-retour]")?.addEventListener("click", () => { ui.pageSiteId = null; ui.detailCompteurId = null; ui.addingSiteId = null; ui.pageType = ""; ui.pageRecherche = ""; render(); window.scrollTo({ top: 0 }); });
+  mountedContainer.querySelectorAll("[data-page-type]").forEach(b => b.addEventListener("click", () => { ui.pageType = b.dataset.pageType; render(); }));
+  mountedContainer.querySelector("#cd-recherche")?.addEventListener("input", (e) => {
+    ui.pageRecherche = e.target.value; const pos = e.target.selectionStart; render();
+    const champ = mountedContainer.querySelector("#cd-recherche"); if (champ) { champ.focus(); champ.setSelectionRange(pos, pos); }
+  });
+  mountedContainer.querySelectorAll("[data-cpt-detail]").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.cptDetail; ui.detailCompteurId = ui.detailCompteurId === id ? null : id; ui.editingCompteurId = null; render();
+    if (ui.detailCompteurId) requestAnimationFrame(() => document.getElementById("cd-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }));
   mountedContainer.querySelectorAll("[data-select-site]").forEach(btn => btn.addEventListener("click", () => {
-    const id = btn.dataset.selectSite;
-    if (ui.siteSelectionne === id) { ui.siteSelectionne = null; ui.detailFerme = true; ui.ouverts.delete(id); render(); return; } // 2e clic = refermer
-    ui.siteSelectionne = id;
-    ui.detailFerme = false;
-    ui.addingSiteId = null;
-    render();
-    if (window.matchMedia("(max-width: 900px)").matches) {
-      requestAnimationFrame(() => document.getElementById("cpt-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    }
+    ui.pageSiteId = btn.dataset.selectSite; ui.detailCompteurId = null; ui.addingSiteId = null; ui.pageType = ""; ui.pageRecherche = "";
+    render(); window.scrollTo({ top: 0 });
   }));
   if (ui.focusSiteId) {
     const cible = document.getElementById("cpt-site-" + ui.focusSiteId);
