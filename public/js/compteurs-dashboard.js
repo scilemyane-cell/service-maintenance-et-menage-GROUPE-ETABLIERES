@@ -114,7 +114,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   const groupesTries = trierGroupes([...new Set(sites.map(s => s.groupe).filter(Boolean))]);
   const rangGroupe = (g) => g ? 1 + groupesTries.indexOf(g) : 0;
   const cleOrdreSite = (s) => [rangAsso(s?.association), rangGroupe(s?.groupe), nomCourt(s?.nom).toLowerCase()];
-  const cmpOrdre = (a, b) => { const x = cleOrdreSite(a), y = cleOrdreSite(b); for (let i = 0; i < 3; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return 0; };
+  const cmpOrdre = (a, b) => { const x = cleOrdreSite(a), y = cleOrdreSite(b); for (let i = 0; i < 2; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return String(x[2]).localeCompare(String(y[2]), "fr", { numeric: true }); };
   // Regroupe une liste par association puis groupe : [{ assoc, groupe, items }].
   const parAssoGroupe = (items, siteDe) => {
     const out = [];

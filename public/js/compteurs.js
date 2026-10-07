@@ -189,7 +189,7 @@ function exporterPdfSite(siteId) {
   `;
 
   const tableauType = (type, label) => {
-    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }));
     if (liste.length === 0) return "";
     return `
       <h3 style="margin:16px 0 6px">${TYPE_ICONE[type]} ${label}</h3>
@@ -285,7 +285,7 @@ function renderSiteCard(site) {
           <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
         </div>
         ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : TYPES_COMPTEUR.map(type => {
-          const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+          const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }));
           if (liste.length === 0) return "";
           return `
             <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]} (${liste.length})</p>
@@ -310,7 +310,7 @@ function renderListe() {
     const bRetard = state.compteurs.filter(c => c.dossierId === b.id && estEnRetard(c)).length;
     if (aRetard > 0 && bRetard === 0) return -1;
     if (bRetard > 0 && aRetard === 0) return 1;
-    return (a.nom || "").localeCompare(b.nom || "");
+    return (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true });
   });
   const groupes = groupedSites(state.sites);
   // Présentation "mosaïque + détail" : une vignette par site (verte à
@@ -1340,7 +1340,7 @@ function renderRapide() {
   const site = state.sites.find(s => s.id === ui.rapideSiteId);
   if (!site) { ui.rapideSiteId = null; render(); return; }
   const liste = state.compteurs.filter(c => c.dossierId === site.id)
-    .sort((a, b) => (a.type === b.type ? (a.nom || "").localeCompare(b.nom || "") : TYPES_COMPTEUR.indexOf(a.type) - TYPES_COMPTEUR.indexOf(b.type)));
+    .sort((a, b) => (a.type === b.type ? (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }) : TYPES_COMPTEUR.indexOf(a.type) - TYPES_COMPTEUR.indexOf(b.type)));
 
   if (ui.rapideIndex >= liste.length) {
     mountedContainer.innerHTML = `
@@ -1475,7 +1475,7 @@ async function renderRapportSite() {
   if (!corps) return; // l'utilisateur a peut-être déjà quitté l'écran entre-temps
 
   corps.innerHTML = TYPES_COMPTEUR.map(type => {
-    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }));
     if (liste.length === 0) return "";
     return `
       <p style="font-size:13px;font-weight:700;color:var(--text-dim);margin:16px 0 8px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]}</p>
