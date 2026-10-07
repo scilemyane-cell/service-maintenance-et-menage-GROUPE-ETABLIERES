@@ -376,7 +376,7 @@ function renderPageSite(site) {
       ${isEditorUser(mountedUser) ? `<button class="nav-btn" data-open-add="${site.id}">➕ Ajouter un compteur</button>` : ""}
     </div>
     ${ui.addingSiteId === site.id ? renderAddForm(site) : ""}
-    ${detail ? `<div class="cd-detail" id="cd-detail"><div class="cd-detail-tete"><b>${TYPE_ICONE[detail.type]} ${esc(detail.nom)}${detail.logement ? ` — Logement ${esc(detail.logement)}` : ""}</b><button class="nav-btn" data-cpt-detail="${detail.id}">✕ Fermer</button></div>${renderCompteurRow(detail)}</div>` : ""}
+
     ${tous.length ? `<div class="cd-filtres">
       ${types.length > 1 ? `<div class="cd-chips">${["", ...types].map(t => `<button data-page-type="${t}" class="${(ui.pageType || "") === t ? "on" : ""}">${t ? `${TYPE_ICONE[t]} ${TYPE_LABEL[t]} <small>${tous.filter(c => c.type === t).length}</small>` : `Tous <small>${tous.length}</small>`}</button>`).join("")}</div>` : ""}
       <input type="search" id="cd-recherche" placeholder="🔎 Logement, nom, PDL…" value="${esc(ui.pageRecherche || "")}">
@@ -391,6 +391,11 @@ function renderPageSite(site) {
         ${c.pdl ? `<small class="cd-pdl">${libPdl(c.type)} ${esc(fmtPdl(c.pdl))}</small>` : ""}
         <small class="cd-date">${jamais ? "jamais relevé" : `relevé le ${formatDate(c.dernierReleve.at)}`}</small>
       </button>`; }).join("") || (tous.length ? `<p class="hint">Aucun compteur ne correspond.</p>` : "")}</div>
+    ${detail ? `<div class="cd-fond" data-cd-fond>
+      <div class="cd-fenetre" role="dialog" aria-modal="true">
+        <div class="cd-fenetre-tete">${dessinCompteur(detail)}<div><small>${esc(TYPE_LABEL[detail.type] || "")}</small><b>${detail.logement ? `Logement ${esc(detail.logement)}` : esc(detail.nom)}</b>${detail.logement ? `<small>${esc(detail.nom)}</small>` : ""}</div><button type="button" class="cd-x" data-cd-fermer title="Fermer">✕</button></div>
+        ${renderCompteurRow(detail)}
+      </div></div>` : ""}
   </div>`;
 }
 
@@ -496,10 +501,15 @@ function renderListe() {
     ui.pageRecherche = e.target.value; const pos = e.target.selectionStart; render();
     const champ = mountedContainer.querySelector("#cd-recherche"); if (champ) { champ.focus(); champ.setSelectionRange(pos, pos); }
   });
+  // Fiche d'un compteur en fenêtre par-dessus la page (la grille ne bouge pas).
+  const garderDefilement = (fn) => { const y = window.scrollY; fn(); requestAnimationFrame(() => window.scrollTo({ top: y })); };
+  const fermerFiche = () => garderDefilement(() => { ui.detailCompteurId = null; ui.editingCompteurId = null; render(); });
   mountedContainer.querySelectorAll("[data-cpt-detail]").forEach(b => b.addEventListener("click", () => {
-    const id = b.dataset.cptDetail; ui.detailCompteurId = ui.detailCompteurId === id ? null : id; ui.editingCompteurId = null; render();
-    if (ui.detailCompteurId) requestAnimationFrame(() => document.getElementById("cd-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    const id = b.dataset.cptDetail; garderDefilement(() => { ui.detailCompteurId = id; ui.editingCompteurId = null; render(); });
   }));
+  mountedContainer.querySelector("[data-cd-fermer]")?.addEventListener("click", fermerFiche);
+  mountedContainer.querySelector("[data-cd-fond]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) fermerFiche(); });
+  if (ui.detailCompteurId && !window.__cdEchap) { window.__cdEchap = true; document.addEventListener("keydown", (e) => { if (e.key === "Escape" && ui.detailCompteurId && document.querySelector("[data-cd-fond]")) fermerFiche(); }); }
   mountedContainer.querySelectorAll("[data-select-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.pageSiteId = btn.dataset.selectSite; ui.detailCompteurId = null; ui.addingSiteId = null; ui.pageType = ""; ui.pageRecherche = "";
     render(); window.scrollTo({ top: 0 });
@@ -591,6 +601,7 @@ function renderListe() {
     render();
   }));
   mountedContainer.querySelectorAll("[data-relever]").forEach(btn => btn.addEventListener("click", () => {
+    ui.detailCompteurId = null; // la fiche ne se rouvre pas au retour du relevé
     ouvrirReleve(btn.dataset.relever, btn.dataset.retourSite);
   }));
   mountedContainer.querySelectorAll("[data-toggle-qr]").forEach(btn => btn.addEventListener("click", () => {

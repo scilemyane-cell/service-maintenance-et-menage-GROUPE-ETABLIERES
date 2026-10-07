@@ -3248,3 +3248,12 @@ body.clo-ouvert{overflow:hidden}
 .cpt-split.cpt-seul{display:block}
 .cpt-seul .cpt-mosaique{max-width:none}
 .cpt-seul .sdw-grille-cpt{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+/* Relevé compteur : fiche d'un compteur en fenêtre */
+.cd-fond{position:fixed;inset:0;z-index:900;background:rgba(8,14,26,.55);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(2px)}
+.cd-fenetre{width:min(720px,100%);max-height:calc(100vh - 32px);overflow-y:auto;background:var(--panel);color:var(--text);border-radius:18px;padding:16px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.cd-fenetre-tete{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.cd-fenetre-tete .cd-svg{width:56px;height:70px;margin:0;flex:none}
+.cd-fenetre-tete>div{flex:1;display:flex;flex-direction:column}.cd-fenetre-tete b{font-size:18px}.cd-fenetre-tete small{color:var(--text-dim);font-size:12px}
+.cd-x{border:0;background:var(--panel-alt,#eef0f3);color:var(--text);width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;flex:none}
+.cd-fenetre .form-card{margin-bottom:0!important;box-shadow:none}
+@media (max-width:600px){.cd-fond{align-items:flex-end;padding:0}.cd-fenetre{border-radius:18px 18px 0 0;max-height:88vh}}
