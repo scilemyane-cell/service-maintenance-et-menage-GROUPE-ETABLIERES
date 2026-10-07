@@ -49,7 +49,8 @@ export function calculConso(releves) {
 export const estEauChaude = (c) => !!c && c.type === "eau" && (c.eauChaude === true || /eau\s*chaude|\becs\b/i.test(`${c.nom || ""} ${c.emplacement || ""}`));
 
 // Ordre choisi par glisser-déposer (champ « ordre » du compteur), sinon alphabétique.
-export const cmpCompteurs = (a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || nomCourt(a.dossierNom + " " + a.nom).localeCompare(nomCourt(b.dossierNom + " " + b.nom), "fr", { numeric: true });
+const lgt = (c) => String(c.logement || "").trim();
+export const cmpCompteurs = (a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || (!lgt(a) !== !lgt(b) ? (lgt(a) ? 1 : -1) : 0) || (lgt(a) && lgt(b) ? lgt(a).localeCompare(lgt(b), "fr", { numeric: true }) : 0) || nomCourt(a.dossierNom + " " + a.nom).localeCompare(nomCourt(b.dossierNom + " " + b.nom), "fr", { numeric: true });
 
 export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associations = [], peutModifier = false, lier = null, assoc = "", glisser = false }) {
   const jours = Math.max(1, Math.round((fin - debut) / JOUR));
@@ -74,7 +75,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
       <div class="sx-dial"><span class="sx-motif">${chaude ? "♨️" : E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
         <div class="sx-centre"><b>${parJour === null ? "—" : fmt2(parJour)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
-      <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}</small>
+      <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom) + (c.logement ? ` · Logement ${c.logement}` : ""))}</small>
         ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt2(b)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>

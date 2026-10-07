@@ -189,7 +189,7 @@ function exporterPdfSite(siteId) {
   `;
 
   const tableauType = (type, label) => {
-    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }));
+    const liste = compteurs.filter(c => c.type === type).sort(cmpCompteursSite);
     if (liste.length === 0) return "";
     return `
       <h3 style="margin:16px 0 6px">${TYPE_ICONE[type]} ${label}</h3>
@@ -285,7 +285,7 @@ function renderSiteCard(site) {
           <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 Ouvrir sur SharePoint</button>
         </div>
         ${compteurs.length === 0 ? `<p class="hint">Aucun compteur pour l'instant sur ce site.</p>` : TYPES_COMPTEUR.map(type => {
-          const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }));
+          const liste = compteurs.filter(c => c.type === type).sort(cmpCompteursSite);
           if (liste.length === 0) return "";
           return `
             <p style="font-size:12px;font-weight:700;color:var(--text-dim);margin:14px 0 6px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]} (${liste.length})</p>
@@ -484,7 +484,7 @@ function renderListe() {
   mountedContainer.querySelectorAll("[data-open-add]").forEach(btn => btn.addEventListener("click", async () => {
     const siteId = btn.dataset.openAdd;
     ui.addingSiteId = siteId; ui.addingType = "eau"; ui.addingNbIndex = null;
-    ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null; ui.addingPdl = null;
+    ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null; ui.addingPdl = null; ui.addingLogement = null;
     if (!ui.sectionsParSite[siteId]) {
       try {
         const dossier = await getDossierUnique(siteId);
@@ -542,6 +542,7 @@ function renderCompteurRow(c) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div>
           <p style="margin:0;font-weight:700">${esc(c.nom)}${c.emplacement ? ` <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(c.emplacement)}</span>` : ""}</p>
+          ${c.logement ? `<p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">🏠 Logement <b style="color:var(--text)">${esc(c.logement)}</b></p>` : ""}
           ${c.pdl ? `<p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">🔌 ${libPdl(c.type)} : <b style="color:var(--text);font-variant-numeric:tabular-nums;user-select:all">${esc(fmtPdl(c.pdl))}</b></p>` : ""}
           <p style="margin:2px 0 0;font-size:12px;${retard ? 'color:var(--red);font-weight:700' : 'color:var(--text-dim)'}">${retard ? '⚠️ ' : '✓ '}${formatDate(c.dernierReleve?.at)}${c.dernierReleve ? ` — ${c.dernierReleve.releveParNom}` : ""}</p>
           <p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">${formatValeurs(c)}</p>
@@ -736,6 +737,20 @@ function appliquerAutoRemplissage(siteId, type) {
   ui.addingAutoEmplacement = suggestionEmplacement;
 }
 
+// Logement desservi par le compteur (ex. 41) : sert au tri (compteurs
+// généraux d'abord, puis logements dans l'ordre 1, 2… 41, 54…) et un même
+// logement ne peut pas avoir deux compteurs du même type sur le même site.
+const normLogement = (v) => String(v || "").trim().replace(/^(logement|logt|lgt|n°|no)\s*/i, "").trim();
+export const cmpCompteursSite = (a, b) => {
+  const la = normLogement(a.logement), lb = normLogement(b.logement);
+  if (!la !== !lb) return la ? 1 : -1;
+  return (la && lb ? la.localeCompare(lb, "fr", { numeric: true }) : 0) || (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true });
+};
+function logementDejaPris(siteId, type, logement, saufId) {
+  const l = normLogement(logement).toLowerCase(); if (!l) return null;
+  return state.compteurs.find(x => x.id !== saufId && x.dossierId === siteId && x.type === type && !x.supprimeLe && normLogement(x.logement).toLowerCase() === l) || null;
+}
+
 // PDL (électricité) / PCE (gaz) : identifiant du point de livraison, 14 chiffres.
 const libPdl = (type) => type === "elec" ? "PDL" : type === "gaz" ? "PCE" : "N° / référence";
 const aidePdl = (type) => type === "elec" ? "14 chiffres — sur la facture ou le Linky (touche +)" : type === "gaz" ? "14 chiffres — sur la facture de gaz" : "optionnel";
@@ -770,6 +785,7 @@ function renderAddForm(site) {
           </datalist>
         </label>
         <label>Emplacement (optionnel)<input id="cpt-new-emplacement" value="${esc(ui.addingEmplacement || "")}" placeholder="ex. sous-sol, local technique…"></label>
+        <label>Logement n° <small style="font-weight:400;color:var(--text-dim)">(si le compteur est celui d'un logement)</small><input id="cpt-new-logement" value="${esc(ui.addingLogement || "")}" placeholder="ex. 41" inputmode="numeric"></label>
         <label>${libPdl(type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(type)})</small><input id="cpt-new-pdl" inputmode="numeric" value="${esc(ui.addingPdl || "")}" placeholder="${type === "elec" || type === "gaz" ? "ex. 1234 5678 9012 34" : ""}"></label>
       </div>
       ${type === "elec" ? `
@@ -875,6 +891,7 @@ function renderEditForm(c) {
       <div class="form-grid">
         <label>Nom<input id="cpt-edit-nom" value="${esc(c.nom)}"></label>
         <label>Emplacement (optionnel)<input id="cpt-edit-emplacement" value="${esc(c.emplacement || '')}"></label>
+        <label>Logement n° <small style="font-weight:400;color:var(--text-dim)">(si le compteur est celui d'un logement)</small><input id="cpt-edit-logement" value="${esc(c.logement || "")}" placeholder="ex. 41" inputmode="numeric"></label>
         <label>${libPdl(c.type)} <small style="font-weight:400;color:var(--text-dim)">(${aidePdl(c.type)})</small><input id="cpt-edit-pdl" inputmode="numeric" value="${esc(fmtPdl(c.pdl || ''))}"></label>
       </div>
       ${c.type === "elec" ? `
@@ -922,10 +939,13 @@ function attachEditFormListeners() {
     const nom = document.getElementById("cpt-edit-nom").value.trim();
     const emplacement = document.getElementById("cpt-edit-emplacement").value.trim();
     const frequence = document.getElementById("cpt-edit-frequence").value;
+    const logement = normLogement(document.getElementById("cpt-edit-logement")?.value);
+    const doublonLgt = logementDejaPris(c.dossierId, c.type, logement, c.id);
+    if (doublonLgt) { statusEl.innerHTML = `<span style="color:var(--red)">Le logement ${esc(logement)} a déjà un compteur de ce type sur ce site (« ${esc(doublonLgt.nom)} »).</span>`; return; }
     const pdl = normPdl(document.getElementById("cpt-edit-pdl")?.value);
     const errPdl = verifPdl(c.type, pdl);
     if (errPdl) { statusEl.innerHTML = `<span style="color:var(--red)">${esc(errPdl)}</span>`; return; }
-    const patch = { nom: nom || c.nom, emplacement, frequence, pdl };
+    const patch = { nom: nom || c.nom, emplacement, frequence, pdl, logement };
     if (c.type === "elec") {
       const nbIndexVal = document.getElementById("cpt-edit-nbindex")?.value;
       patch.nbIndex = nbIndexVal === "custom" ? "custom" : (parseInt(nbIndexVal, 10) || 4);
@@ -958,6 +978,7 @@ function attachAddFormListeners() {
   document.getElementById("cpt-new-nom").addEventListener("input", (e) => { ui.addingNom = e.target.value; });
   document.getElementById("cpt-new-emplacement").addEventListener("input", (e) => { ui.addingEmplacement = e.target.value; });
   document.getElementById("cpt-new-pdl")?.addEventListener("input", (e) => { ui.addingPdl = e.target.value; });
+  document.getElementById("cpt-new-logement")?.addEventListener("input", (e) => { ui.addingLogement = e.target.value; });
   typeSelect.addEventListener("change", (e) => {
     // Capture la saisie actuelle avant de changer de type, pour ne rien
     // perdre si l'utilisateur avait déjà modifié le nom/emplacement.
@@ -992,6 +1013,10 @@ function attachAddFormListeners() {
     const emplacement = document.getElementById("cpt-new-emplacement").value.trim();
     const frequence = document.getElementById("cpt-new-frequence").value;
     const compteur = nouveauCompteur(type);
+    const logement = normLogement(document.getElementById("cpt-new-logement")?.value);
+    const doublonLgt = logementDejaPris(site.id, type, logement, null);
+    if (doublonLgt) { statusEl.innerHTML = `<span style="color:var(--red)">Le logement ${esc(logement)} a déjà un compteur de ce type sur ce site (« ${esc(doublonLgt.nom)} »).</span>`; return; }
+    if (logement) compteur.logement = logement;
     const pdl = normPdl(document.getElementById("cpt-new-pdl")?.value);
     const errPdl = verifPdl(type, pdl);
     if (errPdl) { statusEl.innerHTML = `<span style="color:var(--red)">${esc(errPdl)}</span>`; return; }
@@ -1021,7 +1046,7 @@ function attachAddFormListeners() {
       creerSectionDossierPourCompteur(site.id, type, compteur.nom).catch(e => console.error("Ajout équipement dossier de site échoué :", e));
       ui.addingSiteId = null;
       ui.addingFrequence = null; ui.addingEcheanceJour = null; ui.addingEcheanceMois = null; ui.addingNbIndex = null;
-      ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null; ui.addingPdl = null;
+      ui.addingNom = null; ui.addingEmplacement = null; ui.addingAutoNom = null; ui.addingAutoEmplacement = null; ui.addingPdl = null; ui.addingLogement = null;
       ui.addingIndexPersonnalises = null;
       await load();
     } catch (e) {
@@ -1340,7 +1365,7 @@ function renderRapide() {
   const site = state.sites.find(s => s.id === ui.rapideSiteId);
   if (!site) { ui.rapideSiteId = null; render(); return; }
   const liste = state.compteurs.filter(c => c.dossierId === site.id)
-    .sort((a, b) => (a.type === b.type ? (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }) : TYPES_COMPTEUR.indexOf(a.type) - TYPES_COMPTEUR.indexOf(b.type)));
+    .sort((a, b) => (a.type === b.type ? cmpCompteursSite(a, b) : TYPES_COMPTEUR.indexOf(a.type) - TYPES_COMPTEUR.indexOf(b.type)));
 
   if (ui.rapideIndex >= liste.length) {
     mountedContainer.innerHTML = `
@@ -1475,7 +1500,7 @@ async function renderRapportSite() {
   if (!corps) return; // l'utilisateur a peut-être déjà quitté l'écran entre-temps
 
   corps.innerHTML = TYPES_COMPTEUR.map(type => {
-    const liste = compteurs.filter(c => c.type === type).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { numeric: true }));
+    const liste = compteurs.filter(c => c.type === type).sort(cmpCompteursSite);
     if (liste.length === 0) return "";
     return `
       <p style="font-size:13px;font-weight:700;color:var(--text-dim);margin:16px 0 8px">${TYPE_ICONE[type]} ${TYPE_LABEL[type]}</p>
