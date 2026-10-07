@@ -42,6 +42,10 @@ export function calculConso(releves) {
 // dossiers de site). Réutilisé par le Schéma (relier) et par Pilotage énergie
 // (lecture seule, sur la période choisie).
 //  conso(c, t0, t1) → consommation interpolée ; debut/fin = fenêtre mesurée.
+// Compteur d'eau chaude (ECS) : mesure l'eau froide envoyée à la production
+// d'eau chaude. Reconnu par son nom (« Eau chaude », « ECS ») ou le champ eauChaude.
+export const estEauChaude = (c) => !!c && c.type === "eau" && (c.eauChaude === true || /eau\s*chaude|\becs\b/i.test(`${c.nom || ""} ${c.emplacement || ""}`));
+
 // Ordre choisi par glisser-déposer (champ « ordre » du compteur), sinon alphabétique.
 export const cmpCompteurs = (a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || nomCourt(a.dossierNom + a.nom).localeCompare(nomCourt(b.dossierNom + b.nom), "fr");
 
@@ -63,11 +67,13 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const cible = !opts.virtuel && lier && !bloque;
     const niveau = Math.max(6, Math.min(100, part ?? 55));
     const vitesse = parJour ? Math.max(0.8, 6 - Math.log10(1 + parJour) * 2.2) : 0; // plus ça coule, plus le flux va vite
-    return `<div class="sx-c ${opts.virtuel ? "virtuel" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
-      <div class="sx-dial"><span class="sx-motif">${E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
+    const chaude = !opts.virtuel && estEauChaude(c);
+    return `<div class="sx-c ${chaude ? "chaude" : ""} ${opts.virtuel ? "virtuel" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
+      <div class="sx-dial"><span class="sx-motif">${chaude ? "♨️" : E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
         <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
       <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}${!opts.virtuel && c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
+        ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : ""}
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt(b, b < 10 ? 2 : 0)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
       ${!opts.virtuel && peutModifier && !lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
@@ -81,7 +87,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const b = brut(c), p = propre(c);
     const pc = (x) => b ? Math.max(0, Math.min(100, (x || 0) / b * 100)) : null;
     const branches = e.map(x => `<div class="sx-branche">${reseau(x, pc(brut(x)), false)}</div>`).join("")
-      + `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: "Consommation propre", sous: `${nomCourt(c.dossierNom)} (hors sous-compteurs)`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`;
+      + `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: e.some(estEauChaude) ? "Eau froide consommée" : "Consommation propre", sous: `${nomCourt(c.dossierNom)} (hors sous-compteurs)`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`;
     const debit = b ? b / jours : 0;
     return `<div class="sx-net" style="--v:${debit ? Math.max(0.8, 6 - Math.log10(1 + debit) * 2.2) : 0}s">
       <div class="sx-tete">${dial(c, part, { racine })}</div>

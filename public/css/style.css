@@ -3197,3 +3197,8 @@ body.clo-ouvert{overflow:hidden}
 .sx-poignee:hover{background:rgba(255,255,255,.25)}
 .sx-item:has(>.sx-poignee)>.sx-c{padding-left:34px}
 .sx-item-net:has(>.sx-poignee) .sx-tete .sx-c{padding-left:34px}
+/* Compteur d'eau chaude (ECS) dans le schéma */
+.sx-c.chaude{border-color:rgba(255,120,80,.55);background:rgba(255,90,60,.06)}
+.sx-c.chaude .sx-dial{border-color:rgba(255,120,80,.75);box-shadow:inset 0 0 18px rgba(0,0,0,.6),0 0 16px rgba(255,100,60,.35)}
+.sx-c.chaude .sx-eau{--c1:#ffb199;--c2:#e8452c}
+.sx-badge-chaude{display:inline-block;margin:2px 0;padding:2px 8px;border-radius:999px;background:rgba(255,100,60,.18);color:#ffb39e;font:700 11px system-ui,sans-serif}
