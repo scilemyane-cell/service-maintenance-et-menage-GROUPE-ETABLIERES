@@ -3164,3 +3164,13 @@ body.clo-ouvert{overflow:hidden}
 /* la part « propre » reste verte quelle que soit l'énergie */
 .sx-c.virtuel .sx-eau{background:linear-gradient(180deg,#3ef0a0,#16b979)!important;animation:none}
 .sx-c.virtuel .sx-eau i{display:none}
+/* Schéma / Pilotage : réseaux rangés par association puis groupe (comme les dossiers de site) */
+.sx-assocs{display:flex;gap:6px;flex-wrap:wrap}
+.sx-assocs button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:6px 14px;font:700 12.5px system-ui,sans-serif;cursor:pointer}
+.sx-assocs button.on{background:var(--e,#2a78d6);border-color:var(--e,#2a78d6);color:#fff}
+.sx-assoc{display:flex;flex-direction:column;gap:14px}
+.sx-assoc>h3{margin-bottom:0}
+.sx-groupe{font:800 11.5px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8fb0d4;padding-top:10px;border-top:1px solid rgba(120,190,255,.14)}
+.pe-reseaux{display:flex;flex-direction:column;gap:12px;background:#fff;border:1px solid var(--pe-ligne,#E4E6EA);border-radius:12px;padding:16px}
+.pe-reseaux .sx-zone{border-radius:14px}
+@media print{.pe-reseaux .sx-zone *{animation:none!important}}

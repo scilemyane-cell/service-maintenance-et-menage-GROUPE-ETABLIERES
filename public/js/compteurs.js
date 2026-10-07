@@ -1173,7 +1173,7 @@ async function renderSchemaCompteurs() {
   if (ui.screen !== "schema") return;
   const { renderSchema } = await import("./compteurs-schema.js");
   renderSchema(mountedContainer, {
-    compteurs: state.compteurs, releves: statsReleves, peutModifier: isEditorUser(mountedUser),
+    compteurs: state.compteurs, releves: statsReleves, sites: state.sites, associations: state.associations || [], peutModifier: isEditorUser(mountedUser),
     onRetour: () => { ui.screen = "liste"; render(); },
     onOuvrirSite: (id) => { ui.screen = "liste"; ui.siteSelectionne = id; ui.focusSiteId = id; render(); },
   });

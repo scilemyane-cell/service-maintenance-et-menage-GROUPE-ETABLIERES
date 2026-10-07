@@ -4,16 +4,17 @@
 // « propre » du parent = son index − ce que mesurent ses sous-compteurs.
 // Lien stocké sur le sous-compteur : compteurParentId.
 import { esc } from "./astreinte-logic.js";
+import { trierGroupes } from "./associations-data.js";
 import { modifierCompteur, clesIndex, uniteValeur } from "./compteurs-data.js";
 
-const ENERGIES = [
+export const ENERGIES = [
   { id: "eau", label: "Eau", icone: "💧", couleur: "#2a78d6" },
   { id: "elec", label: "Électricité", icone: "⚡", couleur: "#eda100" },
   { id: "gaz", label: "Gaz", icone: "🔥", couleur: "#eb6834" },
   { id: "chauffage", label: "Chauffage urbain", icone: "♨️", couleur: "#e87ba4" },
 ];
 const JOUR = 86400000;
-const st = { energie: null, lier: null }; // lier = id du compteur qu'on est en train de relier
+const st = { energie: null, lier: null, assoc: "" }; // lier = id du compteur qu'on est en train de relier ; assoc = filtre association
 const fmt = (n, d = 1) => n === null || !Number.isFinite(n) ? "—" : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: d }).format(n);
 const nomCourt = n => String(n || "").replace(/\S+@\S+/g, "").replace(/\s{2,}/g, " ").trim();
 
@@ -36,45 +37,40 @@ export function calculConso(releves) {
   };
 }
 
-export function renderSchema(container, { compteurs, releves, peutModifier, onRetour, onOuvrirSite }) {
-  const presentes = ENERGIES.filter(e => compteurs.some(c => c.type === e.id));
-  if (!st.energie || !presentes.some(e => e.id === st.energie)) st.energie = (presentes[0] || ENERGIES[0]).id;
-  const E = ENERGIES.find(e => e.id === st.energie);
-  const liste = compteurs.filter(c => c.type === st.energie);
+// Réseaux d'une énergie, rangés par association puis groupe (comme les
+// dossiers de site). Réutilisé par le Schéma (relier) et par Pilotage énergie
+// (lecture seule, sur la période choisie).
+//  conso(c, t0, t1) → consommation interpolée ; debut/fin = fenêtre mesurée.
+export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associations = [], peutModifier = false, lier = null, assoc = "" }) {
+  const jours = Math.max(1, Math.round((fin - debut) / JOUR));
   const parId = new Map(liste.map(c => [c.id, c]));
   const parentDe = (c) => c.compteurParentId && parId.has(c.compteurParentId) && c.compteurParentId !== c.id ? c.compteurParentId : null;
   const enfants = (id) => liste.filter(c => parentDe(c) === id).sort((a, b) => nomCourt(a.dossierNom + a.nom).localeCompare(nomCourt(b.dossierNom + b.nom), "fr"));
   const descendants = (id, acc = new Set()) => { enfants(id).forEach(e => { if (!acc.has(e.id)) { acc.add(e.id); descendants(e.id, acc); } }); return acc; };
-
-  // Consommation des 30 derniers jours connus (jusqu'au dernier relevé) : brute et propre.
-  const conso = calculConso(releves);
-  const fin = Date.now(), debut = fin - 30 * JOUR;
   const brut = (c) => conso(c, debut, fin);
   const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
-  const unite = uniteValeur({ type: st.energie });
+  const unite = uniteValeur({ type: E.id });
 
-  // Compteur dessiné comme un cadran : le niveau de liquide = part du compteur
-  // dans le réseau (100 % pour un compteur général), débit au centre.
-  const jours = 30;
+  // Cadran : le niveau = part du compteur dans le réseau, débit au centre.
   const dial = (c, part, opts = {}) => {
     const b = opts.virtuel ? opts.valeur : brut(c);
     const parJour = b === null ? null : b / jours;
-    const bloque = !opts.virtuel && st.lier && (st.lier === c.id || descendants(st.lier).has(c.id));
-    const cible = !opts.virtuel && st.lier && !bloque;
+    const bloque = !opts.virtuel && lier && (lier === c.id || descendants(lier).has(c.id));
+    const cible = !opts.virtuel && lier && !bloque;
     const niveau = Math.max(6, Math.min(100, part ?? 55));
     const vitesse = parJour ? Math.max(0.8, 6 - Math.log10(1 + parJour) * 2.2) : 0; // plus ça coule, plus le flux va vite
-    return `<div class="sx-c ${opts.virtuel ? "virtuel" : ""} ${st.lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && st.lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
+    return `<div class="sx-c ${opts.virtuel ? "virtuel" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
       <div class="sx-dial"><span class="sx-motif">${E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
         <div class="sx-centre"><b>${parJour === null ? "—" : fmt(parJour, parJour < 10 ? 2 : 1)}</b><small>${unite}/jour</small></div>
         ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
       <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom))}${!opts.virtuel && c.emplacement ? ` · ${esc(c.emplacement)}` : ""}</small>
         <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt(b, b < 10 ? 2 : 0)} ${unite} sur ${jours} j`}</span>
         ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
-      ${!opts.virtuel && peutModifier && !st.lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
-      ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === st.lier)?.nom || "")}</div>` : ""}
+      ${!opts.virtuel && peutModifier && !lier ? `<div class="sx-act"><button type="button" data-sc-lier="${c.id}">🔗 ${parentDe(c) ? "Changer" : "Relier"}</button>${parentDe(c) ? `<button type="button" data-sc-detacher="${c.id}">✂</button>` : ""}</div>` : ""}
+      ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === lier)?.nom || "")}</div>` : ""}
     </div>`;
   };
-  // Réseau : compteur → tuyaux animés → sous-compteurs (+ la part « propre »).
+  // Réseau : compteur → tuyaux animés → sous-compteurs (+ la part « propre »), sur autant de niveaux que besoin.
   const reseau = (c, part = 100, racine = true) => {
     const e = enfants(c.id);
     if (!e.length) return dial(c, part, { racine });
@@ -89,27 +85,61 @@ export function renderSchema(container, { compteurs, releves, peutModifier, onRe
       <div class="sx-enfants">${branches}</div>
     </div>`;
   };
+
+  // Rangement par association → groupe, d'après le site du compteur de tête.
+  const siteDe = new Map(sites.map(x => [x.id, x]));
+  const assocDe = (c) => siteDe.get(c.dossierId)?.association || "";
+  const groupeDe = (c) => siteDe.get(c.dossierId)?.groupe || "";
   const racines = liste.filter(c => !parentDe(c));
-  const avecEnfants = racines.filter(c => enfants(c.id).length), seuls = racines.filter(c => !enfants(c.id).length);
+  const nomsAssoc = [...associations.map(a => a.nom).filter(n => racines.some(c => assocDe(c) === n))];
+  if (racines.some(c => !nomsAssoc.includes(assocDe(c)))) nomsAssoc.push("");
+  const affichees = assoc ? nomsAssoc.filter(n => n === assoc) : nomsAssoc;
+  const bloc = (l) => {
+    const avec = l.filter(c => enfants(c.id).length), seuls = l.filter(c => !enfants(c.id).length);
+    return `${avec.map(c => `<div class="sx-scroll">${reseau(c)}</div>`).join("")}${seuls.length ? `<div class="sx-seuls">${seuls.map(c => dial(c, null, { racine: true })).join("")}</div>` : ""}`;
+  };
+  const tri = (l) => [...l].sort((a, b) => nomCourt(a.dossierNom + a.nom).localeCompare(nomCourt(b.dossierNom + b.nom), "fr"));
+  const html = affichees.map(n => {
+    const l = racines.filter(c => (n ? assocDe(c) === n : !nomsAssoc.slice(0, -1).includes(assocDe(c)) || !assocDe(c)));
+    const nb = l.reduce((t, c) => t + 1 + descendants(c.id).size, 0);
+    const sansG = tri(l.filter(c => !groupeDe(c)));
+    const groupes = trierGroupes([...new Set(l.map(groupeDe).filter(Boolean))]);
+    return `<section class="sx-zone sx-assoc"><h3>🏢 ${esc(n || "Sans association")} <small>${nb} compteur${nb > 1 ? "s" : ""}</small></h3>
+      ${sansG.length ? bloc(sansG) : ""}
+      ${groupes.map(g => `<div class="sx-groupe">${esc(g)}</div>${bloc(tri(l.filter(c => groupeDe(c) === g)))}`).join("")}
+    </section>`;
+  }).join("");
+  const chips = nomsAssoc.length > 1 ? `<div class="sx-assocs">${["", ...nomsAssoc.filter(Boolean)].map(n => `<button type="button" data-sx-assoc="${esc(n)}" class="${assoc === n ? "on" : ""}">${esc(n || "Toutes")}</button>`).join("")}</div>` : "";
+  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips };
+}
+
+export function renderSchema(container, { compteurs, releves, sites = [], associations = [], peutModifier, onRetour, onOuvrirSite }) {
+  const presentes = ENERGIES.filter(e => compteurs.some(c => c.type === e.id));
+  if (!st.energie || !presentes.some(e => e.id === st.energie)) st.energie = (presentes[0] || ENERGIES[0]).id;
+  const E = ENERGIES.find(e => e.id === st.energie);
+  const liste = compteurs.filter(c => c.type === st.energie);
+  // Consommation des 30 derniers jours connus.
+  const fin = Date.now(), debut = fin - 30 * JOUR;
+  const r = reseauxHTML({ liste, E, conso: calculConso(releves), debut, fin, sites, associations, peutModifier, lier: st.lier, assoc: st.lier ? "" : st.assoc });
 
   container.innerHTML = `
   <div class="sc sx-e-${E.id}" style="--e:${E.couleur}">
     <div class="sc-entete">
       <button class="nav-btn" id="sc-retour">← Retour</button>
-      <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui : un sous-compteur est déduit de son compteur général. La consommation « propre » d'un compteur = son index moins ses sous-compteurs.</p></div>
+      <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui : un sous-compteur est déduit de son compteur général (sur autant de niveaux que nécessaire). La consommation « propre » d'un compteur = son index moins ses sous-compteurs. Débits sur les 30 derniers jours.</p></div>
     </div>
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
-    ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général). <button type="button" id="sc-annuler">Annuler</button></div>`
-      : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur général qui l'alimente (ex. le lycée).</p>` : ""}
-    ${avecEnfants.length ? `<section class="sx-zone"><h3>Réseaux <small>le niveau = part de chaque compteur dans le réseau · le flux s'accélère avec la consommation</small></h3>${avecEnfants.map(c => `<div class="sx-scroll">${reseau(c)}</div>`).join("")}</section>` : ""}
-    ${seuls.length ? `<section class="sx-zone"><h3>${avecEnfants.length ? "Compteurs indépendants" : "Compteurs (aucun lien pour l'instant)"}</h3><div class="sx-seuls">${seuls.map(c => dial(c, null, { racine: true })).join("")}</div></section>` : ""}
-    ${!liste.length ? `<p class="hint">Aucun compteur de ce type.</p>` : ""}
+    ${st.lier ? "" : r.chips}
+    ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général, ou un sous-compteur). <button type="button" id="sc-annuler">Annuler</button></div>`
+      : peutModifier ? `<p class="sc-aide">Pour relier : clique sur <b>🔗 Relier</b> sur le sous-compteur (ex. le self), puis sur le compteur qui l'alimente (ex. le lycée). Un sous-compteur peut lui-même avoir des sous-compteurs.</p>` : ""}
+    ${r.html}
   </div>`;
 
-  const rerendre = () => renderSchema(container, { compteurs, releves, peutModifier, onRetour, onOuvrirSite });
+  const rerendre = () => renderSchema(container, { compteurs, releves, sites, associations, peutModifier, onRetour, onOuvrirSite });
   container.querySelector("#sc-retour")?.addEventListener("click", () => { st.lier = null; onRetour(); });
   container.querySelector("#sc-annuler")?.addEventListener("click", () => { st.lier = null; rerendre(); });
   container.querySelectorAll("[data-sc-e]").forEach(b => b.addEventListener("click", () => { st.energie = b.dataset.scE; st.lier = null; rerendre(); }));
+  container.querySelectorAll("[data-sx-assoc]").forEach(b => b.addEventListener("click", () => { st.assoc = b.dataset.sxAssoc; rerendre(); }));
   container.querySelectorAll("[data-sc-lier]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); st.lier = b.dataset.scLier; rerendre(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
   const enregistrer = async (id, parent) => {
     try { await modifierCompteur(id, { compteurParentId: parent || null }); const c = compteurs.find(x => x.id === id); if (c) c.compteurParentId = parent || null; st.lier = null; rerendre(); window.toast?.(parent ? "✓ Compteurs reliés" : "✓ Compteur détaché"); }

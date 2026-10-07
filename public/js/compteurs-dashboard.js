@@ -16,6 +16,7 @@
 
 import { esc } from "./astreinte-logic.js";
 import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur } from "./compteurs-data.js";
+import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA } from "./compteurs-schema.js";
 
 const ENERGIES = [
   { id: "elec", label: "Électricité", couleur: "#eda100" },
@@ -31,7 +32,7 @@ const decalerAn = (d, n) => { const x = new Date(d); x.setFullYear(x.getFullYear
 const pct = (a, b) => (a === null || b === null || !b) ? null : ((a - b) / b) * 100;
 
 // État des filtres, conservé tant que l'onglet reste ouvert.
-const f = { periode: "12mois", ug: "", energie: "", energieGraphe: null, tri: "nom", sens: 1 };
+const f = { periode: "12mois", ug: "", energie: "", energieGraphe: null, energieReseau: null, tri: "nom", sens: 1 };
 
 export function renderPilotage(container, { compteurs: tousCompteurs, sites, associations, releves, onRetour, onRelever, onOuvrirSite }) {
   // ---------- Index des relevés par compteur (chronologique) ----------
@@ -262,6 +263,20 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
         </section>`;
       })()}
 
+      ${(() => {
+        // Réseaux de compteurs (même graphique que « Schéma des compteurs ») : suivi par énergie, période choisie.
+        const ens = ENERGIES_SCHEMA.filter(e => compteurs.some(c => c.type === e.id));
+        if (!ens.length) return "";
+        if (!f.energieReseau || !ens.some(e => e.id === f.energieReseau)) f.energieReseau = (ens.find(e => e.id === "elec") || ens[0]).id;
+        const E = ens.find(e => e.id === f.energieReseau);
+        const r = reseauxHTML({ liste: compteurs.filter(c => c.type === E.id), E, conso, debut: Math.max(t0, Math.min(...compteurs.map(c => (parCompteur.get(c.id) || [])[0]?.createdAt || Infinity))), fin: Date.now(), sites, associations });
+        return `<section class="pe-reseaux sx-e-${E.id}">
+          <div class="pe-titre-graphe"><div><h2>${E.icone} Réseaux de compteurs — ${esc(E.label)}</h2><p class="pe-st">Même vue que le Schéma des compteurs, sur ${libPeriode} · débit moyen par jour au centre · le niveau = part de chaque compteur dans son réseau · rangé par association</p></div>
+            <div class="pe-chips">${ens.map(e => `<button data-pe-reseau="${e.id}" class="${e.id === E.id ? "pe-on" : ""}"><i style="background:${e.couleur}"></i>${e.icone} ${e.label}</button>`).join("")}</div></div>
+          ${r.html}
+        </section>`;
+      })()}
+
       <div class="pe-kpis">
         ${kpis.map(x => `
           <div class="pe-carte pe-kpi">
@@ -352,6 +367,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   container.querySelector("#pe-ug")?.addEventListener("change", e => { f.ug = e.target.value; rerendre(); });
   container.querySelector("#pe-energie")?.addEventListener("change", e => { f.energie = e.target.value; if (e.target.value) f.energieGraphe = e.target.value; rerendre(); });
   container.querySelectorAll("[data-pe-graphe]").forEach(b => b.addEventListener("click", () => { f.energieGraphe = b.dataset.peGraphe; rerendre(); }));
+  container.querySelectorAll("[data-pe-reseau]").forEach(b => b.addEventListener("click", () => { f.energieReseau = b.dataset.peReseau; rerendre(); }));
   container.querySelectorAll("[data-pe-tri]").forEach(th => th.addEventListener("click", () => {
     const c = th.dataset.peTri; if (f.tri === c) f.sens *= -1; else { f.tri = c; f.sens = c === "nom" || c === "ug" ? 1 : -1; } rerendre();
   }));
