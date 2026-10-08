@@ -76,7 +76,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
   // Débit moyen (m³/jour) entre chaque paire de relevés ; le dernier intervalle
   // est comparé à la référence : « conso normale » saisie, sinon médiane des
   // intervalles précédents.
-  const veilleEau = () => tousCompteurs.filter(c => c.type === "eau" && (!f.ug || ugDe(c) === f.ug)).map(c => {
+  const veilleEau = (type = "eau") => tousCompteurs.filter(c => c.type === type && (!f.ug || ugDe(c) === f.ug)).map(c => {
     const pts = []; // total des index par relevé (tous index lisibles)
     (parCompteur.get(c.id) || []).forEach(r => {
       let t = 0, ok = true; clesIndex(c).forEach(k => { const v = parseFloat(String(r.valeurs?.[k] ?? "").replace(",", ".")); if (r.illisibles?.[k] || !Number.isFinite(v)) ok = false; else t += v; });
@@ -250,10 +250,14 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
       })()}
 
       ${(() => {
-        if (f.energie && f.energie !== "eau") return "";
-        const V = veilleEau(); if (!V.length) return "";
+        const TV = f.energie || "eau";
+        const V = veilleEau(TV); if (!V.length) return "";
+        const U = uniteValeur({ type: TV });
+        const EV = ENERGIES_SCHEMA.find(e => e.id === TV) || ENERGIES_SCHEMA[0];
+        const T = TV === "eau" ? { titre: "Veille fuites d'eau", qui: "compteur d'eau", fuite: "Fuite probable", fuites: "fuite" }
+          : { titre: `Veille consommation — ${EV.label}`, qui: `compteur (${EV.label.toLowerCase()})`, fuite: "Dérive forte", fuites: "dérive" };
         const nb = (e) => V.filter(x => x.etat === e).length;
-        const libEtat = { fuite: "Fuite probable", surveiller: "À surveiller", ok: "Normal", construction: "Référence à définir", attente: "En attente de 2 relevés" };
+        const libEtat = { fuite: T.fuite, surveiller: "À surveiller", ok: "Normal", construction: "Référence à définir", attente: "En attente de 2 relevés" };
         const jauge = (x) => {
           const r = 42, c = 2 * Math.PI * r, arc = 0.75 * c; // jauge sur 270°
           const p = x.ratio === null ? 0 : Math.min(1, x.ratio / 2.5);
@@ -261,28 +265,28 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
           return `<svg viewBox="0 0 110 110" class="vf-jauge"><circle cx="55" cy="55" r="${r}" class="vf-piste" stroke-dasharray="${arc} ${c}" transform="rotate(135 55 55)"/>
             <circle cx="55" cy="55" r="${r}" class="vf-niveau" stroke-dasharray="${arc * p} ${c}" transform="rotate(135 55 55)"/>
             ${repere !== null ? (() => { const ang = (135 + 270 * repere) * Math.PI / 180; return `<circle cx="${55 + r * Math.cos(ang)}" cy="${55 + r * Math.sin(ang)}" r="4.5" class="vf-repere"/>`; })() : ""}
-            <text x="55" y="52" text-anchor="middle" class="vf-val">${x.dernier ? fmt2(x.dernier.v) : "—"}</text><text x="55" y="68" text-anchor="middle" class="vf-unite">m³ / jour</text></svg>`;
+            <text x="55" y="52" text-anchor="middle" class="vf-val">${x.dernier ? fmt2(x.dernier.v) : "—"}</text><text x="55" y="68" text-anchor="middle" class="vf-unite">${U} / jour</text></svg>`;
         };
         const barres = (x) => { const d = x.debits.slice(-8); if (d.length < 2) return ""; const m = Math.max(...d.map(z => z.v), x.ref || 0) || 1;
-          return `<div class="vf-histo" title="Débit moyen entre deux relevés (8 derniers)">${d.map((z, i) => `<i style="height:${Math.max(6, z.v / m * 100)}%" class="${i === d.length - 1 ? "der" : ""}" title="${new Date(z.du).toLocaleDateString("fr-FR")} → ${new Date(z.au).toLocaleDateString("fr-FR")} : ${fmt(z.v, 2)} m³/j"></i>`).join("")}${x.ref ? `<b style="bottom:${x.ref / m * 100}%"></b>` : ""}</div>`; };
-        return `<section class="vf">
-          <div class="vf-tete"><div><span class="vf-sur">Surveillance en continu</span><h2>💧 Veille fuites d'eau</h2>
-            <p>Chaque compteur d'eau compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale. Au-delà de +30 % : à surveiller ; au-delà de +80 % : fuite probable.</p></div>
-            <div class="vf-resume"><span class="f">${nb("fuite")}<small>fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span>${nb("construction") + nb("attente") ? `<span class="c">${nb("construction") + nb("attente")}<small>référence à définir</small></span>` : ""}</div></div>
+          return `<div class="vf-histo" title="Débit moyen entre deux relevés (8 derniers)">${d.map((z, i) => `<i style="height:${Math.max(6, z.v / m * 100)}%" class="${i === d.length - 1 ? "der" : ""}" title="${new Date(z.du).toLocaleDateString("fr-FR")} → ${new Date(z.au).toLocaleDateString("fr-FR")} : ${fmt(z.v, 2)} ${U}/j"></i>`).join("")}${x.ref ? `<b style="bottom:${x.ref / m * 100}%"></b>` : ""}</div>`; };
+        return `<section class="vf vf-e-${TV}" style="--vfe:${EV.couleur}">
+          <div class="vf-tete"><div><span class="vf-sur">Surveillance en continu</span><h2>${EV.icone} ${T.titre}</h2>
+            <p>Chaque ${T.qui} compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale. Au-delà de +30 % : à surveiller ; au-delà de +80 % : ${T.fuite.toLowerCase()}.</p></div>
+            <div class="vf-resume"><span class="f">${nb("fuite")}<small>${TV === "eau" ? `fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}` : `dérive${nb("fuite") > 1 ? "s" : ""} forte${nb("fuite") > 1 ? "s" : ""}`}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span>${nb("construction") + nb("attente") ? `<span class="c">${nb("construction") + nb("attente")}<small>référence à définir</small></span>` : ""}</div></div>
           ${parAssoGroupe(V, x => siteParId.get(x.c.dossierId)).map((G, gi, T) => `${gi === 0 || T[gi - 1].assoc !== G.assoc ? `<div class="vf-asso">🏢 ${esc(G.assoc)}</div>` : ""}${G.groupe ? `<div class="vf-groupe">${esc(G.groupe)}</div>` : ""}
           <div class="vf-grille">${[...G.items].sort((a, b) => (a.c.ordre ?? 1e9) - (b.c.ordre ?? 1e9) || V.indexOf(a) - V.indexOf(b)).map(x => `
             <div class="vf-c vf-${x.etat}">
-              <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || "Eau")}${x.dernier?.net ? " · propre (hors sous-compteurs)" : ""}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
+              <div class="vf-c-tete"><b>${esc(nomCourt(x.c.dossierNom))}</b><small>${esc(x.c.nom || EV.label)}${x.dernier?.net ? " · propre (hors sous-compteurs)" : ""}</small><span class="vf-etat">${libEtat[x.etat]}</span></div>
               <div class="vf-c-corps">${jauge(x)}
                 <div class="vf-c-info">
                   ${x.ratio !== null ? `<div class="vf-ratio">${x.ratio >= 1 ? "+" : ""}${fmt((x.ratio - 1) * 100)} %<small>vs normal</small></div>` : ""}
-                  <div>Normal : <b>${x.ref ? `${fmt2(x.ref)} m³/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
+                  <div>Normal : <b>${x.ref ? `${fmt2(x.ref)} ${U}/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
                   ${x.dernier ? `<div class="vf-mute">du ${new Date(x.dernier.du).toLocaleDateString("fr-FR")} au ${new Date(x.dernier.au).toLocaleDateString("fr-FR")}</div>` : `<div class="vf-mute">Il faut 2 relevés pour mesurer un débit.</div>`}
                   ${x.age !== null && x.age > 10 ? `<div class="vf-mute">⏱ dernier relevé il y a ${x.age} j — un relevé intermédiaire affinerait la mesure</div>` : ""}
                 </div></div>
               ${barres(x)}
-              ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}">✓ ${fmt2(x.dernier.v)} m³/jour, c'est normal pour ce site</button>` : ""}
-              <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-val="${x.ref ?? ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
+              ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}" data-vf-u="${U}">✓ ${fmt2(x.dernier.v)} ${U}/jour, c'est normal pour ce site</button>` : ""}
+              <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-u="${U}" data-vf-val="${x.ref ?? ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
             </div>`).join("")}</div>`).join("")}
         </section>`;
       })()}
@@ -403,7 +407,7 @@ export function renderPilotage(container, { compteurs: tousCompteurs, sites, ass
     catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); b.disabled = false; }
   }));
   container.querySelectorAll("[data-vf-ref]").forEach(b => b.addEventListener("click", async () => {
-    const v = prompt("Consommation NORMALE de ce compteur, en m³ par jour (ex. 1,5).\nLaisse vide pour revenir au calcul automatique.", b.dataset.vfVal ? String(Math.round(parseFloat(b.dataset.vfVal) * 100) / 100).replace(".", ",") : "");
+    const v = prompt(`Consommation NORMALE de ce compteur, en ${b.dataset.vfU || "m³"} par jour (ex. 1,5).`+"\nLaisse vide pour revenir au calcul automatique.", b.dataset.vfVal ? String(Math.round(parseFloat(b.dataset.vfVal) * 100) / 100).replace(".", ",") : "");
     if (v === null) return;
     const n = parseFloat(v.replace(",", "."));
     try { await modifierCompteur(b.dataset.vfRef, { consoNormaleJour: v.trim() === "" ? null : (Number.isFinite(n) && n > 0 ? n : null) }); const c = tousCompteurs.find(x => x.id === b.dataset.vfRef); if (c) c.consoNormaleJour = v.trim() === "" ? null : n; rerendre(); }
