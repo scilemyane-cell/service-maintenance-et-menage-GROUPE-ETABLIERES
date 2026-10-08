@@ -74,7 +74,26 @@ export const estDeduit = (c) => c.nonDeduit === true ? false : c.nonDeduit === f
 const lgt = (c) => String(c.logement || "").trim();
 export const cmpCompteurs = (a, b) => (a.ordre ?? 1e9) - (b.ordre ?? 1e9) || (!lgt(a) !== !lgt(b) ? (lgt(a) ? 1 : -1) : 0) || (lgt(a) && lgt(b) ? lgt(a).localeCompare(lgt(b), "fr", { numeric: true }) : 0) || nomCourt(a.dossierNom + " " + a.nom).localeCompare(nomCourt(b.dossierNom + " " + b.nom), "fr", { numeric: true });
 
+// Une eau chaude placée AU-DESSUS d'un compteur d'eau froide (branchement à
+// l'envers) est traitée comme étant dessous, en « pour info » (copie, sans écrire).
+export function normaliserEauChaude(liste) {
+  const m = new Map(liste.map(c => [c.id, c]));
+  const inv = liste.filter(c => !estEauChaude(c) && estEauChaude(m.get(c.compteurParentId)));
+  if (!inv.length) return liste;
+  const l2 = liste.map(c => ({ ...c }));
+  const m2 = new Map(l2.map(c => [c.id, c]));
+  inv.forEach(({ id }) => {
+    const c = m2.get(id), ec = m2.get(c.compteurParentId); if (!ec || ec.compteurParentId === c.id) return;
+    c.compteurParentId = ec.compteurParentId && ec.compteurParentId !== c.id ? ec.compteurParentId : null; c.nonDeduit = null;
+    ec.compteurParentId = c.id; ec.nonDeduit = true;
+  });
+  return l2;
+}
+
 export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associations = [], peutModifier = false, lier = null, assoc = "", glisser = false }) {
+  liste = normaliserEauChaude(liste);;
+    }
+  }
   const jours = Math.max(1, Math.round((fin - debut) / JOUR));
   const parId = new Map(liste.map(c => [c.id, c]));
   const parentDe = (c) => c.compteurParentId && parId.has(c.compteurParentId) && c.compteurParentId !== c.id ? c.compteurParentId : null;

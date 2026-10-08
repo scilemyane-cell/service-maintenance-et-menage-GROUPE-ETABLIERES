@@ -16,7 +16,7 @@
 
 import { esc } from "./astreinte-logic.js";
 import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur } from "./compteurs-data.js";
-import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA, estDeduit } from "./compteurs-schema.js";
+import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA, estDeduit, normaliserEauChaude } from "./compteurs-schema.js";
 import { trierGroupes } from "./associations-data.js";
 
 const ENERGIES = [
@@ -36,7 +36,8 @@ const pct = (a, b) => (a === null || b === null || !b) ? null : ((a - b) / b) * 
 // État des filtres, conservé tant que l'onglet reste ouvert.
 const f = { periode: "12mois", ug: "", energie: "", energieGraphe: null, energieReseau: null, tri: "asso", sens: 1 };
 
-export function renderPilotage(container, { compteurs: tousCompteurs, sites, associations, releves, onRetour, onRelever, onOuvrirSite }) {
+export function renderPilotage(container, { compteurs: compteursBruts, sites, associations, releves, onRetour, onRelever, onOuvrirSite }) {
+  const tousCompteurs = normaliserEauChaude(compteursBruts); // eau chaude jamais au-dessus de l'eau froide
   // ---------- Index des relevés par compteur (chronologique) ----------
   const parCompteur = new Map();
   releves.forEach(r => { if (!r.createdAt) return; (parCompteur.get(r.compteurId) || parCompteur.set(r.compteurId, []).get(r.compteurId)).push(r); });
