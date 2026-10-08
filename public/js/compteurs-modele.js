@@ -67,7 +67,7 @@ export function renderModele(container, { compteurs, sites = [], associations = 
       <button class="nav-btn" id="md-auto" title="Remet les compteurs posés en arbre bien rangé">🪄 Ranger</button>
       <button class="add-btn" id="md-ok">✓ Enregistrer</button>
     </div>
-    <p class="md-aide">① Glisse un compteur de la liste sur le plan. ② Tire un fil depuis le <b>rond du bas</b> d'un compteur jusqu'au compteur qu'il <b>alimente</b> (en dessous). ③ Clique sur un fil : <b>déduit</b>, <b>pour info</b> ou supprimer. ④ <b>Enregistrer</b>.</p>
+    <p class="md-aide">① Glisse un compteur de la liste sur le plan. ② Tire un fil entre deux compteurs (depuis le <b>rond bleu</b>) : celui du <b>haut alimente</b> celui du bas. Un compteur peut en alimenter <b>plusieurs</b> : tire un fil vers chacun. ③ Clique sur un fil : <b>déduit</b>, <b>pour info</b> ou supprimer. ④ <b>Enregistrer</b>.</p>
     <div class="md-corps">
       <aside class="md-liste"><input id="md-cherche" placeholder="🔎 Chercher un compteur…"><div id="md-dispo"></div></aside>
       <div class="md-plan" id="md-plan"><div class="md-toile" id="md-toile"><svg class="md-fils" id="md-fils"></svg></div></div>
@@ -151,7 +151,7 @@ export function renderModele(container, { compteurs, sites = [], associations = 
     el.querySelector(".md-x").addEventListener("pointerdown", e => e.stopPropagation());
     // Déplacer la carte.
     el.addEventListener("pointerdown", (e) => {
-      if (e.target.closest(".md-out,.md-x") || (e.button !== undefined && e.button !== 0)) return;
+      if (e.target.closest(".md-out,.md-in,.md-x") || (e.button !== undefined && e.button !== 0)) return;
       e.preventDefault();
       const p0 = { ...d.get(c.id).pos }, s = posToile(e);
       el.classList.add("bouge");
@@ -160,11 +160,10 @@ export function renderModele(container, { compteurs, sites = [], associations = 
       document.addEventListener("pointermove", bouger); document.addEventListener("pointerup", fin);
     });
     // Tirer un fil depuis le rond du bas.
-    el.querySelector(".md-out").addEventListener("pointerdown", (e) => {
+    el.querySelectorAll(".md-out,.md-in").forEach(port => port.addEventListener("pointerdown", (e) => {
       e.preventDefault(); e.stopPropagation();
-      const a = d.get(c.id).pos, x1 = a.x + LARG / 2, y1 = a.y + HAUT;
+      const a = d.get(c.id).pos, x1 = a.x + LARG / 2, y1 = port.classList.contains("md-in") ? a.y : a.y + HAUT;
       const interdits = new Set([c.id]);
-      const ancetres = new Set(); { let pa = lien(c); while (pa && !ancetres.has(pa)) { ancetres.add(pa); pa = lien(liste.find(x => x.id === pa)); } }
       toile.querySelectorAll(".md-c").forEach(x => x.classList.add(interdits.has(x.dataset.id) ? "interdit" : "possible"));
       const tmp = document.createElementNS("http://www.w3.org/2000/svg", "path"); tmp.setAttribute("class", "md-tire"); svg.append(tmp);
       let cible = null;
@@ -180,17 +179,22 @@ export function renderModele(container, { compteurs, sites = [], associations = 
         document.removeEventListener("pointermove", bouger); document.removeEventListener("pointerup", fin);
         tmp.remove(); toile.querySelectorAll(".md-c").forEach(x => x.classList.remove("possible", "interdit", "survol"));
         if (cible) {
-          const dd = d.get(cible);
-          // Fil vers un compteur situé AU-DESSUS : on inverse (ce compteur prend sa place).
-          if (ancetres.has(cible)) d.get(c.id).parent = dd.parent;
-          dd.parent = c.id;
-          if (estEauChaude(liste.find(x => x.id === cible)) && dd.nonDeduit == null) dd.nonDeduit = true;
-          sale = true; window.toast?.(`✓ ${nomC(c)} → ${nomC(liste.find(x => x.id === cible))}`);
+          // Le compteur placé le plus HAUT sur le plan alimente l'autre (peu
+          // importe dans quel sens on a tiré le fil).
+          const ya = d.get(c.id).pos.y, yb = d.get(cible).pos.y;
+          const [pid, cid] = yb < ya - 40 ? [cible, c.id] : [c.id, cible];
+          if (descend(cid).has(pid)) d.get(pid).parent = d.get(cid).parent; // il était dessous : on inverse
+          const dd = d.get(cid), ancien = dd.parent;
+          dd.parent = pid;
+          if (estEauChaude(liste.find(x => x.id === cid)) && dd.nonDeduit == null) dd.nonDeduit = true;
+          sale = true;
+          const nm = (id) => { const x = liste.find(y => y.id === id); return `${nomC(x)} (${nomCourt(x.dossierNom)})`; };
+          window.toast?.(`✓ ${nm(pid)} alimente ${nm(cid)}${ancien && ancien !== pid && ids.has(ancien) ? ` — il n'est plus sous ${nm(ancien)}` : ""}`);
         }
         dessiner();
       };
       document.addEventListener("pointermove", bouger); document.addEventListener("pointerup", fin);
-    });
+    }));
   }
 
   // Poser un compteur depuis la liste.
