@@ -3414,3 +3414,22 @@ body.clo-ouvert{overflow:hidden}
   .sx-n,.sx-n.tete{width:100%}
   .sx-n-val b{font-size:15px}
 }
+/* Schéma des compteurs : couleurs du thème choisi (plus de fond noir imposé) */
+.sx-zone,.sx-e-elec .sx-zone,.sx-e-gaz .sx-zone,.sx-e-chauffage .sx-zone,.sx-e-eau .sx-zone{background:var(--panel-alt);color:var(--text);border:1px solid var(--border);box-shadow:none}
+.sx-zone::before{display:none}
+.sx-zone h3{color:var(--text)}.sx-zone h3 small{color:var(--text-dim)}
+.sx-groupe{color:var(--text-dim);border-top-color:var(--border)}
+.sx-poignee{background:var(--panel);color:var(--text-dim);border:1px solid var(--border)}
+.sx-n{background:var(--panel);color:var(--text);border-color:var(--border);border-top-color:var(--l);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.sx-n.tete{box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.sx-n.info{background:var(--panel)}
+.sx-n.virtuel{background:color-mix(in srgb,var(--l) 8%,var(--panel))}
+.sx-n.alerte{background:color-mix(in srgb,#e5484d 8%,var(--panel))}
+.sx-n-val{color:var(--text)}.sx-n-site,.sx-n-val small{color:var(--text-dim)}
+.sx-n-barre{background:color-mix(in srgb,var(--text) 10%,transparent)}
+.sx-n-barre span{color:var(--text)}
+.sx-r.general{background:color-mix(in srgb,var(--l) 16%,transparent);color:var(--text)}
+.sx-r.deduit{background:color-mix(in srgb,#16a34a 16%,transparent);color:var(--text)}
+.sx-r.info{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text)}
+.sx-r.chaude{background:color-mix(in srgb,#e8452c 16%,transparent);color:var(--text)}
+.pe-reseaux .sx-zone{background:#F4F6F9;color:#0b0b0b;border-color:#E4E6EA}
