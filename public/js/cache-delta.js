@@ -57,6 +57,12 @@ const ms = (t) => (typeof t === "number" ? t : t && typeof t.toMillis === "funct
 const REGISTRE = new Map();
 // Copie locale actuelle d'un document (null si inconnue).
 export function docLocal(cle, id) { return REGISTRE.get(cle)?.docs.get(id) || null; }
+// Retire un document de la copie locale (après une suppression sur CET appareil).
+export function retirerLocal(cle, id) {
+  const r = REGISTRE.get(cle);
+  if (!r || !id || !r.docs.delete(id)) return;
+  r.emettreListe(); r.sauver();
+}
 export function majLocale(cle, id, champs, { remplacer = false } = {}) {
   const r = REGISTRE.get(cle);
   if (!r || !id) return;

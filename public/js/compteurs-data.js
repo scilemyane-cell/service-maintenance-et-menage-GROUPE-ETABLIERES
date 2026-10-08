@@ -8,7 +8,7 @@
 // Un compteur eau/gaz n'a qu'un seul index.
 
 import { partager, ecoutePartagee } from "./ecoute-partagee.js";
-import { ecouteDelta, majLocale } from "./cache-delta.js";
+import { ecouteDelta, majLocale, retirerLocal } from "./cache-delta.js";
 import { db } from "./firebase-init.js";
 import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, serverTimestamp, deleteField,
@@ -228,7 +228,10 @@ export async function listerTousLesCompteurs() {
 export function watchCompteursListe(callback) { return watchCompteursBruts((l) => callback((l || []).filter(c => !c.supprimeLe))); }
 const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = false; u = watch((v) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(v); }); });
 // Relevés de compteurs : copie locale (champ createdAt en ms).
-export const watchRelevesCompteurs = (cb) => ecoutePartagee("releves-compteurs", ecouteDelta({ cle: "releves-compteurs", col: RELEVES, champs: ["createdAt"], numerique: true }), cb);
+export const watchRelevesCompteurs = (cb) => ecoutePartagee("releves-compteurs", ecouteDelta({ cle: RELEVES_CACHE, col: RELEVES, champs: ["createdAt", "majLeMs"], numerique: true }), cb);
+// v2 : une relecture complète pour rattraper les relevés déjà corrigés ; ensuite
+// une correction pose « majLeMs » et arrive sur tous les appareils.
+const RELEVES_CACHE = "releves-compteurs-v2";
 
 export async function creerCompteur(dossierId, dossierNom, compteur) {
   const ref = await addDoc(collection(db, COMPTEURS), { dossierId, dossierNom, ...compteur, majLe: serverTimestamp() });
@@ -331,6 +334,7 @@ export async function listerHistoriqueCompteur(compteurId) {
 // périmé sur la liste/l'historique.
 export async function supprimerReleve(compteurId, releveId) {
   await deleteDoc(doc(db, RELEVES, releveId));
+  retirerLocal(RELEVES_CACHE, releveId);
   const restant = await listerHistoriqueCompteur(compteurId); // déjà trié du plus récent au plus ancien
   const dernier = restant[0];
   await updateDoc(doc(db, COMPTEURS, compteurId), {
@@ -344,11 +348,12 @@ export async function supprimerReleve(compteurId, releveId) {
 // valeurs/date, qui a corrigé et quand. Remet à jour « dernierReleve ».
 export async function modifierReleve(compteurId, releve, valeurs, at, user) {
   const maj = {
-    valeurs, createdAt: at,
+    valeurs, createdAt: at, majLeMs: Date.now(),
     corrige: { le: Date.now(), par: user?.nom || user?.email || "Inconnu", avant: { valeurs: releve.valeurs || {}, createdAt: releve.createdAt || null } },
   };
   if (at !== releve.createdAt) maj.saisiHorsDate = true;
   await updateDoc(doc(db, RELEVES, releve.id), maj);
+  majLocale(RELEVES_CACHE, releve.id, maj);
   const restant = await listerHistoriqueCompteur(compteurId);
   const dernier = restant[0];
   const dr = dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, illisibles: dernier.illisibles || {}, releveParNom: dernier.releveParNom } : null;
