@@ -339,6 +339,23 @@ export async function supprimerReleve(compteurId, releveId) {
   });
 }
 
+// Corrige UN relevé (valeur(s) et/ou date) après une erreur de saisie —
+// Super Admin uniquement (règles Firestore). Garde une trace : anciennes
+// valeurs/date, qui a corrigé et quand. Remet à jour « dernierReleve ».
+export async function modifierReleve(compteurId, releve, valeurs, at, user) {
+  const maj = {
+    valeurs, createdAt: at,
+    corrige: { le: Date.now(), par: user?.nom || user?.email || "Inconnu", avant: { valeurs: releve.valeurs || {}, createdAt: releve.createdAt || null } },
+  };
+  if (at !== releve.createdAt) maj.saisiHorsDate = true;
+  await updateDoc(doc(db, RELEVES, releve.id), maj);
+  const restant = await listerHistoriqueCompteur(compteurId);
+  const dernier = restant[0];
+  const dr = dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, illisibles: dernier.illisibles || {}, releveParNom: dernier.releveParNom } : null;
+  majLocale("compteurs", compteurId, { dernierReleve: dr ? { ...dr, majLe: Timestamp.now() } : null });
+  await updateDoc(doc(db, COMPTEURS, compteurId), { dernierReleve: dr ? { ...dr, majLe: serverTimestamp() } : null, majLe: serverTimestamp() });
+}
+
 // Écart entre deux relevés, index par index (utilisé pour "+142 m³
 // depuis le dernier relevé" et pour la détection d'anomalie). Renvoie
 // null pour un index si l'une des deux valeurs est absente/invalide, ou

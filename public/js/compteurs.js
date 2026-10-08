@@ -21,7 +21,7 @@ import {
   envoyerCompteurCorbeille, getCompteurUnique, enregistrerReleve, listerHistoriqueCompteur,
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, fenetreReleve, motRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
-  trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve,
+  trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve, modifierReleve,
   creerSectionDossierPourCompteur, libelleIndex,
   listerTousLesReleves, consommationMensuelleAgregee, consommationRecente,
 } from "./compteurs-data.js";
@@ -707,7 +707,7 @@ function renderHistoriqueHTML(historique, compteur) {
             const ecarts = historique[i + 1] ? calculerEcarts(r.valeurs, historique[i + 1].valeurs) : null;
             return `
             <tr>
-              <td>${formatDate(r.createdAt)}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
+              <td>${formatDate(r.createdAt)}${r.corrige ? ` <span title="Corrigé le ${esc(new Date(r.corrige.le).toLocaleString("fr-FR"))} par ${esc(r.corrige.par || "")} — avant : ${esc(Object.values(r.corrige.avant?.valeurs || {}).join(" · "))}" style="color:#1a73e8;font-size:11px">✏️ corrigé</span>` : ""}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
               <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
               <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
@@ -717,7 +717,7 @@ function renderHistoriqueHTML(historique, compteur) {
                   : ""
                 ).join("") || "—"}
               </td>
-              ${estSuperAdmin ? `<td><button class="del-btn" data-del-releve="${r.id}" data-compteur-id="${compteur.id}" style="padding:3px 8px;font-size:11px" title="Supprimer ce relevé (ex. essai/test) — Super Admin uniquement">🗑️</button></td>` : ""}
+              ${estSuperAdmin ? `<td style="white-space:nowrap"><button class="nav-btn" data-edit-releve="${r.id}" style="padding:3px 8px;font-size:11px" title="Corriger ce relevé (erreur de saisie)">✏️</button> <button class="del-btn" data-del-releve="${r.id}" data-compteur-id="${compteur.id}" style="padding:3px 8px;font-size:11px" title="Supprimer ce relevé (ex. essai/test) — Super Admin uniquement">🗑️</button></td>` : ""}
             </tr>
           `;}).join("")}
         </tbody>
@@ -742,6 +742,42 @@ async function chargerEtAfficherHistorique(compteurId) {
   holder.innerHTML = renderHistoriqueHTML(historique, compteur);
   resolvePhotos(holder);
   dessinerGraphiqueHistorique(holder, historique, compteur);
+  holder.querySelectorAll("[data-edit-releve]").forEach(btn => btn.addEventListener("click", () => {
+    const r = historique.find(x => x.id === btn.dataset.editReleve); if (!r || !compteur) return;
+    const cles = clesIndex(compteur);
+    const d = new Date(r.createdAt), pad = n => String(n).padStart(2, "0");
+    const dateLoc = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const fond = document.createElement("div"); fond.className = "cd-fond"; fond.style.zIndex = "1400";
+    fond.innerHTML = `<div class="cd-fenetre" style="max-width:440px"><div class="cd-fenetre-tete"><div><b>✏️ Corriger le relevé</b><small>${esc(compteur.nom || "")} — ${esc(compteur.dossierNom || "")}</small></div><button class="cd-x" data-x>✕</button></div>
+      <div class="stack" style="gap:10px">
+        ${cles.map(k => `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">${cles.length > 1 ? esc(k) : `Valeur (${esc(uniteValeur(compteur))})`}<input type="text" inputmode="decimal" data-v="${esc(k)}" value="${esc(r.valeurs?.[k] ?? "")}" style="padding:10px;border-radius:10px;font-size:16px"></label>`).join("")}
+        <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Date du relevé<input type="datetime-local" data-date value="${dateLoc}" style="padding:10px;border-radius:10px;font-size:15px"></label>
+        <p class="hint" style="margin:0">L'ancienne valeur reste notée (mention « ✏️ corrigé »).</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>✓ Enregistrer la correction</button></div>
+      </div></div>`;
+    document.body.append(fond);
+    const fermer = () => fond.remove();
+    fond.querySelectorAll("[data-x]").forEach(b => b.onclick = fermer);
+    fond.addEventListener("click", e => { if (e.target === fond) fermer(); });
+    fond.querySelector("[data-ok]").onclick = async (ev) => {
+      const valeurs = { ...(r.valeurs || {}) };
+      for (const inp of fond.querySelectorAll("[data-v]")) {
+        const v = inp.value.trim().replace(",", ".");
+        if (v === "" || isNaN(parseFloat(v))) { alert("Valeur invalide."); inp.focus(); return; }
+        valeurs[inp.dataset.v] = v;
+      }
+      const at = new Date(fond.querySelector("[data-date]").value).getTime();
+      if (!Number.isFinite(at) || at > Date.now() + 60000) { alert("Date invalide."); return; }
+      ev.currentTarget.disabled = true;
+      try {
+        await modifierReleve(compteurId, r, valeurs, at, mountedUser);
+        statsReleves = null;
+        fermer(); window.toast?.("✓ Relevé corrigé");
+        await load();
+        await chargerEtAfficherHistorique(compteurId);
+      } catch (e) { alert("Correction impossible : " + (e.message || e)); ev.currentTarget.disabled = false; }
+    };
+  }));
   holder.querySelectorAll("[data-del-releve]").forEach(btn => btn.addEventListener("click", async () => {
     if (!confirm("Supprimer définitivement ce relevé (ex. essai/test) ? Cette action est irréversible et ne peut pas être annulée.")) return;
     btn.disabled = true;
