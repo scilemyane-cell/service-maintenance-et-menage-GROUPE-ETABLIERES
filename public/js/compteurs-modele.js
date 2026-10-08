@@ -182,7 +182,9 @@ export function renderModele(container, { compteurs, sites = [], associations = 
           // Le compteur placé le plus HAUT sur le plan alimente l'autre (peu
           // importe dans quel sens on a tiré le fil).
           const ya = d.get(c.id).pos.y, yb = d.get(cible).pos.y;
-          const [pid, cid] = yb < ya - 40 ? [cible, c.id] : [c.id, cible];
+          let [pid, cid] = yb < ya - 40 ? [cible, c.id] : [c.id, cible];
+          // L'eau chaude est toujours SOUS l'eau froide, quel que soit le sens.
+          if (estEauChaude(liste.find(x => x.id === pid)) && !estEauChaude(liste.find(x => x.id === cid))) [pid, cid] = [cid, pid];
           if (descend(cid).has(pid)) d.get(pid).parent = d.get(cid).parent; // il était dessous : on inverse
           const dd = d.get(cid), ancien = dd.parent;
           dd.parent = pid;

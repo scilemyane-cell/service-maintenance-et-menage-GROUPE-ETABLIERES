@@ -85,7 +85,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
   const libC = (x) => `${nomCourt(x.dossierNom)} — ${x.logement ? `Logt ${x.logement} · ` : ""}${x.nom || E.label}`;
   const optionsParent = (c) => {
     const interdits = descendants(c.id); interdits.add(c.id);
-    const possibles = liste.filter(x => !interdits.has(x.id)).sort(cmpCompteurs);
+    const possibles = liste.filter(x => !interdits.has(x.id) && (estEauChaude(c) || !estEauChaude(x))).sort(cmpCompteurs); // une eau chaude n'alimente pas l'eau froide
     const meme = possibles.filter(x => x.dossierId === c.dossierId), autres = possibles.filter(x => x.dossierId !== c.dossierId);
     const opt = (x) => `<option value="${x.id}" ${parentDe(c) === x.id ? "selected" : ""}>${esc(libC(x))}</option>`;
     return `<option value="">— Personne (compteur général)</option>`
@@ -173,6 +173,26 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
 }
 
 export function renderSchema(container, { compteurs, releves, sites = [], associations = [], peutModifier, onRetour, onOuvrirSite }) {
+  // Une eau chaude n'alimente jamais un compteur d'eau froide : si c'est le
+  // cas (branchement à l'envers), on remet l'eau chaude SOUS ce compteur,
+  // en « pour info ». Réparé une fois, automatiquement.
+  if (peutModifier) {
+    const parIdC = new Map(compteurs.map(c => [c.id, c]));
+    const aReparer = compteurs.filter(c => c.type === "eau" && !estEauChaude(c) && estEauChaude(parIdC.get(c.compteurParentId)));
+    if (aReparer.length) {
+      (async () => {
+        for (const c of aReparer) {
+          const ec = parIdC.get(c.compteurParentId); if (!ec || ec.compteurParentId === c.id) continue;
+          const pp = ec.compteurParentId && ec.compteurParentId !== c.id ? ec.compteurParentId : null;
+          await modifierCompteur(c.id, { compteurParentId: pp, nonDeduit: null }); c.compteurParentId = pp; c.nonDeduit = null;
+          await modifierCompteur(ec.id, { compteurParentId: c.id, nonDeduit: true }); ec.compteurParentId = c.id; ec.nonDeduit = true;
+        }
+        window.toast?.("✓ Eau chaude remise sous son compteur général");
+        renderSchema(container, { compteurs, releves, sites, associations, peutModifier, onRetour, onOuvrirSite });
+      })().catch(err => console.error("réparation eau chaude :", err));
+      return;
+    }
+  }
   const presentes = ENERGIES.filter(e => compteurs.some(c => c.type === e.id));
   if (!st.energie || !presentes.some(e => e.id === st.energie)) st.energie = (presentes[0] || ENERGIES[0]).id;
   const E = ENERGIES.find(e => e.id === st.energie);
