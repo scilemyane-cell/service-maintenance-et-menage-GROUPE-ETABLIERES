@@ -65,7 +65,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
   const descendants = (id, acc = new Set()) => { enfants(id).forEach(e => { if (!acc.has(e.id)) { acc.add(e.id); descendants(e.id, acc); } }); return acc; };
   // Liste « Alimenté par » : aucun (compteur général) ou un autre compteur de
   // la même énergie (jamais lui-même ni un de ses sous-compteurs : pas de boucle).
-  const libC = (x) => `${x.logement ? `Logt ${x.logement} · ` : ""}${x.nom || E.label}`;
+  const libC = (x) => `${nomCourt(x.dossierNom)} — ${x.logement ? `Logt ${x.logement} · ` : ""}${x.nom || E.label}`;
   const optionsParent = (c) => {
     const interdits = descendants(c.id); interdits.add(c.id);
     const possibles = liste.filter(x => !interdits.has(x.id)).sort(cmpCompteurs);

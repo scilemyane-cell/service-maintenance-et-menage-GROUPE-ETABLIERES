@@ -3433,3 +3433,5 @@ body.clo-ouvert{overflow:hidden}
 .sx-r.info{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--text)}
 .sx-r.chaude{background:color-mix(in srgb,#e8452c 16%,transparent);color:var(--text)}
 .pe-reseaux .sx-zone{background:#F4F6F9;color:#0b0b0b;border-color:#E4E6EA}
+/* Réglages d'un compteur du schéma : fenêtre centrée sur ordinateur */
+@media (min-width:701px){.sx-feuille-fond{align-items:center}.sx-feuille{border-radius:18px;max-width:520px;box-shadow:0 24px 60px rgba(0,0,0,.35)}}
