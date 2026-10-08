@@ -1,0 +1,2907 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestion des logements — Bâtiments A / B</title>
+<style>
+  :root{
+    --paper:#f4f1e8;
+    --ink:#1c2b3a;
+    --navy:#16273b;
+    --navy-light:#22384f;
+    --blueprint-line:#2c4560;
+    --grid-line:rgba(255,255,255,0.06);
+    --dispo:#8a97a6;
+    --occupe:#2f9e57;
+    --mna:#e0ac2b;
+    --transfert:#3b7dd8;
+    --hs:#c4402f;
+    --podeliha:#8452c9;
+    --paper-line:#d8d2c0;
+    --mono: 'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+    --sans: 'Archivo','Helvetica Neue',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      linear-gradient(var(--paper-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--paper-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    font-family:var(--sans);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  @font-face{
+    font-family:'Archivo';
+    src:local('Arial');
+  }
+
+  header{
+    padding:14px 32px 10px;
+    border-bottom:3px solid var(--navy);
+    background:var(--paper);
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--transfert);
+    margin-bottom:6px;
+  }
+  h1{
+    margin:0;
+    font-size:22px;
+    font-weight:800;
+    letter-spacing:-0.01em;
+    color:var(--navy);
+  }
+  .subtitle{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:#5c6b7a;
+    margin-top:3px;
+  }
+
+  .toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    padding:16px 32px;
+    background:var(--navy);
+    border-bottom:3px solid var(--ink);
+  }
+  .bldg-tabs{display:flex; gap:6px;}
+  .bldg-tab{
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:.05em;
+    padding:8px 16px;
+    background:var(--navy-light);
+    color:#c7d3e0;
+    border:1px solid var(--blueprint-line);
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .bldg-tab.active{
+    background:var(--paper);
+    color:var(--navy);
+    border-color:var(--paper);
+    font-weight:700;
+  }
+  .search{
+    font-family:var(--mono);
+    font-size:13px;
+    padding:8px 12px;
+    background:var(--navy-light);
+    border:1px solid var(--blueprint-line);
+    color:#eaf0f6;
+    border-radius:2px;
+    width:160px;
+  }
+  .search::placeholder{color:#7f93a8;}
+  .spacer{flex:1;}
+  .stats{
+    display:flex;
+    gap:14px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:#c7d3e0;
+  }
+  .stat{display:flex; align-items:center; gap:6px;}
+  .dot{width:10px;height:10px;border-radius:50%; display:inline-block; flex-shrink:0;}
+  .dot.dispo{background:var(--dispo);}
+  .dot.occupe{background:var(--occupe);}
+  .dot.mna{background:var(--mna);}
+  .dot.transfert{background:var(--transfert);}
+  .dot.hs{background:var(--hs);}
+  .dot.podeliha{background:var(--podeliha);}
+
+  #stickyBar{
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    z-index:80;
+    background:var(--paper);
+  }
+
+  .legend{
+    display:flex; gap:18px; flex-wrap:wrap;
+    padding:12px 32px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:#5c6b7a;
+    border-bottom:1px solid var(--paper-line);
+    background:var(--paper);
+  }
+  .legend .stat{color:#5c6b7a;}
+  .legend-add-btn{
+    font-family:var(--mono);
+    font-size:11px;
+    background:none;
+    border:1px dashed #8a97a6;
+    color:var(--navy);
+    padding:4px 10px;
+    cursor:pointer;
+    border-radius:2px;
+    margin-left:auto;
+  }
+  .legend-add-btn:hover{background:var(--navy); color:#fff; border-style:solid;}
+  .cat-row{
+    display:flex; align-items:center; gap:8px;
+    padding:7px 10px;
+    border-bottom:1px solid var(--paper-line);
+    font-family:var(--mono);
+    font-size:12px;
+  }
+  .cat-row:last-child{border-bottom:none;}
+  .cat-row .swatch{width:12px;height:12px;border-radius:50%; flex-shrink:0; border:1.5px solid rgba(0,0,0,.25);}
+  .cat-row .name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .cat-row button{
+    font-family:var(--mono);
+    font-size:10.5px;
+    background:none;
+    border:1px solid #c7cdd4;
+    padding:3px 7px;
+    cursor:pointer;
+    color:#5c6b7a;
+  }
+  .cat-row button:hover{border-color:var(--navy); color:var(--navy);}
+  .cat-row button.del:hover{border-color:var(--hs); color:var(--hs);}
+  .cat-empty{padding:12px; font-family:var(--mono); font-size:11.5px; color:#a3adb8;}
+  .week-card{
+    border:1.5px solid var(--paper-line);
+    background:#fffdf8;
+    border-radius:3px;
+    overflow:hidden;
+    box-shadow:0 2px 6px rgba(22,39,59,.08);
+    border-left:4px solid var(--transfert);
+  }
+  .week-card .week-label{
+    font-family:var(--mono);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.03em;
+    color:var(--paper);
+    background:var(--navy);
+    padding:8px 12px;
+  }
+  .week-days{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+    gap:10px;
+    padding:12px;
+  }
+  .day-card{
+    border:1.5px solid var(--paper-line);
+    border-radius:3px;
+    overflow:hidden;
+    background:#fffdf8;
+  }
+  .day-card-head{
+    font-family:var(--mono);
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    color:var(--navy);
+    text-align:center;
+    background:#eef1e7;
+    padding:7px 6px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .day-card-head.out-of-range{
+    color:#b7bfc7;
+    background:#f4f3ee;
+  }
+  .slot-block{
+    padding:8px;
+    border-top:1px dashed var(--paper-line);
+  }
+  .slot-block:first-of-type{border-top:none;}
+  .slot-tag{
+    font-family:var(--mono);
+    font-size:9.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--transfert);
+    margin-bottom:5px;
+  }
+  .cell-edit{
+    width:100%;
+    min-height:44px;
+    border:1px solid #d8d2c0;
+    border-radius:2px;
+    font-family:var(--mono);
+    font-size:11.5px;
+    line-height:1.5;
+    padding:5px 6px;
+    box-sizing:border-box;
+    background:#fff;
+    transition:border-color .12s ease, box-shadow .12s ease, background-color .12s ease;
+    outline:none;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .cell-edit:focus{
+    border-color:var(--transfert);
+    box-shadow:0 0 0 2px rgba(59,125,216,.15);
+  }
+  .cell-edit.is-repos{
+    background:#e4e6e9;
+    color:#6b7480;
+  }
+  .cell-edit[contenteditable="false"]{
+    background:#f4f3ee;
+    cursor:default;
+    pointer-events:none;
+  }
+  .format-toolbar{
+    display:flex; gap:6px; align-items:center;
+    margin-bottom:12px;
+    font-family:var(--mono); font-size:11px;
+    position:sticky;
+    z-index:70;
+    background:var(--paper);
+    padding:8px 4px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .format-toolbar button{
+    border:1.5px solid var(--ink);
+    background:#fff;
+    padding:5px 12px;
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .format-toolbar button:hover{background:#f0ede3;}
+  .format-toolbar .fmt-bold{font-weight:700;}
+  .format-toolbar .fmt-red{color:#c4402f; font-weight:700;}
+  .format-toolbar .fmt-clear{color:#5c6b7a;}
+  .format-toolbar .hint{color:#8a97a6; margin-left:4px;}
+  .filter-row{
+    display:flex; align-items:center; gap:8px;
+    padding:5px 4px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .filter-row input{cursor:pointer;}
+  .filter-row .swatch{width:11px;height:11px;border-radius:50%; flex-shrink:0; border:1.5px solid rgba(0,0,0,.25);}
+  .filter-actions{
+    display:flex; gap:6px;
+    padding-top:6px; margin-top:4px;
+    border-top:1px solid var(--paper-line);
+  }
+  .filter-actions button{
+    font-family:var(--mono);
+    font-size:10.5px;
+    background:none;
+    border:1px solid #c7cdd4;
+    padding:3px 8px;
+    cursor:pointer;
+    color:#5c6b7a;
+  }
+  .filter-actions button:hover{border-color:var(--navy); color:var(--navy);}
+
+  main{padding:22px 32px 60px;}
+
+  .floor{margin-bottom:34px;}
+  .floor-title{
+    display:flex; align-items:baseline; gap:10px;
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--navy);
+    border-bottom:1.5px solid var(--navy);
+    padding-bottom:6px;
+    margin-bottom:12px;
+  }
+  .floor-title .count{color:#8a97a6; font-weight:400; letter-spacing:0; text-transform:none;}
+  .add-room-btn{
+    margin-left:auto;
+    font-family:var(--mono);
+    font-size:11px;
+    background:none;
+    border:1px solid var(--navy);
+    color:var(--navy);
+    padding:4px 10px;
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .add-room-btn:hover{background:var(--navy); color:var(--paper);}
+
+  .room-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(78px,1fr));
+    gap:8px;
+  }
+  .room{
+    position:relative;
+    border:2px solid var(--ink);
+    background:#fffdf8;
+    padding:8px 6px 10px;
+    cursor:pointer;
+    text-align:center;
+    transition:transform .08s ease;
+    user-select:none;
+  }
+  .room:hover{transform:translateY(-2px);}
+  .room.selected-transfer{outline:3px solid var(--transfert); outline-offset:2px;}
+  .room{cursor:grab;}
+  .room.dragging{opacity:.35;}
+  .room-grid.drag-over{outline:2px dashed var(--transfert); outline-offset:4px; background:rgba(59,125,216,.06);}
+  .room .num{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:14px;
+    color:var(--navy);
+  }
+  .room .badge{
+    display:inline-block;
+    width:14px;height:14px;
+    border-radius:50%;
+    margin-top:6px;
+    border:1.5px solid rgba(0,0,0,.25);
+  }
+  .room .badge.dispo{background:var(--dispo);}
+  .room .badge.occupe{background:var(--occupe);}
+  .room .badge.mna{background:var(--mna);}
+  .room .badge.transfert{background:var(--transfert);}
+  .room .badge.hs{background:var(--hs);}
+  .room .badge.podeliha{background:var(--podeliha);}
+  .room .occupant{
+    font-family:var(--mono);
+    font-size:9.5px;
+    color:#5c6b7a;
+    margin-top:3px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .room .intervention-date{
+    font-family:var(--mono);
+    font-size:9px;
+    color:var(--transfert);
+    font-weight:700;
+    margin-top:2px;
+  }
+  .room.hidden{display:none;}
+
+  /* Panel */
+  .panel-overlay{
+    position:fixed; inset:0;
+    background:rgba(22,39,59,0.55);
+    display:none;
+    align-items:center; justify-content:center;
+    z-index:50;
+    padding:16px;
+    box-sizing:border-box;
+  }
+  .panel-overlay.open{display:flex;}
+  .panel{
+    background:var(--paper);
+    border:3px solid var(--navy);
+    width:320px;
+    max-width:100%;
+    max-height:calc(100vh - 32px);
+    overflow-y:auto;
+    padding:20px;
+    box-sizing:border-box;
+  }
+  .panel h3{
+    margin:0 0 4px;
+    font-family:var(--mono);
+    font-size:18px;
+    color:var(--navy);
+  }
+  .panel .sub{
+    font-family:var(--mono);
+    font-size:11px;
+    color:#8a97a6;
+    margin-bottom:16px;
+  }
+  .panel label{
+    display:block;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:#5c6b7a;
+    margin-bottom:4px;
+    margin-top:14px;
+  }
+  .panel input[type=text], .panel input[type=date]{
+    width:100%;
+    padding:8px;
+    font-family:var(--mono);
+    font-size:13px;
+    border:1.5px solid var(--ink);
+    background:#fff;
+    box-sizing:border-box;
+  }
+  .status-btns{display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;}
+  .status-btn{
+    font-family:var(--mono);
+    font-size:11.5px;
+    padding:8px 6px;
+    border:1.5px solid var(--ink);
+    background:#fff;
+    cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+  }
+  .status-btn.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .panel-actions{
+    margin-top:18px;
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .btn{
+    font-family:var(--mono);
+    font-size:12px;
+    padding:9px 14px;
+    border:1.5px solid var(--ink);
+    background:#fff;
+    cursor:pointer;
+    flex:1;
+  }
+  .btn.primary{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .btn.danger{border-color:var(--hs); color:var(--hs);}
+  .btn.ghost{border-color:transparent; color:#8a97a6;}
+  .btn:hover{opacity:.85;}
+
+  .transfer-banner{
+    display:none;
+    align-items:center; gap:10px;
+    background:var(--transfert);
+    color:#fff;
+    font-family:var(--mono);
+    font-size:12.5px;
+    padding:10px 32px;
+  }
+  .transfer-banner.show{display:flex;}
+  .transfer-banner button{
+    font-family:var(--mono);
+    font-size:11px;
+    background:rgba(255,255,255,.15);
+    color:#fff;
+    border:1px solid rgba(255,255,255,.5);
+    padding:4px 10px;
+    cursor:pointer;
+    margin-left:auto;
+  }
+
+  /* History */
+  .history-wrap{
+    margin-top:10px;
+    border-top:3px solid var(--navy);
+    padding:22px 32px 40px;
+  }
+  .history-wrap h2{
+    font-family:var(--mono);
+    font-size:14px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--navy);
+    margin:0 0 12px;
+  }
+  .history-list{
+    font-family:var(--mono);
+    font-size:12px;
+    color:#3c4b5a;
+    max-height:220px;
+    overflow-y:auto;
+    border:1px solid var(--paper-line);
+    background:#fffdf8;
+  }
+  .history-item{
+    padding:8px 12px;
+    border-bottom:1px solid var(--paper-line);
+    display:flex; gap:10px;
+  }
+  .history-item .t{color:#a3adb8; flex-shrink:0;}
+  .history-empty{padding:16px; color:#a3adb8;}
+
+  @media (max-width: 760px){
+    #stickyBar{ position:static; }
+    #stickyBarSpacer{ display:none !important; }
+    .format-toolbar{ position:static; }
+
+    header{ padding:10px 14px 8px; }
+    h1{ font-size:17px; }
+    .eyebrow{ font-size:9px; }
+    .subtitle{ font-size:10px; }
+
+    .toolbar{ padding:10px 14px; gap:6px; }
+    .bldg-tab{ padding:6px 10px; font-size:12px; }
+    .search{ width:110px; font-size:12px; padding:6px 8px; }
+    .stats{ gap:8px; font-size:10.5px; }
+    .legend-add-btn{ font-size:9.5px; padding:4px 8px; }
+    #saveStatus{ display:none; }
+
+    .legend{ padding:8px 14px; gap:10px; font-size:10.5px; }
+
+    main{ padding:14px 14px 40px; }
+    .room-grid{ grid-template-columns:repeat(auto-fill, minmax(62px,1fr)); }
+
+    .week-days{ grid-template-columns:1fr; padding:8px; gap:8px; }
+    .day-card-head{ font-size:10px; }
+    .slot-tag{ font-size:9px; }
+    .cell-edit{ font-size:12px; }
+    .days-row{ overflow-x:auto; }
+  }
+</style>
+</head>
+<body>
+
+<div id="accessGate" style="position:fixed; inset:0; background:#16273b; display:none; align-items:center; justify-content:center; z-index:200; font-family:'Archivo','Helvetica Neue',Arial,sans-serif;">
+  <div style="background:#f4f1e8; border:3px solid #16273b; padding:32px; width:320px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#3b7dd8; margin-bottom:6px;">Groupe Établières</div>
+    <h2 style="margin:0 0 18px; font-size:20px; color:#16273b;">Accès à l'outil</h2>
+    <input type="password" id="accessCodeInput" placeholder="Code d'accès" style="width:100%; padding:10px; font-family:'IBM Plex Mono',monospace; font-size:14px; border:1.5px solid #16273b; margin-bottom:10px; box-sizing:border-box;">
+    <div id="accessError" style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#c4402f; min-height:16px; margin-bottom:8px;"></div>
+    <button id="accessSubmit" style="width:100%; padding:10px; font-family:'IBM Plex Mono',monospace; font-size:13px; background:#16273b; color:#fff; border:none; cursor:pointer;">Entrer</button>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+
+
+<div id="stickyBar">
+<header>
+  <div class="eyebrow">Groupe Établières — Occupation Bâtiment A et B</div>
+  <h1>Gestion des logements</h1>
+  <div class="subtitle">Vidage &amp; transfert — Bâtiments A / B</div>
+</header>
+
+<div class="toolbar">
+  <div class="bldg-tabs" id="bldgTabs"></div>
+  <input class="search" id="searchBox" type="text" placeholder="N° chambre…">
+  <div style="position:relative;">
+    <button class="search" id="filterBtn" style="cursor:pointer; display:flex; align-items:center; gap:6px;">Filtrer <span id="filterCount"></span> ▾</button>
+    <div id="filterPanel" style="display:none; position:absolute; top:calc(100% + 6px); left:0; background:var(--paper); border:1.5px solid var(--ink); z-index:60; min-width:220px; padding:8px; box-shadow:3px 3px 0 rgba(0,0,0,.15);"></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="stats" id="statsBar"></div>
+  <button class="legend-add-btn" id="resetToPlanBtn" style="margin-left:8px; border-color:#7f93a8; color:#c7d3e0;">↺ Recharger depuis les plans</button>
+  <button class="legend-add-btn" id="exportBtn" style="border-color:#7f93a8; color:#c7d3e0;">⬇ Exporter (.json)</button>
+  <button class="legend-add-btn" id="importBtn" style="border-color:#7f93a8; color:#c7d3e0;">⬆ Importer (.json)</button>
+  <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+  <span id="saveStatus" style="font-family:var(--mono); font-size:11px; color:#7f93a8; margin-left:10px;"></span>
+  <button class="legend-add-btn" id="logoutBtn" style="border-color:#c4402f; color:#e8b0a6;">⎋ Se déconnecter</button>
+  <button class="legend-add-btn" id="printOccupancyBtn" style="border-color:#7f93a8; color:#c7d3e0;">🖨️ Imprimer</button>
+  <button class="legend-add-btn" id="seasonalToggleBtn" style="display:none; border-color:#3b7dd8; color:#9db9e0;">📋 Planning saisonnier</button>
+  <span id="connectedServiceLabel" style="font-family:var(--mono); font-size:11px; color:#c7d3e0; margin-left:10px;"></span>
+</div>
+
+<div class="legend" id="legendBar"></div>
+</div>
+<div id="stickyBarSpacer"></div>
+
+<div id="seasonalPlanningSection" style="display:none; padding:22px 32px; border-bottom:3px solid var(--navy); background:#fbfaf5;">
+  <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:14px;">
+    <h2 style="font-family:var(--mono); font-size:15px; letter-spacing:.1em; text-transform:uppercase; color:var(--navy); margin:0;">Planning saisonnier — Renfort été</h2>
+    <span style="font-family:var(--mono); font-size:11.5px; color:#8a97a6;">03/08/2026 → 30/09/2026 · interventions par semaine, matin / après-midi, lundi à vendredi</span>
+    <span id="seasonalSaveStatus" style="font-family:var(--mono); font-size:11px; color:#7f93a8; margin-left:auto;"></span>
+  </div>
+
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; font-family:var(--mono); font-size:11.5px;">
+    <div style="background:var(--navy); color:#fff; padding:6px 12px; border-radius:3px; font-weight:700; letter-spacing:.04em;">Horaires du saisonnier</div>
+    <div style="background:#fff; border:1.5px solid var(--paper-line); padding:6px 12px; border-radius:3px; color:var(--navy);"><b>Lundi</b> — 8h-12h · 13h-17h <span style="color:#8a97a6;">(8h)</span></div>
+    <div style="background:#fff; border:1.5px solid var(--paper-line); padding:6px 12px; border-radius:3px; color:var(--navy);"><b>Mardi</b> — 8h-12h · 13h-17h <span style="color:#8a97a6;">(8h)</span></div>
+    <div style="background:#fff; border:1.5px solid var(--paper-line); padding:6px 12px; border-radius:3px; color:var(--navy);"><b>Mercredi</b> — 8h-12h <span style="color:#8a97a6;">(4h)</span></div>
+    <div style="background:#fff; border:1.5px solid var(--paper-line); padding:6px 12px; border-radius:3px; color:var(--navy);"><b>Jeudi</b> — 8h-12h · 13h-17h <span style="color:#8a97a6;">(8h)</span></div>
+    <div style="background:#fff; border:1.5px solid var(--paper-line); padding:6px 12px; border-radius:3px; color:var(--navy);"><b>Vendredi</b> — 8h-12h · 13h-16h <span style="color:#8a97a6;">(7h)</span></div>
+    <div style="background:var(--transfert); color:#fff; padding:6px 12px; border-radius:3px; font-weight:700;">Total : 35h / semaine</div>
+  </div>
+  <div class="format-toolbar" id="seasonalFormatToolbar">
+    <button class="fmt-bold" id="fmtBoldBtn" type="button">B Gras</button>
+    <button class="fmt-red" id="fmtRedBtn" type="button">● Rouge</button>
+    <button class="fmt-clear" id="fmtClearBtn" type="button">Effacer le style</button>
+    <span class="hint">Sélectionnez du texte dans une case, puis cliquez ici · une case contenant "repos" passe automatiquement en gris</span>
+  </div>
+  <div id="seasonalWeeksContainer" style="display:flex; flex-direction:column; gap:14px;"></div>
+</div>
+
+<div class="panel-overlay" id="categoryOverlay">
+  <div class="panel" style="width:360px;">
+    <h3 id="categoryPanelTitle">Catégories</h3>
+    <div class="sub">Ajoute, modifie ou supprime un statut personnalisé</div>
+
+    <label>Catégories existantes</label>
+    <div id="categoryList" style="border:1.5px solid var(--ink); background:#fff; max-height:180px; overflow-y:auto;"></div>
+
+    <label id="categoryFormLabel">Nouvelle catégorie</label>
+    <input type="text" id="categoryNameInput" placeholder="Nom…">
+
+    <label>Couleur</label>
+    <input type="color" id="categoryColorInput" value="#5c6b7a" style="width:100%; height:38px; padding:2px; border:1.5px solid var(--ink); background:#fff; cursor:pointer;">
+
+    <div class="panel-actions">
+      <button class="btn ghost" id="closeCategoryPanel">Fermer</button>
+      <button class="btn ghost" id="cancelCategoryEdit" style="display:none;">Annuler la modification</button>
+      <button class="btn primary" id="saveCategory">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<div class="transfer-banner" id="transferBanner">
+  <span id="transferMsg"></span>
+  <button id="cancelTransfer">Annuler</button>
+</div>
+
+<main id="floors"></main>
+
+<div class="history-wrap">
+  <h2>Journal des mouvements</h2>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<div class="panel-overlay" id="panelOverlay">
+  <div class="panel">
+    <h3 id="panelTitle">Chambre —</h3>
+    <div class="sub" id="panelSub"></div>
+
+    <label>Statut</label>
+    <div class="status-btns" id="statusBtns"></div>
+
+    <label>Occupant / note</label>
+    <input type="text" id="occupantInput" placeholder="Nom, référence…">
+
+    <label>Date d'intervention</label>
+    <input type="date" id="interventionDateInput">
+
+    <div class="panel-actions">
+      <button class="btn ghost" id="closePanel">Fermer</button>
+      <button class="btn" id="startTransferBtn">Transférer vers…</button>
+      <button class="btn primary" id="saveRoom">Valider</button>
+    </div>
+    <div class="panel-actions" style="margin-top:6px;">
+      <button class="btn danger" id="deleteRoomBtn" style="flex:none; width:100%;">🗑 Supprimer cette chambre</button>
+    </div>
+    <div id="saveConfirm" style="font-family:var(--mono); font-size:11px; color:var(--occupe); margin-top:8px; height:14px;"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ============================================================
+// CONFIGURATION FIREBASE — à compléter (voir instructions livrées à côté)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyC9XP9ZYueo_XWj92uaGFlB0ulUc8dN9hU",
+  authDomain: "agropolis-ca6bf.firebaseapp.com",
+  projectId: "agropolis-ca6bf",
+  storageBucket: "agropolis-ca6bf.firebasestorage.app",
+  messagingSenderId: "414066383790",
+  appId: "1:414066383790:web:35b554177f18373547463f"
+};
+
+// ============================================================
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const stateDocRef = doc(db, 'logements_internat', 'etat');
+const seasonalDocRef = doc(db, 'logements_internat', 'planning_saisonnier');
+
+// --- Accès : ouvert depuis l'appli SMM (tuile « Logements Bât. A / B ») ---
+// Plus de code d'accès : l'utilisateur connecté à l'appli est repris tel
+// quel (son nom apparaît dans le journal des mouvements).
+const accessGate = document.getElementById('accessGate');
+const appRoot = document.getElementById('appRoot');
+const smmUser = (() => { try { return (window.parent !== window && window.parent.smmUtilisateur) || (window.opener && window.opener.smmUtilisateur) || null; } catch (e) { return null; } })();
+const currentUserName = smmUser ? (smmUser.nom || smmUser.email || '') : '';
+let currentService = smmUser ? (smmUser.role === 'direction' ? 'Direction' : 'Maintenance') : '';
+let applyServiceDefaultFilter = null; // rempli par l'IIFE principale plus bas
+let syncStickyBarSpacerRef = null;
+
+function grantAccess(){
+  accessGate.style.display = 'none';
+  appRoot.style.display = 'block';
+  document.getElementById('connectedServiceLabel').textContent = currentUserName ? `👤 ${currentUserName}` : '';
+  document.getElementById('logoutBtn').style.display = 'none';
+  const btn = document.getElementById('seasonalToggleBtn');
+  btn.style.display = 'inline-block';
+  btn.textContent = currentService === 'Maintenance' ? '📋 Planning saisonnier' : '📋 Planning saisonnier (lecture seule)';
+  setTimeout(()=>{ if(syncStickyBarSpacerRef) syncStickyBarSpacerRef(); }, 0);
+}
+function logout(){ /* géré par l'appli SMM */ }
+
+if(smmUser){
+  grantAccess();
+} else {
+  accessGate.style.display = 'flex';
+  accessGate.innerHTML = `<div style="background:#f4f1e8;border:3px solid #16273b;padding:32px;width:320px;font-family:'IBM Plex Mono',monospace;color:#16273b">
+    <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#3b7dd8;margin-bottom:6px">Groupe Établières</div>
+    <h2 style="margin:0 0 14px;font-size:20px;font-family:'Archivo',sans-serif">Gestion des logements</h2>
+    <p style="font-size:13px;margin:0 0 16px">Ouvre cet outil depuis l'appli, tuile « 🏠 Logements Bât. A / B ».</p>
+    <a href="app.html" target="_top" style="display:block;text-align:center;padding:10px;background:#16273b;color:#fff;text-decoration:none">Ouvrir l'appli</a></div>`;
+}
+
+(function(){
+  const STATUSES = {
+  "dispo": {
+    "label": "Disponible",
+    "color": "#8a97a6"
+  },
+  "occupe": {
+    "label": "Occupé",
+    "color": "#2f9e57"
+  },
+  "mna": {
+    "label": "MNA",
+    "color": "#e0ac2b"
+  },
+  "transfert": {
+    "label": "RELOGEMEMENT BAT A",
+    "color": "#3b7dd8"
+  },
+  "podeliha": {
+    "label": "Podeliha",
+    "color": "#8452c9"
+  },
+  "vide-de-mobilier": {
+    "label": "VIDE DE MOBILIER",
+    "color": "#1dfa00"
+  },
+  "stockage-mobilier": {
+    "label": "STOCKAGE MOBILIER",
+    "color": "#ff0040"
+  },
+  "aucune-info": {
+    "label": "AUCUNE INFO",
+    "color": "#0fb392"
+  }
+};
+
+  // Données issues du dernier export transmis (03/08/2026) : état réel
+  // du tableau à pastilles, servant de point de départ / graine Firestore.
+  const data = {
+  "A": {
+    "label": "Bâtiment A",
+    "floors": [
+      {
+        "name": "RDCH",
+        "rooms": [
+          {
+            "number": "1",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "2",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "3",
+            "status": "stockage-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "4",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "5",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "6",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "7",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "8",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "9",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "10",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "11",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "12",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "13",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "14",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "15",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "16",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "17",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "18",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "19",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "20",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "21",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "22",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "23",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "24",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "25",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "26",
+            "status": "mna",
+            "occupant": ""
+          }
+        ]
+      },
+      {
+        "name": "1er étage",
+        "rooms": [
+          {
+            "number": "27",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "28",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "29",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "30",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "31",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "32",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "33",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "34",
+            "status": "vide-de-mobilier",
+            "occupant": "RADIATEUR A ENLEVER"
+          },
+          {
+            "number": "35",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "36",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "37",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "38",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "39",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "40",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "41",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "42",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "43",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "44",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "45",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "46",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "47",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "48",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "49",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "50",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "51",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "52",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "53",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "54",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "55",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "56",
+            "status": "occupe",
+            "occupant": ""
+          }
+        ]
+      },
+      {
+        "name": "2e étage",
+        "rooms": [
+          {
+            "number": "57",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "58",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "59",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "60",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "61",
+            "status": "dispo",
+            "occupant": ""
+          },
+          {
+            "number": "62",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "63",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "64",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "65",
+            "status": "dispo",
+            "occupant": ""
+          },
+          {
+            "number": "66",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "67",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "68",
+            "status": "dispo",
+            "occupant": ""
+          },
+          {
+            "number": "69",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "70",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "71",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "72",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "73",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "74",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "75",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "76",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "77",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "78",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "79",
+            "status": "dispo",
+            "occupant": ""
+          },
+          {
+            "number": "80",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "81",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "82",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "83",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "84",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "85",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "86",
+            "status": "podeliha",
+            "occupant": ""
+          }
+        ]
+      },
+      {
+        "name": "3e étage",
+        "rooms": [
+          {
+            "number": "87",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "88",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "89",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "90",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "91",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "92",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "93",
+            "status": "vide-de-mobilier",
+            "occupant": "radiateur"
+          },
+          {
+            "number": "94",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "95",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "96",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "97",
+            "status": "vide-de-mobilier",
+            "occupant": "RADIATEUR"
+          },
+          {
+            "number": "98",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "99",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "100",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "101",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "102",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "103",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "104",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "105",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "106",
+            "status": "podeliha",
+            "occupant": ""
+          }
+        ]
+      }
+    ]
+  },
+  "B": {
+    "label": "Bâtiment B",
+    "floors": [
+      {
+        "name": "RDCH",
+        "rooms": [
+          {
+            "number": "107",
+            "status": "dispo",
+            "occupant": "en cours"
+          },
+          {
+            "number": "108",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "109",
+            "status": "dispo",
+            "occupant": "pas de cle"
+          },
+          {
+            "number": "110",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "111",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "112",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "113",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "114",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "115",
+            "status": "dispo",
+            "occupant": "pas de cle"
+          },
+          {
+            "number": "116",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "117",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "118",
+            "status": "dispo",
+            "occupant": "a attente de devis"
+          },
+          {
+            "number": "119",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "120",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "121",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "122",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "123",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "124",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "125",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "126",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "127",
+            "status": "podeliha",
+            "occupant": ""
+          }
+        ]
+      },
+      {
+        "name": "1er étage",
+        "rooms": [
+          {
+            "number": "128",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "129",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "130",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "131",
+            "status": "stockage-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "132",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "133",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "134",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "135",
+            "status": "dispo",
+            "occupant": "manque cle"
+          },
+          {
+            "number": "136",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "137",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "138",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "139",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "140",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "141",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "142",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "143",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "144",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "145",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "146",
+            "status": "dispo",
+            "occupant": "manque cle"
+          },
+          {
+            "number": "147",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "148",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "149",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "150",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "151",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "152",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "153",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "154",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "155",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "156",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "157",
+            "status": "transfert",
+            "occupant": ""
+          },
+          {
+            "number": "158",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "159",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "160",
+            "status": "transfert",
+            "occupant": ""
+          },
+          {
+            "number": "161",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "162",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "31",
+            "status": "dispo",
+            "occupant": ""
+          }
+        ]
+      },
+      {
+        "name": "2e étage",
+        "rooms": [
+          {
+            "number": "163",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "164",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "165",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "166",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "167",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "168",
+            "status": "dispo",
+            "occupant": "en cours"
+          },
+          {
+            "number": "169",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "170",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "171",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "172",
+            "status": "vide-de-mobilier",
+            "occupant": ""
+          },
+          {
+            "number": "173",
+            "status": "transfert",
+            "occupant": ""
+          },
+          {
+            "number": "174",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "175",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "176",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "177",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "178",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "179",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "180",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "181",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "182",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "183",
+            "status": "occupe",
+            "occupant": ""
+          },
+          {
+            "number": "184",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "185",
+            "status": "transfert",
+            "occupant": ""
+          },
+          {
+            "number": "186",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "187",
+            "status": "mna",
+            "occupant": ""
+          },
+          {
+            "number": "188",
+            "status": "vide-de-mobilier",
+            "occupant": "radiateur"
+          },
+          {
+            "number": "189",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "190",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "191",
+            "status": "transfert",
+            "occupant": ""
+          },
+          {
+            "number": "192",
+            "status": "podeliha",
+            "occupant": ""
+          }
+        ]
+      },
+      {
+        "name": "3e étage",
+        "rooms": [
+          {
+            "number": "193",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "194",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "195",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "196",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "197",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "198",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "199",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "200",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "201",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "202",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "203",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "204",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "205",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "206",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "207",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "208",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "209",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "210",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "211",
+            "status": "podeliha",
+            "occupant": ""
+          },
+          {
+            "number": "212",
+            "status": "podeliha",
+            "occupant": ""
+          }
+        ]
+      }
+    ]
+  }
+};
+
+  const INITIAL_HISTORY = [{"t": "03/08 15:02", "text": "Chambre 212 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 211 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 210 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 209 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 208 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 207 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 206 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 205 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:02", "text": "Chambre 204 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 203 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 202 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 201 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 200 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 199 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 198 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 197 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 196 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 195 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 193 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 194 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 193 (Bâtiment B) → STOCKAGE MOBILIER"}, {"t": "03/08 15:01", "text": "Chambre 192 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 190 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:01", "text": "Chambre 189 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:00", "text": "Chambre 187 (Bâtiment B) → MNA"}, {"t": "03/08 15:00", "text": "Chambre 186 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:00", "text": "Chambre 184 (Bâtiment B) → Podeliha"}, {"t": "03/08 15:00", "text": "Chambre 183 (Bâtiment B) → Occupé"}, {"t": "03/08 15:00", "text": "Chambre 182 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:59", "text": "Chambre 181 (Bâtiment B) → Occupé"}, {"t": "03/08 14:59", "text": "Chambre 180 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:59", "text": "Chambre 179 (Bâtiment B) → Occupé"}, {"t": "03/08 14:59", "text": "Chambre 178 (Bâtiment B) → MNA"}, {"t": "03/08 14:59", "text": "Chambre 177 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:59", "text": "Chambre 176 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:59", "text": "Chambre 175 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:59", "text": "Chambre 174 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:59", "text": "Chambre 171 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:58", "text": "Chambre 170 (Bâtiment B) → Occupé"}, {"t": "03/08 14:58", "text": "Chambre 169 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:58", "text": "Chambre 167 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:58", "text": "Chambre 166 (Bâtiment B) → Occupé"}, {"t": "03/08 14:58", "text": "Chambre 165 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:58", "text": "Chambre 164 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:58", "text": "Chambre 163 (Bâtiment B) → Occupé"}, {"t": "03/08 14:58", "text": "Chambre 191 (Bâtiment B) → RELOGEMEMENT BAT A"}, {"t": "03/08 14:57", "text": "Catégorie \"RELOGEMEMENT BAT A\" modifiée"}, {"t": "03/08 14:57", "text": "Chambre 185 (Bâtiment B) → Transfert en cours"}, {"t": "03/08 14:43", "text": "Chambre 188 (Bâtiment B) → VIDE DE MOBILIER — radiateur"}, {"t": "03/08 14:43", "text": "Chambre 191 (Bâtiment B) → VIDE DE MOBILIER"}, {"t": "03/08 14:42", "text": "Chambre 173 (Bâtiment B) → Transfert en cours"}, {"t": "03/08 14:42", "text": "Chambre 173 (Bâtiment B) → Transfert en cours"}, {"t": "03/08 14:42", "text": "Chambre 173 (Bâtiment B) → Transfert en cours"}, {"t": "03/08 14:41", "text": "Chambre 172 (Bâtiment B) → VIDE DE MOBILIER"}, {"t": "03/08 14:41", "text": "Chambre 168 (Bâtiment B) → Disponible — en cours"}, {"t": "03/08 14:39", "text": "Chambre 160 (Bâtiment B) → Transfert en cours"}, {"t": "03/08 14:39", "text": "Chambre 146 (Bâtiment B) → Disponible — manque cle"}, {"t": "03/08 14:38", "text": "Chambre 137 (Bâtiment B) → VIDE DE MOBILIER"}, {"t": "03/08 14:37", "text": "Chambre 139 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:36", "text": "Chambre 134 (Bâtiment B) → Podeliha"}, {"t": "03/08 14:36", "text": "Chambre 115 (Bâtiment B) → Disponible — pas de cle"}, {"t": "03/08 14:36", "text": "Chambre 109 (Bâtiment B) → Disponible — pas de cle"}, {"t": "03/08 14:36", "text": "Chambre 109 (Bâtiment B) → Disponible — pas de cle"}, {"t": "03/08 14:36", "text": "Chambre 109 (Bâtiment B) → Disponible — pas de cle"}, {"t": "03/08 14:36", "text": "Chambre 118 (Bâtiment B) → Disponible — a attente de devis"}, {"t": "03/08 14:33", "text": "Chambre 107 (Bâtiment B) → Disponible — en cours"}, {"t": "03/08 14:30", "text": "Chambre 135 (Bâtiment B) → Disponible — manque cle"}, {"t": "03/08 14:30", "text": "Chambre 135 (Bâtiment B) → Disponible"}, {"t": "03/08 14:26", "text": "Chambre 31 ajoutée — 1er étage, Bâtiment B"}, {"t": "03/08 14:21", "text": "Chambre 91 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 14:21", "text": "Chambre 93 (Bâtiment A) → VIDE DE MOBILIER — radiateur"}, {"t": "03/08 14:20", "text": "Chambre 87 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 14:20", "text": "Chambre 87 (Bâtiment A) → Disponible"}, {"t": "03/08 14:17", "text": "Chambre 105 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 14:16", "text": "Chambre 97 (Bâtiment A) → VIDE DE MOBILIER — RADIATEUR"}, {"t": "03/08 14:10", "text": "Chambre 54 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 14:09", "text": "Chambre 43 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 14:08", "text": "Chambre 34 (Bâtiment A) → VIDE DE MOBILIER — RADIATEUR A ENLEVER"}, {"t": "03/08 14:08", "text": "Chambre 34 (Bâtiment A) → Disponible — RADIATEUR A ENLEVER"}, {"t": "03/08 14:06", "text": "Chambre 39 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 14:03", "text": "Chambre 11 (Bâtiment A) → Podeliha"}, {"t": "03/08 14:02", "text": "Chambre 131 (Bâtiment B) → STOCKAGE MOBILIER"}, {"t": "03/08 14:01", "text": "Chambre 7 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 13:38", "text": "Chambre 21 (Bâtiment A) → MNA"}, {"t": "03/08 13:38", "text": "Chambre 21 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 13:12", "text": "Chambre 162 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:12", "text": "Chambre 161 (Bâtiment B) → Occupé"}, {"t": "03/08 13:12", "text": "Chambre 159 (Bâtiment B) → MNA"}, {"t": "03/08 13:12", "text": "Chambre 158 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:12", "text": "Chambre 157 (Bâtiment B) → Transfert en cours"}, {"t": "03/08 13:12", "text": "Chambre 156 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:12", "text": "Chambre 155 (Bâtiment B) → Occupé"}, {"t": "03/08 13:12", "text": "Chambre 154 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:11", "text": "Chambre 153 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:11", "text": "Chambre 152 (Bâtiment B) → Occupé"}, {"t": "03/08 13:11", "text": "Chambre 151 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:11", "text": "Chambre 150 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:10", "text": "Chambre 149 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:10", "text": "Chambre 148 (Bâtiment B) → Occupé"}, {"t": "03/08 13:10", "text": "Chambre 147 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:10", "text": "Chambre 145 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:10", "text": "Chambre 144 (Bâtiment B) → Occupé"}, {"t": "03/08 13:10", "text": "Chambre 143 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:10", "text": "Chambre 142 (Bâtiment B) → Occupé"}, {"t": "03/08 13:09", "text": "Chambre 141 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:09", "text": "Chambre 140 (Bâtiment B) → Occupé"}, {"t": "03/08 13:09", "text": "Chambre 139 (Bâtiment B) → AUCUNE INFO"}, {"t": "03/08 13:09", "text": "Chambre 138 (Bâtiment B) → Occupé"}, {"t": "03/08 13:09", "text": "Chambre 136 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:08", "text": "Catégorie \"AUCUNE INFO\" modifiée"}, {"t": "03/08 13:08", "text": "Chambre 134 (Bâtiment B) → AUCUNE INFO"}, {"t": "03/08 13:08", "text": "Catégorie \"AUCUNE INFO\" ajoutée"}, {"t": "03/08 13:07", "text": "Chambre 133 (Bâtiment B) → Occupé"}, {"t": "03/08 13:07", "text": "Chambre 132 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:07", "text": "Chambre 130 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:07", "text": "Chambre 129 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:07", "text": "Chambre 128 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:06", "text": "Transfert : 128 (Bâtiment B) → 135 (Bâtiment B)"}, {"t": "03/08 13:05", "text": "Chambre 126 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:05", "text": "Chambre 127 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:05", "text": "Chambre 125 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:05", "text": "Chambre 124 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:05", "text": "Chambre 123 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:05", "text": "Chambre 122 (Bâtiment B) → Occupé"}, {"t": "03/08 13:05", "text": "Chambre 121 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 120 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 119 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 117 (Bâtiment B) → Occupé"}, {"t": "03/08 13:04", "text": "Chambre 116 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 114 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 113 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 112 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:04", "text": "Chambre 111 (Bâtiment B) → MNA"}, {"t": "03/08 13:04", "text": "Chambre 110 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:03", "text": "Chambre 110 (Bâtiment B) → MNA"}, {"t": "03/08 13:03", "text": "Chambre 108 (Bâtiment B) → Podeliha"}, {"t": "03/08 13:01", "text": "Chambre 106 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:01", "text": "Chambre 104 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:01", "text": "Chambre 103 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:01", "text": "Chambre 102 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:01", "text": "Chambre 101 (Bâtiment A) → MNA"}, {"t": "03/08 13:01", "text": "Chambre 100 (Bâtiment A) → Occupé"}, {"t": "03/08 13:01", "text": "Chambre 99 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:01", "text": "Chambre 98 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:00", "text": "Chambre 96 (Bâtiment A) → Podeliha"}, {"t": "03/08 13:00", "text": "Chambre 95 (Bâtiment A) → Occupé"}, {"t": "03/08 13:00", "text": "Chambre 94 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:59", "text": "Chambre 92 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:59", "text": "Chambre 90 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:59", "text": "Chambre 89 (Bâtiment A) → Occupé"}, {"t": "03/08 12:59", "text": "Chambre 88 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:55", "text": "Chambre 7 (Bâtiment A) → STOCKAGE MOBILIER"}, {"t": "03/08 12:55", "text": "Catégorie \"Hors service\" supprimée"}, {"t": "03/08 12:54", "text": "Chambre 8 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:54", "text": "Chambre 7 (Bâtiment A) → Disponible"}, {"t": "03/08 12:53", "text": "Chambre 7 (Bâtiment A) → VIDE DE MOBILIER"}, {"t": "03/08 12:53", "text": "Chambre 3 (Bâtiment A) → STOCKAGE MOBILIER"}, {"t": "03/08 12:53", "text": "Catégorie \"STOCKAGE MOBILIER\" ajoutée"}, {"t": "03/08 12:52", "text": "Catégorie \"VIDE DE MOBILIER\" modifiée"}, {"t": "03/08 12:52", "text": "Catégorie \"VIDE DE MOBILIER\" ajoutée"}, {"t": "03/08 12:51", "text": "Chambre 86 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:51", "text": "Chambre 85 (Bâtiment A) → Occupé"}, {"t": "03/08 12:51", "text": "Chambre 84 (Bâtiment A) → Occupé"}, {"t": "03/08 12:51", "text": "Chambre 83 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:51", "text": "Chambre 82 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:51", "text": "Chambre 81 (Bâtiment A) → Occupé"}, {"t": "03/08 12:51", "text": "Chambre 80 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:51", "text": "Chambre 78 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:50", "text": "Chambre 77 (Bâtiment A) → Occupé"}, {"t": "03/08 12:50", "text": "Chambre 76 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:50", "text": "Chambre 75 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:50", "text": "Chambre 74 (Bâtiment A) → Occupé"}, {"t": "03/08 12:50", "text": "Chambre 73 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:50", "text": "Chambre 72 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:50", "text": "Chambre 71 (Bâtiment A) → Occupé"}, {"t": "03/08 12:49", "text": "Chambre 70 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:49", "text": "Chambre 69 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:49", "text": "Chambre 67 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:49", "text": "Chambre 66 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:49", "text": "Chambre 64 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:49", "text": "Chambre 63 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:49", "text": "Chambre 62 (Bâtiment A) → Occupé"}, {"t": "03/08 12:48", "text": "Chambre 60 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:48", "text": "Chambre 59 (Bâtiment A) → Occupé"}, {"t": "03/08 12:48", "text": "Chambre 58 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:48", "text": "Chambre 57 (Bâtiment A) → Occupé"}, {"t": "03/08 12:48", "text": "Chambre 56 (Bâtiment A) → Occupé"}, {"t": "03/08 12:48", "text": "Chambre 55 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:47", "text": "Chambre 53 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:47", "text": "Chambre 52 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:47", "text": "Chambre 51 (Bâtiment A) → Occupé"}, {"t": "03/08 12:47", "text": "Chambre 50 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:47", "text": "Chambre 49 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:47", "text": "Chambre 48 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:47", "text": "Chambre 47 (Bâtiment A) → Occupé"}, {"t": "03/08 12:47", "text": "Chambre 46 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:46", "text": "Chambre 45 (Bâtiment A) → Occupé"}, {"t": "03/08 12:46", "text": "Chambre 44 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:46", "text": "Chambre 42 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:46", "text": "Chambre 41 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:46", "text": "Chambre 40 (Bâtiment A) → Occupé"}, {"t": "03/08 12:46", "text": "Chambre 38 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:46", "text": "Chambre 37 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:46", "text": "Chambre 36 (Bâtiment A) → Occupé"}, {"t": "03/08 12:45", "text": "Chambre 35 (Bâtiment A) → Occupé"}, {"t": "03/08 12:45", "text": "Chambre 33 (Bâtiment A) → Occupé"}, {"t": "03/08 12:45", "text": "Chambre 32 (Bâtiment A) → Occupé"}, {"t": "03/08 12:45", "text": "Chambre 30 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:45", "text": "Chambre 29 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:45", "text": "Chambre 28 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:45", "text": "Chambre 27 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:44", "text": "Chambre 10 (Bâtiment A) → Occupé"}, {"t": "03/08 12:44", "text": "Chambre 9 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:44", "text": "Chambre 6 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:44", "text": "Chambre 5 (Bâtiment A) → Occupé"}, {"t": "03/08 12:44", "text": "Chambre 4 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:44", "text": "Chambre 2 (Bâtiment A) → Occupé"}, {"t": "03/08 12:43", "text": "Chambre 1 (Bâtiment A) → Podeliha"}, {"t": "03/08 12:43", "text": "Chambre 1 (Bâtiment A) → Podeliha"}];
+
+  const REFERENCE_DATA = JSON.parse(JSON.stringify(data));
+
+  let currentBldg = 'A';
+  let searchTerm = '';
+  let activeFilters = null; // null = tous affichés ; sinon Set des statuts à afficher
+  let panelTarget = null; // {bldg, floorIdx, roomIdx}
+  let draftStatus = null;
+  let transferSource = null; // {bldg, floorIdx, roomIdx}
+  let draggedRoomRef = null; // {floorIdx, roomNumber}
+  const history = INITIAL_HISTORY.slice();
+
+  const bldgTabs = document.getElementById('bldgTabs');
+  const floorsEl = document.getElementById('floors');
+  const statsBar = document.getElementById('statsBar');
+  const searchBox = document.getElementById('searchBox');
+  const filterBtn = document.getElementById('filterBtn');
+  const filterPanel = document.getElementById('filterPanel');
+  const filterCount = document.getElementById('filterCount');
+  const panelOverlay = document.getElementById('panelOverlay');
+  const panelTitle = document.getElementById('panelTitle');
+  const panelSub = document.getElementById('panelSub');
+  const statusBtns = document.getElementById('statusBtns');
+  const occupantInput = document.getElementById('occupantInput');
+  const interventionDateInput = document.getElementById('interventionDateInput');
+  const historyList = document.getElementById('historyList');
+  const transferBanner = document.getElementById('transferBanner');
+  const transferMsg = document.getElementById('transferMsg');
+  const legendBar = document.getElementById('legendBar');
+  const saveStatus = document.getElementById('saveStatus');
+  const STORAGE_KEY = 'housing-state-v1'; // clé de secours locale uniquement
+  let saveTimer = null;
+  let applyingRemote = false;
+  let firestoreReady = false;
+
+  function setSaveStatus(text){
+    saveStatus.textContent = text;
+  }
+
+  function applyPayload(parsed){
+    if(parsed.statuses){
+      Object.keys(STATUSES).forEach(k=>delete STATUSES[k]);
+      Object.assign(STATUSES, parsed.statuses);
+    }
+    if(parsed.buildings){
+      if(parsed.buildings.A) data.A = parsed.buildings.A;
+      if(parsed.buildings.B) data.B = parsed.buildings.B;
+    }
+    if(Array.isArray(parsed.history)){
+      history.length = 0;
+      parsed.history.forEach(h=>history.push(h));
+    }
+  }
+
+  function buildPayload(){
+    // Historique borné pour rester largement sous la limite de taille Firestore.
+    return JSON.stringify({statuses:STATUSES, buildings:data, history:history.slice(0,300)});
+  }
+
+  async function persistState(){
+    if(applyingRemote) return; // évite de réécrire ce qu'on vient de recevoir
+    setSaveStatus('Enregistrement…');
+    const payload = buildPayload();
+
+    try{
+      localStorage.setItem(STORAGE_KEY, payload); // filet de sécurité local
+    }catch(err){ /* navigateur en mode privé, tant pis */ }
+
+    try{
+      await setDoc(stateDocRef, {json: payload, updatedAt: Date.now()});
+      setSaveStatus('Enregistré ✓ (partagé)');
+    }catch(err){
+      console.error('Erreur Firebase :', err);
+      setSaveStatus('Échec Firebase — vérifiez la config / la connexion');
+    }
+  }
+
+  function schedulePersist(){
+    if(saveTimer) clearTimeout(saveTimer);
+    setSaveStatus('Modifié…');
+    saveTimer = setTimeout(persistState, 400);
+  }
+
+  function startRealtimeSync(){
+    setSaveStatus('Connexion…');
+    onSnapshot(stateDocRef, (snap)=>{
+      if(!snap.exists()){
+        if(!firestoreReady){
+          // Premier lancement sur ce projet Firebase : on amorce la base
+          // partagée avec l'état connu le plus récent (dernier export du 03/08).
+          setSaveStatus('Initialisation des données partagées…');
+          persistState();
+        } else {
+          setSaveStatus('Aucune donnée partagée pour l’instant');
+        }
+        firestoreReady = true;
+        return;
+      }
+      const d = snap.data();
+      if(!d || !d.json) return;
+      applyingRemote = true;
+      applyPayload(JSON.parse(d.json));
+      render();
+      renderHistory();
+      applyingRemote = false;
+      setSaveStatus('Synchronisé ✓');
+      firestoreReady = true;
+    }, (err)=>{
+      console.error('Erreur de connexion Firebase :', err);
+      setSaveStatus('Échec de connexion Firebase — vérifiez firebaseConfig');
+      // Filet de secours : au moins recharger la dernière copie locale connue.
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(raw){ applyPayload(JSON.parse(raw)); render(); renderHistory(); }
+      }catch(e){}
+    });
+  }
+
+  function exportState(){
+    const blob = new Blob([buildPayload()], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'logements-sauvegarde-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importStateFromFile(file){
+    const reader = new FileReader();
+    reader.onload = async ()=>{
+      try{
+        const parsed = JSON.parse(reader.result);
+        applyPayload(parsed);
+        logHistory('Données importées depuis un fichier de sauvegarde');
+        render();
+        await persistState();
+      }catch(err){
+        alert("Le fichier sélectionné n'est pas une sauvegarde valide.");
+      }
+    };
+    reader.readAsText(file);
+  }
+  const categoryOverlay = document.getElementById('categoryOverlay');
+  const categoryNameInput = document.getElementById('categoryNameInput');
+  const categoryColorInput = document.getElementById('categoryColorInput');
+  const categoryList = document.getElementById('categoryList');
+  const categoryFormLabel = document.getElementById('categoryFormLabel');
+  const cancelCategoryEdit = document.getElementById('cancelCategoryEdit');
+  const saveCategoryBtn = document.getElementById('saveCategory');
+  let editingCategoryKey = null;
+
+  function slugify(name){
+    let base = name.trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+    if(!base) base = 'categorie';
+    let key = base, n=2;
+    while(STATUSES[key]){ key = base+'-'+n; n++; }
+    return key;
+  }
+
+  function renderLegend(){
+    legendBar.innerHTML='';
+    Object.keys(STATUSES).forEach(k=>{
+      const span=document.createElement('span');
+      span.className='stat';
+      span.innerHTML = `<span class="dot" style="background:${STATUSES[k].color}"></span>${STATUSES[k].label}`;
+      legendBar.appendChild(span);
+    });
+    const addBtn=document.createElement('button');
+    addBtn.className='legend-add-btn';
+    addBtn.textContent='+ Ajouter une catégorie';
+    addBtn.onclick=openCategoryPanel;
+    legendBar.appendChild(addBtn);
+  }
+
+  function renderCategoryList(){
+    const keys = Object.keys(STATUSES);
+    if(keys.length===0){
+      categoryList.innerHTML = '<div class="cat-empty">Aucune catégorie.</div>';
+      return;
+    }
+    categoryList.innerHTML = keys.map(k=>{
+      const s = STATUSES[k];
+      return `<div class="cat-row" data-key="${k}">
+        <span class="swatch" style="background:${s.color}"></span>
+        <span class="name">${s.label}</span>
+        <button class="edit" data-action="edit" data-key="${k}">Modifier</button>
+        <button class="del" data-action="del" data-key="${k}">Supprimer</button>
+      </div>`;
+    }).join('');
+    Array.from(categoryList.querySelectorAll('button[data-action="edit"]')).forEach(btn=>{
+      btn.onclick = ()=> startEditCategory(btn.dataset.key);
+    });
+    Array.from(categoryList.querySelectorAll('button[data-action="del"]')).forEach(btn=>{
+      btn.onclick = ()=> deleteCategory(btn.dataset.key);
+    });
+  }
+
+  function startEditCategory(key){
+    editingCategoryKey = key;
+    const s = STATUSES[key];
+    categoryNameInput.value = s.label;
+    categoryColorInput.value = s.color;
+    categoryFormLabel.textContent = `Modifier « ${s.label} »`;
+    saveCategoryBtn.textContent = 'Enregistrer les modifications';
+    cancelCategoryEdit.style.display = 'inline-block';
+    categoryNameInput.focus();
+  }
+
+  function resetCategoryForm(){
+    editingCategoryKey = null;
+    categoryNameInput.value = '';
+    categoryColorInput.value = '#5c6b7a';
+    categoryFormLabel.textContent = 'Nouvelle catégorie';
+    saveCategoryBtn.textContent = 'Ajouter';
+    cancelCategoryEdit.style.display = 'none';
+  }
+
+  function deleteCategory(key){
+    const s = STATUSES[key];
+    if(!s) return;
+    const ok = confirm(`Supprimer la catégorie « ${s.label} » ? Les chambres avec ce statut repasseront à "Disponible".`);
+    if(!ok) return;
+    Object.keys(data).forEach(bk=>{
+      data[bk].floors.forEach(f=>f.rooms.forEach(r=>{
+        if(r.status===key) r.status='dispo';
+      }));
+    });
+    delete STATUSES[key];
+    logHistory(`Catégorie "${s.label}" supprimée`);
+    if(editingCategoryKey===key) resetCategoryForm();
+    renderCategoryList();
+    render();
+  }
+
+  function openCategoryPanel(){
+    resetCategoryForm();
+    renderCategoryList();
+    categoryOverlay.classList.add('open');
+  }
+
+  document.getElementById('closeCategoryPanel').onclick = ()=>{
+    categoryOverlay.classList.remove('open');
+  };
+
+  cancelCategoryEdit.onclick = resetCategoryForm;
+
+  saveCategoryBtn.onclick = ()=>{
+    const name = categoryNameInput.value.trim();
+    if(!name){ categoryNameInput.focus(); return; }
+    if(editingCategoryKey){
+      STATUSES[editingCategoryKey] = {label:name, color:categoryColorInput.value};
+      logHistory(`Catégorie "${name}" modifiée`);
+    } else {
+      const key = slugify(name);
+      STATUSES[key] = {label:name, color:categoryColorInput.value};
+      logHistory(`Catégorie "${name}" ajoutée`);
+    }
+    resetCategoryForm();
+    renderCategoryList();
+    render();
+  };
+
+  function renderTabs(){
+    bldgTabs.innerHTML='';
+    Object.keys(data).forEach(key=>{
+      const b=document.createElement('button');
+      b.className='bldg-tab'+(key===currentBldg?' active':'');
+      b.textContent=data[key].label;
+      b.onclick=()=>{currentBldg=key; render();};
+      bldgTabs.appendChild(b);
+    });
+  }
+
+  function logHistory(text){
+    history.unshift({t:new Date().toLocaleString('fr-FR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}), text, who:currentUserName||currentService||''});
+    renderHistory();
+    schedulePersist();
+  }
+
+  function renderHistory(){
+    if(history.length===0){
+      historyList.innerHTML='<div class="history-empty">Aucun mouvement enregistré pour l’instant.</div>';
+      return;
+    }
+    historyList.innerHTML = history.map(h=>{
+      const who = h.who === 'Service Généraux' ? 'Services Généraux' : h.who; // corrige aussi les anciennes entrées
+      return `<div class="history-item"><span class="t">${h.t}</span>${who?`<span style="color:var(--transfert); font-weight:700;">[${who}]</span>`:''}<span>${h.text}</span></div>`;
+    }).join('');
+  }
+
+  function computeStats(){
+    const counts = {};
+    Object.keys(STATUSES).forEach(k=>counts[k]=0);
+    const b = data[currentBldg];
+    b.floors.forEach(f=>f.rooms.forEach(r=>{
+      if(counts[r.status]===undefined) counts[r.status]=0;
+      counts[r.status]++;
+    }));
+    return counts;
+  }
+
+  function renderStats(){
+    const c = computeStats();
+    statsBar.innerHTML = Object.keys(STATUSES).map(k=>
+      `<span class="stat"><span class="dot" style="background:${STATUSES[k].color}"></span>${c[k]||0}</span>`
+    ).join('');
+  }
+
+  function isFilterActive(){
+    return activeFilters !== null;
+  }
+
+  function renderFilterPanel(){
+    const keys = Object.keys(STATUSES);
+    const rows = keys.map(k=>{
+      const checked = !activeFilters || activeFilters.has(k);
+      return `<label class="filter-row">
+        <input type="checkbox" data-key="${k}" ${checked?'checked':''}>
+        <span class="swatch" style="background:${STATUSES[k].color}"></span>
+        ${STATUSES[k].label}
+      </label>`;
+    }).join('');
+    filterPanel.innerHTML = rows + `
+      <div class="filter-actions">
+        <button id="filterAll">Tout afficher</button>
+        <button id="filterNone">Tout masquer</button>
+      </div>`;
+    filterPanel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      cb.onchange = ()=>{
+        if(!activeFilters) activeFilters = new Set(keys);
+        if(cb.checked) activeFilters.add(cb.dataset.key);
+        else activeFilters.delete(cb.dataset.key);
+        if(activeFilters.size === keys.length) activeFilters = null;
+        updateFilterCount();
+        renderFloors();
+      };
+    });
+    filterPanel.querySelector('#filterAll').onclick = ()=>{
+      activeFilters = null;
+      updateFilterCount();
+      renderFilterPanel();
+      renderFloors();
+    };
+    filterPanel.querySelector('#filterNone').onclick = ()=>{
+      activeFilters = new Set();
+      updateFilterCount();
+      renderFilterPanel();
+      renderFloors();
+    };
+  }
+
+  function updateFilterCount(){
+    const total = Object.keys(STATUSES).length;
+    const n = activeFilters ? activeFilters.size : total;
+    filterCount.textContent = isFilterActive() ? `(${n}/${total})` : '';
+  }
+
+  filterBtn.onclick = (e)=>{
+    e.stopPropagation();
+    const isOpen = filterPanel.style.display === 'block';
+    if(isOpen){
+      filterPanel.style.display = 'none';
+    } else {
+      renderFilterPanel();
+      filterPanel.style.display = 'block';
+    }
+  };
+  document.addEventListener('click', (e)=>{
+    if(!filterPanel.contains(e.target) && e.target!==filterBtn){
+      filterPanel.style.display = 'none';
+    }
+  });
+
+  function compareRoomNumbers(a,b){
+    const na = parseInt(a.number,10), nb = parseInt(b.number,10);
+    if(!isNaN(na) && !isNaN(nb) && na!==nb) return na-nb;
+    return a.number.localeCompare(b.number, undefined, {numeric:true});
+  }
+
+  function renderFloors(){
+    floorsEl.innerHTML='';
+    const b = data[currentBldg];
+    b.floors.forEach((floor, fIdx)=>{
+      floor.rooms.sort(compareRoomNumbers); // toujours dans l'ordre croissant, même après un déplacement
+      const section = document.createElement('div');
+      section.className='floor';
+
+      const title = document.createElement('div');
+      title.className='floor-title';
+      const occCount = floor.rooms.filter(r=>r.status!=='dispo').length;
+      title.innerHTML = `${floor.name} <span class="count">— ${floor.rooms.length} chambres, ${occCount} non disponibles</span>`;
+      const addBtn = document.createElement('button');
+      addBtn.className='add-room-btn';
+      addBtn.textContent='+ Ajouter une chambre';
+      addBtn.onclick=()=>{
+        const num = prompt("Numéro de la nouvelle chambre :");
+        if(num && num.trim()){
+          floor.rooms.push({number:num.trim(), status:'dispo', occupant:''});
+          logHistory(`Chambre ${num.trim()} ajoutée — ${floor.name}, ${b.label}`);
+          render();
+        }
+      };
+      title.appendChild(addBtn);
+      section.appendChild(title);
+
+      const grid = document.createElement('div');
+      grid.className='room-grid';
+      grid.ondragover = (e)=>{ e.preventDefault(); grid.classList.add('drag-over'); };
+      grid.ondragleave = ()=>{ grid.classList.remove('drag-over'); };
+      grid.ondrop = (e)=>{
+        e.preventDefault();
+        grid.classList.remove('drag-over');
+        if(!draggedRoomRef || draggedRoomRef.floorIdx===fIdx) return;
+        moveRoomToFloor(draggedRoomRef.floorIdx, draggedRoomRef.roomNumber, fIdx);
+        draggedRoomRef = null;
+      };
+
+      floor.rooms.forEach((room, rIdx)=>{
+        const el = document.createElement('div');
+        const matchesSearch = !searchTerm || room.number.toLowerCase().includes(searchTerm);
+        const matchesFilter = !activeFilters || activeFilters.has(room.status);
+        const matches = matchesSearch && matchesFilter;
+        el.className='room'+(matches?'':' hidden');
+        el.draggable = true;
+        el.ondragstart = (e)=>{
+          draggedRoomRef = {floorIdx: fIdx, roomNumber: room.number};
+          el.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        };
+        el.ondragend = ()=>{ el.classList.remove('dragging'); };
+        if(transferSource && transferSource.bldg===currentBldg && transferSource.floorIdx===fIdx && transferSource.roomIdx===rIdx){
+          el.classList.add('selected-transfer');
+        }
+        const dateBadge = room.interventionDate
+          ? `<div class="intervention-date">📅 ${room.interventionDate.split('-').reverse().join('/')}</div>`
+          : '';
+        el.innerHTML = `
+          <div class="num">${room.number}</div>
+          <div class="badge" style="background:${(STATUSES[room.status]||{}).color||'#8a97a6'}"></div>
+          <div class="occupant">${room.occupant || '&nbsp;'}</div>
+          ${dateBadge}
+        `;
+        el.onclick = ()=> handleRoomClick(fIdx, rIdx);
+        grid.appendChild(el);
+      });
+
+      section.appendChild(grid);
+      floorsEl.appendChild(section);
+    });
+  }
+
+  function moveRoomToFloor(srcFloorIdx, roomNumber, destFloorIdx){
+    const b = data[currentBldg];
+    const srcFloor = b.floors[srcFloorIdx];
+    const destFloor = b.floors[destFloorIdx];
+    const idx = srcFloor.rooms.findIndex(r=>r.number===roomNumber);
+    if(idx===-1) return;
+    const [room] = srcFloor.rooms.splice(idx,1);
+    destFloor.rooms.push(room);
+    logHistory(`Chambre ${room.number} déplacée : "${srcFloor.name}" → "${destFloor.name}" (${b.label})`);
+    render();
+  }
+
+  function handleRoomClick(floorIdx, roomIdx){
+    if(transferSource){
+      completeTransfer(floorIdx, roomIdx);
+      return;
+    }
+    openPanel(floorIdx, roomIdx);
+  }
+
+  function openPanel(floorIdx, roomIdx){
+    panelTarget = {bldg:currentBldg, floorIdx, roomIdx};
+    const room = data[currentBldg].floors[floorIdx].rooms[roomIdx];
+    draftStatus = room.status;
+    document.getElementById('saveConfirm').textContent = '';
+    panelTitle.textContent = `Chambre ${room.number}`;
+    panelSub.textContent = `${data[currentBldg].label} — ${data[currentBldg].floors[floorIdx].name}`;
+    occupantInput.value = room.occupant || '';
+    interventionDateInput.value = room.interventionDate || '';
+
+    statusBtns.innerHTML='';
+    Object.keys(STATUSES).forEach(key=>{
+      const btn=document.createElement('button');
+      btn.className='status-btn'+(draftStatus===key?' active':'');
+      btn.innerHTML=`<span class="dot" style="background:${STATUSES[key].color}"></span>${STATUSES[key].label}`;
+      btn.onclick=()=>{
+        draftStatus = key;
+        Array.from(statusBtns.children).forEach(c=>c.classList.remove('active'));
+        btn.classList.add('active');
+      };
+      statusBtns.appendChild(btn);
+    });
+
+    panelOverlay.classList.add('open');
+  }
+
+  function closePanelFn(){
+    panelOverlay.classList.remove('open');
+    panelTarget=null;
+    draftStatus=null;
+  }
+
+  document.getElementById('closePanel').onclick = closePanelFn;
+
+  document.getElementById('saveRoom').onclick = async ()=>{
+    if(!panelTarget) return;
+    const room = data[panelTarget.bldg].floors[panelTarget.floorIdx].rooms[panelTarget.roomIdx];
+    const oldStatusLabel = (STATUSES[room.status]||{}).label || room.status;
+    const oldOccupant = room.occupant || '';
+    const oldDate = room.interventionDate || '';
+    const newOccupant = occupantInput.value.trim();
+    const newDate = interventionDateInput.value || '';
+    room.status = draftStatus;
+    room.occupant = newOccupant;
+    room.interventionDate = newDate;
+    const newStatusLabel = STATUSES[room.status].label;
+    let msg = `Chambre ${room.number} (${data[panelTarget.bldg].label}) : ${oldStatusLabel} → ${newStatusLabel}`;
+    if(oldOccupant !== newOccupant){
+      msg += ` | note : "${oldOccupant||'—'}" → "${newOccupant||'—'}"`;
+    }
+    if(oldDate !== newDate){
+      msg += ` | intervention : ${oldDate||'—'} → ${newDate||'—'}`;
+    }
+    logHistory(msg);
+    renderStats();
+    renderFloors();
+    closePanelFn();
+    await persistState();
+  };
+
+  document.getElementById('deleteRoomBtn').onclick = async ()=>{
+    if(!panelTarget) return;
+    const floor = data[panelTarget.bldg].floors[panelTarget.floorIdx];
+    const room = floor.rooms[panelTarget.roomIdx];
+    const ok = confirm(`Supprimer définitivement la chambre ${room.number} (${data[panelTarget.bldg].label}, ${floor.name}) ?`);
+    if(!ok) return;
+    floor.rooms.splice(panelTarget.roomIdx, 1);
+    logHistory(`Chambre ${room.number} (${data[panelTarget.bldg].label}) supprimée`);
+    closePanelFn();
+    render();
+    await persistState();
+  };
+
+  document.getElementById('startTransferBtn').onclick = ()=>{
+    if(!panelTarget) return;
+    transferSource = {...panelTarget};
+    closePanelFn();
+    const room = data[transferSource.bldg].floors[transferSource.floorIdx].rooms[transferSource.roomIdx];
+    transferMsg.textContent = `Transfert depuis la chambre ${room.number} (${data[transferSource.bldg].label}) — cliquez sur la chambre de destination.`;
+    transferBanner.classList.add('show');
+    render();
+  };
+
+  document.getElementById('cancelTransfer').onclick = ()=>{
+    transferSource=null;
+    transferBanner.classList.remove('show');
+    render();
+  };
+
+  function completeTransfer(destFloorIdx, destRoomIdx){
+    const destBldg = currentBldg;
+    if(transferSource.bldg===destBldg && transferSource.floorIdx===destFloorIdx && transferSource.roomIdx===destRoomIdx){
+      // clicked same room, cancel
+      transferSource=null;
+      transferBanner.classList.remove('show');
+      render();
+      return;
+    }
+    const src = data[transferSource.bldg].floors[transferSource.floorIdx].rooms[transferSource.roomIdx];
+    const dest = data[destBldg].floors[destFloorIdx].rooms[destRoomIdx];
+
+    if(dest.status!=='dispo'){
+      const ok = confirm(`La chambre ${dest.number} n'est pas disponible (statut actuel : ${STATUSES[dest.status].label}). Continuer le transfert quand même ?`);
+      if(!ok) return;
+    }
+
+    const occupantName = src.occupant;
+    dest.status = src.status==='dispo' ? 'occupe' : src.status;
+    dest.occupant = occupantName;
+    src.status = 'dispo';
+    src.occupant = '';
+
+    logHistory(`Transfert : ${src.number} (${data[transferSource.bldg].label}) → ${dest.number} (${data[destBldg].label})${occupantName?' — '+occupantName:''}`);
+
+    transferSource=null;
+    transferBanner.classList.remove('show');
+    render();
+  }
+
+  searchBox.addEventListener('input', (e)=>{
+    searchTerm = e.target.value.trim().toLowerCase();
+    render();
+  });
+
+  function render(){
+    renderTabs();
+    renderLegend();
+    renderStats();
+    renderFloors();
+    syncStickyBarSpacer();
+  }
+
+  function syncStickyBarSpacer(){
+    const bar = document.getElementById('stickyBar');
+    const spacer = document.getElementById('stickyBarSpacer');
+    if(bar && spacer) spacer.style.height = bar.offsetHeight + 'px';
+    const fmtBar = document.getElementById('seasonalFormatToolbar');
+    if(bar && fmtBar) fmtBar.style.top = bar.offsetHeight + 'px';
+  }
+  window.addEventListener('resize', syncStickyBarSpacer);
+
+  document.getElementById('resetToPlanBtn').onclick = async ()=>{
+    const ok = confirm("Recharger les statuts à partir de ma lecture des plans transmis ? Cela remplacera les statuts et occupants actuels de TOUTES les chambres (les catégories personnalisées sont conservées).");
+    if(!ok) return;
+    data.A = JSON.parse(JSON.stringify(REFERENCE_DATA.A));
+    data.B = JSON.parse(JSON.stringify(REFERENCE_DATA.B));
+    history.unshift({t:new Date().toLocaleString('fr-FR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}), text:'Statuts rechargés depuis la lecture des plans'});
+    renderHistory();
+    render();
+    await persistState();
+  };
+
+  document.getElementById('exportBtn').onclick = exportState;
+  document.getElementById('printOccupancyBtn').onclick = printOccupancy;
+
+  function printOccupancy(){
+    const b = data[currentBldg];
+    const term = searchTerm;
+    const floorsHtml = b.floors.map(floor=>{
+      const rooms = floor.rooms.filter(r=>{
+        const matchesSearch = !term || r.number.toLowerCase().includes(term);
+        const matchesFilter = !activeFilters || activeFilters.has(r.status);
+        return matchesSearch && matchesFilter;
+      });
+      if(rooms.length===0) return '';
+      const cells = rooms.map(r=>{
+        const s = STATUSES[r.status] || {label:r.status, color:'#8a97a6'};
+        const dateLabel = r.interventionDate ? r.interventionDate.split('-').reverse().join('/') : '';
+        return `<div class="p-room">
+          <div class="p-num">${r.number}</div>
+          <div class="p-badge" style="background:${s.color}"></div>
+          <div class="p-status">${s.label}</div>
+          ${dateLabel?`<div class="p-date">📅 ${dateLabel}</div>`:''}
+        </div>`;
+      }).join('');
+      return `<div class="p-floor">
+        <div class="p-floor-title">${floor.name} <span>— ${rooms.length} chambre${rooms.length>1?'s':''}</span></div>
+        <div class="p-grid">${cells}</div>
+      </div>`;
+    }).join('');
+
+    const legendHtml = Object.keys(STATUSES).map(k=>
+      `<span class="p-legend-item"><span class="p-dot" style="background:${STATUSES[k].color}"></span>${STATUSES[k].label}</span>`
+    ).join('');
+
+    const filterNote = activeFilters
+      ? `Filtre actif : ${Array.from(activeFilters).map(k=>(STATUSES[k]||{}).label||k).join(', ')}`
+      : 'Toutes les catégories affichées';
+
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<title>Occupation — ${b.label}</title>
+<style>
+  @page{ size: landscape; margin: 12mm; }
+  *{box-sizing:border-box;}
+  body{font-family:Arial, Helvetica, sans-serif; color:#16273b; margin:0; padding:20px 26px;}
+  .top-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    background:#16273b; color:#fff;
+    padding:14px 22px; border-radius:4px; margin-bottom:16px;
+  }
+  .top-bar .eyebrow{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#8fb4e6; font-weight:bold; margin-bottom:3px;}
+  .top-bar h1{font-size:20px; margin:0;}
+  .top-bar .meta{font-size:11.5px; text-align:right; opacity:.9; line-height:1.5;}
+  .p-legend{display:flex; flex-wrap:wrap; gap:12px; font-size:10.5px; color:#5c6b7a; margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid #d8d2c0;}
+  .p-legend-item{display:flex; align-items:center; gap:4px;}
+  .p-dot{width:9px; height:9px; border-radius:50%; display:inline-block; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .p-floor{margin-bottom:18px; break-inside:avoid;}
+  .p-floor-title{font-size:12.5px; font-weight:bold; text-transform:uppercase; letter-spacing:.04em; border-bottom:1.5px solid #16273b; padding-bottom:4px; margin-bottom:8px;}
+  .p-floor-title span{font-weight:normal; color:#8a97a6; text-transform:none;}
+  .p-grid{display:grid; grid-template-columns:repeat(10, 1fr); gap:6px;}
+  .p-room{border:1px solid #d8d2c0; border-radius:3px; padding:6px 4px; text-align:center;}
+  .p-num{font-weight:bold; font-size:12px;}
+  .p-badge{width:10px; height:10px; border-radius:50%; margin:3px auto; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .p-status{font-size:8.5px; color:#5c6b7a; text-transform:uppercase; letter-spacing:.02em;}
+  .p-date{font-size:8.5px; color:#3b7dd8; font-weight:bold; margin-top:2px;}
+  .footer{margin-top:16px; font-size:10px; color:#a3adb8; text-align:right;}
+  @media print{ .top-bar{-webkit-print-color-adjust:exact; print-color-adjust:exact;} }
+</style></head>
+<body>
+  <div class="top-bar">
+    <div>
+      <div class="eyebrow">Groupe Établières — ${currentService||''}</div>
+      <h1>Occupation — ${b.label}</h1>
+    </div>
+    <div class="meta">${filterNote}<br>${new Date().toLocaleDateString('fr-FR')}</div>
+  </div>
+  <div class="p-legend">${legendHtml}</div>
+  ${floorsHtml}
+  <div class="footer">Document généré depuis l'outil de gestion des logements</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(()=>win.print(), 300);
+  }
+
+
+  document.getElementById('logoutBtn').onclick = ()=>{
+    if(confirm('Se déconnecter de l’outil ?')) logout();
+  };
+
+  document.getElementById('importBtn').onclick = ()=>{
+    document.getElementById('importFileInput').click();
+  };
+
+  document.getElementById('importFileInput').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(file) importStateFromFile(file);
+    e.target.value = '';
+  });
+
+  // ===== Module "Planning saisonnier" (Services Généraux uniquement) =====
+  // Stocké dans un document Firestore séparé, jamais consigné dans le
+  // journal des mouvements — cette section n'appelle jamais logHistory().
+  const SEASON_START = '2026-08-03';
+  const SEASON_END = '2026-09-30';
+  let seasonalEntries = {};
+
+  function isoDate(d){ return d.toISOString().slice(0,10); }
+
+  function getMonday(d){
+    const nd = new Date(d);
+    nd.setDate(d.getDate() - (d.getDay()===0 ? 6 : d.getDay()-1));
+    nd.setHours(0,0,0,0);
+    return nd;
+  }
+
+  function buildSeasonWeeks(startStr, endStr){
+    const seasonStart = new Date(startStr+'T00:00:00');
+    const seasonEnd = new Date(endStr+'T00:00:00');
+    let monday = getMonday(seasonStart);
+    const lastMonday = getMonday(seasonEnd);
+    const weeks = [];
+    while(monday <= lastMonday){
+      const days = [];
+      for(let i=0;i<5;i++){
+        const d = new Date(monday);
+        d.setDate(monday.getDate()+i);
+        days.push({date:d, inRange: d>=seasonStart && d<=seasonEnd});
+      }
+      weeks.push({days});
+      monday = new Date(monday);
+      monday.setDate(monday.getDate()+7);
+    }
+    return weeks;
+  }
+
+  function formatDayLabel(d){
+    const names = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    return `${names[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  function formatWeekLabel(week){
+    const first = week.days[0].date, last = week.days[week.days.length-1].date;
+    const mm = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+    return `Semaine du ${first.getDate()} au ${last.getDate()} ${mm[last.getMonth()]} ${last.getFullYear()}`;
+  }
+
+  let lastRenderedWeeks = [];
+
+  function isRepos(text){
+    return /\brepos\b/i.test((text||'').trim());
+  }
+
+  function renderSeasonalPlanning(){
+    const container = document.getElementById('seasonalWeeksContainer');
+    const weeks = buildSeasonWeeks(SEASON_START, SEASON_END);
+    lastRenderedWeeks = weeks;
+    const isReadOnly = currentService !== 'Services Généraux' && currentService !== 'Maintenance';
+    document.getElementById('seasonalFormatToolbar').style.display = isReadOnly ? 'none' : 'flex';
+
+    container.innerHTML = weeks.map((week, wIdx)=>{
+      const dayCards = week.days.map(day=>{
+        if(!day.inRange){
+          return `<div class="day-card"><div class="day-card-head out-of-range">${formatDayLabel(day.date)}</div></div>`;
+        }
+        const iso = isoDate(day.date);
+        const matin = (seasonalEntries[iso]||{}).matin || '';
+        const soir = (seasonalEntries[iso]||{}).soir || '';
+        const matinRepos = isRepos(matin.replace(/<[^>]*>/g,'')) ? ' is-repos' : '';
+        const soirRepos = isRepos(soir.replace(/<[^>]*>/g,'')) ? ' is-repos' : '';
+        return `<div class="day-card">
+          <div class="day-card-head">${formatDayLabel(day.date)}</div>
+          <div class="slot-block">
+            <div class="slot-tag">☀ Matin</div>
+            <div class="cell-edit${matinRepos}" data-date="${iso}" data-slot="matin" contenteditable="${isReadOnly?'false':'true'}">${matin}</div>
+          </div>
+          <div class="slot-block">
+            <div class="slot-tag">🌤 Après-midi</div>
+            <div class="cell-edit${soirRepos}" data-date="${iso}" data-slot="soir" contenteditable="${isReadOnly?'false':'true'}">${soir}</div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="week-card">
+        <div class="week-label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <span>${formatWeekLabel(week)}</span>
+          <button class="week-print-btn" data-week-idx="${wIdx}" style="font-family:var(--mono); font-size:10.5px; background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.4); padding:4px 9px; cursor:pointer; border-radius:2px;">🖨️ Extraire cette semaine</button>
+        </div>
+        <div class="week-days">${dayCards}</div>
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('.cell-edit').forEach(el=>{
+      if(isReadOnly) return; // Agropolis : lecture seule, pas de sauvegarde
+      el.addEventListener('input', ()=>{
+        el.classList.toggle('is-repos', isRepos(el.innerText));
+      });
+      el.addEventListener('blur', ()=>{
+        const iso = el.dataset.date, slot = el.dataset.slot;
+        if(!seasonalEntries[iso]) seasonalEntries[iso] = {matin:'', soir:''};
+        seasonalEntries[iso][slot] = el.innerHTML;
+        persistSeasonalPlanning(); // volontairement séparé de logHistory()
+      });
+    });
+
+    container.querySelectorAll('.week-print-btn').forEach(btn=>{
+      btn.onclick = ()=> printSeasonalWeek(lastRenderedWeeks[parseInt(btn.dataset.weekIdx,10)]);
+    });
+  }
+
+  function applyFormat(command, value){
+    const active = document.activeElement;
+    if(!active || !active.classList || !active.classList.contains('cell-edit')) return;
+    document.execCommand(command, false, value || null);
+    active.dispatchEvent(new Event('input'));
+  }
+  document.getElementById('fmtBoldBtn').addEventListener('mousedown', e=>e.preventDefault());
+  document.getElementById('fmtBoldBtn').addEventListener('click', ()=> applyFormat('bold'));
+  document.getElementById('fmtRedBtn').addEventListener('mousedown', e=>e.preventDefault());
+  document.getElementById('fmtRedBtn').addEventListener('click', ()=> applyFormat('foreColor', '#c4402f'));
+  document.getElementById('fmtClearBtn').addEventListener('mousedown', e=>e.preventDefault());
+  document.getElementById('fmtClearBtn').addEventListener('click', ()=>{
+    applyFormat('removeFormat');
+    applyFormat('foreColor', '#1c2b3a');
+  });
+
+  function printSeasonalWeek(week){
+    if(!week) return;
+    const fullNames = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+    const activeDays = week.days.filter(d=>d.inRange);
+    const dayCols = activeDays.map(day=>{
+      const iso = isoDate(day.date);
+      const entry = seasonalEntries[iso] || {};
+      const matin = (entry.matin||'').trim();
+      const soir = (entry.soir||'').trim();
+      return `<div class="day-col">
+        <div class="day-col-head">
+          <div class="day-name">${fullNames[day.date.getDay()]}</div>
+          <div class="day-date">${String(day.date.getDate()).padStart(2,'0')}/${String(day.date.getMonth()+1).padStart(2,'0')}</div>
+        </div>
+        <div class="slot${isRepos(matin.replace(/<[^>]*>/g,''))?' is-repos':''}">
+          <div class="slot-tag">☀ Matin</div>
+          <div class="slot-text">${matin || '<span class="empty">—</span>'}</div>
+        </div>
+        <div class="slot slot-soir${isRepos(soir.replace(/<[^>]*>/g,''))?' is-repos':''}">
+          <div class="slot-tag">🌤️ Après-midi</div>
+          <div class="slot-text">${soir || '<span class="empty">—</span>'}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<title>Planning — ${formatWeekLabel(week)}</title>
+<style>
+  @page{ size: landscape; margin: 12mm; }
+  *{box-sizing:border-box;}
+  body{font-family:Arial, Helvetica, sans-serif; color:#16273b; margin:0; padding:22px 30px;}
+  .top-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    background:#16273b; color:#fff;
+    padding:16px 24px; border-radius:4px; margin-bottom:22px;
+  }
+  .top-bar .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#8fb4e6; font-weight:bold; margin-bottom:4px;}
+  .top-bar h1{font-size:22px; margin:0;}
+  .top-bar .week-range{font-size:14px; text-align:right; opacity:.9;}
+  .top-bar .week-range b{font-size:16px; display:block;}
+  .days-row{display:grid; grid-template-columns:repeat(${activeDays.length}, 1fr); gap:12px;}
+  .day-col{border:1.5px solid #d8d2c0; border-radius:4px; overflow:hidden; break-inside:avoid;}
+  .day-col-head{background:#eef1e7; border-bottom:1.5px solid #d8d2c0; padding:10px 8px; text-align:center;}
+  .day-name{font-weight:bold; font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:#16273b;}
+  .day-date{font-size:11px; color:#8a97a6; margin-top:2px;}
+  .slot{padding:12px 10px; min-height:110px; border-bottom:1px dashed #d8d2c0;}
+  .slot-soir{border-bottom:none; background:#fbfaf5;}
+  .slot.is-repos{background:#e4e6e9 !important; color:#6b7480;}
+  .slot-tag{font-size:10.5px; font-weight:bold; text-transform:uppercase; letter-spacing:.04em; color:#3b7dd8; margin-bottom:6px;}
+  .slot-text{font-size:12.5px; line-height:1.5; color:#1c2b3a; white-space:pre-wrap;}
+  .empty{color:#c3cad2;}
+  .sign-area{
+    display:flex; justify-content:space-between; gap:40px;
+    margin-top:34px; padding-top:16px; border-top:1px solid #d8d2c0;
+  }
+  .sign-block{flex:1; font-size:11.5px; color:#5c6b7a;}
+  .sign-line{margin-top:34px; border-top:1px solid #8a97a6;}
+  .footer{margin-top:18px; font-size:10px; color:#a3adb8; text-align:right;}
+  @media print{ body{padding:6mm;} .top-bar{-webkit-print-color-adjust:exact; print-color-adjust:exact;} }
+</style></head>
+<body>
+  <div class="top-bar">
+    <div>
+      <div class="eyebrow">Groupe Établières — Services Généraux</div>
+      <h1>Planning saisonnier</h1>
+    </div>
+    <div class="week-range">Semaine<b>${formatWeekLabel(week).replace('Semaine du ','du ')}</b></div>
+  </div>
+
+  <div class="days-row">${dayCols}</div>
+
+  <div class="sign-area">
+    <div class="sign-block">Nom du saisonnier :<div class="sign-line"></div></div>
+    <div class="sign-block">Signature :<div class="sign-line"></div></div>
+    <div class="sign-block">Visa responsable :<div class="sign-line"></div></div>
+  </div>
+
+  <div class="footer">Document généré le ${new Date().toLocaleDateString('fr-FR')}</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(()=>win.print(), 300);
+  }
+
+  let skipNextSeasonalRender = false;
+
+  async function persistSeasonalPlanning(){
+    const statusEl = document.getElementById('seasonalSaveStatus');
+    statusEl.textContent = 'Enregistrement…';
+    try{
+      skipNextSeasonalRender = true; // évite de reconstruire la grille (et perdre la taille redimensionnée) pour notre propre saisie
+      await setDoc(seasonalDocRef, {json: JSON.stringify(seasonalEntries), updatedAt: Date.now()});
+      statusEl.textContent = 'Enregistré ✓';
+    }catch(err){
+      console.error('Erreur planning saisonnier :', err);
+      statusEl.textContent = 'Échec de l’enregistrement';
+      skipNextSeasonalRender = false;
+    }
+  }
+
+  function startSeasonalSync(){
+    onSnapshot(seasonalDocRef, (snap)=>{
+      if(snap.exists() && snap.data() && snap.data().json){
+        try{ seasonalEntries = JSON.parse(snap.data().json); }catch(e){ seasonalEntries = {}; }
+      }
+      if(skipNextSeasonalRender){
+        skipNextSeasonalRender = false;
+        return; // nos propres données locales sont déjà à jour, on garde la grille telle quelle
+      }
+      renderSeasonalPlanning();
+    }, (err)=>{
+      console.error('Erreur de connexion planning saisonnier :', err);
+    });
+  }
+
+  document.getElementById('seasonalToggleBtn').onclick = ()=>{
+    const sec = document.getElementById('seasonalPlanningSection');
+    sec.style.display = sec.style.display==='none' ? 'block' : 'none';
+  };
+
+  startSeasonalSync();
+  // ===== Fin module "Planning saisonnier" =====
+
+  render();
+  renderHistory();
+  startRealtimeSync();
+
+  applyServiceDefaultFilter = function(){
+    if(currentService === 'Services Généraux' || currentService === 'Maintenance'){
+      activeFilters = new Set(['dispo','vide-de-mobilier','stockage-mobilier']);
+      updateFilterCount();
+      renderFloors();
+    }
+  };
+  if(smmUser){
+    applyServiceDefaultFilter(); // ouvert depuis l'appli SMM
+  }
+
+  syncStickyBarSpacerRef = syncStickyBarSpacer;
+  setTimeout(syncStickyBarSpacer, 0);
+})();
+</script>
+
+</div>
+
+</body>
+</html>
