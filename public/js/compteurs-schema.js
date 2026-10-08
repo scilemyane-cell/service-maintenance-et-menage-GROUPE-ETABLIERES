@@ -91,9 +91,7 @@ export function normaliserEauChaude(liste) {
 }
 
 export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associations = [], peutModifier = false, lier = null, assoc = "", glisser = false }) {
-  liste = normaliserEauChaude(liste);;
-    }
-  }
+  liste = normaliserEauChaude(liste);
   const jours = Math.max(1, Math.round((fin - debut) / JOUR));
   const parId = new Map(liste.map(c => [c.id, c]));
   const parentDe = (c) => c.compteurParentId && parId.has(c.compteurParentId) && c.compteurParentId !== c.id ? c.compteurParentId : null;
