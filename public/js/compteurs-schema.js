@@ -166,6 +166,7 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     <div class="sc-entete">
       <button class="nav-btn" id="sc-retour">← Retour</button>
       <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui, sur les 30 derniers jours.</p></div>
+      ${peutModifier ? `<button class="add-btn sc-modele" id="sc-modele">✏️ Mode modélisation</button>` : ""}
     </div>
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? "" : r.chips}
@@ -175,6 +176,11 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
   </div>`;
 
   const rerendre = () => renderSchema(container, { compteurs, releves, sites, associations, peutModifier, onRetour, onOuvrirSite });
+  container.querySelector("#sc-modele")?.addEventListener("click", async () => {
+    const { renderModele } = await import("./compteurs-modele.js");
+    renderModele(container, { compteurs, sites, associations, energie: st.energie, onRetour: (e) => { if (e) st.energie = e; rerendre(); window.scrollTo(0, 0); } });
+    window.scrollTo(0, 0);
+  });
   container.querySelector("#sc-retour")?.addEventListener("click", () => { st.lier = null; onRetour(); });
   container.querySelector("#sc-annuler")?.addEventListener("click", () => { st.lier = null; rerendre(); });
   container.querySelectorAll("[data-sc-e]").forEach(b => b.addEventListener("click", () => { st.energie = b.dataset.scE; st.lier = null; rerendre(); }));
