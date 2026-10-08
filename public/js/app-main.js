@@ -101,6 +101,8 @@
   const mountPermissionsDoc = aLaDemande(charger_permissions_doc, "mountPermissionsDoc");
   const charger_previsionnel = () => import("./previsionnel.js");
   const mountPrevisionnel = aLaDemande(charger_previsionnel, "mountPrevisionnel");
+  const charger_logements = () => import("./logements-miroir.js");
+  const mountLogements = aLaDemande(charger_logements, "mountLogements");
   const charger_stock_menage = () => import("./stock-menage.js");
   const mountStockMenage = aLaDemande(charger_stock_menage, "mountStockMenage");
   const charger_statistiques = () => import("./statistiques.js");
@@ -115,7 +117,7 @@
   let modulesPrecharges = false;
   function prechargerModules() {
     if (modulesPrecharges) return; modulesPrecharges = true;
-    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_statistiques, charger_corbeille, charger_connexions];
+    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_logements, charger_statistiques, charger_corbeille, charger_connexions];
     const suivant = () => { const f = liste.shift(); if (!f) return; f().catch(() => {}).finally(() => setTimeout(suivant, 30)); };
     (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(() => { suivant(); suivant(); suivant(); }, { timeout: 1500 });
   }
@@ -367,6 +369,12 @@
         ],
       },
       {
+        id: "logements", label: "Logements Bât. A / B", icon: "🏠", desc: "Occupation des chambres, vidage, transfert, planning saisonnier (miroir de l'outil logements)",
+        subtabs: [
+          { id: "liste", label: "Logements", icon: "🏠", roles: [...GESTION, "direction"], mount: mountLogements },
+        ],
+      },
+      {
         id: "stock-menage", label: "Stock Ménage", icon: "🧻", desc: "PQ, savon, entretien — sorties attribuées à un centre ou au dispositif MNA",
         subtabs: [
           { id: "liste", label: "Stock", icon: "🧻", roles: [...GESTION,"menage","technicien"], mount: mountStockMenage },
@@ -389,8 +397,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, stockMenage, stock] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, stockMenage, stock];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock];
   }
 
   watchAuth((user) => {
@@ -538,7 +546,7 @@
       if (n) console.info(`Accès Suivi des demandes (modification) donné à ${n} technicien(s).`);
     } catch (e) { console.error("migrationAccesTechSuivi:", e); }
   }
-  const TUILES_GEREES_PAR_UTILISATEUR = ["statistiques", "astreinte", "sites", "compteurs", "masterlock", "previsionnel", "planning-individuel", "suivi-demandes", "stock-menage", "stock"];
+  const TUILES_GEREES_PAR_UTILISATEUR = ["statistiques", "astreinte", "sites", "compteurs", "masterlock", "previsionnel", "planning-individuel", "suivi-demandes", "logements", "stock-menage", "stock"];
   const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
   // Direction : voit tout comme le Super Admin, en consultation seule —
   // sauf l'Administration (comptes, corbeille…) et le Suivi des tâches.
