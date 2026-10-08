@@ -621,8 +621,7 @@ function renderListe() {
     const id = btn.dataset.toggleHist;
     if (ui.historiqueOuverts.has(id)) { ui.historiqueOuverts.delete(id); render(); return; }
     ui.historiqueOuverts.add(id);
-    render();
-    await chargerEtAfficherHistorique(id);
+    render(); // le rendu remplit lui-même les historiques ouverts
   }));
   mountedContainer.querySelectorAll("[data-edit-compteur]").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.editCompteur;
@@ -636,6 +635,9 @@ function renderListe() {
     envoyerCompteurCorbeille(c.id).then(load).catch(e => window.toast("Erreur : " + (e.message || e)));
   }));
 
+  // Historiques ouverts : (re)remplis à chaque rendu — sinon une mise à jour
+  // de la liste vidait le cadre et il fallait recliquer plusieurs fois.
+  ui.historiqueOuverts.forEach(id => { const h = document.getElementById(`cpt-hist-${id}`); if (h && !h.childElementCount) chargerEtAfficherHistorique(id); });
   attachAddFormListeners();
   attachEditFormListeners();
   resolvePhotos(mountedContainer);

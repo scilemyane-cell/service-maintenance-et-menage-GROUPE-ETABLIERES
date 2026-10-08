@@ -231,7 +231,7 @@ const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = fal
 export const watchRelevesCompteurs = (cb) => ecoutePartagee("releves-compteurs", ecouteDelta({ cle: RELEVES_CACHE, col: RELEVES, champs: ["createdAt", "majLeMs"], numerique: true }), cb);
 // v2 : une relecture complète pour rattraper les relevés déjà corrigés ; ensuite
 // une correction pose « majLeMs » et arrive sur tous les appareils.
-const RELEVES_CACHE = "releves-compteurs-v2";
+const RELEVES_CACHE = "releves-compteurs-v3"; // v3 : relecture pour rattraper les relevés antidatés
 
 export async function creerCompteur(dossierId, dossierNom, compteur) {
   const ref = await addDoc(collection(db, COMPTEURS), { dossierId, dossierNom, ...compteur, majLe: serverTimestamp() });
@@ -293,7 +293,10 @@ export async function getCompteurUnique(id) {
 // technicien ne pouvant enregistrer qu'à la date/heure du moment.
 export async function enregistrerReleve(compteur, valeurs, photos, user, dateAntidatee = null, illisibles = {}) {
   const at = dateAntidatee || Date.now();
-  await addDoc(collection(db, RELEVES), {
+  // majLeMs : un relevé ANTIDATÉ (createdAt dans le passé) doit quand même
+  // arriver dans la copie locale des autres appareils (stats, schéma).
+  const ref = await addDoc(collection(db, RELEVES), {
+    majLeMs: Date.now(),
     compteurId: compteur.id,
     dossierId: compteur.dossierId,
     dossierNom: compteur.dossierNom,
@@ -307,6 +310,7 @@ export async function enregistrerReleve(compteur, valeurs, photos, user, dateAnt
     createdAt: at,
     saisiHorsDate: !!dateAntidatee,
   });
+  majLocale(RELEVES_CACHE, ref.id, { compteurId: compteur.id, dossierId: compteur.dossierId, dossierNom: compteur.dossierNom, type: compteur.type, nomCompteur: compteur.nom, valeurs, illisibles, photos, releveParNom: user?.nom || user?.email || "Inconnu", createdAt: at, saisiHorsDate: !!dateAntidatee, majLeMs: Date.now() });
   majLocale("compteurs", compteur.id, { dernierReleve: { at, valeurs, photos, illisibles, releveParNom: user?.nom || user?.email || "Inconnu", majLe: Timestamp.now() } });
   await updateDoc(doc(db, COMPTEURS, compteur.id), {
     dernierReleve: {
