@@ -1,3 +1,4 @@
+import { choixDateHTML, activerChoixDate, isoLocal } from "./choix-date.js";
 import { differerSiSaisieDate } from "./saisie-dates.js";
 import { nomPropre, villeDe, dessinPourSite } from "./sites-visuel.js";
 import { categorieSite } from "./site-map.js";
@@ -751,11 +752,12 @@ async function chargerEtAfficherHistorique(compteurId) {
     fond.innerHTML = `<div class="cd-fenetre" style="max-width:440px"><div class="cd-fenetre-tete"><div><b>✏️ Corriger le relevé</b><small>${esc(compteur.nom || "")} — ${esc(compteur.dossierNom || "")}</small></div><button class="cd-x" data-x>✕</button></div>
       <div class="stack" style="gap:10px">
         ${cles.map(k => `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">${cles.length > 1 ? esc(k) : `Valeur (${esc(uniteValeur(compteur))})`}<input type="text" inputmode="decimal" data-v="${esc(k)}" value="${esc(r.valeurs?.[k] ?? "")}" style="padding:10px;border-radius:10px;font-size:16px"></label>`).join("")}
-        <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Date du relevé<input type="datetime-local" data-date value="${dateLoc}" style="padding:10px;border-radius:10px;font-size:15px"></label>
+        <div style="font-weight:700;font-size:13px">Date du relevé${choixDateHTML("corr-date", isoLocal(d))}</div>
         <p class="hint" style="margin:0">L'ancienne valeur reste notée (mention « ✏️ corrigé »).</p>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>✓ Enregistrer la correction</button></div>
       </div></div>`;
     document.body.append(fond);
+    activerChoixDate(fond);
     const fermer = () => fond.remove();
     fond.querySelectorAll("[data-x]").forEach(b => b.onclick = fermer);
     fond.addEventListener("click", e => { if (e.target === fond) fermer(); });
@@ -766,7 +768,8 @@ async function chargerEtAfficherHistorique(compteurId) {
         if (v === "" || isNaN(parseFloat(v))) { alert("Valeur invalide."); inp.focus(); return; }
         valeurs[inp.dataset.v] = v;
       }
-      const at = new Date(fond.querySelector("[data-date]").value).getTime();
+      const iso = fond.querySelector("#corr-date").value;
+      const at = iso === isoLocal(d) ? r.createdAt : new Date(`${iso}T12:00:00`).getTime(); // même jour : on garde l'heure d'origine
       if (!Number.isFinite(at) || at > Date.now() + 60000) { alert("Date invalide."); return; }
       ev.currentTarget.disabled = true;
       try {
@@ -1433,7 +1436,7 @@ function renderReleve() {
 
         ${peutAntidater(mountedUser) ? `
           <label style="display:block;margin-top:10px">Date du relevé
-            <input type="date" id="cpt-r-date" value="${ui.releveEnCours.dateChoisie || new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}">
+            ${choixDateHTML("cpt-r-date", ui.releveEnCours.dateChoisie || isoLocal(new Date()))}
           </label>
           <p class="hint" style="margin:2px 0 0">Laisse aujourd'hui par défaut, ou choisis une date antérieure si ce relevé a été fait plus tôt et pas encore saisi.</p>
         ` : ""}
@@ -1467,6 +1470,7 @@ function renderReleve() {
     if (ui.releveRetourSiteId) ui.ouverts.add(ui.releveRetourSiteId);
     render();
   });
+  activerChoixDate(mountedContainer);
   document.getElementById("cpt-r-date")?.addEventListener("change", (e) => { ui.releveEnCours.dateChoisie = e.target.value; });
   wirePhotosBlock("cpt-r", compteur, photos, () => { syncValeurs(); render(); });
   document.getElementById("cpt-r-save").addEventListener("click", async () => {
@@ -1478,7 +1482,7 @@ function renderReleve() {
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
     if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
     const dateChoisie = peutAntidater(mountedUser) ? dateInputVersTimestamp(document.getElementById("cpt-r-date")?.value) : null;
-    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const aujourdHui = isoLocal(new Date());
     const estAnterieure = dateChoisie && document.getElementById("cpt-r-date").value !== aujourdHui;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
@@ -1554,7 +1558,7 @@ function renderRapide() {
 
         ${peutAntidater(mountedUser) ? `
           <label style="display:block;margin-top:10px">Date du relevé
-            <input type="date" id="cpt-rap-date" value="${ui.releveEnCours.dateChoisie || new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}">
+            ${choixDateHTML("cpt-rap-date", ui.releveEnCours.dateChoisie || isoLocal(new Date()))}
           </label>
         ` : ""}
 
@@ -1585,6 +1589,7 @@ function renderRapide() {
 
   document.getElementById("cpt-rap-quitter").addEventListener("click", () => { ui.rapideSiteId = null; ui.releveEnCours = null; ui.ouverts.add(site.id); render(); });
   document.getElementById("cpt-rap-passer").addEventListener("click", () => { ui.rapideIndex++; ui.releveEnCours = null; render(); });
+  activerChoixDate(mountedContainer);
   document.getElementById("cpt-rap-date")?.addEventListener("change", (e) => { ui.releveEnCours.dateChoisie = e.target.value; });
   wirePhotosBlock("cpt-rap", compteur, photos, () => { syncValeurs(); render(); });
   document.getElementById("cpt-rap-valider").addEventListener("click", async () => {
@@ -1595,7 +1600,7 @@ function renderRapide() {
     if (incomplet) { statusEl.innerHTML = `<span style="color:var(--red)">Renseigne une valeur pour chaque index, ou coche "Illisible".</span>`; return; }
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Vérification…</span>`;
     if (!(await confirmerMalgreAnomalies(compteur, valeurs))) { statusEl.innerHTML = ""; return; }
-    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const aujourdHui = isoLocal(new Date());
     const dateSaisie = document.getElementById("cpt-rap-date")?.value;
     const dateChoisie = peutAntidater(mountedUser) && dateSaisie && dateSaisie !== aujourdHui ? dateInputVersTimestamp(dateSaisie) : null;
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;

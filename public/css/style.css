@@ -3496,3 +3496,12 @@ body.clo-ouvert{overflow:hidden}
 .lg-espace{flex:1}
 .lg-barre a.nav-btn{text-decoration:none}
 #lg-cadre{width:100%;min-height:480px;border:1px solid var(--border);border-radius:12px;background:#f4f1ea}
+/* Sélecteur de date des relevés (choix-date.js) */
+.cdate{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.cdate-ligne{display:flex;align-items:center;gap:8px}
+.cdate-lib{flex:1;text-align:center;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--panel-alt);font-size:15px;text-transform:capitalize}
+.cdate-pas{width:44px;height:44px;border-radius:12px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:16px;cursor:pointer;flex:none}
+.cdate-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cdate-chips button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:8px 12px;font:700 13px system-ui,sans-serif;cursor:pointer}
+.cdate-chips button.on{background:var(--gold);border-color:var(--gold);color:#111}
+.cdate-saisie{width:120px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:15px;text-align:center}

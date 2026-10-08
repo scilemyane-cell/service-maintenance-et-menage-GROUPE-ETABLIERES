@@ -7,7 +7,7 @@
 // Une relecture complète est faite une fois par semaine (ou sans copie)
 // pour rattraper d'éventuelles suppressions.
 import { db } from "./firebase-init.js";
-import { collection, query, where, onSnapshot, getDocs, Timestamp } from "./firestore-compte.js";
+import { collection, query, where, onSnapshot, getDocs, getDoc, Timestamp } from "./firestore-compte.js";
 
 const DB_NOM = "smm-cache", STORE = "kv", RELECTURE_COMPLETE = 7 * 86400000, MARGE = 15 * 60000;
 
@@ -110,7 +110,17 @@ export function ecouteDelta({ cle, col, champs, numerique = false }) {
           const x = ch.doc.data({ serverTimestamps: "estimate" });
           // « removed » : soit supprimé, soit écriture locale en attente
           // (l'horodatage serveur n'est pas encore connu) → on garde.
-          if (ch.type === "removed" && !ch.doc.metadata.hasPendingWrites) { if (docs.delete(ch.doc.id)) change = true; return; }
+          // Un document ne « sort » d'une écoute « modifié depuis » que s'il est
+          // supprimé… ou pendant une écriture locale (horodatage serveur pas
+          // encore connu — et ch.doc.metadata ne le signale pas toujours) : on
+          // vérifie qu'il n'existe vraiment plus avant de le retirer, sinon le
+          // compteur modifié/relevé disparaissait jusqu'au redémarrage.
+          if (ch.type === "removed") {
+            if (ch.doc.metadata.hasPendingWrites || snap.metadata.hasPendingWrites) return;
+            const id = ch.doc.id;
+            getDoc(ch.doc.ref).then(d => { if (!d.exists() && docs.delete(id)) { emettre(liste()); sauver(); } }).catch(() => {});
+            return;
+          }
           docs.set(ch.doc.id, x); change = true;
           if (!ch.doc.metadata.hasPendingWrites) noterDate(ch.doc.data());
         });

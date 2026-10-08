@@ -337,8 +337,9 @@ export async function supprimerReleve(compteurId, releveId) {
   retirerLocal(RELEVES_CACHE, releveId);
   const restant = await listerHistoriqueCompteur(compteurId); // déjà trié du plus récent au plus ancien
   const dernier = restant[0];
+  majLocale("compteurs", compteurId, { dernierReleve: dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, illisibles: dernier.illisibles || {}, releveParNom: dernier.releveParNom, majLe: Timestamp.now() } : null });
   await updateDoc(doc(db, COMPTEURS, compteurId), {
-    dernierReleve: dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, releveParNom: dernier.releveParNom } : null,
+    dernierReleve: dernier ? { at: dernier.createdAt, valeurs: dernier.valeurs, photos: dernier.photos || null, illisibles: dernier.illisibles || {}, releveParNom: dernier.releveParNom, majLe: serverTimestamp() } : null,
     majLe: serverTimestamp(),
   });
 }
