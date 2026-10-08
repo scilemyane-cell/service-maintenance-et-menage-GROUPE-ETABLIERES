@@ -195,8 +195,20 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     fond.innerHTML = `<div class="sx-feuille"><div class="sx-feuille-tete"><b>${esc(c.nom || "")}</b><small>${esc(nomCourt(c.dossierNom))}${c.logement ? ` · Logement ${esc(c.logement)}` : ""}</small><button type="button" data-f-x>✕</button></div>
       <label class="sx-f-l">↳ Alimenté par (le compteur juste au-dessus)<select data-f-parent>${r.optionsParent(c)}</select></label>
       ${aParent ? `<label class="sx-f-c"><input type="checkbox" data-f-deduit ${estDeduit(c) ? "checked" : ""}> Déduire du compteur au-dessus <small>(décoche pour un compteur « pour info », ex. eau chaude)</small></label>` : `<p class="sx-f-aide">C'est un compteur général (rien au-dessus).</p>`}
+      ${aParent ? (() => { const P = compteurs.find(x => x.id === r.parentDe(c)); return `<button type="button" class="sx-f-inv" data-f-inverser>⇅ Inverser : mettre ce compteur AU-DESSUS de « ${esc(nomCourt(P?.dossierNom))} — ${esc(P?.nom || "")} »<small>Ce compteur devient le général ; l'autre passe dessous, avec les compteurs qui étaient à côté.</small></button>`; })() : ""}
       <button type="button" class="sx-f-ok" data-f-x>Fermer</button></div>`;
     document.body.append(fond);
+    fond.querySelector("[data-f-inverser]")?.addEventListener("click", async () => {
+      const P = compteurs.find(x => x.id === r.parentDe(c)); if (!P) return;
+      const PP = P.compteurParentId || null;
+      const freres = compteurs.filter(x => x.type === c.type && x.compteurParentId === P.id && x.id !== c.id);
+      try {
+        await modifierCompteur(c.id, { compteurParentId: PP }); c.compteurParentId = PP;
+        await modifierCompteur(P.id, { compteurParentId: c.id }); P.compteurParentId = c.id;
+        for (const f of freres) { await modifierCompteur(f.id, { compteurParentId: c.id }); f.compteurParentId = c.id; }
+        fermer(); rerendre(); window.toast?.("✓ Compteurs inversés");
+      } catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
+    });
     const fermer = () => fond.remove();
     fond.addEventListener("click", (ev) => { if (ev.target === fond) fermer(); });
     fond.querySelectorAll("[data-f-x]").forEach(b => b.addEventListener("click", fermer));
