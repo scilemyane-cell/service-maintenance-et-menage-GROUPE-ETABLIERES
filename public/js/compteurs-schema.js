@@ -79,44 +79,47 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
   const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).filter(estDeduit).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
   const unite = uniteValeur({ type: E.id });
 
-  // Cadran : le niveau = part du compteur dans le réseau, débit au centre.
-  const dial = (c, part, opts = {}) => {
+  // Carte d'un compteur dans l'arbre : nom, site, total, débit/jour et son
+  // rôle (général, déduit, pour info). Réglages : en cliquant dessus.
+  const noeud = (c, opts = {}) => {
     const b = opts.virtuel ? opts.valeur : brut(c);
     const parJour = b === null ? null : b / jours;
+    const chaude = !opts.virtuel && estEauChaude(c);
+    const aParent = !opts.virtuel && parentDe(c);
+    const info = aParent && !estDeduit(c);
     const bloque = !opts.virtuel && lier && (lier === c.id || descendants(lier).has(c.id));
     const cible = !opts.virtuel && lier && !bloque;
-    const niveau = Math.max(6, Math.min(100, part ?? 55));
-    const vitesse = parJour ? Math.max(0.8, 6 - Math.log10(1 + parJour) * 2.2) : 0; // plus ça coule, plus le flux va vite
-    const chaude = !opts.virtuel && estEauChaude(c);
-    return `<div class="sx-c ${chaude ? "chaude" : ""} ${opts.virtuel ? "virtuel" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}"` : ""} style="--niv:${niveau}%;--v:${vitesse}s">
-      <div class="sx-dial"><span class="sx-motif">${chaude ? "♨️" : E.icone}</span><div class="sx-eau"><i></i><i></i><i></i></div>
-        <div class="sx-centre"><b>${parJour === null ? "—" : fmt2(parJour)}</b><small>${unite}/jour</small></div>
-        ${part != null && !opts.racine ? `<span class="sx-part">${fmt(part, 0)} %</span>` : ""}</div>
-      <div class="sx-nom"><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b><small>${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom) + (c.logement ? ` · Logement ${c.logement}` : ""))}</small>
-        ${chaude ? `<span class="sx-badge-chaude">♨️ Eau chaude produite</span>` : opts.general ? `<span class="sx-badge-general">💧 Eau froide générale</span>` : ""}
-        <span class="sx-tot">${b === null ? "pas encore de mesure" : `${fmt2(b)} ${unite} sur ${jours} j`}</span>
-        ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}</div>
-      ${!opts.virtuel && parentDe(c) && !estDeduit(c) ? `<span class="sx-badge-info">ℹ️ pour info — non déduit</span>` : ""}
-      ${!opts.virtuel && peutModifier && parentDe(c) ? `<label class="sx-deduit"><input type="checkbox" data-sx-deduit="${c.id}" ${estDeduit(c) ? "checked" : ""}> Déduire du compteur au-dessus</label>` : ""}
-      ${!opts.virtuel && peutModifier ? `<label class="sx-parent" title="Le compteur qui alimente celui-ci (en amont)">↳ Alimenté par <select data-sx-parent="${c.id}">${optionsParent(c)}</select></label>` : ""}
+    const role = opts.virtuel ? `<span class="sx-r reste">= Reste (calcul)</span>`
+      : chaude ? `<span class="sx-r chaude">♨️ Eau chaude${info ? " · pour info" : " · déduite"}</span>`
+      : info ? `<span class="sx-r info">ℹ️ Pour info · non déduit</span>`
+      : aParent ? `<span class="sx-r deduit">− Déduit</span>`
+      : enfants(c.id).length ? `<span class="sx-r general">🔝 Compteur général</span>` : "";
+    const niveau = opts.part == null ? null : Math.max(0, Math.min(100, opts.part));
+    return `<div class="sx-n ${chaude ? "chaude" : ""} ${opts.virtuel ? "virtuel" : ""} ${info ? "info" : ""} ${!aParent && !opts.virtuel && enfants(c.id).length ? "tete" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}" tabindex="0"` : ""}>
+      <div class="sx-n-titre"><span class="sx-n-ic">${opts.virtuel ? "⚖️" : chaude ? "♨️" : E.icone}</span><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b></div>
+      <small class="sx-n-site">${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom) + (c.logement ? ` · Logt ${c.logement}` : ""))}</small>
+      <div class="sx-n-val">${b === null ? `<span class="sx-n-vide">pas encore de mesure</span>` : `<b>${fmt2(b)}</b> ${unite}<small> · ${fmt2(parJour)}/j</small>`}</div>
+      ${niveau !== null ? `<div class="sx-n-barre" title="${fmt(niveau, 0)} % du compteur au-dessus"><i style="width:${niveau}%"></i><span>${fmt(niveau, 0)} %</span></div>` : ""}
+      ${role}
+      ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}
       ${cible ? `<div class="sx-cible">↳ alimente ${esc(liste.find(x => x.id === lier)?.nom || "")}</div>` : ""}
     </div>`;
   };
-  // Réseau : compteur → tuyaux animés → sous-compteurs (+ la part « propre »), sur autant de niveaux que besoin.
-  const reseau = (c, part = 100, racine = true) => {
+  // Arbre de HAUT en BAS : le compteur général en haut, ses sous-compteurs
+  // en dessous (traits pleins = déduits, pointillés = pour info), puis la
+  // case « = Reste consommé » qui fait le calcul.
+  const branche = (c, part = null) => {
     const e = enfants(c.id);
-    if (!e.length) return dial(c, part, { racine });
+    const info = parentDe(c) && !estDeduit(c);
+    if (!e.length) return `<li class="${info ? "info" : ""}">${noeud(c, { part })}</li>`;
     const b = brut(c), p = propre(c);
-    const pc = (x) => b ? Math.max(0, Math.min(100, (x || 0) / b * 100)) : null;
-    const branches = e.map(x => `<div class="sx-branche">${reseau(x, pc(brut(x)), false)}</div>`).join("")
-      + (!e.some(estDeduit) ? "" : `<div class="sx-branche">${dial(null, p !== null ? pc(p) : null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, titre: `Reste consommé — ${nomCourt(c.dossierNom)}`, sous: `hors ${e.filter(estDeduit).map(x => estEauChaude(x) ? "eau chaude" : nomCourt(x.dossierNom) !== nomCourt(c.dossierNom) ? nomCourt(x.dossierNom) : (x.nom || "sous-compteur")).join(", ")}`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</div>`);
-    const debit = b ? b / jours : 0;
-    return `<div class="sx-net" style="--v:${debit ? Math.max(0.8, 6 - Math.log10(1 + debit) * 2.2) : 0}s">
-      <div class="sx-tete">${dial(c, part, { racine, general: E.id === "eau" && e.some(estEauChaude) })}</div>
-      <div class="sx-tuyau ${debit ? "coule" : ""}"></div>
-      <div class="sx-enfants">${branches}</div>
-    </div>`;
+    const pc = (x) => b ? (x || 0) / b * 100 : null;
+    const ded = e.filter(estDeduit);
+    const formule = b === null ? "" : `${fmt2(b)} ${ded.map(x => `− ${fmt2(brut(x) || 0)}`).join(" ")}`;
+    const reste = !ded.length ? "" : `<li class="sx-li-reste">${noeud(null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, part: p !== null ? pc(Math.max(0, p)) : null, titre: `Reste — ${nomCourt(c.nom || c.dossierNom)}`, sous: formule ? `${formule} ${unite}` : `hors ${ded.map(x => x.nom || "sous-compteur").join(", ")}`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</li>`;
+    return `<li class="${info ? "info" : ""}">${noeud(c, { part })}<ul>${e.map(x => branche(x, pc(brut(x)))).join("")}${reste}</ul></li>`;
   };
+  const reseau = (c) => `<div class="sx-scroll"><ul class="sx-org">${branche(c)}</ul></div>`;
 
   // Rangement par association → groupe, d'après le site du compteur de tête.
   const siteDe = new Map(sites.map(x => [x.id, x]));
@@ -131,8 +134,8 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
   const bloc = (l, cle) => {
     listes.set(cle, l);
     return `<div class="sx-liste" data-sx-liste="${esc(cle)}">${l.map((c, i) => enfants(c.id).length
-      ? `<div class="sx-item sx-item-net" ${glisser ? `data-drag-index="${i}"` : ""}>${glisser ? `<span class="sx-poignee" data-drag-handle title="Glisser pour ranger">☰</span>` : ""}<div class="sx-scroll">${reseau(c)}</div></div>`
-      : `<div class="sx-item" ${glisser ? `data-drag-index="${i}"` : ""}>${glisser ? `<span class="sx-poignee" data-drag-handle title="Glisser pour ranger">☰</span>` : ""}${dial(c, null, { racine: true })}</div>`).join("")}</div>`;
+      ? `<div class="sx-item sx-item-net" ${glisser ? `data-drag-index="${i}"` : ""}>${glisser ? `<span class="sx-poignee" data-drag-handle title="Glisser pour ranger">☰</span>` : ""}${reseau(c)}</div>`
+      : `<div class="sx-item" ${glisser ? `data-drag-index="${i}"` : ""}>${glisser ? `<span class="sx-poignee" data-drag-handle title="Glisser pour ranger">☰</span>` : ""}${noeud(c)}</div>`).join("")}</div>`;
   };
   const tri = (l) => [...l].sort(cmpCompteurs);
   const html = affichees.map(n => {
@@ -146,7 +149,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     </section>`;
   }).join("");
   const chips = nomsAssoc.length > 1 ? `<div class="sx-assocs">${["", ...nomsAssoc.filter(Boolean)].map(n => `<button type="button" data-sx-assoc="${esc(n)}" class="${assoc === n ? "on" : ""}">${esc(n || "Toutes")}</button>`).join("")}</div>` : "";
-  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips, listes, descendants };
+  return { html: html || `<p class="hint">Aucun compteur de ce type.</p>`, chips, listes, descendants, optionsParent, parentDe };
 }
 
 export function renderSchema(container, { compteurs, releves, sites = [], associations = [], peutModifier, onRetour, onOuvrirSite }) {
@@ -162,12 +165,12 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
   <div class="sc sx-e-${E.id}" style="--e:${E.couleur}">
     <div class="sc-entete">
       <button class="nav-btn" id="sc-retour">← Retour</button>
-      <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui : un sous-compteur est déduit de son compteur général (sur autant de niveaux que nécessaire). La consommation « propre » d'un compteur = son index moins ses sous-compteurs. Débits sur les 30 derniers jours.</p></div>
+      <div><h1>🔗 Schéma des compteurs</h1><p>Qui alimente qui, sur les 30 derniers jours.</p></div>
     </div>
     <div class="sc-onglets">${presentes.map(e => `<button data-sc-e="${e.id}" class="${e.id === st.energie ? "on" : ""}" style="--e:${e.couleur}">${e.icone} ${e.label} <small>${compteurs.filter(c => c.type === e.id).length}</small></button>`).join("")}</div>
     ${st.lier ? "" : r.chips}
     ${st.lier ? `<div class="sc-mode">🔗 <b>${esc(liste.find(x => x.id === st.lier)?.nom || "")}</b> (${esc(nomCourt(liste.find(x => x.id === st.lier)?.dossierNom))}) : clique sur le compteur qui l'<b>alimente</b> (son compteur général, ou un sous-compteur). <button type="button" id="sc-annuler">Annuler</button></div>`
-      : peutModifier ? `<p class="sc-aide">Pour brancher un compteur : <b>attrape son cadran rond et lâche-le sur le compteur qui l'alimente</b> (ex. le self sur le compteur général du lycée). Pour en refaire un compteur général : lâche-le sur la zone « Compteur général » qui apparaît en bas. La liste « ↳ Alimenté par » fait la même chose. Pour ranger : maintiens <b>☰</b> et fais glisser.</p>` : ""}
+      : peutModifier ? `<p class="sc-aide">Lecture de <b>haut en bas</b> : le compteur général en haut, ses sous-compteurs dessous. Trait plein = <b>déduit</b>, pointillés = <b>pour info</b> (ex. eau chaude). La case <b>= Reste</b> fait le calcul. Pour régler un compteur : <b>clique dessus</b> (ou glisse-le sur le compteur qui l'alimente). Pour ranger : <b>☰</b>.</p>` : ""}
     ${r.html}
   </div>`;
 
@@ -182,58 +185,44 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
     catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
   };
   container.querySelectorAll("[data-sc-detacher]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); enregistrer(b.dataset.scDetacher, null); }));
-  container.querySelectorAll(".sx-c.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
-  container.querySelectorAll("[data-sx-deduit]").forEach(cb => {
-    cb.addEventListener("pointerdown", (e) => e.stopPropagation());
-    cb.addEventListener("change", async () => {
-      const id = cb.dataset.sxDeduit;
-      try { await modifierCompteur(id, { nonDeduit: !cb.checked }); const c = compteurs.find(x => x.id === id); if (c) c.nonDeduit = !cb.checked; rerendre(); window.toast?.(cb.checked ? "✓ Déduit du compteur au-dessus" : "✓ Compteur pour info (non déduit)"); }
-      catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
-    });
-  });
-  container.querySelectorAll("[data-sx-parent]").forEach(sel => {
-    sel.addEventListener("click", (e) => e.stopPropagation());
-    sel.addEventListener("pointerdown", (e) => e.stopPropagation());
-    sel.addEventListener("change", () => enregistrer(sel.dataset.sxParent, sel.value || null));
-  });
-  // Téléphone : les cartes restent compactes (lecture) ; toucher un compteur
-  // ouvre une fenêtre en bas avec « Alimenté par » et « Déduire ».
-  const surTel = () => window.matchMedia("(max-width:700px)").matches;
-  if (peutModifier) container.querySelectorAll(".sx-c[data-sc-id]").forEach(carte => carte.addEventListener("click", (e) => {
-    if (!surTel() || e.target.closest("select,input,label,button")) return;
-    const id = carte.dataset.scId, c = compteurs.find(x => x.id === id); if (!c) return;
-    const sel = carte.querySelector(".sx-parent select"), cb = carte.querySelector("[data-sx-deduit]");
+  container.querySelectorAll(".sx-n.cible").forEach(el => el.addEventListener("click", () => enregistrer(st.lier, el.dataset.scId)));
+  // Cliquer (ou toucher) un compteur ouvre une fenêtre avec « Alimenté par »
+  // et « Déduire » ; sur ordinateur on peut aussi le glisser sur son parent.
+  const ouvrirReglages = (id) => {
+    const c = compteurs.find(x => x.id === id); if (!c) return;
+    const aParent = !!r.parentDe(c);
     const fond = document.createElement("div"); fond.className = "sx-feuille-fond";
     fond.innerHTML = `<div class="sx-feuille"><div class="sx-feuille-tete"><b>${esc(c.nom || "")}</b><small>${esc(nomCourt(c.dossierNom))}${c.logement ? ` · Logement ${esc(c.logement)}` : ""}</small><button type="button" data-f-x>✕</button></div>
-      <label class="sx-f-l">↳ Alimenté par (le compteur juste au-dessus)<select data-f-parent>${sel ? sel.innerHTML : ""}</select></label>
-      ${cb ? `<label class="sx-f-c"><input type="checkbox" data-f-deduit ${cb.checked ? "checked" : ""}> Déduire du compteur au-dessus <small>(décoche pour un compteur « pour info », ex. eau chaude)</small></label>` : ""}
+      <label class="sx-f-l">↳ Alimenté par (le compteur juste au-dessus)<select data-f-parent>${r.optionsParent(c)}</select></label>
+      ${aParent ? `<label class="sx-f-c"><input type="checkbox" data-f-deduit ${estDeduit(c) ? "checked" : ""}> Déduire du compteur au-dessus <small>(décoche pour un compteur « pour info », ex. eau chaude)</small></label>` : `<p class="sx-f-aide">C'est un compteur général (rien au-dessus).</p>`}
       <button type="button" class="sx-f-ok" data-f-x>Fermer</button></div>`;
     document.body.append(fond);
     const fermer = () => fond.remove();
     fond.addEventListener("click", (ev) => { if (ev.target === fond) fermer(); });
     fond.querySelectorAll("[data-f-x]").forEach(b => b.addEventListener("click", fermer));
-    const fs = fond.querySelector("[data-f-parent]"); if (sel) fs.value = sel.value;
+    const fs = fond.querySelector("[data-f-parent]");
     fs.addEventListener("change", () => { fermer(); enregistrer(id, fs.value || null); });
     fond.querySelector("[data-f-deduit]")?.addEventListener("change", async (ev) => {
       const v = ev.target.checked;
       try { await modifierCompteur(id, { nonDeduit: !v }); c.nonDeduit = !v; fermer(); rerendre(); window.toast?.(v ? "✓ Déduit du compteur au-dessus" : "✓ Compteur pour info (non déduit)"); }
       catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
     });
-  }));
-  // Brancher par glisser-déposer : on attrape le CADRAN d'un compteur et on le
-  // lâche sur le compteur qui l'alimente (ou sur la zone « compteur général »).
-  if (peutModifier) container.querySelectorAll(".sx-c[data-sc-id] .sx-dial").forEach(dialEl => {
-    const carte = dialEl.closest(".sx-c"), id = carte.dataset.scId;
-    dialEl.style.cursor = "grab"; dialEl.style.touchAction = "none"; dialEl.title = "Glisser sur le compteur qui alimente celui-ci";
-    if (window.matchMedia("(max-width:700px)").matches) { dialEl.style.touchAction = ""; dialEl.style.cursor = ""; return; }
-    dialEl.addEventListener("pointerdown", (e) => {
+  };
+  if (peutModifier) container.querySelectorAll(".sx-n[data-sc-id]").forEach(carte => {
+    const id = carte.dataset.scId;
+    carte.addEventListener("keydown", (e) => { if (e.key === "Enter") ouvrirReglages(id); });
+    const surTel = window.matchMedia("(max-width:700px)").matches;
+    if (surTel) { carte.addEventListener("click", () => ouvrirReglages(id)); return; }
+    carte.style.cursor = "grab"; carte.style.touchAction = "none";
+    carte.title = "Clic : régler · Glisser sur un autre compteur : le brancher dessous";
+    carte.addEventListener("pointerdown", (e) => {
       if (e.button !== undefined && e.button !== 0) return;
       const x0 = e.clientX, y0 = e.clientY; let fantome = null, zone = null, cible = null;
       const interdits = r.descendants(id); interdits.add(id);
       const demarrer = () => {
-        fantome = dialEl.cloneNode(true); fantome.className += " sx-fantome"; document.body.append(fantome);
-        zone = document.createElement("div"); zone.className = "sx-zone-general"; zone.textContent = "⬇ Lâcher ici = compteur général (sans compteur au-dessus)"; container.querySelector(".sc").append(zone);
-        container.querySelectorAll(".sx-c[data-sc-id]").forEach(c => c.classList.add(interdits.has(c.dataset.scId) ? "sx-interdit" : "sx-possible"));
+        fantome = carte.cloneNode(true); fantome.classList.add("sx-fantome"); document.body.append(fantome);
+        zone = document.createElement("div"); zone.className = "sx-zone-general"; zone.textContent = "⬇ Lâcher ici = compteur général (rien au-dessus)"; container.querySelector(".sc").append(zone);
+        container.querySelectorAll(".sx-n[data-sc-id]").forEach(c => c.classList.add(interdits.has(c.dataset.scId) ? "sx-interdit" : "sx-possible"));
         document.body.style.userSelect = "none";
       };
       const bouger = (ev) => {
@@ -242,14 +231,14 @@ export function renderSchema(container, { compteurs, releves, sites = [], associ
         ev.preventDefault();
         fantome.style.left = ev.clientX + "px"; fantome.style.top = ev.clientY + "px";
         const sous = document.elementFromPoint(ev.clientX, ev.clientY);
-        const c = sous?.closest?.(".sx-c[data-sc-id]"); const z = sous?.closest?.(".sx-zone-general");
+        const c = sous?.closest?.(".sx-n[data-sc-id]"); const z = sous?.closest?.(".sx-zone-general");
         container.querySelectorAll(".sx-survol").forEach(x => x.classList.remove("sx-survol"));
         cible = z ? "GENERAL" : (c && !interdits.has(c.dataset.scId) ? c.dataset.scId : null);
         if (z) z.classList.add("sx-survol"); else if (cible) c.classList.add("sx-survol");
       };
       const lacher = () => {
         document.removeEventListener("pointermove", bouger); document.removeEventListener("pointerup", lacher); document.removeEventListener("pointercancel", lacher);
-        if (!fantome) return;
+        if (!fantome) { ouvrirReglages(id); return; }
         fantome.remove(); zone?.remove(); document.body.style.userSelect = "";
         container.querySelectorAll(".sx-possible,.sx-interdit,.sx-survol").forEach(x => x.classList.remove("sx-possible", "sx-interdit", "sx-survol"));
         const actuel = compteurs.find(x => x.id === id)?.compteurParentId || null;
