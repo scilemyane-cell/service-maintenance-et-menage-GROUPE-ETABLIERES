@@ -325,7 +325,7 @@
         ],
       },
       {
-        id: "compteurs", label: "Relevé compteur", icon: "🎛️", desc: "Eau, gaz, électricité — avec photo et QR",
+        id: "compteurs", label: "Relevé compteur", icon: "🎛️", iconHTML: `<svg viewBox="0 0 120 150" width="30" height="38" aria-hidden="true" style="display:block;margin:0 auto"><rect x="4" y="4" width="112" height="142" rx="16" fill="#c9d628"/><rect x="16" y="14" width="88" height="86" rx="12" fill="#f4f5f0"/><rect x="22" y="34" width="76" height="30" rx="3" fill="#8fd3e0" stroke="#5aa9b8" stroke-width="2"/><text x="60" y="55" text-anchor="middle" font-family="monospace" font-size="15" font-weight="700" fill="#1d3d6b">kWh</text><rect x="30" y="78" width="26" height="11" rx="3" fill="#9a9a9a"/><rect x="64" y="78" width="26" height="11" rx="3" fill="#9a9a9a"/><rect x="26" y="112" width="68" height="20" rx="4" fill="#b3bf1f"/><text x="60" y="127" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="800" fill="#4a5200">LINKY</text></svg>`, desc: "Eau, gaz, électricité — avec photo et QR",
         badge: compteursAlertCount > 0 ? compteursAlertCount : null,
         subtabs: [
           { id: "liste", label: "Sites", icon: "🏢", roles: [...GESTION,"technicien"], mount: mountCompteurs },

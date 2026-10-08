@@ -639,7 +639,7 @@ function render() {
                     ${c.badgeAtelier ? `<span class="gh-badge" title="Alertes stock atelier">🔧${c.badgeAtelier > 99 ? "99+" : c.badgeAtelier}</span>` : ""}
                     ${c.badgeSites ? `<span class="gh-badge gh-badge-orange" title="Alertes stock déporté (sites)">🏢${c.badgeSites > 99 ? "99+" : c.badgeSites}</span>` : ""}
                   </span>` : c.badge ? `<span class="gh-badges"><span class="gh-badge">${c.badge > 99 ? "99+" : c.badge}</span></span>` : ""}
-                <span class="gh-tuile-icone">${c.icon}</span>
+                <span class="gh-tuile-icone">${c.iconHTML || c.icon}</span>
                 <span class="gh-tuile-label">${esc(c.label)}</span>
               </button>
               ${peutReorganiser ? `
