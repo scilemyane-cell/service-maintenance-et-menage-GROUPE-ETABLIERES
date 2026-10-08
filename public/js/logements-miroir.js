@@ -20,7 +20,7 @@ export function mountLogements(container, user) {
   const cadre = container.querySelector("#lg-cadre");
   container.querySelector("#lg-recharger").onclick = () => { cadre.src = PAGE + "?t=" + Date.now(); };
   container.querySelector("#lg-plein").onclick = () => window.open(PAGE, "_blank");
-  const ajuster = () => { if (!document.contains(cadre)) { window.removeEventListener("resize", ajuster); return; } cadre.style.height = Math.max(480, window.innerHeight - cadre.getBoundingClientRect().top - 12) + "px"; };
+  const ajuster = () => { if (!document.contains(cadre)) { window.removeEventListener("resize", ajuster); return; } cadre.style.height = Math.max(640, window.innerHeight - cadre.getBoundingClientRect().top - 12) + "px"; };
   requestAnimationFrame(ajuster); setTimeout(ajuster, 300);
   window.addEventListener("resize", ajuster);
 }
