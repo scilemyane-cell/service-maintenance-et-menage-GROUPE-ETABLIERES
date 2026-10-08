@@ -33,11 +33,28 @@ export function calculConso(releves) {
     cache.set(c.id, out); return out;
   };
   const interp = (pts, ms) => { for (let i = 1; i < pts.length; i++) if (ms <= pts[i][0]) { const [ta, va] = pts[i - 1], [tb, vb] = pts[i]; return tb === ta ? vb : va + (vb - va) * (ms - ta) / (tb - ta); } return pts[pts.length - 1][1]; };
-  return (c, t0, t1) => {
+  const f = (c, t0, t1) => {
     let tot = 0, ok = false;
     series(c).forEach(pts => { if (pts.length < 2) return; const a = Math.max(t0, pts[0][0]), b = Math.min(t1, pts[pts.length - 1][0]); if (b <= a) return; const va = interp(pts, a), vb = interp(pts, b); if (vb >= va) { tot += vb - va; ok = true; } });
     return ok ? tot : null;
   };
+  // Débit moyen par jour sur la fenêtre [t0, t1], mesuré sur la partie de la
+  // fenêtre couverte par les relevés ; si les relevés sont tous plus anciens,
+  // on prend le dernier intervalle mesuré (relevés mensuels).
+  f.taux = (c, t0, t1) => {
+    let tot = 0, ok = false;
+    series(c).forEach(pts => {
+      if (pts.length < 2) return;
+      let a = Math.max(t0, pts[0][0]), b = Math.min(t1, pts[pts.length - 1][0]);
+      if (b - a < 86400000) { a = pts[pts.length - 2][0]; b = pts[pts.length - 1][0]; }
+      if (b <= a) return;
+      const va = interp(pts, a), vb = interp(pts, b);
+      if (vb >= va) { tot += (vb - va) / ((b - a) / 86400000); ok = true; }
+    });
+    return ok ? tot : null;
+  };
+  f.nb = (c) => Math.max(0, ...series(c).map(p => p.length));
+  return f;
 }
 
 // Réseaux d'une énergie, rangés par association puis groupe (comme les
@@ -75,7 +92,10 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
       + (meme.length ? `<optgroup label="${esc(nomCourt(c.dossierNom) || "Même site")}">${meme.map(opt).join("")}</optgroup>` : "")
       + [...new Set(autres.map(x => x.dossierNom))].map(n => `<optgroup label="${esc(nomCourt(n))}">${autres.filter(x => x.dossierNom === n).map(opt).join("")}</optgroup>`).join("");
   };
-  const brut = (c) => conso(c, debut, fin);
+  // Débit par jour × nombre de jours de la fenêtre (une fenêtre partiellement
+  // couverte par les relevés n'est plus sous-estimée) ; sinon conso brute.
+  const brut = (c) => { if (conso.taux) { const t = conso.taux(c, debut, fin); return t === null ? null : t * jours; } return conso(c, debut, fin); };
+  const pasDeMesure = (c) => { const n = conso.nb ? conso.nb(c) : null; return n === 0 ? "aucun relevé" : n === 1 ? "1 seul relevé — il en faut 2" : "pas encore de mesure"; };
   const propre = (c) => { const b = brut(c); if (b === null) return null; const s = enfants(c.id).filter(estDeduit).reduce((t, e) => t + (brut(e) || 0), 0); return b - s; };
   const unite = uniteValeur({ type: E.id });
 
@@ -98,7 +118,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     return `<div class="sx-n ${chaude ? "chaude" : ""} ${opts.virtuel ? "virtuel" : ""} ${info ? "info" : ""} ${!aParent && !opts.virtuel && enfants(c.id).length ? "tete" : ""} ${lier === c?.id ? "lie" : ""} ${cible ? "cible" : ""} ${bloque && lier !== c?.id ? "bloque" : ""} ${opts.alerte ? "alerte" : ""}" ${!opts.virtuel ? `data-sc-id="${c.id}" tabindex="0"` : ""}>
       <div class="sx-n-titre"><span class="sx-n-ic">${opts.virtuel ? "⚖️" : chaude ? "♨️" : E.icone}</span><b>${esc(opts.virtuel ? opts.titre : (c.nom || E.label))}</b></div>
       <small class="sx-n-site">${esc(opts.virtuel ? opts.sous : nomCourt(c.dossierNom) + (c.logement ? ` · Logt ${c.logement}` : ""))}</small>
-      <div class="sx-n-val">${b === null ? `<span class="sx-n-vide">pas encore de mesure</span>` : `<b>${fmt2(b)}</b> ${unite}<small> · ${fmt2(parJour)}/j</small>`}</div>
+      <div class="sx-n-val">${b === null ? `<span class="sx-n-vide">${opts.virtuel ? "un compteur n'a pas encore 2 relevés" : pasDeMesure(c)}</span>` : `<b>${fmt2(b)}</b> ${unite}<small> · ${fmt2(parJour)}/j</small>`}</div>
       ${niveau !== null ? `<div class="sx-n-barre" title="${fmt(niveau, 0)} % du compteur au-dessus"><i style="width:${niveau}%"></i><span>${fmt(niveau, 0)} %</span></div>` : ""}
       ${role}
       ${opts.alerte ? `<span class="sx-al">⚠️ ${esc(opts.alerte)}</span>` : ""}
@@ -112,7 +132,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const e = enfants(c.id);
     const info = parentDe(c) && !estDeduit(c);
     if (!e.length) return `<li class="${info ? "info" : ""}">${noeud(c, { part })}</li>`;
-    const b = brut(c), p = propre(c);
+    const b = brut(c), p = e.filter(estDeduit).some(x => brut(x) === null) ? null : propre(c); // un sous-compteur sans mesure : pas de reste faux
     const pc = (x) => b ? (x || 0) / b * 100 : null;
     const ded = e.filter(estDeduit);
     const formule = b === null ? "" : `${fmt2(b)} ${ded.map(x => `− ${fmt2(brut(x) || 0)}`).join(" ")}`;
