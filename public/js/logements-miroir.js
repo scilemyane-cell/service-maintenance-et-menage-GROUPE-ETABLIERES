@@ -6,7 +6,7 @@
 const PAGE = "logements.html";
 
 export function mountLogements(container, user) {
-  window.smmUtilisateur = user ? { nom: user.nom || user.email || "", email: user.email || "", role: user.role || "" } : null;
+  window.smmUtilisateur = user ? { nom: user.nom || user.email || "", email: user.email || "", role: user.role || "", lectureSeule: !!user.lectureSeule } : null;
   container.innerHTML = `
     <div class="lg-miroir">
       <div class="lg-barre">

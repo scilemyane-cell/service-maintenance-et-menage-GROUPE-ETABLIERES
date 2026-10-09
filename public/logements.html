@@ -719,7 +719,8 @@ const accessGate = document.getElementById('accessGate');
 const appRoot = document.getElementById('appRoot');
 const smmUser = (() => { try { return (window.parent !== window && window.parent.smmUtilisateur) || (window.opener && window.opener.smmUtilisateur) || null; } catch (e) { return null; } })();
 const currentUserName = smmUser ? (smmUser.nom || smmUser.email || '') : '';
-let currentService = smmUser ? (smmUser.role === 'direction' ? 'Direction' : 'Maintenance') : '';
+// Accès "Lecture" (Gérer l'accès) : planning saisonnier en lecture seule, comme la direction
+let currentService = smmUser ? (smmUser.role === 'direction' ? 'Direction' : (smmUser.lectureSeule ? 'Consultation' : 'Maintenance')) : '';
 let applyServiceDefaultFilter = null; // rempli par l'IIFE principale plus bas
 let syncStickyBarSpacerRef = null;
 

@@ -371,7 +371,8 @@
       {
         id: "logements", label: "Logements Bât. A / B", icon: "🏠", desc: "Occupation des chambres, vidage, transfert, planning saisonnier (miroir de l'outil logements)",
         subtabs: [
-          { id: "liste", label: "Logements", icon: "🏠", roles: [...GESTION, "direction"], mount: mountLogements },
+          // Rôles de terrain : seulement si "Gérer l'accès" le donne (Lecture/Modification)
+          { id: "liste", label: "Logements", icon: "🏠", roles: [...GESTION, "direction", "technicien", "menage", "mi_temps"], mount: mountLogements },
         ],
       },
       {

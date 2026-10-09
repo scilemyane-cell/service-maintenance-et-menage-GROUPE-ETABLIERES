@@ -136,6 +136,7 @@ const TUILES_GEREES = [
   { id: "previsionnel", label: "Prévisionnel Travaux" },
   { id: "planning-individuel", label: "Planning individuel" },
   { id: "suivi-demandes", label: "Suivi des demandes" },
+  { id: "logements", label: "Logements Bât. A / B" },
   { id: "stock-menage", label: "Stock Ménage" },
   { id: "stock", label: "Stock maintenance" },
 ];
