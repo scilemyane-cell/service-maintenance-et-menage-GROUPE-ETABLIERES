@@ -108,6 +108,7 @@ export function indisponible(people, absences, person, date) {
 // personne ne l'est, on retient qui a le moins de jours d'absence cette
 // semaine-là (au pire, l'interruption reste inévitable ce cas précis).
 const DEBUT_ALTERNANCE_N2 = "2026-10-05";
+const DEBUT_ALTERNANCE_SOUPLE = "2026-10-19"; // semaines déjà commencées inchangées
 export function computeWeeklyTitulaires(people, absences) {
   const scoresN1 = {}, scoresN2 = {};
   // Charge globale par personne (union N1/N2) : cumule le poids des
@@ -160,7 +161,16 @@ export function computeWeeklyTitulaires(people, absences) {
       // l'ancien calcul pour ne pas modifier l'historique.
       const precedent = idx > 0 ? titN2[idx - 1] : undefined;
       const alternance = dateKey(w.start) >= DEBUT_ALTERNANCE_N2;
-      const candidats = alternance && precedent !== undefined && availN2.some(p => p !== precedent) ? availN2.filter(p => p !== precedent) : availN2;
+      let candidats = alternance && precedent !== undefined && availN2.some(p => p !== precedent) ? availN2.filter(p => p !== precedent) : availN2;
+      // Depuis le 19/10/2026 : si seul le titulaire de la semaine précédente
+      // est dispo TOUTE la semaine (les autres ont un congé/RTT/arrêt d'1 ou 2
+      // jours), on ne lui fait pas enchaîner les semaines : on prend un autre
+      // technicien absent au plus 2 jours, et ses jours d'absence sont
+      // couverts par le suivant de la liste (resolveDayN2).
+      if (dateKey(w.start) >= DEBUT_ALTERNANCE_SOUPLE && precedent !== undefined && candidats.length === 1 && candidats[0] === precedent) {
+        const partiels = people.n2.filter(p => p !== precedent && !pasEncoreDemarre(people, p, w.start) && joursAbsents(p) > 0 && joursAbsents(p) <= 2);
+        if (partiels.length) candidats = partiels.sort((a, b) => joursAbsents(a) - joursAbsents(b) || taux(a) - taux(b)).slice(0, 1);
+      }
       const sorted = [...candidats].sort((a, b) => taux(a) - taux(b));
       chosenN2 = sorted[0];
       scoresN2[chosenN2] += weight;
