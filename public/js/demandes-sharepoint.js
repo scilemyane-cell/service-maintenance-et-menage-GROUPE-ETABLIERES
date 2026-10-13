@@ -56,6 +56,7 @@ function statut(v) {
   const t = sa(v); if (!t) return "Non renseigné";
   if (t.startsWith("realis")) return "Réalisé";
   if (t.startsWith("annul")) return "Annulé";
+  if (t.startsWith("arbitrage")) return "Arbitrage budgétaire"; // demande mise en pause
   return { "pris en compte": "Pris en compte", "demande de devis": "Demande de devis", "planifie": "Planifié", "intervenant sollicite": "Intervenant sollicité", "commande en cours": "Commande en cours", "autre": "Autre" }[t] || txt(v);
 }
 const urgence = (v) => ({ normal: "Normal", urgent: "Urgent", "a planifier": "À planifier", critique: "Critique" }[sa(v)] || "Non renseignée");

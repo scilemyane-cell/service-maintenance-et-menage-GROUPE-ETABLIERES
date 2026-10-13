@@ -172,8 +172,11 @@ export async function importerDemandes(lignes) {
 // demandes (watchDemandes, cache-delta) : zéro lecture supplémentaire.
 const msDe = (t) => (t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000 : 0));
 const resumeAction = (x) => (x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null);
+// « Arbitrage budgétaire » : demande mise en pause — hors compteurs, stats et
+// listes (visible seulement dans l'onglet « En pause »).
+export const estEnPause = (d) => String(d?.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("arbitrage");
 function deriverDemandes(cle, calcul, callback) {
-  return ecoutePartagee(`derive:${cle}`, (emettre) => { watchDemandes((liste) => emettre(calcul(liste))); }, callback);
+  return ecoutePartagee(`derive:${cle}`, (emettre) => { watchDemandes((liste) => emettre(calcul(liste.filter(d => !estEnPause(d))))); }, callback);
 }
 // Demandes Urgentes / Critiques encore ouvertes (bandeau d'accueil).
 export function watchUrgencesOuvertes(callback) {

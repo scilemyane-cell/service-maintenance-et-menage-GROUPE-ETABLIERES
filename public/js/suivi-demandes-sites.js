@@ -139,7 +139,7 @@ async function basculerFavori(nomSite) {
   catch (e) { console.error("saveFavorisDemandes:", e); window.toast?.("Favori non enregistré."); }
 }
 
-const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "Planifié", "Commande en cours", "Réalisé", "Annulé"];
+const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "Planifié", "Commande en cours", "Réalisé", "Annulé", "Arbitrage budgétaire"];
 const ORDRE_URG = { "Critique": 0, "Urgent": 1, "À planifier": 2, "Normal": 3, "Non renseignée": 4 };
 const TRAITE = (s) => s === "Réalisé" || s === "Annulé";
 // Circuit de validation : le technicien déclare « Réalisé », la demande passe

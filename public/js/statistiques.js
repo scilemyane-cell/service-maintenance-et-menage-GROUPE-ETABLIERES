@@ -20,7 +20,7 @@ import { db } from "./firebase-init.js";
 import { collection, getDocs, doc, getDoc } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
-import { watchDemandes, watchInterventions } from "./firestore-data.js";
+import { watchDemandes, watchInterventions, estEnPause } from "./firestore-data.js";
 import { ecoutePartagee } from "./ecoute-partagee.js";
 import { ecouteDelta } from "./cache-delta.js";
 import { watchRelevesCompteurs } from "./compteurs-data.js";
@@ -68,7 +68,7 @@ export async function mountStatistiques(container, user) {
 // plus une fois toutes les 30 min (bouton « Actualiser » pour forcer).
 const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = false; u = watch((v) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(v); }); });
 const LOCAUX = {
-  demandes: () => premiereValeur(watchDemandes),
+  demandes: () => premiereValeur(watchDemandes).then(l => l.filter(d => !estEnPause(d))), // hors « Arbitrage budgétaire »
   interventions: () => premiereValeur(watchInterventions),
   relevesCompteurs: () => premiereValeur(watchRelevesCompteurs),
 };

@@ -209,7 +209,8 @@
     if (demOuvertesAbonne || !["super_admin", "admin", "n1"].includes(role)) return;
     demOuvertesAbonne = true;
     import("./firestore-data.js").then(({ watchDemandes }) => watchDemandes((liste) => {
-      const ouvertes = liste.filter(d => !d.lieeA && !STATUTS_FINIS.includes(d.statut));
+      const pause = (d) => String(d.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("arbitrage");
+      const ouvertes = liste.filter(d => !d.lieeA && !STATUTS_FINIS.includes(d.statut) && !pause(d));
       demOuvertes = { n: ouvertes.length, u: ouvertes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length };
       const el = document.getElementById("gh-compte-dem");
       if (el) { el.innerHTML = compteDemandesHTML(); brancherCompteDemandes(); }

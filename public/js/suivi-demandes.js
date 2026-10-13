@@ -27,7 +27,7 @@ import { capturerAncre, restaurerAncre } from "./ancre-scroll.js";
 //    qui reste pour l'instant une photo figée mise à jour manuellement par
 //    Claude à chaque envoi du fichier Excel par Valentin.
 import { esc } from "./astreinte-logic.js";
-import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes } from "./firestore-data.js";
+import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes, estEnPause } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
@@ -200,7 +200,7 @@ export function mountSuiviDemandesTab(container, user) {
 function nbMesActions() {
   const uid = identite().uid; if (!uid || !state.demandes) return 0;
   const monNom = identite().nom;
-  return (state.demandes || []).filter(d => (d.actionPour === uid && !d.actionFaiteLe) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
+  return (state.demandes || []).filter(d => !estEnPause(d)).filter(d => (d.actionPour === uid && !d.actionFaiteLe) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
 }
 function injecterMesActions(container) {
   const uid = identite().uid;
@@ -500,6 +500,7 @@ function renderVue(container) {
     restaurerSaisies(container, saisies);
     return;
   }
+  if (ui.vue === "pause") return renderEnPause(container);
   if (ui.vue === "tableau") return renderTableau(container);
   if (ui.vue === "prestataires" && permsUtilisateur().isEditor) {
     return renderPrestataires(container, state.demandes === null ? null : toutesLesLignes(), {
@@ -577,7 +578,31 @@ function toggleVueHTML() {
       <button type="button" class="demandes-vue-btn ${ui.vue === "stats" ? "active" : ""}" data-vue="stats">📊 Statistiques</button>
       ${btnActions}
       ${permsUtilisateur().isEditor ? `<button type="button" class="demandes-vue-btn ${ui.vue === "prestataires" ? "active" : ""}" data-vue="prestataires">🏢 Prestataires</button>` : ""}
+      ${(n => n ? `<button type="button" class="demandes-vue-btn ${ui.vue === "pause" ? "active" : ""}" data-vue="pause" title="Demandes en « Arbitrage budgétaire » : hors statistiques et compteurs">⏸️ En pause <span class="vue-badge" style="background:#8a8f98">${n}</span></button>` : "")((state.demandes || []).filter(d => estEnPause(d) && !d.lieeA).length)}
     </div>`;
+}
+
+// ---- Onglet « ⏸️ En pause » : demandes en « Arbitrage budgétaire » ----
+// Elles sortent des statistiques, compteurs et listes ; on peut les
+// remettre en service d'un clic (statut « Pris en compte », reporté dans l'Excel).
+function renderEnPause(container) {
+  const perms = permsUtilisateur();
+  const l = toutesLesLignes(true).filter(x => estEnPause(x) && !x.lieeA).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  container.innerHTML = `<div class="stack">${toggleVueHTML()}
+    <div class="form-card" style="margin:0">
+      <h3 style="margin:0 0 4px">⏸️ Demandes en pause — Arbitrage budgétaire</h3>
+      <p class="hint" style="margin:0 0 12px">Elles ne comptent ni dans les statistiques, ni dans les compteurs « à traiter ». ${perms.isEditor ? "« ▶ Remettre en service » les repasse en « Pris en compte » (l'Excel est mis à jour)." : ""}</p>
+      ${l.length ? `<div class="table-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Site</th><th>Local</th><th>Description</th><th>Urgence</th>${perms.isEditor ? "<th></th>" : ""}</tr></thead><tbody>
+        ${l.map(x => `<tr><td class="mono">${esc(x.n)}</td><td>${x.date ? esc(new Date(x.date).toLocaleDateString("fr-FR")) : "—"}</td><td>${esc(x.site)}</td><td>${esc(x.local || "")}</td><td>${esc(x.descr || "")}</td><td>${esc(x.urgence || "")}</td>
+          ${perms.isEditor ? `<td><button type="button" class="add-btn" data-reprendre="${esc(x.id)}" style="white-space:nowrap;padding:6px 10px;font-size:12px">▶ Remettre en service</button></td>` : ""}</tr>`).join("")}
+      </tbody></table></div>` : `<p class="hint">Aucune demande en pause.</p>`}
+    </div></div>`;
+  attacherToggleVue(container);
+  container.querySelectorAll("[data-reprendre]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "⏳…";
+    try { await updateDemande(b.dataset.reprendre, { statut: "Pris en compte", dateStatut: new Date().toISOString().slice(0, 10) }); planifierDepotAuto(); window.toast?.("✓ Demande remise en service"); }
+    catch (e) { alert("Impossible : " + (e?.message || e)); b.disabled = false; b.textContent = "▶ Remettre en service"; }
+  }));
 }
 
 function attacherToggleVue(container) {
@@ -617,8 +642,10 @@ function ligneDepuisDoc(d) {
 // Même site écrit différemment dans le fichier (« Lycée » / « lycée », « Siège » /
 // « siège ») : regroupé sous l'orthographe la plus fréquente ; association
 // manquante (« Autres ») reprise des autres demandes du même site.
-function toutesLesLignes() {
-  const lignes = (state.demandes || []).map(ligneDepuisDoc);
+// Sans les demandes en pause (« Arbitrage budgétaire ») : elles ne comptent
+// nulle part, sauf dans l'onglet « ⏸️ En pause ».
+function toutesLesLignes(avecPause = false) {
+  const lignes = (state.demandes || []).filter(d => avecPause || !estEnPause(d)).map(ligneDepuisDoc);
   // Clé sans accents, majuscules, espaces ni ponctuation : « RS- Le Mail » = « RS - Le Mail ».
   const cle = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const orth = new Map(), assoc = new Map();
@@ -733,7 +760,7 @@ function renderTableau(container) {
   }
 
   const lignes = lignesFiltrees();
-  const total = state.demandes.length;
+  const total = state.demandes.filter(d => !estEnPause(d)).length;
   // Même calcul que le compteur du bandeau : sans les doublons reliés ni les « à valider ».
   const aTraiterTotal = toutesLesLignes().filter(l => !l.lieeA && !STATUTS_TRAITES.includes(l.statut) && l.statut !== "Réalisé – à valider").length;
 
