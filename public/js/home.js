@@ -102,7 +102,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   uidsImm.forEach(u => unsubs.push(watchActionsImmediates(u, (l) => { immediates[u] = l; scheduleRender(); })));
   // Logements Bât. A / B attribués (5 jours avant l'intervention)
   mesLogements = [];
-  if (user.uid) import("./logements-data.js").then(({ watchMesLogements }) => { if (uidVues !== user.uid) return; unsubs.push(watchMesLogements(user.uid, (l) => { mesLogements = l; scheduleRender(); })); }).catch(e => console.error(e));
+  if (user.uid) import("./logements-data.js").then(({ watchMesLogements }) => { if (uidVues !== user.uid) return; unsubs.push(watchMesLogements(["super_admin", "admin", "n1"].includes(user.role) ? "*" : user.uid, (l) => { mesLogements = l; scheduleRender(); })); }).catch(e => console.error(e));
   if (["super_admin", "admin", "n1"].includes(user.role)) unsubs.push(watchNouvellesDemandes((l) => { nouvelles = l; scheduleRender(); }));
   // Tâches ménage du mois en retard (agents ménage + encadrement)
   sitesMenage = null; fichesMenage = null;
@@ -381,13 +381,14 @@ function bandeauLogementsHTML() {
   const auj = new Date(); auj.setHours(0, 0, 0, 0);
   const lib = (d) => { const x = new Date(d + "T00:00:00"); const j = Math.round((x - auj) / 86400000); return j === 0 ? "aujourd'hui" : j === 1 ? "demain" : j < 0 ? `en retard (${x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })})` : x.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "2-digit" }); };
   const jourJ = mesLogements.some(x => x.date <= new Date(auj.getTime() - auj.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+  const sup = ["super_admin", "admin", "n1"].includes(mountedUser?.role);
   return `<section class="gh-urgences gh-logts ${jourJ ? "jour-j" : ""}">
     <div class="gh-urg-tete">🏠 <b>${mesLogements.length} logement${mesLogements.length > 1 ? "s" : ""} à faire</b><span>Bâtiments A / B — les 5 prochains jours</span></div>
     <div class="gh-urg-liste">${mesLogements.map(x => `
       <div class="gh-urg ${lib(x.date) === "aujourd'hui" || lib(x.date).startsWith("en retard") ? "jour-j" : ""}">
         <button type="button" data-logts-ouvrir class="gh-urg-corps">
           <span class="gh-urg-badge">${esc(lib(x.date))}${x.creneau ? ` · ${x.creneau === "matin" ? "matin" : "après-midi"}` : ""}</span>
-          <span class="gh-urg-txt"><b>Chambre ${esc(x.numero)} · ${esc(x.bat)} · ${esc(x.etage)}</b>${x.note ? `<small>${esc(x.note)}</small>` : ""}</span>
+          <span class="gh-urg-txt"><b>Chambre ${esc(x.numero)} · ${esc(x.bat)} · ${esc(x.etage)}${sup && x.pour ? ` · 👷 ${esc(x.pour)}` : ""}</b>${x.note ? `<small>${esc(x.note)}</small>` : ""}</span>
           <span class="gh-urg-go">Ouvrir →</span>
         </button>
       </div>`).join("")}
