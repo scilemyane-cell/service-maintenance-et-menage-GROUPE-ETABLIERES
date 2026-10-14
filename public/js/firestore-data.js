@@ -176,9 +176,13 @@ const resumeAction = (x) => (x.actionPour && x.actionTexte ? { pour: x.actionPou
 // listes (visible seulement dans l'onglet « En pause »).
 // Demande réalisée / annulée (y compris « à valider ») : son action est close.
 export const demandeClose = (d) => /^(realis|annul)/.test(String(d?.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+// Demande supprimée par un superviseur (erreur de saisie) : gardée en base
+// (sinon l'import Excel la recréerait), mais hors de toutes les listes,
+// compteurs et statistiques — restaurable depuis l'onglet « 🗑 Supprimées ».
+export const estSupprimee = (d) => !!d?.supprimeeLe;
 export const estEnPause = (d) => String(d?.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("arbitrage");
 function deriverDemandes(cle, calcul, callback) {
-  return ecoutePartagee(`derive:${cle}`, (emettre) => { watchDemandes((liste) => emettre(calcul(liste.filter(d => !estEnPause(d))))); }, callback);
+  return ecoutePartagee(`derive:${cle}`, (emettre) => { watchDemandes((liste) => emettre(calcul(liste.filter(d => !estEnPause(d) && !estSupprimee(d))))); }, callback);
 }
 // Demandes Urgentes / Critiques encore ouvertes (bandeau d'accueil).
 export function watchUrgencesOuvertes(callback) {

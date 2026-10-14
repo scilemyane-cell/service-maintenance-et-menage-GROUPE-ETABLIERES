@@ -800,7 +800,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         const candidats = tousDuSite.filter(x => x.id !== l.id && !x.lieeA && !lieesDe(x.id).length && !TRAITE(x.statut));
         const mails = Array.isArray(l.mailsEnvoyes) ? l.mailsEnvoyes : [];
         return `${mails.length ? `<div class="dps-mails">${mails.slice(-3).map(m => `<span>📧 Mail à <b>${esc(m.a)}</b> le ${fr(m.le)}${m.par ? ` par ${esc(m.par)}` : ""}</span>`).join("")}</div>` : ""}
-        ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button></div>` : ""}
+        ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button>${perms.isEditor ? `<button type="button" class="dps-mail-btn dps-suppr-btn" data-suppr-dem="${esc(l.id)}" title="Supprimer cette demande (erreur) — restaurable depuis l'onglet « 🗑 Supprimées »">🗑 Supprimer</button>` : ""}</div>` : ""}
         ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
           <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}
@@ -916,6 +916,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ouvrirTicketMail({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "" }, { email: ent?.email || "", contact: ent?.contact || "" });
   }));
   brancherAttrib();
+  container.querySelectorAll("[data-suppr-dem]").forEach(b => b.addEventListener("click", async () => {
+    const l = lignes.find(x => x.id === b.dataset.supprDem); if (!l) return;
+    const motif = prompt(`Supprimer la demande ${l.n} (${l.site}) ?\nElle disparaîtra des listes, compteurs et statistiques, et l'Excel ne la recréera pas.\nRestaurable depuis l'onglet « 🗑 Supprimées ».\n\nMotif (facultatif) :`, "Erreur de saisie");
+    if (motif === null) return;
+    b.disabled = true;
+    try { await maj(l.id, { supprimeeLe: Date.now(), supprimeePar: utilisateur, supprimeeMotif: motif.trim() }); window.toast?.(`🗑 ${l.n} supprimée`); }
+    catch (e) { alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
   container.querySelectorAll("[data-site-corr]").forEach(sel => sel.addEventListener("change", async () => {
     const l = lignes.find(x => x.id === sel.dataset.siteCorr); if (!l || sel.value === l.site) return;
     if (!confirm(`Déplacer ${l.n} vers le site « ${sel.value} » ?`)) { sel.value = l.site; return; }

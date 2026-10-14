@@ -170,6 +170,7 @@ export function rapprocherLignes(fichier, demandesApp) {
     }
     for (const a of cibles) {
       const diff = {};
+      if (a.supprimeeLe) continue; // supprimée par un superviseur : l'Excel ne la modifie ni ne la recrée
       if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
       // Même N° mais AUTRE SITE (ou ligne Excel sans descriptif face à une
       // demande qui en a un) : ce n'est pas la même demande — N° réutilisé ou
@@ -435,7 +436,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   const compteNum = {}; (demandesApp || []).filter(d => !d.lieeA).forEach(d => { compteNum[d.numero] = (compteNum[d.numero] || 0) + 1; });
   const ignorees = [];
   const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier))
-    .filter(d => { if (d.lieeA) return false; /* doublon relié : la demande gardée porte le suivi pour ce N° */ if (compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
+    .filter(d => { if (d.lieeA || d.supprimeeLe) return false; /* doublon relié : la demande gardée porte le suivi pour ce N° */ if (compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
     numero: d.numero,
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation === "OUI" ? "OUI" : "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",

@@ -212,7 +212,7 @@
     demOuvertesAbonne = true;
     import("./firestore-data.js").then(({ watchDemandes }) => watchDemandes((liste) => {
       const pause = (d) => String(d.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("arbitrage");
-      const ouvertes = liste.filter(d => !d.lieeA && !STATUTS_FINIS.includes(d.statut) && !pause(d));
+      const ouvertes = liste.filter(d => !d.lieeA && !d.supprimeeLe && !STATUTS_FINIS.includes(d.statut) && !pause(d));
       demOuvertes = { n: ouvertes.length, u: ouvertes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length };
       const el = document.getElementById("gh-compte-dem");
       if (el) { el.innerHTML = compteDemandesHTML(); brancherCompteDemandes(); }

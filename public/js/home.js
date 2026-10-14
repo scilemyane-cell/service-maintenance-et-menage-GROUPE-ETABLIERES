@@ -392,7 +392,7 @@ function calculerComNotifs(user) {
   try { const v = JSON.parse(localStorage.getItem(`etablieres-dps-vu-${user.uid}`) || "null"); if (v && v.base) vu = v; } catch {}
   const vuSite = (site) => { const e = Object.entries(vu.sites || {}).find(([n]) => cleSiteC(n) === cleSiteC(site)); return e ? e[1] : vu.base; };
   const ferme = (st) => /^(realis|annul|arbitrage)/.test(String(st || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
-  comDemandes = mesSites.size ? comDocs.filter(d => !d.lieeA && !ferme(d.statut) && d.commentaireTech && d.commentaireMajMs && mesSites.has(cleSiteC(d.site))
+  comDemandes = mesSites.size ? comDocs.filter(d => !d.lieeA && !d.supprimeeLe && !ferme(d.statut) && d.commentaireTech && d.commentaireMajMs && mesSites.has(cleSiteC(d.site))
     && (d.commentaireMajPar || "") !== (user.nom || "") && d.commentaireMajMs > vuSite(d.site)) : [];
   scheduleRender();
 }

@@ -27,7 +27,7 @@ import { capturerAncre, restaurerAncre } from "./ancre-scroll.js";
 //    qui reste pour l'instant une photo figée mise à jour manuellement par
 //    Claude à chaque envoi du fichier Excel par Valentin.
 import { esc } from "./astreinte-logic.js";
-import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes, estEnPause, demandeClose } from "./firestore-data.js";
+import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes, estEnPause, demandeClose, estSupprimee } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
@@ -200,7 +200,7 @@ export function mountSuiviDemandesTab(container, user) {
 function nbMesActions() {
   const uid = identite().uid; if (!uid || !state.demandes) return 0;
   const monNom = identite().nom;
-  return (state.demandes || []).filter(d => !estEnPause(d)).filter(d => (d.actionPour === uid && !d.actionFaiteLe && !demandeClose(d)) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
+  return (state.demandes || []).filter(d => !estEnPause(d) && !estSupprimee(d)).filter(d => (d.actionPour === uid && !d.actionFaiteLe && !demandeClose(d)) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
 }
 function injecterMesActions(container) {
   const uid = identite().uid;
@@ -524,6 +524,7 @@ function renderVue(container) {
     return;
   }
   if (ui.vue === "pause") return renderEnPause(container);
+  if (ui.vue === "supprimees") return renderSupprimees(container);
   if (ui.vue === "tableau") return renderTableau(container);
   if (ui.vue === "prestataires" && permsUtilisateur().isEditor) {
     return renderPrestataires(container, state.demandes === null ? null : toutesLesLignes(), {
@@ -601,8 +602,29 @@ function toggleVueHTML() {
       <button type="button" class="demandes-vue-btn ${ui.vue === "stats" ? "active" : ""}" data-vue="stats">📊 Statistiques</button>
       ${btnActions}
       ${permsUtilisateur().isEditor ? `<button type="button" class="demandes-vue-btn ${ui.vue === "prestataires" ? "active" : ""}" data-vue="prestataires">🏢 Prestataires</button>` : ""}
-      ${(n => n ? `<button type="button" class="demandes-vue-btn ${ui.vue === "pause" ? "active" : ""}" data-vue="pause" title="Demandes en « Arbitrage budgétaire » : hors statistiques et compteurs">⏸️ En pause <span class="vue-badge" style="background:#8a8f98">${n}</span></button>` : "")((state.demandes || []).filter(d => estEnPause(d) && !d.lieeA).length)}
+      ${(n => n ? `<button type="button" class="demandes-vue-btn ${ui.vue === "pause" ? "active" : ""}" data-vue="pause" title="Demandes en « Arbitrage budgétaire » : hors statistiques et compteurs">⏸️ En pause <span class="vue-badge" style="background:#8a8f98">${n}</span></button>` : "")((state.demandes || []).filter(d => estEnPause(d) && !d.lieeA && !estSupprimee(d)).length)}
+      ${(n => n && permsUtilisateur().isEditor ? `<button type="button" class="demandes-vue-btn ${ui.vue === "supprimees" ? "active" : ""}" data-vue="supprimees" title="Demandes supprimées (erreurs) — restaurables">🗑 Supprimées <span class="vue-badge" style="background:#8a8f98">${n}</span></button>` : "")((state.demandes || []).filter(estSupprimee).length)}
     </div>`;
+}
+
+// ---- Onglet « 🗑 Supprimées » : erreurs supprimées par un superviseur ----
+function renderSupprimees(container) {
+  const l = (state.demandes || []).filter(estSupprimee).sort((a, b) => (b.supprimeeLe || 0) - (a.supprimeeLe || 0));
+  container.innerHTML = `<div class="stack">${toggleVueHTML()}
+    <div class="form-card" style="margin:0">
+      <h3 style="margin:0 0 4px">🗑 Demandes supprimées</h3>
+      <p class="hint" style="margin:0 0 12px">Retirées de toutes les listes, compteurs et statistiques. L'Excel ne les recrée pas. « ↩ Restaurer » les remet en place.</p>
+      ${l.length ? `<div class="table-wrap"><table><thead><tr><th>N°</th><th>Site</th><th>Description</th><th>Supprimée</th><th>Motif</th><th></th></tr></thead><tbody>
+        ${l.map(d => `<tr><td class="mono">${esc(d.numero || "—")}</td><td>${esc(d.site || "")}</td><td>${esc((d.descriptif || "").slice(0, 120))}</td><td>${new Date(d.supprimeeLe).toLocaleDateString("fr-FR")}${d.supprimeePar ? ` · ${esc(d.supprimeePar)}` : ""}</td><td>${esc(d.supprimeeMotif || "")}</td>
+          <td><button type="button" class="nav-btn" data-restaurer-dem="${esc(d.id)}" style="white-space:nowrap;padding:6px 10px;font-size:12px">↩ Restaurer</button></td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="hint">Aucune demande supprimée.</p>`}
+    </div></div>`;
+  attacherToggleVue(container);
+  container.querySelectorAll("[data-restaurer-dem]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { await updateDemande(b.dataset.restaurerDem, { supprimeeLe: null, supprimeePar: null, supprimeeMotif: null }); window.toast?.("✓ Demande restaurée"); }
+    catch (e) { alert("Impossible : " + (e?.message || e)); b.disabled = false; }
+  }));
 }
 
 // ---- Onglet « ⏸️ En pause » : demandes en « Arbitrage budgétaire » ----
@@ -667,8 +689,8 @@ function ligneDepuisDoc(d) {
 // manquante (« Autres ») reprise des autres demandes du même site.
 // Sans les demandes en pause (« Arbitrage budgétaire ») : elles ne comptent
 // nulle part, sauf dans l'onglet « ⏸️ En pause ».
-function toutesLesLignes(avecPause = false) {
-  const lignes = (state.demandes || []).filter(d => avecPause || !estEnPause(d)).map(ligneDepuisDoc);
+function toutesLesLignes(avecPause = false, avecSupprimees = false) {
+  const lignes = (state.demandes || []).filter(d => (avecPause || !estEnPause(d)) && (avecSupprimees || !estSupprimee(d))).map(ligneDepuisDoc);
   // Clé sans accents, majuscules, espaces ni ponctuation : « RS- Le Mail » = « RS - Le Mail ».
   const cle = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const orth = new Map(), assoc = new Map();
@@ -783,7 +805,7 @@ function renderTableau(container) {
   }
 
   const lignes = lignesFiltrees();
-  const total = state.demandes.filter(d => !estEnPause(d)).length;
+  const total = state.demandes.filter(d => !estEnPause(d) && !estSupprimee(d)).length;
   // Même calcul que le compteur du bandeau : sans les doublons reliés ni les « à valider ».
   const aTraiterTotal = toutesLesLignes().filter(l => !l.lieeA && !STATUTS_TRAITES.includes(l.statut) && l.statut !== "Réalisé – à valider").length;
 

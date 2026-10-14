@@ -68,7 +68,7 @@ export async function mountStatistiques(container, user) {
 // plus une fois toutes les 30 min (bouton « Actualiser » pour forcer).
 const premiereValeur = (watch) => new Promise((ok) => { let u = null, fini = false; u = watch((v) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok(v); }); });
 const LOCAUX = {
-  demandes: () => premiereValeur(watchDemandes).then(l => l.filter(d => !estEnPause(d))), // hors « Arbitrage budgétaire »
+  demandes: () => premiereValeur(watchDemandes).then(l => l.filter(d => !estEnPause(d) && !d.supprimeeLe)), // hors « Arbitrage budgétaire »
   interventions: () => premiereValeur(watchInterventions),
   relevesCompteurs: () => premiereValeur(watchRelevesCompteurs),
 };
