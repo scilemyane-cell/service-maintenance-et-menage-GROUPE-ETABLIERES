@@ -576,7 +576,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     lignes.filter(l => filtreAssoc(l) && !l.lieeA).forEach(l => {
       const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0, interne: 0, externe: 0, nonDefini: 0 });
       s.total++;
-      if (l.actionPour && !l.actionFaiteLe) s.actions++;
+      if (l.actionPour && !l.actionFaiteLe && !/^(r[ée]alis|annul)/i.test(l.statut || "")) s.actions++;
       if (estNouvelle(l, vu.sites[l.site] || vu.base)) s.nouvelles = (s.nouvelles || 0) + 1;
       if (comNouveau(l, vu.sites[l.site] || vu.base, utilisateur)) s.comNouv = (s.comNouv || 0) + 1;
       if (EN_ATTENTE_VALID(l.statut)) s.aValider++;

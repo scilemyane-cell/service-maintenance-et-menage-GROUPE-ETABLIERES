@@ -1,5 +1,5 @@
 import { ecoutePartagee, partager } from "./ecoute-partagee.js";
-import { ecouteDelta, majLocale } from "./cache-delta.js";
+import { ecouteDelta, majLocale, docLocal } from "./cache-delta.js";
 import { db, auth } from "./firebase-init.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc,
@@ -174,6 +174,8 @@ const msDe = (t) => (t?.toMillis ? t.toMillis() : (t?.seconds ? t.seconds * 1000
 const resumeAction = (x) => (x.actionPour && x.actionTexte ? { pour: x.actionPourNom || "", fait: !!x.actionFaiteLe, imm: !!x.actionImmediate, texte: x.actionTexte } : null);
 // « Arbitrage budgétaire » : demande mise en pause — hors compteurs, stats et
 // listes (visible seulement dans l'onglet « En pause »).
+// Demande réalisée / annulée (y compris « à valider ») : son action est close.
+export const demandeClose = (d) => /^(realis|annul)/.test(String(d?.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
 export const estEnPause = (d) => String(d?.statut || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("arbitrage");
 function deriverDemandes(cle, calcul, callback) {
   return ecoutePartagee(`derive:${cle}`, (emettre) => { watchDemandes((liste) => emettre(calcul(liste.filter(d => !estEnPause(d))))); }, callback);
@@ -201,14 +203,20 @@ export function watchDemandesAValider(callback) {
 }
 // Actions IMMÉDIATES attribuées à une personne, pas encore faites (bandeau rouge de l'accueil).
 export function watchActionsImmediates(uid, callback) {
-  return deriverDemandes(`immediates:${uid}`, (liste) => liste.filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !x.lieeA)
+  return deriverDemandes(`immediates:${uid}`, (liste) => liste.filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !demandeClose(x) && !x.lieeA)
     .map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, actionTexte: x.actionTexte, actionPar: x.actionPar })), callback);
 }
 // Actions à faire + retours non lus sur les actions que j'ai attribuées (badge de la tuile).
 export function watchMesActionsDemandes(uid, callback) {
-  return deriverDemandes(`mes-actions:${uid}`, (liste) => liste.filter(x => (x.actionPour === uid && !x.actionFaiteLe) || (x.actionParUid === uid && x.actionReponseNonLue)).length, callback);
+  return deriverDemandes(`mes-actions:${uid}`, (liste) => liste.filter(x => (x.actionPour === uid && !x.actionFaiteLe && !demandeClose(x)) || (x.actionParUid === uid && x.actionReponseNonLue)).length, callback);
 }
 export async function updateDemande(id, fields) {
+  // Demande clôturée (réalisée / annulée, même en attente de validation) :
+  // l'action qui y était attribuée est close en même temps.
+  if (fields && fields.statut && demandeClose(fields) && !("actionFaiteLe" in fields)) {
+    const d = docLocal("demandes", id);
+    if (d && d.actionPour && !d.actionFaiteLe) { fields = { ...fields, actionFaiteLe: new Date().toISOString().slice(0, 10), actionFaitePar: "Clôture de la demande" }; }
+  }
   majLocale("demandes", id, { ...fields, dateMaj: Timestamp.now() }); // affichage immédiat, même hors ligne
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
 }

@@ -27,7 +27,7 @@ import { capturerAncre, restaurerAncre } from "./ancre-scroll.js";
 //    qui reste pour l'instant une photo figée mise à jour manuellement par
 //    Claude à chaque envoi du fichier Excel par Valentin.
 import { esc } from "./astreinte-logic.js";
-import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes, estEnPause } from "./firestore-data.js";
+import { watchDemandes, importerDemandes, updateDemande, lireToutesDemandes, estEnPause, demandeClose } from "./firestore-data.js";
 import { renderStatsDemandes } from "./suivi-demandes-stats.js";
 import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
@@ -200,12 +200,12 @@ export function mountSuiviDemandesTab(container, user) {
 function nbMesActions() {
   const uid = identite().uid; if (!uid || !state.demandes) return 0;
   const monNom = identite().nom;
-  return (state.demandes || []).filter(d => !estEnPause(d)).filter(d => (d.actionPour === uid && !d.actionFaiteLe) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
+  return (state.demandes || []).filter(d => !estEnPause(d)).filter(d => (d.actionPour === uid && !d.actionFaiteLe && !demandeClose(d)) || (d.actionReponseNonLue && (d.actionParUid === uid || (!d.actionParUid && d.actionPar === monNom)))).length;
 }
 function injecterMesActions(container) {
   const uid = identite().uid;
   if (!uid || !state.demandes) return;
-  const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe)
+  const mes = toutesLesLignes().filter(l => l.actionPour === uid && !l.actionFaiteLe && !demandeClose(l))
     .sort((a, b) => (b.actionImmediate ? 1 : 0) - (a.actionImmediate ? 1 : 0) || (a.actionEcheance || "9999").localeCompare(b.actionEcheance || "9999"));
   container.querySelector(".dps-mes-actions")?.remove();
   const monNom = identite().nom;
@@ -498,7 +498,7 @@ function render(container) {
 function injecterBandeauImmediat(container) {
   container.querySelector(".dps-imm-bandeau")?.remove();
   const uid = identite().uid; if (!uid || !state.demandes) return;
-  const l = toutesLesLignes().filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !x.lieeA);
+  const l = toutesLesLignes().filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !x.lieeA && !demandeClose(x));
   if (!l.length || (ui.vue === "sites" && container.querySelector(".dps-focus"))) return;
   const el = document.createElement("section");
   el.className = "dps-imm-bandeau";
