@@ -3505,3 +3505,9 @@ body.clo-ouvert{overflow:hidden}
 .cdate-chips button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:8px 12px;font:700 13px system-ui,sans-serif;cursor:pointer}
 .cdate-chips button.on{background:var(--gold);border-color:var(--gold);color:#111}
 .cdate-saisie{width:120px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:15px;text-align:center}
+/* Par site : répartition interne / externe des demandes à traiter */
+.dps-site-ie{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 6px}
+.dps-site-ie span{font:700 11.5px system-ui,sans-serif;padding:3px 8px;border-radius:999px}
+.dps-site-ie .int{background:#e6f0ff;color:#1a4fb4}
+.dps-site-ie .ext{background:#fff1e0;color:#9a5300}
+.dps-site-ie .nd{background:#eef0f3;color:#52514e}

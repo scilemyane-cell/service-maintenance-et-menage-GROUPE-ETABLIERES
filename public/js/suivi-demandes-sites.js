@@ -571,13 +571,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const parSite = {};
     const doublonsParSite = {}; lignes.forEach(l => { if (l.lieeA && filtreAssoc(l)) doublonsParSite[l.site] = (doublonsParSite[l.site] || 0) + 1; });
     lignes.filter(l => filtreAssoc(l) && !l.lieeA).forEach(l => {
-      const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0 });
+      const s = parSite[l.site] || (parSite[l.site] = { nom: l.site, association: l.association, ouvertes: 0, urgentes: 0, total: 0, plusVieille: 0, realiseesMois: 0, aValider: 0, actions: 0, interne: 0, externe: 0, nonDefini: 0 });
       s.total++;
       if (l.actionPour && !l.actionFaiteLe) s.actions++;
       if (estNouvelle(l, vu.sites[l.site] || vu.base)) s.nouvelles = (s.nouvelles || 0) + 1;
       if (EN_ATTENTE_VALID(l.statut)) s.aValider++;
       else if (!TRAITE(l.statut)) {
         s.ouvertes++;
+        { const ci = String(l.categorieIntervenant || "").toLowerCase(); if (ci.startsWith("interne")) s.interne++; else if (ci.startsWith("externe")) s.externe++; else s.nonDefini++; }
         if (l.urgence === "Urgent" || l.urgence === "Critique") s.urgentes++;
         const j = joursDepuis(l.date); if (j !== null && j > s.plusVieille) s.plusVieille = j;
       } else if (l.statut === "Réalisé" && (l.dateIntervention || l.dateStatut || "").slice(0, 7) === aujourdhui().slice(0, 7)) s.realiseesMois++;
@@ -601,6 +602,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <button class="dps-site ${s.urgentes ? "a-urg" : s.ouvertes ? "" : "vide"}" data-dps-site="${esc(s.nom)}">
           <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small>${techsDuSite(s.nom).length ? `<small class="dps-site-techs">👷 ${esc(techsDuSite(s.nom).map(nomDe).filter(Boolean).join(", "))}</small>` : ""}</div>
           <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
+          ${s.ouvertes ? `<div class="dps-site-ie" title="Demandes à traiter, selon l'intervenant"><span class="int">🔧 ${s.interne} interne</span><span class="ext">🏢 ${s.externe} externe</span>${s.nonDefini ? `<span class="nd">❔ ${s.nonDefini} non défini</span>` : ""}</div>` : ""}
           <div class="dps-site-pied">
             ${doublonsParSite[s.nom] ? `<span class="dps-pastille lien">🔗 ${doublonsParSite[s.nom]} doublon${doublonsParSite[s.nom] > 1 ? "s" : ""} non compté${doublonsParSite[s.nom] > 1 ? "s" : ""}</span>` : ""}
             ${s.nouvelles ? `<span class="dps-pastille nouv">🆕 ${s.nouvelles} nouvelle${s.nouvelles > 1 ? "s" : ""}</span>` : ""}
