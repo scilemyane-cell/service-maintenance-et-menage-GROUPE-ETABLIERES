@@ -340,7 +340,7 @@
 
   .room-grid{
     display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(78px,1fr));
+    grid-template-columns:repeat(auto-fill, minmax(110px,1fr));
     gap:8px;
   }
   .room{
@@ -386,6 +386,12 @@
     overflow:hidden;
     text-overflow:ellipsis;
   }
+  .room .occupant.note{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;font-size:11px;line-height:1.25;color:#16273b;font-weight:600;text-align:left;background:#fff6d6;border-left:3px solid #e0a800;padding:2px 4px;margin-top:5px}
+  .room .assigne{font-family:var(--mono);font-size:10px;font-weight:700;color:#fff;background:#3b7dd8;border-radius:3px;padding:1px 4px;margin-top:4px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .room.a-moi{outline:3px solid #3b7dd8;outline-offset:1px}
+  #occupantInput{min-height:70px;resize:vertical;font-family:inherit;font-size:14px;width:100%;box-sizing:border-box;padding:8px}
+  #assigneSelect{width:100%;padding:8px;font-size:14px;box-sizing:border-box}
+  #mesLogementsBtn.on{background:#3b7dd8!important;color:#fff!important;border-color:#3b7dd8!important}
   .room .intervention-date{
     font-family:var(--mono);
     font-size:9px;
@@ -597,6 +603,7 @@
   <button class="legend-add-btn" id="logoutBtn" style="border-color:#c4402f; color:#e8b0a6;">⎋ Se déconnecter</button>
   <button class="legend-add-btn" id="printOccupancyBtn" style="border-color:#7f93a8; color:#c7d3e0;">🖨️ Imprimer</button>
   <button class="legend-add-btn" id="seasonalToggleBtn" style="display:none; border-color:#3b7dd8; color:#9db9e0;">📋 Planning saisonnier</button>
+  <button class="legend-add-btn" id="mesLogementsBtn" style="display:none; border-color:#3b7dd8; color:#9db9e0;">👷 Mes logements</button>
   <span id="connectedServiceLabel" style="font-family:var(--mono); font-size:11px; color:#c7d3e0; margin-left:10px;"></span>
 </div>
 
@@ -672,7 +679,10 @@
     <div class="status-btns" id="statusBtns"></div>
 
     <label>Occupant / note</label>
-    <input type="text" id="occupantInput" placeholder="Nom, référence…">
+    <textarea id="occupantInput" placeholder="Nom, référence, consignes pour le technicien…"></textarea>
+
+    <label>👷 Attribuer à un technicien</label>
+    <select id="assigneSelect"></select>
 
     <label>Date d'intervention</label>
     <input type="date" id="interventionDateInput">
@@ -719,6 +729,9 @@ const accessGate = document.getElementById('accessGate');
 const appRoot = document.getElementById('appRoot');
 const smmUser = (() => { try { return (window.parent !== window && window.parent.smmUtilisateur) || (window.opener && window.opener.smmUtilisateur) || null; } catch (e) { return null; } })();
 const currentUserName = smmUser ? (smmUser.nom || smmUser.email || '') : '';
+const lireTechs = () => { try { return (window.parent !== window && window.parent.smmTechs) || (window.opener && window.opener.smmTechs) || []; } catch (e) { return []; } };
+const peutAttribuer = !!smmUser && ['super_admin','admin','n1'].includes(smmUser.role);
+let mesLogementsSeuls = !!smmUser && smmUser.role === 'technicien'; // un technicien voit d'abord SES logements
 // Accès "Lecture" (Gérer l'accès) : planning saisonnier en lecture seule, comme la direction
 let currentService = smmUser ? (smmUser.role === 'direction' ? 'Direction' : (smmUser.lectureSeule ? 'Consultation' : 'Maintenance')) : '';
 let applyServiceDefaultFilter = null; // rempli par l'IIFE principale plus bas
@@ -729,6 +742,8 @@ function grantAccess(){
   appRoot.style.display = 'block';
   document.getElementById('connectedServiceLabel').textContent = currentUserName ? `👤 ${currentUserName}` : '';
   document.getElementById('logoutBtn').style.display = 'none';
+  { const b = document.getElementById('mesLogementsBtn'); b.style.display = 'inline-block'; b.classList.toggle('on', mesLogementsSeuls);
+    b.onclick = () => { mesLogementsSeuls = !mesLogementsSeuls; b.classList.toggle('on', mesLogementsSeuls); if (typeof window.__lgRendre === 'function') window.__lgRendre(); }; }
   const btn = document.getElementById('seasonalToggleBtn');
   btn.style.display = 'inline-block';
   btn.textContent = currentService === 'Maintenance' ? '📋 Planning saisonnier' : '📋 Planning saisonnier (lecture seule)';
@@ -2345,10 +2360,18 @@ if(smmUser){
         const dateBadge = room.interventionDate
           ? `<div class="intervention-date">📅 ${room.interventionDate.split('-').reverse().join('/')}</div>`
           : '';
+        const echap = (t) => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        if(smmUser && room.assigneUid && room.assigneUid === smmUser.uid) el.classList.add('a-moi');
+        if(mesLogementsSeuls){ // « Mes logements » : tous ceux qui me sont attribués, quel que soit le filtre de statut
+          const aMoi = smmUser && room.assigneUid === smmUser.uid;
+          el.classList.toggle('hidden', !aMoi || !matchesSearch);
+        }
+        el.title = [room.occupant, room.assigneNom ? `Attribué à ${room.assigneNom}` : ''].filter(Boolean).join('\n');
         el.innerHTML = `
           <div class="num">${room.number}</div>
           <div class="badge" style="background:${(STATUSES[room.status]||{}).color||'#8a97a6'}"></div>
-          <div class="occupant">${room.occupant || '&nbsp;'}</div>
+          ${room.occupant ? `<div class="occupant note">${echap(room.occupant)}</div>` : ''}
+          ${room.assigneNom ? `<div class="assigne">👷 ${echap(room.assigneNom)}</div>` : ''}
           ${dateBadge}
         `;
         el.onclick = ()=> handleRoomClick(fIdx, rIdx);
@@ -2389,6 +2412,13 @@ if(smmUser){
     panelSub.textContent = `${data[currentBldg].label} — ${data[currentBldg].floors[floorIdx].name}`;
     occupantInput.value = room.occupant || '';
     interventionDateInput.value = room.interventionDate || '';
+    {
+      const sel = document.getElementById('assigneSelect');
+      const techs = lireTechs().slice();
+      if(room.assigneUid && !techs.some(t=>t.uid===room.assigneUid)) techs.push({uid:room.assigneUid, nom:room.assigneNom||'—'});
+      sel.innerHTML = `<option value="">— Personne</option>` + techs.map(t=>`<option value="${t.uid}" ${t.uid===room.assigneUid?'selected':''}>${String(t.nom).replace(/</g,'&lt;')}</option>`).join('');
+      sel.disabled = !peutAttribuer;
+    }
 
     statusBtns.innerHTML='';
     Object.keys(STATUSES).forEach(key=>{
@@ -2425,6 +2455,9 @@ if(smmUser){
     room.status = draftStatus;
     room.occupant = newOccupant;
     room.interventionDate = newDate;
+    const oldAssigne = room.assigneNom || '';
+    { const sel = document.getElementById('assigneSelect'); const uid = sel.value; const nom = uid ? sel.options[sel.selectedIndex].text : '';
+      if(peutAttribuer){ if((uid||null) !== (room.assigneUid||null)) room.assigneLe = uid ? new Date().toISOString().slice(0,10) : null; room.assigneUid = uid || null; room.assigneNom = nom || null; } }
     const newStatusLabel = STATUSES[room.status].label;
     let msg = `Chambre ${room.number} (${data[panelTarget.bldg].label}) : ${oldStatusLabel} → ${newStatusLabel}`;
     if(oldOccupant !== newOccupant){
@@ -2432,6 +2465,9 @@ if(smmUser){
     }
     if(oldDate !== newDate){
       msg += ` | intervention : ${oldDate||'—'} → ${newDate||'—'}`;
+    }
+    if(oldAssigne !== (room.assigneNom||'')){
+      msg += ` | attribué : ${oldAssigne||'—'} → ${room.assigneNom||'—'}`;
     }
     logHistory(msg);
     renderStats();
@@ -2898,6 +2934,7 @@ if(smmUser){
   }
 
   syncStickyBarSpacerRef = syncStickyBarSpacer;
+  window.__lgRendre = renderFloors;
   setTimeout(syncStickyBarSpacer, 0);
 })();
 </script>
