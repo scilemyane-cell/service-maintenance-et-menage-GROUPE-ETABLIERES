@@ -3567,3 +3567,7 @@ body.clo-ouvert{overflow:hidden}
 .sdv-sites{ display:flex; flex-wrap:wrap; gap:4px; }
 .sdv-sites span{ font-size:11.5px; padding:2px 8px; border-radius:999px; background:var(--panel-alt); color:var(--text-dim); white-space:nowrap; }
 .sdv-sites b{ color:var(--text); }
+.dps-version-prec{margin:6px 0;padding:6px 10px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;font-size:13px}
+.dps-version-prec summary{cursor:pointer;font-weight:700;color:#9a3412}
+.dps-version-prec div{margin:6px 0}
+.dps-version-prec button{border:1px solid #fb923c;background:#fff;border-radius:8px;padding:5px 10px;font-weight:700;cursor:pointer}

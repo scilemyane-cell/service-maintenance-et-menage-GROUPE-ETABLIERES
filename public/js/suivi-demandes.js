@@ -631,7 +631,7 @@ function ligneDepuisDoc(d) {
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "", validation: d.validation || "", refusPar: d.refusPar || "", refusLe: d.refusLe || "", refusMotif: d.refusMotif || "",
     importeMs: d.importeLe?.toMillis ? d.importeLe.toMillis() : (d.importeLe?.seconds ? d.importeLe.seconds * 1000 : 0),
     lieeA: d.lieeA || "", lieeANumero: d.lieeANumero || "", mailsEnvoyes: Array.isArray(d.mailsEnvoyes) ? d.mailsEnvoyes : [],
-    commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "", commentaireMajMs: d.commentaireMajMs || 0, commentaireMajPar: d.commentaireMajPar || "",
+    commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "", commentaireMajMs: d.commentaireMajMs || 0, commentaireMajPar: d.commentaireMajPar || "", versionPrecedente: d.versionPrecedente || null,
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
     actionPar: d.actionPar || "", actionParUid: d.actionParUid || "", actionFil: Array.isArray(d.actionFil) ? d.actionFil : [], actionReponseNonLue: !!d.actionReponseNonLue, actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
     actionImmediate: !!d.actionImmediate,

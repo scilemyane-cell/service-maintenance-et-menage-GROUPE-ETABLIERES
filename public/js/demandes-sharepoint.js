@@ -171,8 +171,25 @@ export function rapprocherLignes(fichier, demandesApp) {
     for (const a of cibles) {
       const diff = {};
       if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
+      // Même N° mais AUTRE SITE (ou ligne Excel sans descriptif face à une
+      // demande qui en a un) : ce n'est pas la même demande — N° réutilisé ou
+      // ligne écrasée dans l'Excel. On ne remplace JAMAIS l'existante : la
+      // ligne du fichier est créée à part (vu sur SG-958 : Trois Portes
+      // remplacée par une ligne « RS - Le Cap » vide).
+      const autreSite = sa(f.site || "").replace(/[^a-z0-9]/g, "") && sa(a.site || "").replace(/[^a-z0-9]/g, "") && sa(f.site).replace(/[^a-z0-9]/g, "") !== sa(a.site).replace(/[^a-z0-9]/g, "");
+      const videContrePlein = !empreinte(f) && !!empreinte(a);
+      if (autreSite || videContrePlein) {
+        if (!(demandesApp || []).some(d => d.id !== a.id && d.numero === f.numero && sa(d.site || "") === sa(f.site || "") && empreinte(d) === empreinte(f))) nouvelles.push(f);
+        continue;
+      }
       const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
       champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+      // Jamais vider un champ de la demande avec une case vide du fichier.
+      ["descriptif", "local", "demandeur", "site"].forEach(k => { if (k in diff && !String(diff[k]).trim() && String(a[k] || "").trim()) delete diff[k]; });
+      // Le descriptif / le lieu changent : on garde l'ancienne version (restaurable).
+      if (["descriptif", "site", "local", "demandeur", "dateDemande"].some(k => k in diff)) {
+        diff.versionPrecedente = { le: Date.now(), descriptif: a.descriptif || "", site: a.site || "", local: a.local || "", demandeur: a.demandeur || "", dateDemande: a.dateDemande || "", type: a.type || "", urgence: a.urgence || "" };
+      }
       // Demande déjà suivie dans l'appli : un complément ajouté dans l'Excel
       // (ex. mail reçu) est repris s'il PROLONGE le commentaire de l'appli.
       if (a.dateMaj && !("commentaireTech" in diff)) {

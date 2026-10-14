@@ -758,6 +758,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${l.validation === "REFUSEE" && !TRAITE(l.statut) ? `<div class="dps-refus">↩ <b>Clôture refusée</b>${l.refusPar ? ` par ${esc(l.refusPar)}` : ""}${l.refusLe ? ` le ${fr(l.refusLe)}` : ""}${l.refusMotif ? ` : « ${esc(l.refusMotif)} »` : ""}<small>Complète puis renvoie la clôture.</small></div>` : ""}
       <p class="dps-descr">${esc(l.descr) || "<i>Sans descriptif</i>"}</p>
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
+      ${l.versionPrecedente && (l.versionPrecedente.descriptif !== l.descr || l.versionPrecedente.site !== l.site) ? `<details class="dps-version-prec"><summary>🕘 Cette demande a été modifiée par l'Excel le ${new Date(l.versionPrecedente.le).toLocaleDateString("fr-FR")} — voir l'ancienne version</summary>
+        <div><b>${esc(l.versionPrecedente.site)}</b>${l.versionPrecedente.local ? ` · 📍 ${esc(l.versionPrecedente.local)}` : ""}${l.versionPrecedente.demandeur ? ` · par ${esc(l.versionPrecedente.demandeur)}` : ""}${l.versionPrecedente.dateDemande ? ` · ${fr(l.versionPrecedente.dateDemande)}` : ""}<br><i>${esc(l.versionPrecedente.descriptif || "(sans descriptif)")}</i></div>
+        ${perms.isEditor ? `<button type="button" data-restaurer-version="${esc(l.id)}">↩ Restaurer cette version</button>` : ""}</details>` : ""}
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
         : l.urgenceCorrigee ? `<div class="dps-urg-edit"><small>Urgence requalifiée (demandée « ${esc(l.urgenceDemandee)} »)</small></div>` : ""}
       ${attribBlocHTML(l)}
@@ -870,6 +873,13 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   }));
   container.querySelector("#dps-voir-site")?.addEventListener("click", () => { st.focusId = null; rerender(); });
   container.querySelectorAll("[data-ie-filtre]").forEach(b => b.addEventListener("click", () => { st.ie = b.dataset.ieFiltre; rerender(); }));
+  container.querySelectorAll("[data-restaurer-version]").forEach(b => b.addEventListener("click", async () => {
+    const l = lignes.find(x => x.id === b.dataset.restaurerVersion); const v = l?.versionPrecedente; if (!v) return;
+    if (!confirm(`Remettre l'ancienne version de ${l.n} ?\n${v.site} — ${(v.descriptif || "").slice(0, 80)}`)) return;
+    b.disabled = true;
+    try { await maj(l.id, { descriptif: v.descriptif, site: v.site, local: v.local, demandeur: v.demandeur, dateDemande: v.dateDemande, type: v.type, urgence: v.urgence, versionPrecedente: { ...v, restaureeLe: Date.now() } }); }
+    catch (e) { alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
   container.querySelector("#dps-tri")?.addEventListener("change", (e) => { st.tri = e.target.value; try { localStorage.setItem("etablieres-dps-tri", st.tri); } catch {} rerender(); });
   let tq = null;
   container.querySelector("#dps-qsite")?.addEventListener("input", (e) => { st.qSite = e.target.value; clearTimeout(tq); tq = setTimeout(() => { rerender(); const el = container.querySelector("#dps-qsite"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 300); });
