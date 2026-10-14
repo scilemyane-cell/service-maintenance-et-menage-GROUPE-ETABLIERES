@@ -160,7 +160,7 @@ async function genererEtImprimer() {
           <div style="text-align:center;border:1px solid #ccc;border-radius:8px;padding:${estPetit ? "8px" : "16px"};page-break-inside:avoid;break-inside:avoid">
             ${photoDe(it) ? `<div style="display:flex;gap:8px;justify-content:center;align-items:center">
               <div id="qm-qr-${i}" style="width:${tailleAvecPhoto}px;height:${tailleAvecPhoto}px;overflow:hidden;flex:none"></div>
-              <img data-qm-photo="${i}" alt="" style="width:${tailleAvecPhoto}px;height:${tailleAvecPhoto}px;object-fit:contain;border-radius:6px;border:1px solid #ddd;flex:none;background:#fafafa">
+              <img data-qm-photo="${i}" alt="" style="width:${tailleAvecPhoto}px;height:${tailleAvecPhoto}px;object-fit:cover;border-radius:6px;border:1px solid #ddd;flex:none;background:#fafafa">
             </div>` : `<div id="qm-qr-${i}" style="width:${taille}px;height:${taille}px;margin:0 auto;overflow:hidden"></div>`}
             <p style="margin:6px 0 0;font-size:${estPetit ? 10 : 13}px;font-weight:700;line-height:1.2">${esc(libellePour(it))}</p>
           </div>
@@ -178,19 +178,34 @@ async function genererEtImprimer() {
   // Les QR se dessinent en SVG (vectoriel, net à n'importe quelle taille)
   // — il faut attendre que chacun soit prêt avant d'imprimer, sinon
   // certaines cases resteraient vides sur le papier.
-  // Photos des produits (SharePoint : lien frais à chaque fois), attendues
-  // avant l'impression (8 s maximum, sinon on imprime sans).
+  // Photos des produits : les originaux (photos de téléphone, plusieurs Mo)
+  // n'étaient qu'à moitié chargés au moment d'imprimer → on les réduit
+  // d'abord (≈ 360 px, recadrées au carré) en image intégrée à la page.
+  const reduire = (url) => new Promise((ok, ko) => {
+    const im = new Image(); im.crossOrigin = "anonymous";
+    im.onload = () => {
+      try {
+        const T = 360, c = document.createElement("canvas"); c.width = c.height = T;
+        const cote = Math.min(im.naturalWidth, im.naturalHeight); // carré centré
+        c.getContext("2d").drawImage(im, (im.naturalWidth - cote) / 2, (im.naturalHeight - cote) / 2, cote, cote, 0, 0, T, T);
+        ok(c.toDataURL("image/jpeg", 0.85));
+      } catch (e) { ok(url); } // image non réductible : l'originale
+    };
+    im.onerror = ko; im.src = url;
+  });
+  let faites = 0; const aCharger = items.filter(photoDe).length;
   const photos = items.map(async (it, i) => {
     const ph = photoDe(it); if (!ph) return;
     const img = printRoot.querySelector(`[data-qm-photo="${i}"]`); if (!img) return;
     try {
-      img.src = ph.itemId ? await getImageDisplayUrl(ph.itemId) : ph.url;
-      await new Promise(ok => { if (img.complete) return ok(); img.onload = img.onerror = ok; });
+      const src = await reduire(ph.itemId ? await getImageDisplayUrl(ph.itemId) : ph.url);
+      img.src = src; await img.decode().catch(() => {});
     } catch { img.style.visibility = "hidden"; }
+    statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Photos ${++faites}/${aCharger}…</span>`;
   });
   await Promise.all([
     ...items.map((it, i) => renderQrWithLogo(document.getElementById(`qm-qr-${i}`), payloadPour(it), photoDe(it) ? tailleAvecPhoto : taille)),
-    Promise.race([Promise.all(photos), new Promise(ok => setTimeout(ok, 8000))]),
+    Promise.race([Promise.all(photos), new Promise(ok => setTimeout(ok, 30000))]),
   ]);
 
   statusEl.innerHTML = "";
