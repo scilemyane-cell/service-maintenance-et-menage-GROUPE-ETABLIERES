@@ -3523,3 +3523,7 @@ body.clo-ouvert{overflow:hidden}
 .gh-urgences.gh-logts.jour-j{animation:gh-logts-clignote 1.2s ease-in-out infinite}
 @keyframes gh-logts-clignote{50%{filter:brightness(1.25);box-shadow:0 0 0 4px rgba(255,200,80,.6),0 8px 30px rgba(232,101,10,.6)}}
 @media (prefers-reduced-motion:reduce){.gh-urgences.gh-logts.jour-j{animation:none}}
+/* Suivi des demandes : commentaire nouveau (ajouté par quelqu'un d'autre) */
+.dps-pastille.com-nouv{background:#dbeafe;color:#1d4ed8;font-weight:800;animation:dps-com-pulse 1.6s ease-in-out infinite}
+@keyframes dps-com-pulse{50%{box-shadow:0 0 0 3px rgba(59,130,246,.35)}}
+.dps-com-nouveau{margin:6px 0;padding:10px 12px;border-radius:10px;background:#eff6ff;border:2px solid #3b82f6;color:#1e3a8a;font-size:14px;line-height:1.4;white-space:pre-wrap}

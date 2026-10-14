@@ -602,6 +602,7 @@
   <span id="saveStatus" style="font-family:var(--mono); font-size:11px; color:#7f93a8; margin-left:10px;"></span>
   <button class="legend-add-btn" id="logoutBtn" style="border-color:#c4402f; color:#e8b0a6;">⎋ Se déconnecter</button>
   <button class="legend-add-btn" id="printOccupancyBtn" style="border-color:#7f93a8; color:#c7d3e0;">🖨️ Imprimer</button>
+  <button class="legend-add-btn" id="recapBtn" style="border-color:#e0a800; color:#ffd77a;">📋 Récap des interventions</button>
   <button class="legend-add-btn" id="seasonalToggleBtn" style="display:none; border-color:#3b7dd8; color:#9db9e0;">📋 Planning saisonnier</button>
   <button class="legend-add-btn" id="mesLogementsBtn" style="display:none; border-color:#3b7dd8; color:#9db9e0;">👷 Mes logements</button>
   <span id="connectedServiceLabel" style="font-family:var(--mono); font-size:11px; color:#c7d3e0; margin-left:10px;"></span>
@@ -2586,6 +2587,65 @@ if(smmUser){
 
   document.getElementById('exportBtn').onclick = exportState;
   document.getElementById('printOccupancyBtn').onclick = printOccupancy;
+
+  // ---- Récap des dates d'intervention (à transmettre par mail / imprimer) ----
+  document.getElementById('recapBtn').onclick = () => {
+    const echap = (t) => String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const isoJ = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const auj = new Date(), dans30 = new Date(); dans30.setDate(dans30.getDate()+30);
+    const fond = document.createElement('div');
+    fond.className = 'panel-overlay open'; fond.style.zIndex = 2000;
+    fond.innerHTML = `<div class="panel" style="width:min(860px,100%);max-height:calc(100vh - 32px)">
+      <h3>📋 Récap des interventions</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:8px 0">
+        <label style="display:flex;flex-direction:column;font-size:11px">Du<input type="date" id="rcDu" value="${isoJ(auj)}"></label>
+        <label style="display:flex;flex-direction:column;font-size:11px">Au<input type="date" id="rcAu" value="${isoJ(dans30)}"></label>
+        <label style="display:flex;flex-direction:column;font-size:11px">Bâtiment<select id="rcBat"><option value="">Tous</option>${Object.keys(data).map(k=>`<option value="${k}">${echap(data[k].label||k)}</option>`).join('')}</select></label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px"><input type="checkbox" id="rcSans"> sans date aussi</label>
+      </div>
+      <div id="rcTable" style="overflow:auto;max-height:55vh"></div>
+      <div class="panel-actions" style="margin-top:10px">
+        <button class="btn ghost" data-rc-x>Fermer</button>
+        <button class="btn" id="rcCopier">📋 Copier pour un mail</button>
+        <button class="btn primary" id="rcImprimer">🖨️ Imprimer / PDF</button>
+      </div>
+      <div id="rcMsg" style="font-family:var(--mono);font-size:11px;color:var(--occupe);margin-top:6px"></div>
+    </div>`;
+    document.body.append(fond);
+    const lignes = () => {
+      const du = fond.querySelector('#rcDu').value, au = fond.querySelector('#rcAu').value, bat = fond.querySelector('#rcBat').value, sans = fond.querySelector('#rcSans').checked;
+      const l = [];
+      Object.entries(data).forEach(([k, b]) => { if (bat && k !== bat) return; (b.floors||[]).forEach(f => (f.rooms||[]).forEach(r => {
+        const d = r.interventionDate || '';
+        if (d ? ((du && d < du) || (au && d > au)) : !sans) return;
+        l.push({ date: d, creneau: r.creneau || '', bat: b.label || k, etage: f.name, num: r.number, statut: (STATUSES[r.status]||{}).label || r.status, note: r.occupant || '', tech: r.assigneNom || '' });
+      })); });
+      return l.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.creneau === 'matin' ? -1 : b.creneau === 'matin' ? 1 : 0) || a.bat.localeCompare(b.bat) || String(a.num).localeCompare(String(b.num), 'fr', { numeric: true }));
+    };
+    const jour = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Sans date';
+    const cren = (c) => c === 'matin' ? 'matin' : c === 'apres-midi' ? 'après-midi' : 'journée';
+    const tableau = (l) => l.length ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>${['Date','Créneau','Bâtiment','Étage','Chambre','Statut','Note','Technicien'].map(h=>`<th style="text-align:left;border-bottom:2px solid #16273b;padding:4px 6px">${h}</th>`).join('')}</tr></thead>
+      <tbody>${l.map(x=>`<tr><td style="border-bottom:1px solid #ccc;padding:4px 6px;white-space:nowrap">${echap(jour(x.date))}</td><td style="border-bottom:1px solid #ccc;padding:4px 6px">${cren(x.creneau)}</td><td style="border-bottom:1px solid #ccc;padding:4px 6px">${echap(x.bat)}</td><td style="border-bottom:1px solid #ccc;padding:4px 6px">${echap(x.etage)}</td><td style="border-bottom:1px solid #ccc;padding:4px 6px"><b>${echap(x.num)}</b></td><td style="border-bottom:1px solid #ccc;padding:4px 6px">${echap(x.statut)}</td><td style="border-bottom:1px solid #ccc;padding:4px 6px">${echap(x.note)}</td><td style="border-bottom:1px solid #ccc;padding:4px 6px">${echap(x.tech)}</td></tr>`).join('')}</tbody></table>`
+      : '<p style="font-size:13px">Aucune intervention sur cette période.</p>';
+    const maj = () => { fond.querySelector('#rcTable').innerHTML = tableau(lignes()); };
+    fond.querySelectorAll('#rcDu,#rcAu,#rcBat,#rcSans').forEach(el => el.onchange = maj);
+    fond.querySelector('[data-rc-x]').onclick = () => fond.remove();
+    fond.addEventListener('click', e => { if (e.target === fond) fond.remove(); });
+    fond.querySelector('#rcCopier').onclick = async () => {
+      const l = lignes(); let txt = `Récapitulatif des interventions — logements ${fond.querySelector('#rcBat').value ? (data[fond.querySelector('#rcBat').value].label) : 'Bâtiments A et B'}\n`;
+      let jourPrec = null;
+      l.forEach(x => { if (x.date !== jourPrec) { txt += `\n${jour(x.date)}\n`; jourPrec = x.date; } txt += `  • Chambre ${x.num} (${x.bat}, ${x.etage}) — ${cren(x.creneau)}${x.note ? ` — ${x.note}` : ''}\n`; });
+      try { await navigator.clipboard.writeText(txt); fond.querySelector('#rcMsg').textContent = '✓ Copié : colle-le dans ton mail (Ctrl+V).'; }
+      catch { const ta = document.createElement('textarea'); ta.value = txt; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); fond.querySelector('#rcMsg').textContent = '✓ Copié.'; }
+    };
+    fond.querySelector('#rcImprimer').onclick = () => {
+      const w = window.open('', '_blank'); if (!w) { alert('Autorise les fenêtres pour imprimer.'); return; }
+      w.document.write(`<!doctype html><meta charset="utf-8"><title>Récap des interventions</title><body style="font-family:Arial,sans-serif;padding:20px"><h2 style="margin:0 0 4px">Récapitulatif des interventions — logements</h2><p style="margin:0 0 14px;color:#555;font-size:12px">Groupe Établières · du ${echap(fond.querySelector('#rcDu').value.split('-').reverse().join('/'))} au ${echap(fond.querySelector('#rcAu').value.split('-').reverse().join('/'))} · édité le ${new Date().toLocaleDateString('fr-FR')}</p>${tableau(lignes())}</body>`);
+      w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+    };
+    maj();
+  };
 
   function printOccupancy(){
     const b = data[currentBldg];

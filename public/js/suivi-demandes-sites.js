@@ -388,6 +388,8 @@ function marquerSiteVu(uid, site) {
   const v = lireVu(uid); v.sites[site] = Date.now();
   try { localStorage.setItem(vuCle(uid), JSON.stringify(v)); } catch {}
 }
+// Commentaire ajouté/modifié par QUELQU'UN D'AUTRE depuis ma dernière visite du site.
+const comNouveau = (l, depuis, moi) => !!l.commentaireTech && !!l.commentaireMajMs && l.commentaireMajMs > depuis && (l.commentaireMajPar || "") !== (moi || "") && !TRAITE(l.statut);
 const estNouvelle = (l, depuis) => !!l.importeMs && l.importeMs > depuis && !TRAITE(l.statut) && l.statut !== A_VALIDER;
 
 const ieDe = (l) => { const ci = String(l.categorieIntervenant || "").toLowerCase(); return ci.startsWith("interne") ? "interne" : ci.startsWith("externe") ? "externe" : "nd"; };
@@ -522,7 +524,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const corrections = () => {
       const lv = lignes.find(x => x.id === c.dataset.id) || {}, ch = {};
       c.querySelectorAll("[data-vf]").forEach(el => { const k = el.dataset.vf, v = el.value.trim(); if (v !== String(lv[k] || "").trim()) ch[k] = v; });
-      if ("commentaireTech" in ch) { ch.commentaireTechPar = utilisateur; ch.commentaireTechLe = aujourdhui(); }
+      if ("commentaireTech" in ch) { ch.commentaireTechPar = utilisateur; ch.commentaireTechLe = aujourdhui(); ch.commentaireMajMs = Date.now(); ch.commentaireMajPar = utilisateur; }
       return ch;
     };
     c.querySelector("[data-vf-enregistrer]")?.addEventListener("click", async (e) => {
@@ -576,6 +578,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       s.total++;
       if (l.actionPour && !l.actionFaiteLe) s.actions++;
       if (estNouvelle(l, vu.sites[l.site] || vu.base)) s.nouvelles = (s.nouvelles || 0) + 1;
+      if (comNouveau(l, vu.sites[l.site] || vu.base, utilisateur)) s.comNouv = (s.comNouv || 0) + 1;
       if (EN_ATTENTE_VALID(l.statut)) s.aValider++;
       else if (!TRAITE(l.statut)) {
         s.ouvertes++;
@@ -607,6 +610,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <div class="dps-site-pied">
             ${doublonsParSite[s.nom] ? `<span class="dps-pastille lien">🔗 ${doublonsParSite[s.nom]} doublon${doublonsParSite[s.nom] > 1 ? "s" : ""} non compté${doublonsParSite[s.nom] > 1 ? "s" : ""}</span>` : ""}
             ${s.nouvelles ? `<span class="dps-pastille nouv">🆕 ${s.nouvelles} nouvelle${s.nouvelles > 1 ? "s" : ""}</span>` : ""}
+            ${s.comNouv ? `<span class="dps-pastille com-nouv">💬 ${s.comNouv} nouveau${s.comNouv > 1 ? "x" : ""} commentaire${s.comNouv > 1 ? "s" : ""}</span>` : ""}
             ${s.urgentes ? `<span class="dps-pastille urg">🔴 ${s.urgentes} urgente${s.urgentes > 1 ? "s" : ""}</span>` : ""}
             ${s.plusVieille > 30 ? `<span class="dps-pastille vieux">⏳ ${s.plusVieille} j</span>` : ""}
             ${s.realiseesMois ? `<span class="dps-pastille ok">✓ ${s.realiseesMois} ce mois</span>` : ""}
@@ -746,7 +750,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} ${lieesDe(l.id).length ? "a-liees" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${pastilleAttribHTML(l)}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${comNouveau(l, st.vuAvant, utilisateur) ? `<span class="dps-pastille com-nouv">💬 Nouveau commentaire</span>` : ""}${pastilleAttribHTML(l)}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${perms.peutTraiter && !TRAITE(l.statut) ? `<button type="button" class="dps-tk-copie" data-ticket-copie="${esc(l.id)}" title="Copie le ticket prestataire en image : colle-le ensuite dans ton mail (Ctrl+V ou appui long › Coller)">📋 Ticket pour mail</button>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
@@ -776,6 +780,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           </select></label>`;
         })() : ""}
         <label>Date d'intervention<span class="dps-date"><input type="date" data-dps-champ="dateIntervention" value="${esc(val(l, "dateIntervention"))}"><button type="button" class="dps-auj" data-dps-auj title="Mettre la date du jour">Aujourd'hui</button></span></label>
+        ${comNouveau(l, st.vuAvant, utilisateur) ? `<div class="dps-com-nouveau">💬 <b>Nouveau commentaire</b>${l.commentaireMajPar ? ` de ${esc(l.commentaireMajPar)}` : ""} :<br>« ${esc(l.commentaireTech)} »</div>` : ""}
         <label class="dps-com">Commentaire<textarea spellcheck="true" lang="fr" data-dps-champ="commentaireTech" rows="2" placeholder="Ce qui a été fait, pièce à commander…">${esc(val(l, "commentaireTech"))}</textarea>${l.commentaireTech ? `<small class="dps-com-auteur">✍️ ${l.commentaireTechPar ? `${esc(l.commentaireTechPar)}${l.commentaireTechLe ? ` · ${fr(l.commentaireTechLe)}` : ""}` : "auteur inconnu (saisi dans le fichier Excel ou avant le suivi des auteurs)"}</small>` : ""}${phrasesHTML("commentaires", perms.isEditor)}<button type="button" class="dps-ia" data-dps-ia title="L'IA corrige et met au propre tes notes, sans rien inventer">✨ Mettre au propre</button></label>
       </div>
       <div class="dps-actions">
@@ -1050,7 +1055,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         else Object.assign(champs, { statut: A_VALIDER, validation: "ANNULATION", declarePar: utilisateur, declareLe: aujourdhui() });
       }
       if (champs.statut && perms.isEditor) champs.dateStatut = aujourdhui();
-      if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui() });
+      if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui(), commentaireMajMs: Date.now(), commentaireMajPar: utilisateur });
       e.target.disabled = true;
       const etat = c.querySelector(".dps-etat"); etat.textContent = "⏳ Enregistrement…"; etat.className = "dps-etat";
       try {

@@ -173,6 +173,13 @@ export function rapprocherLignes(fichier, demandesApp) {
       if (a.creeDansApp) { if (!a.vuDansFichier) majs.push([a.id, { vuDansFichier: true }]); continue; } // créée dans l'appli : l'appli fait foi
       const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
       champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+      // Demande déjà suivie dans l'appli : un complément ajouté dans l'Excel
+      // (ex. mail reçu) est repris s'il PROLONGE le commentaire de l'appli.
+      if (a.dateMaj && !("commentaireTech" in diff)) {
+        const fc = String(f.commentaireTech || "").trim(), ac = String(a.commentaireTech || "").trim();
+        if (fc && fc !== ac && (!ac || fc.includes(ac))) diff.commentaireTech = fc;
+      }
+      if (diff.commentaireTech) { diff.commentaireMajMs = Date.now(); diff.commentaireMajPar = "Bureau (Excel)"; } // signalé « 💬 nouveau » aux techniciens
       if (Object.keys(diff).length) majs.push([a.id, diff]);
     }
   }

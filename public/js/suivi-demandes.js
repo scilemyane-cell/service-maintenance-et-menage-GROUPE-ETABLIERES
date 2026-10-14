@@ -631,7 +631,7 @@ function ligneDepuisDoc(d) {
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "", validation: d.validation || "", refusPar: d.refusPar || "", refusLe: d.refusLe || "", refusMotif: d.refusMotif || "",
     importeMs: d.importeLe?.toMillis ? d.importeLe.toMillis() : (d.importeLe?.seconds ? d.importeLe.seconds * 1000 : 0),
     lieeA: d.lieeA || "", lieeANumero: d.lieeANumero || "", mailsEnvoyes: Array.isArray(d.mailsEnvoyes) ? d.mailsEnvoyes : [],
-    commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "",
+    commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "", commentaireMajMs: d.commentaireMajMs || 0, commentaireMajPar: d.commentaireMajPar || "",
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
     actionPar: d.actionPar || "", actionParUid: d.actionParUid || "", actionFil: Array.isArray(d.actionFil) ? d.actionFil : [], actionReponseNonLue: !!d.actionReponseNonLue, actionLe: d.actionLe || "", actionFaiteLe: d.actionFaiteLe || "", actionFaitePar: d.actionFaitePar || "",
     actionImmediate: !!d.actionImmediate,
@@ -1014,7 +1014,7 @@ function renderTableau(container) {
       inp.addEventListener(evt, async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date().toISOString().slice(0, 10) } : {};
+        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date().toISOString().slice(0, 10), commentaireMajMs: Date.now(), commentaireMajPar: identite().nom } : {};
         try { await updateDemande(id, { [champ]: e.target.value.trim(), ...auteur }); planifierDepotAuto(); }
         catch (err) { console.error("updateDemande " + champ, err); alert(`Échec de l'enregistrement (${libelle}) — réessaie.`); e.target.disabled = false; }
       });
