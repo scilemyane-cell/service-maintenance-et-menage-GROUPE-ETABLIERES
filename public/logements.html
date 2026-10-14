@@ -2310,6 +2310,7 @@ if(smmUser){
   }
 
   function renderFloors(){
+    if (window.__lgSauverFiltres) window.__lgSauverFiltres();
     floorsEl.innerHTML='';
     const b = data[currentBldg];
     b.floors.forEach((floor, fIdx)=>{
@@ -2937,7 +2938,26 @@ if(smmUser){
   renderHistory();
   startRealtimeSync();
 
+  // Filtres mémorisés PAR UTILISATEUR : on retrouve ceux de sa dernière ouverture.
+  const CLE_FILTRES = 'lg-filtres-' + (smmUser?.uid || smmUser?.email || 'anonyme');
+  const lireFiltres = () => { try { return JSON.parse(localStorage.getItem(CLE_FILTRES) || 'null'); } catch { return null; } };
+  let dernierEnreg = '';
+  window.__lgSauverFiltres = () => {
+    try {
+      const v = JSON.stringify({ statuts: activeFilters ? Array.from(activeFilters) : null, bat: currentBldg, mes: mesLogementsSeuls });
+      if (v !== dernierEnreg) { localStorage.setItem(CLE_FILTRES, v); dernierEnreg = v; }
+    } catch {}
+  };
   applyServiceDefaultFilter = function(){
+    const memo = lireFiltres();
+    if(memo){
+      activeFilters = Array.isArray(memo.statuts) ? new Set(memo.statuts.filter(k => STATUSES[k])) : null;
+      if(memo.bat && data[memo.bat] && memo.bat !== currentBldg){ currentBldg = memo.bat; render(); }
+      if(typeof memo.mes === 'boolean'){ mesLogementsSeuls = memo.mes; document.getElementById('mesLogementsBtn')?.classList.toggle('on', mesLogementsSeuls); }
+      updateFilterCount();
+      renderFloors();
+      return;
+    }
     if(currentService === 'Services Généraux' || currentService === 'Maintenance'){
       activeFilters = new Set(['dispo','vide-de-mobilier','stockage-mobilier']);
       updateFilterCount();
