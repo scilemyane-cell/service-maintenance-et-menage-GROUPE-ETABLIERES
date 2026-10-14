@@ -141,7 +141,7 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'commentaireTech', 'intervenant', 'dateIntervention', 'dateMaj', 'declarePar', 'declareLe', 'commentaireTechPar', 'commentaireTechLe',
                  'actionPour', 'actionPourNom', 'actionTexte', 'actionEcheance', 'actionImmediate', 'actionPar', 'actionLe', 'actionFaiteLe', 'actionFaitePar',
                  'actionParUid', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'lieeA', 'lieeANumero', 'mailsEnvoyes',
-                 'categorieIntervenant', 'dateStatut', 'validation', 'dateValidation', 'validePar']))
+                 'categorieIntervenant', 'dateStatut', 'validation', 'dateValidation', 'validePar', 'commentaireMajMs', 'commentaireMajPar']))
         // La personne à qui une action est attribuée peut la marquer faite.
         || (isSignedIn() && resource.data.get('actionPour', '') == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFaiteLe', 'actionFaitePar', 'actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'actionParUid', 'dateMaj']))

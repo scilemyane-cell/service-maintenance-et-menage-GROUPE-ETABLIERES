@@ -524,7 +524,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const corrections = () => {
       const lv = lignes.find(x => x.id === c.dataset.id) || {}, ch = {};
       c.querySelectorAll("[data-vf]").forEach(el => { const k = el.dataset.vf, v = el.value.trim(); if (v !== String(lv[k] || "").trim()) ch[k] = v; });
-      if ("commentaireTech" in ch) { ch.commentaireTechPar = utilisateur; ch.commentaireTechLe = aujourdhui(); ch.commentaireMajMs = Date.now(); ch.commentaireMajPar = utilisateur; }
+      if ("commentaireTech" in ch) { ch.commentaireTechPar = utilisateur; ch.commentaireTechLe = aujourdhui(); if (perms.isEditor) { ch.commentaireMajMs = Date.now(); ch.commentaireMajPar = utilisateur; } }
       return ch;
     };
     c.querySelector("[data-vf-enregistrer]")?.addEventListener("click", async (e) => {
@@ -1074,7 +1074,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         else Object.assign(champs, { statut: A_VALIDER, validation: "ANNULATION", declarePar: utilisateur, declareLe: aujourdhui() });
       }
       if (champs.statut && perms.isEditor) champs.dateStatut = aujourdhui();
-      if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui(), commentaireMajMs: Date.now(), commentaireMajPar: utilisateur });
+      if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui(), ...(perms.isEditor ? { commentaireMajMs: Date.now(), commentaireMajPar: utilisateur } : {}) }); // champs « nouveau commentaire » : superviseurs seulement (règles Firestore des techniciens)
       e.target.disabled = true;
       const etat = c.querySelector(".dps-etat"); etat.textContent = "⏳ Enregistrement…"; etat.className = "dps-etat";
       try {

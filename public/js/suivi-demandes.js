@@ -1014,7 +1014,7 @@ function renderTableau(container) {
       inp.addEventListener(evt, async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date().toISOString().slice(0, 10), commentaireMajMs: Date.now(), commentaireMajPar: identite().nom } : {};
+        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date().toISOString().slice(0, 10), ...(permsUtilisateur().isEditor ? { commentaireMajMs: Date.now(), commentaireMajPar: identite().nom } : {}) } : {};
         try { await updateDemande(id, { [champ]: e.target.value.trim(), ...auteur }); planifierDepotAuto(); }
         catch (err) { console.error("updateDemande " + champ, err); alert(`Échec de l'enregistrement (${libelle}) — réessaie.`); e.target.disabled = false; }
       });
