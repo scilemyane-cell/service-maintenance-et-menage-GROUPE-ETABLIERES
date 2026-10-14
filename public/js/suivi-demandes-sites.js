@@ -390,7 +390,8 @@ function marquerSiteVu(uid, site) {
 }
 const estNouvelle = (l, depuis) => !!l.importeMs && l.importeMs > depuis && !TRAITE(l.statut) && l.statut !== A_VALIDER;
 
-const st = { site: null, q: "", association: "", voirTraitees: false, toutVoir: false, brouillons: {}, tech: "", tri: "urgence", qSite: "" };
+const ieDe = (l) => { const ci = String(l.categorieIntervenant || "").toLowerCase(); return ci.startsWith("interne") ? "interne" : ci.startsWith("externe") ? "externe" : "nd"; };
+const st = { ie: "", site: null, q: "", association: "", voirTraitees: false, toutVoir: false, brouillons: {}, tech: "", tri: "urgence", qSite: "" };
 // Tri des demandes d'un site (mémorisé sur l'appareil).
 try { st.tri = localStorage.getItem("etablieres-dps-tri") || "urgence"; } catch {}
 const ORDRE_AVANCEMENT = { "Non renseigné": 0, "Pris en compte": 1, "Intervenant sollicité": 2, "Demande de devis": 3, "Planifié": 4, "Commande en cours": 5, "Autre": 6 };
@@ -578,7 +579,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       if (EN_ATTENTE_VALID(l.statut)) s.aValider++;
       else if (!TRAITE(l.statut)) {
         s.ouvertes++;
-        { const ci = String(l.categorieIntervenant || "").toLowerCase(); if (ci.startsWith("interne")) s.interne++; else if (ci.startsWith("externe")) s.externe++; else s.nonDefini++; }
+        { const k = ieDe(l); if (k === "interne") s.interne++; else if (k === "externe") s.externe++; else s.nonDefini++; }
         if (l.urgence === "Urgent" || l.urgence === "Critique") s.urgentes++;
         const j = joursDepuis(l.date); if (j !== null && j > s.plusVieille) s.plusVieille = j;
       } else if (l.statut === "Réalisé" && (l.dateIntervention || l.dateStatut || "").slice(0, 7) === aujourdhui().slice(0, 7)) s.realiseesMois++;
@@ -602,7 +603,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <button class="dps-site ${s.urgentes ? "a-urg" : s.ouvertes ? "" : "vide"}" data-dps-site="${esc(s.nom)}">
           <div class="dps-site-tete"><b>${esc(s.nom)}</b><small>${esc(s.association)}</small>${techsDuSite(s.nom).length ? `<small class="dps-site-techs">👷 ${esc(techsDuSite(s.nom).map(nomDe).filter(Boolean).join(", "))}</small>` : ""}</div>
           <div class="dps-site-compte"><span class="n">${s.ouvertes}</span><span>à traiter</span></div>
-          ${s.ouvertes ? `<div class="dps-site-ie" title="Demandes à traiter, selon l'intervenant"><span class="int">🔧 ${s.interne} interne</span><span class="ext">🏢 ${s.externe} externe</span>${s.nonDefini ? `<span class="nd">❔ ${s.nonDefini} non défini</span>` : ""}</div>` : ""}
+          ${s.ouvertes ? `<div class="dps-site-ie" title="Demandes à traiter, selon l'intervenant"><span class="int" data-dps-ie="interne" data-ie-site="${esc(s.nom)}">🔧 ${s.interne} interne</span><span class="ext" data-dps-ie="externe" data-ie-site="${esc(s.nom)}">🏢 ${s.externe} externe</span>${s.nonDefini ? `<span class="nd" data-dps-ie="nd" data-ie-site="${esc(s.nom)}">❔ ${s.nonDefini} non défini</span>` : ""}</div>` : ""}
           <div class="dps-site-pied">
             ${doublonsParSite[s.nom] ? `<span class="dps-pastille lien">🔗 ${doublonsParSite[s.nom]} doublon${doublonsParSite[s.nom] > 1 ? "s" : ""} non compté${doublonsParSite[s.nom] > 1 ? "s" : ""}</span>` : ""}
             ${s.nouvelles ? `<span class="dps-pastille nouv">🆕 ${s.nouvelles} nouvelle${s.nouvelles > 1 ? "s" : ""}</span>` : ""}
@@ -696,7 +697,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     brancherAttrib();
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
     container.querySelectorAll("[data-ouvrir-dem]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.ouvrirSite; st.q = ""; st.vuAvant = null; st.focusId = b.dataset.ouvrirDem; rerender(); container.scrollIntoView({ block: "start" }); }));
-    container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" }); }));
+    container.querySelectorAll("[data-dps-site]").forEach(b => b.addEventListener("click", (e) => {
+      const ie = e.target.closest("[data-dps-ie]"); // clic sur « interne / externe » : le site, filtré
+      st.ie = ie ? ie.dataset.dpsIe : "";
+      st.site = b.dataset.dpsSite; st.q = ""; st.vuAvant = null; rerender(); container.scrollIntoView({ block: "start" });
+    }));
     brancherValidation();
     brancherNouvelle();
     restaurerSaisies(container, saisies);
@@ -713,7 +718,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const enValidation = duSite.filter(l => EN_ATTENTE_VALID(l.statut));
   const qS = sa(st.qSite.trim());
   const filtreQ = (l) => !qS || sa(`${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type}`).includes(qS);
-  const ouvertes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l)).sort((TRIS[st.tri] || TRIS.urgence)[1]);
+  const ouvertesToutes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l));
+  const ouvertes = ouvertesToutes.filter(l => !st.ie || ieDe(l) === st.ie).sort((TRIS[st.tri] || TRIS.urgence)[1]);
   const traitees = duSite.filter(l => TRAITE(l.statut)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
   // Bloc des demandes liées, affiché en haut de la carte principale.
   const lieesHTML = (l) => {
@@ -835,6 +841,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Réalisations et annulations déclarées par les techniciens — vérifie puis valide ou refuse." : "Envoyées au superviseur : en attente de sa validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
     <div class="dps-tri-barre">
       <label class="dps-recherche"><span>🔎</span><input id="dps-qsite" type="search" placeholder="Logement, local, N°, mot du descriptif…" value="${esc(st.qSite)}"></label>
+      <div class="dps-ie-filtre">${[["", "Toutes"], ["interne", "🔧 Interne"], ["externe", "🏢 Externe"], ["nd", "❔ Non défini"]].map(([k, lib]) => { const n = k ? ouvertesToutes.filter(l => ieDe(l) === k).length : ouvertesToutes.length; return (k && !n && st.ie !== k) ? "" : `<button type="button" data-ie-filtre="${k}" class="${st.ie === k ? "on" : ""}">${lib} <small>${n}</small></button>`; }).join("")}</div>
       <label class="dps-tri">Trier par<select id="dps-tri">${Object.entries(TRIS).map(([k, [lib]]) => `<option value="${k}" ${st.tri === k ? "selected" : ""}>${lib}</option>`).join("")}</select></label>
     </div>
     ${st.tri === "local" || st.tri === "avancement" ? (() => {
@@ -848,7 +855,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   onToggle();
   container.querySelector("#dps-retour").addEventListener("click", () => {
     if (st.focusId) { st.focusId = null; if (quitterFocus) { st.site = null; quitterFocus(); } else rerender(); return; }
-    st.site = null; st.qSite = ""; rerender();
+    st.site = null; st.qSite = ""; st.ie = ""; rerender();
   });
   { const f = document.createElement("button"); f.type = "button"; f.id = "dps-retour-flottant"; f.className = "dps-retour-flottant"; f.textContent = st.focusId && quitterFocus ? "← 📌 Mes actions" : st.focusId ? "← Retour au site" : "← 🏠 Tous les sites"; (container.querySelector(".stack") || container).append(f); }
   container.querySelector("#dps-retour-flottant")?.addEventListener("click", () => { container.querySelector("#dps-retour")?.click(); window.scrollTo({ top: 0 }); });
@@ -857,6 +864,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ouvertes: duSite.filter(l => A_TRAITER(l.statut)), enValidation, traitees,
   }));
   container.querySelector("#dps-voir-site")?.addEventListener("click", () => { st.focusId = null; rerender(); });
+  container.querySelectorAll("[data-ie-filtre]").forEach(b => b.addEventListener("click", () => { st.ie = b.dataset.ieFiltre; rerender(); }));
   container.querySelector("#dps-tri")?.addEventListener("change", (e) => { st.tri = e.target.value; try { localStorage.setItem("etablieres-dps-tri", st.tri); } catch {} rerender(); });
   let tq = null;
   container.querySelector("#dps-qsite")?.addEventListener("input", (e) => { st.qSite = e.target.value; clearTimeout(tq); tq = setTimeout(() => { rerender(); const el = container.querySelector("#dps-qsite"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 300); });
