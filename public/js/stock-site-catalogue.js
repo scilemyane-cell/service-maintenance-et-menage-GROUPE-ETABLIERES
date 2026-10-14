@@ -10,9 +10,10 @@ import { activerGlisserDeposer } from "./drag-reorder.js";
 import {
   watchCatalogueSite, ajouterProduitCatalogueSite, modifierProduitCatalogueSite, supprimerProduitCatalogueSite, definirOrdreCatalogueSite,
 } from "./stock-site-data.js";
+import { watchFournisseurs } from "./fournisseurs-data.js";
 
 let mountedContainer = null;
-let state = { produits: [] };
+let state = { produits: [], fournisseurs: [] };
 let ui = { editId: null };
 let unsub = null;
 
@@ -21,7 +22,9 @@ export function mountStockCatalogueSite(container) {
   mountedContainer = container;
   ui = { editId: null };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsub = watchCatalogueSite((p) => { state.produits = p; if (!ui.editId) render(); });
+  const u1 = watchCatalogueSite((p) => { state.produits = p; if (!ui.editId) render(); });
+  const u2 = watchFournisseurs((f) => { state.fournisseurs = f; if (!ui.editId) render(); });
+  unsub = () => { u1(); u2(); };
 }
 
 function render() {
@@ -37,14 +40,15 @@ function render() {
       ${state.produits.length > 1 ? `<p class="hint" style="margin:0">Maintiens l'icône ☰ appuyée puis fais glisser pour réordonner la liste.</p>` : ""}
       <div class="table-wrap">
         <table>
-          <thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Unité</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Fournisseur</th><th>Unité</th><th></th></tr></thead>
           <tbody>
-            ${state.produits.length === 0 ? `<tr><td colspan="5" class="empty-row">Liste vide pour l'instant.</td></tr>` :
+            ${state.produits.length === 0 ? `<tr><td colspan="6" class="empty-row">Liste vide pour l'instant.</td></tr>` :
               state.produits.map((p, idx) => `
                 <tr data-drag-index="${idx}">
                   <td style="white-space:nowrap;width:1%"><span data-drag-handle style="font-size:16px;color:var(--text-dim);cursor:grab;padding:4px;user-select:none">☰</span></td>
                   <td>${esc(p.nom)}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.categorie || "—")}</td>
+                  <td style="font-size:12px;color:var(--text-dim)">${esc(p.fournisseurNom || "—")}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.unite || "pièce")}</td>
                   <td style="white-space:nowrap">
                     <button class="nav-btn" data-edit="${p.id}" style="padding:4px 8px;font-size:11px">✏️</button>
@@ -82,6 +86,13 @@ function renderForm(p) {
           <label>Nom<input id="csc-nom" value="${esc(p?.nom || '')}"></label>
           <label>Catégorie<input id="csc-categorie" value="${esc(p?.categorie || '')}" placeholder="ex. Sécurité, Consommables…"></label>
           <label>Unité<input id="csc-unite" value="${esc(p?.unite || 'pièce')}"></label>
+          <label>Fournisseur
+            <select id="csc-fournisseur">
+              <option value="">— Même que le Stock maintenance (si le produit y existe) —</option>
+              ${state.fournisseurs.map(f => `<option value="${f.id}" ${p?.fournisseurId === f.id ? "selected" : ""}>${esc(f.nom)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Réf. fournisseur<input id="csc-ref" value="${esc(p?.refFournisseur || '')}"></label>
         </div>
         <button class="add-btn" id="csc-save">💾 Enregistrer</button>
         <span id="csc-status" style="font-size:12px;margin-left:8px"></span>
@@ -97,7 +108,12 @@ function renderForm(p) {
       nom,
       categorie: document.getElementById("csc-categorie").value.trim(),
       unite: document.getElementById("csc-unite").value.trim() || "pièce",
+      refFournisseur: document.getElementById("csc-ref").value.trim(),
     };
+    const f = state.fournisseurs.find(x => x.id === document.getElementById("csc-fournisseur").value);
+    Object.assign(payload, f
+      ? { fournisseurId: f.id, fournisseurNom: f.nom || "", fournisseurEmail: f.email || "" }
+      : { fournisseurId: null, fournisseurNom: "", fournisseurEmail: "" });
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
       if (p) await modifierProduitCatalogueSite(p.id, payload);
