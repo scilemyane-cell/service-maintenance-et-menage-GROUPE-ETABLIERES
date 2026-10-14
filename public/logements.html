@@ -386,7 +386,7 @@
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .room .occupant.note{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;font-size:11px;line-height:1.25;color:#16273b;font-weight:600;text-align:left;background:#fff6d6;border-left:3px solid #e0a800;padding:2px 4px;margin-top:5px}
+  .room .occupant.note{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;font-size:11px;line-height:1.3;color:#16273b;margin-top:5px}
   .room .assigne{font-family:var(--mono);font-size:10px;font-weight:700;color:#fff;background:#3b7dd8;border-radius:3px;padding:1px 4px;margin-top:4px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .room.a-moi{outline:3px solid #3b7dd8;outline-offset:1px}
   #occupantInput{min-height:70px;resize:vertical;font-family:inherit;font-size:14px;width:100%;box-sizing:border-box;padding:8px}
@@ -686,6 +686,11 @@
 
     <label>Date d'intervention</label>
     <input type="date" id="interventionDateInput">
+    <div id="creneauBtns" style="display:flex;gap:6px;margin-top:6px">
+      <button type="button" class="status-btn" data-creneau="">Journée</button>
+      <button type="button" class="status-btn" data-creneau="matin">☀️ Matin</button>
+      <button type="button" class="status-btn" data-creneau="apres-midi">🌇 Après-midi</button>
+    </div>
 
     <div class="panel-actions">
       <button class="btn ghost" id="closePanel">Fermer</button>
@@ -731,6 +736,7 @@ const smmUser = (() => { try { return (window.parent !== window && window.parent
 const currentUserName = smmUser ? (smmUser.nom || smmUser.email || '') : '';
 const lireTechs = () => { try { return (window.parent !== window && window.parent.smmTechs) || (window.opener && window.opener.smmTechs) || []; } catch (e) { return []; } };
 const peutAttribuer = !!smmUser && ['super_admin','admin','n1'].includes(smmUser.role);
+let draftCreneau = '';
 let mesLogementsSeuls = !!smmUser && smmUser.role === 'technicien'; // un technicien voit d'abord SES logements
 // Accès "Lecture" (Gérer l'accès) : planning saisonnier en lecture seule, comme la direction
 let currentService = smmUser ? (smmUser.role === 'direction' ? 'Direction' : (smmUser.lectureSeule ? 'Consultation' : 'Maintenance')) : '';
@@ -2358,12 +2364,14 @@ if(smmUser){
           el.classList.add('selected-transfer');
         }
         const dateBadge = room.interventionDate
-          ? `<div class="intervention-date">📅 ${room.interventionDate.split('-').reverse().join('/')}</div>`
+          ? `<div class="intervention-date">📅 ${room.interventionDate.split('-').reverse().join('/')}${room.creneau ? ` · ${room.creneau === 'matin' ? 'matin' : 'après-midi'}` : ''}</div>`
           : '';
         const echap = (t) => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         if(smmUser && room.assigneUid && room.assigneUid === smmUser.uid) el.classList.add('a-moi');
         if(mesLogementsSeuls){ // « Mes logements » : tous ceux qui me sont attribués, quel que soit le filtre de statut
-          const aMoi = smmUser && room.assigneUid === smmUser.uid;
+          const limite = new Date(); limite.setDate(limite.getDate() + 5);
+          const dans5j = !room.interventionDate || smmUser.role !== 'technicien' || room.interventionDate <= limite.toISOString().slice(0, 10);
+          const aMoi = smmUser && room.assigneUid === smmUser.uid && dans5j; // technicien : visible 5 jours avant
           el.classList.toggle('hidden', !aMoi || !matchesSearch);
         }
         el.title = [room.occupant, room.assigneNom ? `Attribué à ${room.assigneNom}` : ''].filter(Boolean).join('\n');
@@ -2412,6 +2420,8 @@ if(smmUser){
     panelSub.textContent = `${data[currentBldg].label} — ${data[currentBldg].floors[floorIdx].name}`;
     occupantInput.value = room.occupant || '';
     interventionDateInput.value = room.interventionDate || '';
+    draftCreneau = room.creneau || '';
+    document.querySelectorAll('#creneauBtns [data-creneau]').forEach(b => { b.classList.toggle('active', b.dataset.creneau === draftCreneau); b.onclick = () => { draftCreneau = b.dataset.creneau; document.querySelectorAll('#creneauBtns [data-creneau]').forEach(x => x.classList.toggle('active', x === b)); }; });
     {
       const sel = document.getElementById('assigneSelect');
       const techs = lireTechs().slice();
@@ -2455,6 +2465,8 @@ if(smmUser){
     room.status = draftStatus;
     room.occupant = newOccupant;
     room.interventionDate = newDate;
+    const oldCreneau = room.creneau || '';
+    room.creneau = newDate ? (draftCreneau || '') : '';
     const oldAssigne = room.assigneNom || '';
     { const sel = document.getElementById('assigneSelect'); const uid = sel.value; const nom = uid ? sel.options[sel.selectedIndex].text : '';
       if(peutAttribuer){ if((uid||null) !== (room.assigneUid||null)) room.assigneLe = uid ? new Date().toISOString().slice(0,10) : null; room.assigneUid = uid || null; room.assigneNom = nom || null; } }
@@ -2465,6 +2477,9 @@ if(smmUser){
     }
     if(oldDate !== newDate){
       msg += ` | intervention : ${oldDate||'—'} → ${newDate||'—'}`;
+    }
+    if(oldCreneau !== (room.creneau||'')){
+      msg += ` | créneau : ${oldCreneau||'journée'} → ${room.creneau||'journée'}`;
     }
     if(oldAssigne !== (room.assigneNom||'')){
       msg += ` | attribué : ${oldAssigne||'—'} → ${room.assigneNom||'—'}`;

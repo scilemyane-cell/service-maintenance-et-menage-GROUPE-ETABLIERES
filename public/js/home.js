@@ -100,6 +100,9 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   const uidsImm = new Set([user.uid].filter(Boolean));
   if (user.postePartage) { try { const i = JSON.parse(localStorage.getItem("etablieres-poste-identite") || "null"); if (i?.uid && Date.now() - i.t < 4 * 3600000) uidsImm.add(i.uid); } catch {} }
   uidsImm.forEach(u => unsubs.push(watchActionsImmediates(u, (l) => { immediates[u] = l; scheduleRender(); })));
+  // Logements Bât. A / B attribués (5 jours avant l'intervention)
+  mesLogements = [];
+  if (user.uid) import("./logements-data.js").then(({ watchMesLogements }) => { if (uidVues !== user.uid) return; unsubs.push(watchMesLogements(user.uid, (l) => { mesLogements = l; scheduleRender(); })); }).catch(e => console.error(e));
   if (["super_admin", "admin", "n1"].includes(user.role)) unsubs.push(watchNouvellesDemandes((l) => { nouvelles = l; scheduleRender(); }));
   // Tâches ménage du mois en retard (agents ménage + encadrement)
   sitesMenage = null; fichesMenage = null;
@@ -371,6 +374,25 @@ function bandeauUrgencesHTML() {
 
 // Pastille « action attribuée » sur les bandeaux (visible par tous).
 const pastilleAction = (a) => !a ? "" : `<span class="gh-act ${a.fait ? "fait" : a.imm ? "imm" : ""}" title="${esc(a.texte || "")}">${a.fait ? "✓ Action faite" : `${a.imm ? "🚨" : "📌"} Action → ${esc(a.pour || "?")}`}</span>`;
+// ---- Bandeau « logements à faire » (technicien, 5 jours avant) ----
+let mesLogements = [];
+function bandeauLogementsHTML() {
+  if (!mesLogements.length) return "";
+  const auj = new Date(); auj.setHours(0, 0, 0, 0);
+  const lib = (d) => { const x = new Date(d + "T00:00:00"); const j = Math.round((x - auj) / 86400000); return j === 0 ? "aujourd'hui" : j === 1 ? "demain" : j < 0 ? `en retard (${x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })})` : x.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "2-digit" }); };
+  return `<section class="gh-urgences gh-logts">
+    <div class="gh-urg-tete">🏠 <b>${mesLogements.length} logement${mesLogements.length > 1 ? "s" : ""} à faire</b><span>Bâtiments A / B — les 5 prochains jours</span></div>
+    <div class="gh-urg-liste">${mesLogements.map(x => `
+      <div class="gh-urg">
+        <button type="button" data-logts-ouvrir class="gh-urg-corps">
+          <span class="gh-urg-badge" style="background:#3b7dd8">${esc(lib(x.date))}${x.creneau ? ` · ${x.creneau === "matin" ? "matin" : "après-midi"}` : ""}</span>
+          <span class="gh-urg-txt"><b>Chambre ${esc(x.numero)} · ${esc(x.bat)} · ${esc(x.etage)}</b>${x.note ? `<small>${esc(x.note)}</small>` : ""}</span>
+          <span class="gh-urg-go">Ouvrir →</span>
+        </button>
+      </div>`).join("")}
+    </div></section>`;
+}
+
 // ---- Bandeau « actions immédiates » (la personne concernée) ----
 let immediates = {};
 function bandeauImmediatHTML() {
@@ -616,6 +638,7 @@ function render() {
       </button>` : ""}
       ${transfertBannerHTML(next, confirmedRecord)}
       ${bandeauImmediatHTML()}
+      ${bandeauLogementsHTML()}
       ${bandeauUrgencesHTML()}
       ${bandeauNouvellesHTML()}
 
@@ -696,6 +719,7 @@ function render() {
     window.ouvrirCompleterId = e.currentTarget.dataset.completerAccueil;
     onSelectRef("astreinte");
   });
+  mountedContainer.querySelectorAll("[data-logts-ouvrir]").forEach(b => b.addEventListener("click", () => onSelectRef("logements")));
   mountedContainer.querySelectorAll("[data-urg-ouvrir]").forEach(b => b.addEventListener("click", () => {
     if (b.dataset.nouvId) marquerVus(CLE_NOUV_VUES, "nouvellesVues", [b.dataset.nouvId]);
     window.__suiviOuvrir = { id: b.dataset.urgOuvrir, site: b.dataset.urgSite };
