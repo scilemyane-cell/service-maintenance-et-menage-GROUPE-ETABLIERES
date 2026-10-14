@@ -100,6 +100,12 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   const uidsImm = new Set([user.uid].filter(Boolean));
   if (user.postePartage) { try { const i = JSON.parse(localStorage.getItem("etablieres-poste-identite") || "null"); if (i?.uid && Date.now() - i.t < 4 * 3600000) uidsImm.add(i.uid); } catch {} }
   uidsImm.forEach(u => unsubs.push(watchActionsImmediates(u, (l) => { immediates[u] = l; scheduleRender(); })));
+  // Nouveaux commentaires sur les demandes des sites dont je suis le technicien référent
+  comDemandes = []; comAff = {}; comDocs = [];
+  if (user.uid) {
+    import("./affectations-sites-data.js").then(({ watchAffectationsSites }) => { if (uidVues !== user.uid) return; unsubs.push(watchAffectationsSites((a) => { comAff = a || {}; calculerComNotifs(user); })); }).catch(() => {});
+    import("./firestore-data.js").then(({ watchDemandes }) => { if (uidVues !== user.uid) return; unsubs.push(watchDemandes((l) => { comDocs = l || []; calculerComNotifs(user); })); }).catch(() => {});
+  }
   // Logements Bât. A / B attribués (5 jours avant l'intervention)
   mesLogements = [];
   if (user.uid) import("./logements-data.js").then(({ watchMesLogements }) => { if (uidVues !== user.uid) return; unsubs.push(watchMesLogements(["super_admin", "admin", "n1"].includes(user.role) ? "*" : user.uid, (l) => { mesLogements = l; scheduleRender(); })); }).catch(e => console.error(e));
@@ -374,6 +380,20 @@ function bandeauUrgencesHTML() {
 
 // Pastille « action attribuée » sur les bandeaux (visible par tous).
 const pastilleAction = (a) => !a ? "" : `<span class="gh-act ${a.fait ? "fait" : a.imm ? "imm" : ""}" title="${esc(a.texte || "")}">${a.fait ? "✓ Action faite" : `${a.imm ? "🚨" : "📌"} Action → ${esc(a.pour || "?")}`}</span>`;
+// ---- Notification « 💬 nouveaux commentaires » (technicien référent du site) ----
+let comDemandes = [], comAff = {}, comDocs = [];
+const cleSiteC = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function calculerComNotifs(user) {
+  const mesSites = new Set(Object.entries(comAff).filter(([, l]) => (l || []).includes(user.uid)).map(([n]) => cleSiteC(n)));
+  let vu = { base: Date.now(), sites: {} };
+  try { const v = JSON.parse(localStorage.getItem(`etablieres-dps-vu-${user.uid}`) || "null"); if (v && v.base) vu = v; } catch {}
+  const vuSite = (site) => { const e = Object.entries(vu.sites || {}).find(([n]) => cleSiteC(n) === cleSiteC(site)); return e ? e[1] : vu.base; };
+  const ferme = (st) => /^(realis|annul|arbitrage)/.test(String(st || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+  comDemandes = mesSites.size ? comDocs.filter(d => !d.lieeA && !ferme(d.statut) && d.commentaireTech && d.commentaireMajMs && mesSites.has(cleSiteC(d.site))
+    && (d.commentaireMajPar || "") !== (user.nom || "") && d.commentaireMajMs > vuSite(d.site)) : [];
+  scheduleRender();
+}
+
 // ---- Bandeau « logements à faire » (technicien, 5 jours avant) ----
 let mesLogements = [];
 function bandeauLogementsHTML() {
@@ -624,6 +644,11 @@ function render() {
       if (aValider) notifs.push({ cat: "astreinte", sub: "interventions", mois, icone: "🗓️", texte: `Clôture de ${nomMois} : ${aValider} intervention${aValider > 1 ? "s" : ""} d'astreinte à valider — relevés d'heures et notes de frais km à imprimer`, niveau: "rouge" });
     }
   }
+  if (comDemandes.length) {
+    const sites = [...new Set(comDemandes.map(d => d.site))];
+    notifs.unshift({ cat: "suivi-demandes", com: comDemandes.length === 1 ? comDemandes[0] : null, icone: "💬", niveau: "orange",
+      texte: `${comDemandes.length} nouveau${comDemandes.length > 1 ? "x" : ""} commentaire${comDemandes.length > 1 ? "s" : ""} sur tes demandes — ${sites.slice(0, 3).join(", ")}${sites.length > 3 ? "…" : ""}${comDemandes.length === 1 ? ` (N° ${comDemandes[0].numero || "?"} : « ${String(comDemandes[0].commentaireTech).slice(0, 80)} »)` : ""}` });
+  }
   if (holidayToday) notifs.push({ icone: "☀️", texte: `Jour férié : ${holidayToday}`, niveau: "violet" });
 
   const jour = today.toLocaleDateString("fr-FR", { weekday: "short" });
@@ -697,7 +722,7 @@ function render() {
                 <div class="gh-astreinte-ligne"><span class="avatar" style="background:${colorForPerson(n2.assigned, people)}"></span><span>N2</span><b>${esc(n2.assigned)}</b></div>
               </div>` : `<p class="gh-vide">Astreinte pas encore configurée.</p>`}
             ${notifs.length === 0 ? `<p class="gh-aucune">Aucune notification</p>` : notifs.map(n => `
-              <${n.cat ? `button data-notif-cat="${n.cat}"${n.sub ? ` data-notif-sub="${n.sub}"` : ""}${n.mois ? ` data-notif-mois="${n.mois}"` : ""}` : "div"} class="gh-notif gh-notif-${n.niveau}">
+              <${n.cat ? `button data-notif-cat="${n.cat}"${n.sub ? ` data-notif-sub="${n.sub}"` : ""}${n.mois ? ` data-notif-mois="${n.mois}"` : ""}${n.com ? ` data-notif-com="${esc(n.com.id)}" data-notif-com-site="${esc(n.com.site || "")}"` : ""}` : "div"} class="gh-notif gh-notif-${n.niveau}">
                 <span>${n.icone}</span><span>${esc(n.texte)}</span>
               </${n.cat ? "button" : "div"}>`).join("")}
           </div>
@@ -740,6 +765,7 @@ function render() {
     btn.addEventListener("click", () => {
       // Raccourcis Suivi des demandes : « valider » → bloc des demandes à valider, « actions » → onglet Mes actions.
       if (btn.dataset.notifMois) window.__clotureMois = btn.dataset.notifMois;
+      if (btn.dataset.notifCom) window.__suiviOuvrir = { id: btn.dataset.notifCom, site: btn.dataset.notifComSite }; // un seul commentaire : on ouvre la demande
       if (btn.dataset.notifCat === "suivi-demandes" && btn.dataset.notifSub) window.__suiviRaccourci = btn.dataset.notifSub;
       else if (btn.dataset.notifSub) window.ouvrirSousOnglet = btn.dataset.notifSub;
       onSelectRef(btn.dataset.notifCat);
