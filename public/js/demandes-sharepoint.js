@@ -176,7 +176,7 @@ export function rapprocherLignes(fichier, demandesApp) {
       // ligne écrasée dans l'Excel. On ne remplace JAMAIS l'existante : la
       // ligne du fichier est créée à part (vu sur SG-958 : Trois Portes
       // remplacée par une ligne « RS - Le Cap » vide).
-      const autreSite = sa(f.site || "").replace(/[^a-z0-9]/g, "") && sa(a.site || "").replace(/[^a-z0-9]/g, "") && sa(f.site).replace(/[^a-z0-9]/g, "") !== sa(a.site).replace(/[^a-z0-9]/g, "");
+      const autreSite = !a.siteCorrige && sa(f.site || "").replace(/[^a-z0-9]/g, "") && sa(a.site || "").replace(/[^a-z0-9]/g, "") && sa(f.site).replace(/[^a-z0-9]/g, "") !== sa(a.site).replace(/[^a-z0-9]/g, "");
       const videContrePlein = !empreinte(f) && !!empreinte(a);
       if (autreSite || videContrePlein) {
         if (!(demandesApp || []).some(d => d.id !== a.id && d.numero === f.numero && sa(d.site || "") === sa(f.site || "") && empreinte(d) === empreinte(f))) nouvelles.push(f);
@@ -184,6 +184,7 @@ export function rapprocherLignes(fichier, demandesApp) {
       }
       const champs = a.dateMaj ? CHAMPS_DEMANDEUR : [...CHAMPS_DEMANDEUR, ...CHAMPS_TRAITEMENT];
       champs.forEach(k => { if ((f[k] || "") !== (a[k] || "")) diff[k] = f[k] || ""; });
+      if (a.siteCorrige) { delete diff.site; delete diff.association; } // site corrigé dans l'appli : il fait foi
       // Jamais vider un champ de la demande avec une case vide du fichier.
       ["descriptif", "local", "demandeur", "site"].forEach(k => { if (k in diff && !String(diff[k]).trim() && String(a[k] || "").trim()) delete diff[k]; });
       // Le descriptif / le lieu changent : on garde l'ancienne version (restaurable).

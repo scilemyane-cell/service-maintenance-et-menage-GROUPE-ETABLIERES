@@ -33,7 +33,14 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   fond.innerHTML = `
   <form class="ndm" autocomplete="off">
     <div class="ndm-tete"><h3>➕ Nouvelle demande</h3><button type="button" class="ndm-x" data-fermer aria-label="Fermer">✕</button></div>
-    <label>Site<input name="site" list="ndm-sites" required value="${esc(siteDefaut)}" placeholder="Choisis ou tape le site"><datalist id="ndm-sites">${nomsSites.map(s => `<option value="${esc(s)}">`).join("")}</datalist></label>
+    <label>Site<select name="siteChoix" required>
+      <option value="">— Choisis le site —</option>
+      ${["Agropolis", "École", "Armonia", "Autres"].map(as => { const l = nomsSites.filter(n => (sites[n] || "Autres") === as); return l.length ? `<optgroup label="${as}">${l.map(n => `<option value="${esc(n)}" ${n === siteDefaut ? "selected" : ""}>${esc(n)}</option>`).join("")}</optgroup>` : ""; }).join("")}
+      ${siteDefaut && !nomsSites.includes(siteDefaut) ? `<option value="${esc(siteDefaut)}" selected>${esc(siteDefaut)}</option>` : ""}
+      <option value="__autre">✏️ Autre site (le taper)…</option>
+    </select></label>
+    <label class="ndm-autre-site" style="display:none">Nom du site<input name="siteAutre" placeholder="Tape le nom du site"></label>
+    <input type="hidden" name="site" value="${esc(siteDefaut)}">
     <div class="ndm-2">
       <label>Association<select name="association">${["Agropolis", "École", "Armonia", "Autres"].map(a => `<option ${a === (sites[siteDefaut] || "") ? "selected" : ""}>${a}</option>`).join("")}</select></label>
       <label>Local / pièce<input name="local" placeholder="ex. CH 301, Internat…"></label>
@@ -55,7 +62,14 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   const fermer = () => fond.remove();
   fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", fermer));
   fond.addEventListener("click", (e) => { if (e.target === fond) fermer(); });
-  f.site.addEventListener("change", () => { const a = sites[f.site.value]; if (a) f.association.value = a; });
+  const majSite = () => {
+    const autre = f.siteChoix.value === "__autre";
+    fond.querySelector(".ndm-autre-site").style.display = autre ? "" : "none";
+    f.site.value = autre ? f.siteAutre.value.trim() : f.siteChoix.value;
+    const a = sites[f.site.value]; if (a) f.association.value = a;
+  };
+  f.siteChoix.addEventListener("change", () => { majSite(); if (f.siteChoix.value === "__autre") f.siteAutre.focus(); });
+  f.siteAutre.addEventListener("input", majSite);
   fond.querySelector("[data-ndm-ia]").addEventListener("click", async (e) => {
     const t = f.descriptif.value.trim(); if (!t) { f.descriptif.focus(); return; }
     const b = e.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = "⏳ IA…";
@@ -65,8 +79,10 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   });
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
+    majSite();
     const v = Object.fromEntries(new FormData(f).entries());
-    if (!v.site.trim() || !v.descriptif.trim()) return;
+    if (!v.site.trim()) { etat.textContent = "Choisis le site."; (f.siteChoix.value === "__autre" ? f.siteAutre : f.siteChoix).focus(); return; }
+    if (!v.descriptif.trim()) return;
     const bouton = f.querySelector('[type="submit"]'); bouton.disabled = true; etat.textContent = "⏳ Création…";
     try {
       const numero = await creerDemande({
@@ -78,5 +94,5 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       fermer(); onCree(numero, v.site.trim());
     } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); bouton.disabled = false; }
   });
-  setTimeout(() => (siteDefaut ? f.descriptif : f.site).focus(), 50);
+  setTimeout(() => (siteDefaut ? f.descriptif : f.siteChoix).focus(), 50);
 }

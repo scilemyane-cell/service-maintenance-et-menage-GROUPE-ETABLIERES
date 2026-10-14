@@ -761,6 +761,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${l.versionPrecedente && (l.versionPrecedente.descriptif !== l.descr || l.versionPrecedente.site !== l.site) ? `<details class="dps-version-prec"><summary>🕘 Cette demande a été modifiée par l'Excel le ${new Date(l.versionPrecedente.le).toLocaleDateString("fr-FR")} — voir l'ancienne version</summary>
         <div><b>${esc(l.versionPrecedente.site)}</b>${l.versionPrecedente.local ? ` · 📍 ${esc(l.versionPrecedente.local)}` : ""}${l.versionPrecedente.demandeur ? ` · par ${esc(l.versionPrecedente.demandeur)}` : ""}${l.versionPrecedente.dateDemande ? ` · ${fr(l.versionPrecedente.dateDemande)}` : ""}<br><i>${esc(l.versionPrecedente.descriptif || "(sans descriptif)")}</i></div>
         ${perms.isEditor ? `<button type="button" data-restaurer-version="${esc(l.id)}">↩ Restaurer cette version</button>` : ""}</details>` : ""}
+      ${perms.isEditor ? `<div class="dps-urg-edit"><label>Site <select data-site-corr="${esc(l.id)}">${(() => { const m = {}; lignes.forEach(x => { if (x.site && x.site !== "Non renseigné") m[x.site] = m[x.site] || x.association || "Autres"; }); return ["Agropolis", "École", "Armonia", "Autres"].map(as => { const n = Object.keys(m).filter(k => (m[k] || "Autres") === as).sort((a, b) => a.localeCompare(b, "fr")); return n.length ? `<optgroup label="${as}">${n.map(k => `<option value="${esc(k)}" data-asso="${esc(m[k])}" ${k === l.site ? "selected" : ""}>${esc(k)}</option>`).join("")}</optgroup>` : ""; }).join(""); })()}</select></label></div>` : ""}
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
         : l.urgenceCorrigee ? `<div class="dps-urg-edit"><small>Urgence requalifiée (demandée « ${esc(l.urgenceDemandee)} »)</small></div>` : ""}
       ${attribBlocHTML(l)}
@@ -915,6 +916,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     ouvrirTicketMail({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "" }, { email: ent?.email || "", contact: ent?.contact || "" });
   }));
   brancherAttrib();
+  container.querySelectorAll("[data-site-corr]").forEach(sel => sel.addEventListener("change", async () => {
+    const l = lignes.find(x => x.id === sel.dataset.siteCorr); if (!l || sel.value === l.site) return;
+    if (!confirm(`Déplacer ${l.n} vers le site « ${sel.value} » ?`)) { sel.value = l.site; return; }
+    const asso = sel.selectedOptions[0]?.dataset.asso || l.association;
+    sel.disabled = true;
+    try { await maj(l.id, { site: sel.value, association: asso, siteCorrige: true, siteCorrigePar: utilisateur, siteAvant: l.site }); window.toast?.(`✓ ${l.n} déplacée vers ${sel.value}`); }
+    catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; sel.value = l.site; }
+  }));
   container.querySelectorAll("[data-urgence]").forEach(sel => sel.addEventListener("change", async () => {
     const l = lignes.find(x => x.id === sel.dataset.urgence), v = sel.value;
     const champs = v === l.urgenceDemandee ? { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" } : { urgenceCorrigee: v, urgenceCorrigeePar: utilisateur, urgenceCorrigeeLe: aujourdhui() };
