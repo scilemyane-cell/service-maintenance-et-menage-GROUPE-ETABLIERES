@@ -366,8 +366,8 @@ function urgencesAAfficher() {
 function bandeauUrgencesHTML() {
   const l = urgencesAAfficher(); if (!l.length) return "";
   const cliquable = catsRef.some(c => c.id === "suivi-demandes");
-  return `<section class="gh-urgences">
-    <div class="gh-urg-tete">🚨 <b>${l.length} demande${l.length > 1 ? "s" : ""} urgente${l.length > 1 ? "s" : ""}</b><span>à traiter en priorité</span></div>
+  return `<section class="gh-urgences ${replieCls("urgences")}">
+    <button type="button" class="gh-urg-tete gh-urg-plier" data-plier="urgences">🚨 <b>${l.length} demande${l.length > 1 ? "s" : ""} urgente${l.length > 1 ? "s" : ""}</b><span>à traiter en priorité</span>${flechePlier("urgences")}</button>
     <div class="gh-urg-liste">${l.slice(0, 4).map(u => `
       <div class="gh-urg ${u.urgence === "Critique" ? "crit" : ""}">
         <${cliquable ? `button type="button" data-urg-ouvrir="${esc(u.id)}" data-urg-site="${esc(u.site || "")}"` : "div"} class="gh-urg-corps">
@@ -397,6 +397,17 @@ function calculerComNotifs(user) {
   scheduleRender();
 }
 
+// Bandeaux de l'accueil réductibles (choix mémorisé sur ce poste).
+const CLE_BANDEAUX_REPLIES = "etablieres-bandeaux-replies";
+function bandeauxReplies() { try { return JSON.parse(localStorage.getItem(CLE_BANDEAUX_REPLIES) || "[]"); } catch { return []; } }
+const replieCls = (cle) => bandeauxReplies().includes(cle) ? "replie" : "";
+const flechePlier = (cle) => `<i class="gh-plier">${bandeauxReplies().includes(cle) ? "▼ Afficher" : "▲ Réduire"}</i>`;
+function basculerBandeau(cle) {
+  const l = bandeauxReplies();
+  const n = l.includes(cle) ? l.filter(x => x !== cle) : [...l, cle];
+  try { localStorage.setItem(CLE_BANDEAUX_REPLIES, JSON.stringify(n)); } catch {}
+}
+
 // ---- Bandeau « dépôt de stock à faire » (technicien titulaire du site) ----
 let depotTit = null, depotItems = [], depotItemsCle = "", depotItemsUnsub = null, depotMod = null, depotUser = null;
 function sitesDepotTitulaire(user) {
@@ -420,8 +431,8 @@ function bandeauDepotsHTML() {
     return { d, nb: manquants.length, unites: manquants.reduce((s, it) => s + (it.quantiteCible ?? 0) - (it.quantite ?? 0), 0) };
   }).filter(x => x.nb > 0);
   if (!sites.length) return "";
-  return `<section class="gh-urgences gh-logts">
-    <div class="gh-urg-tete">📥 <b>Dépôt de stock à faire</b><span>Produits à déposer sur ${sites.length > 1 ? "tes sites" : "ton site"}</span></div>
+  return `<section class="gh-urgences gh-logts ${replieCls("depot")}">
+    <button type="button" class="gh-urg-tete gh-urg-plier" data-plier="depot">📥 <b>Dépôt de stock à faire</b><span>Produits à déposer sur ${sites.length > 1 ? "tes sites" : "ton site"}</span>${flechePlier("depot")}</button>
     <div class="gh-urg-liste">${sites.map(x => `
       <div class="gh-urg">
         <button type="button" data-depot-ouvrir="${esc(x.d.id)}" class="gh-urg-corps">
@@ -441,8 +452,8 @@ function bandeauLogementsHTML() {
   const lib = (d) => { const x = new Date(d + "T00:00:00"); const j = Math.round((x - auj) / 86400000); return j === 0 ? "aujourd'hui" : j === 1 ? "demain" : j < 0 ? `en retard (${x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })})` : x.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "2-digit" }); };
   const jourJ = mesLogements.some(x => x.date <= new Date(auj.getTime() - auj.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
   const sup = ["super_admin", "admin", "n1"].includes(mountedUser?.role);
-  return `<section class="gh-urgences gh-logts ${jourJ ? "jour-j" : ""}">
-    <div class="gh-urg-tete">🏠 <b>${mesLogements.length} logement${mesLogements.length > 1 ? "s" : ""} à faire</b><span>Bâtiments A / B — les 5 prochains jours</span></div>
+  return `<section class="gh-urgences gh-logts ${jourJ ? "jour-j" : ""} ${replieCls("logts")}">
+    <button type="button" class="gh-urg-tete gh-urg-plier" data-plier="logts">🏠 <b>${mesLogements.length} logement${mesLogements.length > 1 ? "s" : ""} à faire</b><span>Bâtiments A / B — les 5 prochains jours</span>${flechePlier("logts")}</button>
     <div class="gh-urg-liste">${mesLogements.map(x => `
       <div class="gh-urg ${lib(x.date) === "aujourd'hui" || lib(x.date).startsWith("en retard") ? "jour-j" : ""}">
         <button type="button" data-logts-ouvrir class="gh-urg-corps">
@@ -461,8 +472,8 @@ function bandeauImmediatHTML() {
   Object.values(immediates).flat().forEach(x => { if (!vus.has(x.id)) { vus.add(x.id); l.push(x); } });
   if (!l.length) return "";
   const cliquable = catsRef.some(c => c.id === "suivi-demandes");
-  return `<section class="gh-urgences gh-immediat">
-    <div class="gh-urg-tete">🚨 <b>${l.length} action${l.length > 1 ? "s" : ""} immédiate${l.length > 1 ? "s" : ""} à faire</b><span>reste affiché tant que ce n'est pas fait</span></div>
+  return `<section class="gh-urgences gh-immediat ${replieCls("immediat")}">
+    <button type="button" class="gh-urg-tete gh-urg-plier" data-plier="immediat">🚨 <b>${l.length} action${l.length > 1 ? "s" : ""} immédiate${l.length > 1 ? "s" : ""} à faire</b><span>reste affiché tant que ce n'est pas fait</span>${flechePlier("immediat")}</button>
     <div class="gh-urg-liste">${l.map(x => `
       <div class="gh-urg crit">
         <${cliquable ? `button type="button" data-urg-ouvrir="${esc(x.id)}" data-urg-site="${esc(x.site || "")}"` : "div"} class="gh-urg-corps">
@@ -787,6 +798,7 @@ function render() {
     onSelectRef("astreinte");
   });
   mountedContainer.querySelectorAll("[data-logts-ouvrir]").forEach(b => b.addEventListener("click", () => onSelectRef("logements")));
+  mountedContainer.querySelectorAll("[data-plier]").forEach(b => b.addEventListener("click", () => { basculerBandeau(b.dataset.plier); scheduleRender(); }));
   mountedContainer.querySelectorAll("[data-depot-ouvrir]").forEach(b => b.addEventListener("click", () => {
     window.stockSiteDepotDeepLinkId = b.dataset.depotOuvrir;
     window.ouvrirSousOnglet = "sites";
