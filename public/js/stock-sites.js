@@ -7,6 +7,7 @@
 
 import { esc } from "./astreinte-logic.js";
 import { activerGlisserDeposer } from "./drag-reorder.js";
+import { getAccessToken, uploadToDrive, getImageThumbUrls, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { dessinerFluxSVG } from "./flux-svg.js";
 import { renderUniteField, attacherUniteField } from "./unites-stock.js";
@@ -15,19 +16,19 @@ import {
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
   configurerArticlesSiteDepuisCatalogue, listerCatalogueSite, listerCatalogueCentral,
   qrPayloadForSite, getArticleSiteAvecResidence, actualiserStockSite, enregistrerSortieSite,
-  listerMouvementsSite, supprimerMouvementSite, trierArticlesSite, definirOrdreArticlesSite,
+  listerMouvementsSite, supprimerMouvementSite, trierArticlesSite, definirOrdreArticlesSite, modifierProduitCatalogueSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
 let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null, vue: vueMemorisee() };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
   state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null, vue: vueMemorisee() };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -51,12 +52,19 @@ export async function mountStockSites(container, user) {
 }
 
 async function load() {
-  const [sites, items] = await Promise.all([
+  const [sites, items, catalogueSite] = await Promise.all([
     listerSitesAvecStockDeporte(),
     listerTousLesArticlesSite(),
+    listerCatalogueSite().catch(() => []),
   ]);
   state.sites = sites;
   state.items = items;
+  state.catalogueSite = catalogueSite;
+  // Photos des articles issus du catalogue central : chargé seulement si
+  // un site en contient (évite de relire tout le stock central).
+  if (!state.catalogueCentral && items.some(it => it.catalogueOrigine === "central")) {
+    try { state.catalogueCentral = await listerCatalogueCentral(); } catch (e) { /* pas de photo, tant pis */ }
+  }
   if (ui.screen === "liste") render();
 }
 
@@ -77,6 +85,157 @@ function render() {
 // =================================================================
 // Liste
 // =================================================================
+function vueMemorisee() {
+  try { return localStorage.getItem("ssx-vue") === "liste" ? "liste" : "tuiles"; } catch (e) { return "tuiles"; }
+}
+
+// Réordonner et changer les photos : réservé aux gestionnaires (les
+// règles Firestore n'autorisent les autres qu'à modifier la quantité).
+function peutGerer() {
+  return !mountedUser?.lectureSeule && ["super_admin", "admin", "n1"].includes(mountedUser?.role);
+}
+
+// Photo d'un article : la sienne, sinon celle du produit de la liste type
+// (partagée par tous les sites), sinon celle du produit du stock central.
+function produitSource(it) {
+  if (!it.produitId) return null;
+  const liste = it.catalogueOrigine === "central" ? state.catalogueCentral : state.catalogueSite;
+  return (liste || []).find(p => p.id === it.produitId) || null;
+}
+function photoArticle(it) {
+  return it.photo || produitSource(it)?.photo || null;
+}
+
+// Image par défaut tant qu'aucune photo n'a été prise.
+const ICONES_PRODUITS = [
+  [/matelas|al[eè]ze|drap|oreiller|couette|couverture/i, "🛏️"], [/ampoule|n[eé]on|led|lampe|luminaire/i, "💡"],
+  [/douche|flexible|pommeau/i, "🚿"], [/toilette|abattant|wc|chasse/i, "🚽"], [/r[eé]frig|frigo|cong[eé]l/i, "🧊"],
+  [/plaque|cuisson|micro|four|bouilloire/i, "🍳"], [/radiateur|chauff|convecteur/i, "♨️"], [/daf|d[eé]tecteur|fum[eé]e|extincteur/i, "🚨"],
+  [/pile|batterie/i, "🔋"], [/serrure|cl[eé]|cylindre|badge/i, "🔑"], [/robinet|mitigeur|siphon|lavabo|[eé]vier/i, "🚰"],
+  [/rideau|store|voilage/i, "🪟"], [/chaise|table|bureau|armoire/i, "🪑"], [/poubelle/i, "🗑️"], [/prise|multiprise|c[aâ]ble/i, "🔌"],
+];
+function iconeProduit(nom) {
+  return (ICONES_PRODUITS.find(([re]) => re.test(nom || "")) || [null, "📦"])[1];
+}
+
+function origineArticle(it) {
+  return it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site";
+}
+
+function tuilesArticlesHTML(site, items) {
+  const ro = mountedUser?.lectureSeule;
+  const gere = peutGerer();
+  return `
+    <div class="sk-grille" data-ordre-site="${site.id}">
+      ${items.map((it, idx) => {
+        const qte = it.quantite ?? 0, cible = it.quantiteCible ?? 0;
+        const manque = Math.max(0, cible - qte);
+        const st = manque > 0 ? "danger" : "ok";
+        const photo = photoArticle(it);
+        const img = photo?.itemId ? `<img data-ssx-photo="${esc(photo.itemId)}" alt="" onerror="this.style.opacity=0.3">`
+          : photo?.url ? `<img src="${esc(photo.url)}" alt="" onerror="this.style.opacity=0.3">`
+          : `<span class="ssx-icone">${iconeProduit(it.nom)}</span>`;
+        return `
+        <article class="sk-carte sk-${st}" ${gere ? `data-drag-index="${idx}"` : ""}>
+          <div class="sk-photo">${img}
+            <span class="sk-etat sk-etat-${st}">${manque > 0 ? `Manque ${manque}` : "OK"}</span>
+            ${gere ? `<span class="ssx-poignee" data-drag-handle title="Glisser pour réordonner">☰</span>` : ""}
+            ${gere ? `<button class="ssx-photo-btn" data-photo="${it.id}" title="${photo ? "Remplacer la photo" : "Ajouter une photo"}">📷</button>` : ""}
+          </div>
+          <div class="sk-corps">
+            <h4 title="${esc(it.nom)}">${esc(it.nom)}</h4>
+            <div class="ssx-champs">
+              <label>Stock<input type="number" min="0" step="1" value="${qte}" data-qte="${it.id}" ${st === "danger" ? 'style="color:var(--red);font-weight:700"' : ""} ${ro ? "disabled" : ""}></label>
+              <label>Cible<input type="number" min="0" step="1" value="${cible}" data-cible="${it.id}" ${ro ? "disabled" : ""}></label>
+              <span>${esc(it.unite || "")}</span>
+            </div>
+            <div class="sk-jauge"><span style="width:${Math.min(100, (qte / Math.max(cible, qte, 1)) * 100)}%"></span></div>
+            <p class="sk-four">${origineArticle(it)}</p>
+          </div>
+          <div class="sk-actions">
+            <button class="nav-btn" data-ajuste="${it.id}" ${ro ? "disabled style=\"opacity:.4\"" : ""}>📤 Sortie/Ajuster</button>
+            <button class="nav-btn" data-qr="${it.id}" title="QR code">🔳</button>
+            ${ro ? "" : `<button class="del-btn" data-del="${it.id}" title="Retirer du site">🗑️</button>`}
+          </div>
+        </article>`;
+      }).join("")}
+    </div>`;
+}
+
+function tableauArticlesHTML(site, items) {
+  const ro = mountedUser?.lectureSeule;
+  const gere = peutGerer();
+  return `
+    <div class="table-wrap" style="border:none">
+      <table data-ordre-site="${site.id}">
+        <thead><tr>${gere ? "<th></th>" : ""}<th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
+        <tbody>
+          ${items.map((it, idx) => `
+            <tr ${gere ? `data-drag-index="${idx}"` : ""}>
+              ${gere ? `<td style="white-space:nowrap;width:1%"><span data-drag-handle style="font-size:16px;color:var(--text-dim);cursor:grab;padding:4px;user-select:none" title="Glisser pour réordonner">☰</span></td>` : ""}
+              <td>${esc(it.nom)}</td>
+              <td style="font-size:11px;color:var(--text-dim)">${origineArticle(it)}</td>
+              <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}" ${ro ? "disabled" : ""}> ${esc(it.unite || "")}</td>
+              <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px" ${ro ? "disabled" : ""}></td>
+              <td style="white-space:nowrap">
+                <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
+                <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px${ro ? ';opacity:.4' : ''}" ${ro ? "disabled" : ""}>📤 Sortie/Ajuster</button>
+                ${ro ? "" : `<button class="del-btn" data-del="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button>`}
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// Photos : affichage (miniatures SharePoint, à redemander à chaque
+// affichage) et remplacement par une photo prise / choisie.
+function brancherPhotos() {
+  const nodes = [...mountedContainer.querySelectorAll("[data-ssx-photo]")];
+  const ids = [...new Set(nodes.map(n => n.dataset.ssxPhoto))];
+  if (ids.length) {
+    getImageThumbUrls(ids).then(urls => {
+      nodes.forEach(img => { const u = urls[img.dataset.ssxPhoto]; if (u) img.src = u; else img.style.opacity = 0.3; });
+    }).catch(() => nodes.forEach(img => { img.style.opacity = 0.3; }));
+  }
+  const input = document.getElementById("ssx-photo-input");
+  if (!input) return;
+  mountedContainer.querySelectorAll("[data-photo]").forEach(btn => btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const it = state.items.find(x => x.id === btn.dataset.photo);
+    if (!it) return;
+    btn.textContent = "⏳";
+    try {
+      // Connexion demandée en réaction directe au clic (sinon bloquée).
+      input.dataset.token = await getAccessToken();
+      input.dataset.itemId = it.id;
+      input.value = "";
+      input.click();
+    } catch (err) {
+      window.toast("Connexion impossible : " + (err.message || err));
+    }
+    btn.textContent = "📷";
+  }));
+  input.onchange = async () => {
+    const file = input.files[0];
+    const it = state.items.find(x => x.id === input.dataset.itemId);
+    if (!file || !it) return;
+    window.toast("⏳ Envoi de la photo…");
+    try {
+      const { url, itemId, isImage, name } = await uploadToDrive(file, input.dataset.token, ["Stock déporté", it.nom || "Article"], STOCK_ROOT_FOLDER);
+      const photo = { url, itemId, isImage, name };
+      // Produit de la liste type : la photo vaut pour tous les sites.
+      const source = it.catalogueOrigine !== "central" && it.produitId ? (state.catalogueSite || []).find(p => p.id === it.produitId) : null;
+      if (source) { await modifierProduitCatalogueSite(source.id, { photo }); source.photo = photo; }
+      else { await modifierArticleSite(it.id, { photo }); it.photo = photo; }
+      window.toast("✓ Photo enregistrée");
+      render();
+    } catch (err) {
+      window.toast("Échec de l'envoi : " + (err.message || err));
+    }
+  };
+}
 function renderListe() {
   const alertesTotal = state.items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0)).length;
   // Les sites ayant au moins une alerte remontent en haut de la liste,
@@ -90,7 +249,13 @@ function renderListe() {
   mountedContainer.innerHTML = `
     <div class="stack">
       <p class="hint">Stock gardé localement sur chaque site (indépendant du stock central), activable depuis la fiche d'un dossier de site ("📦 Ce site a un stock déporté").</p>
-      <button class="add-btn" id="ssx-scan" style="width:fit-content">📷 Scanner un article</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="add-btn" id="ssx-scan" style="width:fit-content">📷 Scanner un article</button>
+        <span style="flex:1"></span>
+        <button class="nav-btn ${ui.vue !== "liste" ? "active" : ""}" data-vue="tuiles">🔲 Tuiles</button>
+        <button class="nav-btn ${ui.vue === "liste" ? "active" : ""}" data-vue="liste">☰ Liste</button>
+      </div>
+      <input type="file" accept="image/*" id="ssx-photo-input" style="display:none">
       ${alertesTotal > 0 ? `<div class="stat-chip warn" style="width:fit-content">⚠️ ${alertesTotal} article(s) sous leur seuil, tous sites confondus</div>` : ""}
 
       ${state.sites.length === 0 ? `
@@ -135,29 +300,7 @@ function renderListe() {
               <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois sur ce site — scanné avec l'appareil photo du téléphone, ouvre directement la mise à jour du stock de <b>${esc(site.nom)}</b>, sans compte ni code à saisir.</p>
               <button class="nav-btn" data-qr-rapide-print="${site.id}" style="margin-top:10px">🖨️ Imprimer</button>
             </div>
-            ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
-              <div class="table-wrap" style="border:none">
-                <table data-ordre-site="${site.id}">
-                  <thead><tr>${mountedUser?.lectureSeule ? "" : "<th></th>"}<th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
-                  <tbody>
-                    ${items.map((it, idx) => `
-                      <tr ${mountedUser?.lectureSeule ? "" : `data-drag-index="${idx}"`}>
-                        ${mountedUser?.lectureSeule ? "" : `<td style="white-space:nowrap;width:1%"><span data-drag-handle style="font-size:16px;color:var(--text-dim);cursor:grab;padding:4px;user-select:none" title="Glisser pour réordonner">☰</span></td>`}
-                        <td>${esc(it.nom)}</td>
-                        <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
-                        <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}" ${mountedUser?.lectureSeule ? "disabled" : ""}> ${esc(it.unite || "")}</td>
-                        <td><input type="number" min="0" step="1" value="${it.quantiteCible ?? 0}" data-cible="${it.id}" style="width:70px" ${mountedUser?.lectureSeule ? "disabled" : ""}></td>
-                        <td style="white-space:nowrap">
-                          <button class="nav-btn" data-qr="${it.id}" style="padding:4px 8px;font-size:11px">🔳 QR</button>
-                          <button class="nav-btn" data-ajuste="${it.id}" style="padding:4px 8px;font-size:11px${mountedUser?.lectureSeule ? ';opacity:.4' : ''}" ${mountedUser?.lectureSeule ? "disabled" : ""}>📤 Sortie/Ajuster</button>
-                          ${mountedUser?.lectureSeule ? "" : `<button class="del-btn" data-del="${it.id}" style="padding:4px 8px;font-size:11px">🗑️</button>`}
-                        </td>
-                      </tr>
-                    `).join("")}
-                  </tbody>
-                </table>
-              </div>
-            `}
+            ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : (ui.vue === "liste" ? tableauArticlesHTML(site, items) : tuilesArticlesHTML(site, items))}
             <div id="ssx-add-zone-${site.id}" style="margin-top:10px">
               ${mountedUser?.lectureSeule ? "" : (ui.addingSiteId === site.id ? renderAddForm(site) : `
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -207,11 +350,17 @@ function renderListe() {
   mountedContainer.querySelectorAll("[data-qr-rapide-print]").forEach(btn => btn.addEventListener("click", () => {
     printQrCard(document.getElementById(`ssx-qr-rapide-holder-${btn.dataset.qrRapidePrint}`));
   }));
-  if (!mountedUser?.lectureSeule) {
-    mountedContainer.querySelectorAll("table[data-ordre-site]").forEach(table => {
+  mountedContainer.querySelectorAll("[data-vue]").forEach(btn => btn.addEventListener("click", () => {
+    ui.vue = btn.dataset.vue;
+    try { localStorage.setItem("ssx-vue", ui.vue); } catch (e) { /* stockage indisponible */ }
+    render();
+  }));
+  brancherPhotos();
+  if (peutGerer()) {
+    mountedContainer.querySelectorAll("[data-ordre-site]").forEach(table => {
       const siteId = table.dataset.ordreSite;
       const listeAffichee = state.items.filter(it => it.dossierId === siteId).sort(trierArticlesSite);
-      activerGlisserDeposer(table, "tbody tr[data-drag-index]", async (nouvelOrdre) => {
+      activerGlisserDeposer(table, "[data-drag-index]", async (nouvelOrdre) => {
         const nouvelleListe = nouvelOrdre.map(i => listeAffichee[i]);
         if (nouvelleListe.every((it, i) => it === listeAffichee[i])) return;
         nouvelleListe.forEach((it, i) => { it.ordre = i; });

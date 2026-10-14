@@ -3527,3 +3527,13 @@ body.clo-ouvert{overflow:hidden}
 .dps-pastille.com-nouv{background:#dbeafe;color:#1d4ed8;font-weight:800;animation:dps-com-pulse 1.6s ease-in-out infinite}
 @keyframes dps-com-pulse{50%{box-shadow:0 0 0 3px rgba(59,130,246,.35)}}
 .dps-com-nouveau{margin:6px 0;padding:10px 12px;border-radius:10px;background:#eff6ff;border:2px solid #3b82f6;color:#1e3a8a;font-size:14px;line-height:1.4;white-space:pre-wrap}
+
+/* Stock déporté — tuiles d'articles par site */
+.ssx-icone{ font-size:46px; }
+.ssx-poignee{ position:absolute; top:6px; right:40px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:rgba(0,0,0,.45); color:#fff; font-size:15px; user-select:none; }
+.ssx-photo-btn{ position:absolute; top:6px; right:6px; width:28px; height:28px; border:none; border-radius:8px; background:rgba(0,0,0,.45); color:#fff; font-size:14px; cursor:pointer; padding:0; }
+.ssx-photo-btn:hover, .ssx-poignee:hover{ background:rgba(0,0,0,.7); }
+.ssx-champs{ display:flex; align-items:flex-end; gap:8px; font-size:11px; color:var(--text-dim); }
+.ssx-champs label{ display:flex; flex-direction:column; gap:2px; }
+.ssx-champs input{ width:62px; }
+.ssx-champs span{ padding-bottom:6px; }
