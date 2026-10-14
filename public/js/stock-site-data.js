@@ -132,8 +132,18 @@ export function watchStockSite(dossierId, callback) {
   return onSnapshot(q, (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-    callback(list.sort((a, b) => (a.nom || "").localeCompare(b.nom || "")));
+    callback(list.sort(trierArticlesSite));
   }, (err) => { console.error("watchStockSite:", err); callback([]); });
+}
+
+// Ordre d'affichage des articles d'un site : ordre choisi par glisser-
+// déposer (champ "ordre"), puis alphabétique pour ceux jamais rangés.
+export function trierArticlesSite(a, b) {
+  return (a.ordre ?? 999999) - (b.ordre ?? 999999) || (a.nom || "").localeCompare(b.nom || "");
+}
+
+export async function definirOrdreArticlesSite(paires) {
+  await Promise.all(paires.map(({ id, ordre }) => updateDoc(doc(db, COLLECTION, id), { ordre })));
 }
 
 export async function ajouterArticleSite(dossierId, item) {

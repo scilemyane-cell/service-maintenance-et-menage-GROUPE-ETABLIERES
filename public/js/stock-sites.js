@@ -6,6 +6,7 @@
 // porter la case "a un stock déporté".
 
 import { esc } from "./astreinte-logic.js";
+import { activerGlisserDeposer } from "./drag-reorder.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { dessinerFluxSVG } from "./flux-svg.js";
 import { renderUniteField, attacherUniteField } from "./unites-stock.js";
@@ -14,7 +15,7 @@ import {
   ajouterArticleSite, modifierArticleSite, supprimerArticleSite,
   configurerArticlesSiteDepuisCatalogue, listerCatalogueSite, listerCatalogueCentral,
   qrPayloadForSite, getArticleSiteAvecResidence, actualiserStockSite, enregistrerSortieSite,
-  listerMouvementsSite, supprimerMouvementSite,
+  listerMouvementsSite, supprimerMouvementSite, trierArticlesSite, definirOrdreArticlesSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
@@ -95,7 +96,7 @@ function renderListe() {
       ${state.sites.length === 0 ? `
         <p class="hint">Aucun site n'a le stock déporté activé pour l'instant. Coche "Ce site a un stock déporté" depuis la fiche d'un dossier de site (Dossiers de site) pour qu'il apparaisse ici.</p>
       ` : sitesTries.map(site => {
-        const items = state.items.filter(it => it.dossierId === site.id);
+        const items = state.items.filter(it => it.dossierId === site.id).sort(trierArticlesSite);
         const itemsManquants = items.filter(it => (it.quantite ?? 0) < (it.quantiteCible ?? 0));
         const alertesSite = itemsManquants.length;
         const ouvert = ui.ouverts.has(site.id);
@@ -136,11 +137,12 @@ function renderListe() {
             </div>
             ${items.length === 0 ? `<p class="hint">Aucun article pour l'instant sur ce site.</p>` : `
               <div class="table-wrap" style="border:none">
-                <table>
-                  <thead><tr><th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
+                <table data-ordre-site="${site.id}">
+                  <thead><tr>${mountedUser?.lectureSeule ? "" : "<th></th>"}<th>Article</th><th>Origine</th><th>Quantité</th><th>Cible perm.</th><th></th></tr></thead>
                   <tbody>
-                    ${items.map(it => `
-                      <tr>
+                    ${items.map((it, idx) => `
+                      <tr ${mountedUser?.lectureSeule ? "" : `data-drag-index="${idx}"`}>
+                        ${mountedUser?.lectureSeule ? "" : `<td style="white-space:nowrap;width:1%"><span data-drag-handle style="font-size:16px;color:var(--text-dim);cursor:grab;padding:4px;user-select:none" title="Glisser pour réordonner">☰</span></td>`}
                         <td>${esc(it.nom)}</td>
                         <td style="font-size:11px;color:var(--text-dim)">${it.catalogueOrigine === "central" ? "Catalogue central" : it.produitId ? "Liste type sites" : "Propre au site"}</td>
                         <td><input type="number" min="0" step="1" value="${it.quantite ?? 0}" data-qte="${it.id}" style="width:70px;${(it.quantite ?? 0) < (it.quantiteCible ?? 0) ? 'color:var(--red);font-weight:700' : ''}" ${mountedUser?.lectureSeule ? "disabled" : ""}> ${esc(it.unite || "")}</td>
@@ -205,6 +207,20 @@ function renderListe() {
   mountedContainer.querySelectorAll("[data-qr-rapide-print]").forEach(btn => btn.addEventListener("click", () => {
     printQrCard(document.getElementById(`ssx-qr-rapide-holder-${btn.dataset.qrRapidePrint}`));
   }));
+  if (!mountedUser?.lectureSeule) {
+    mountedContainer.querySelectorAll("table[data-ordre-site]").forEach(table => {
+      const siteId = table.dataset.ordreSite;
+      const listeAffichee = state.items.filter(it => it.dossierId === siteId).sort(trierArticlesSite);
+      activerGlisserDeposer(table, "tbody tr[data-drag-index]", async (nouvelOrdre) => {
+        const nouvelleListe = nouvelOrdre.map(i => listeAffichee[i]);
+        if (nouvelleListe.every((it, i) => it === listeAffichee[i])) return;
+        nouvelleListe.forEach((it, i) => { it.ordre = i; });
+        try { await definirOrdreArticlesSite(nouvelleListe.map((it, i) => ({ id: it.id, ordre: i }))); }
+        catch (e) { window.toast("Échec : " + (e.message || e)); }
+        render();
+      });
+    });
+  }
   mountedContainer.querySelectorAll("[data-qr]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "qr"; ui.qrId = btn.dataset.qr; render(); }));
   mountedContainer.querySelectorAll("[data-ajuste]").forEach(btn => btn.addEventListener("click", () => { ui.screen = "ajuste"; ui.ajusteId = btn.dataset.ajuste; render(); }));
   mountedContainer.querySelectorAll("[data-qte]").forEach(inp => {
@@ -273,7 +289,7 @@ function renderListe() {
 function renderRapide() {
   const site = state.sites.find(s => s.id === ui.rapideSiteId);
   if (!site) { ui.rapideSiteId = null; render(); return; }
-  const liste = [...state.items].filter(it => it.dossierId === site.id).sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+  const liste = [...state.items].filter(it => it.dossierId === site.id).sort(trierArticlesSite);
 
   if (liste.length === 0) {
     mountedContainer.innerHTML = `
