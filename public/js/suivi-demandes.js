@@ -192,7 +192,7 @@ export function mountSuiviDemandesTab(container, user) {
   // Quota : copie des demandes gardée sur l'appareil, seules les demandes
   // modifiées depuis la dernière visite sont relues (cache-delta.js).
   mountedContainer = container;
-  unsub = watchDemandes((liste) => { state.demandes = liste; render(container); });
+  unsub = watchDemandes((liste) => { state.demandes = liste; renvoyerEnregistrementsRefuses(liste); render(container); });
   if (!unsubUsers) unsubUsers = watchUsers((l) => { utilisateurs = l.filter(u => !u.supprimeLe && voitSuivi(u)); if (state.demandes) render(container); });
 }
 
@@ -289,6 +289,29 @@ const CLE_POSTE = "etablieres-poste-identite";
 function lireIdentitePoste() {
   try { const i = JSON.parse(localStorage.getItem(CLE_POSTE) || "null"); return i && Date.now() - i.t < 4 * 3600000 ? i : null; } catch { return null; }
 }
+// Réparation (14/10) : des clôtures de techniciens ont été refusées par
+// Firestore (champ non autorisé) alors que la copie locale de la tablette
+// les montrait faites. Une fois par appareil, on renvoie au serveur les
+// demandes déclarées par moi depuis le 14/10, avec les seuls champs permis.
+let renvoiFait = false;
+function renvoyerEnregistrementsRefuses(liste) {
+  if (renvoiFait) return; renvoiFait = true;
+  const CLE = "etablieres-renvoi-clotures-1014";
+  try { if (localStorage.getItem(CLE)) return; } catch { return; }
+  const moi = identite().nom; if (!moi) return;
+  const PERMIS = ["statut", "commentaireTech", "intervenant", "dateIntervention", "declarePar", "declareLe", "commentaireTechPar", "commentaireTechLe", "categorieIntervenant", "dateStatut", "validation"];
+  const aRenvoyer = (liste || []).filter(d => d.declarePar === moi && String(d.declareLe || "") >= "2026-10-14");
+  (async () => {
+    let n = 0;
+    for (const d of aRenvoyer) {
+      const champs = {}; PERMIS.forEach(k => { if (d[k] !== undefined && d[k] !== null) champs[k] = d[k]; });
+      try { await updateDemande(d.id, champs); n++; } catch (e) { console.warn("Renvoi clôture", d.numero, e); }
+    }
+    try { localStorage.setItem(CLE, String(Date.now())); } catch {}
+    if (n) { window.toast?.(`✓ ${n} clôture(s) renvoyée(s) au superviseur`); planifierDepotAuto(); }
+  })();
+}
+
 function identite() {
   if (!mountedUser?.postePartage) return { uid: mountedUser?.uid || null, nom: mountedUser?.nom || mountedUser?.email || "" };
   const i = lireIdentitePoste();
