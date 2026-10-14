@@ -2041,10 +2041,30 @@ function renderAbsences(container, perms) {
       btn.addEventListener("click", () => {
         const a = state.absences.find(x => x.id === btn.dataset.editAbs);
         if (!a) return;
-        ui.absEditingId = a.id;
-        ui.absForm = { person: a.person, type: a.type, start: a.start, end: a.end, note: a.note || "" };
-        renderAll();
-        mountedContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Fenêtre de modification (le formulaire du haut était hors de vue
+        // depuis le bas de la liste : on avait l'impression que rien ne se passait).
+        const fond = document.createElement("div"); fond.className = "cd-fond"; fond.style.zIndex = "1400";
+        fond.innerHTML = `<div class="cd-fenetre" style="max-width:460px"><div class="cd-fenetre-tete"><div><b>✏️ Modifier l'absence</b><small>${esc(a.person)}</small></div><button class="cd-x" data-x>✕</button></div>
+          <div class="stack" style="gap:10px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Personne<select data-f="person">${[...new Set(allPeople)].map(p => `<option value="${esc(p)}" ${p === a.person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Type<select data-f="type"><option value="conge" ${a.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${a.type === "rtt" ? "selected" : ""}>${esc(libelleRtt(a.person))}</option><option value="arret" ${a.type === "arret" ? "selected" : ""}>Arrêt</option></select></label>
+            <div style="display:flex;gap:10px"><label style="flex:1;display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Du<input type="date" data-f="start" value="${esc(a.start)}"></label><label style="flex:1;display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Au<input type="date" data-f="end" value="${esc(a.end)}"></label></div>
+            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Note<input data-f="note" value="${esc(a.note || "")}" placeholder="optionnel"></label>
+            <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>💾 Enregistrer</button></div>
+          </div></div>`;
+        document.body.append(fond);
+        const fermer = () => fond.remove();
+        fond.querySelectorAll("[data-x]").forEach(b => b.onclick = fermer);
+        fond.addEventListener("click", e => { if (e.target === fond) fermer(); });
+        fond.querySelector("[data-ok]").onclick = async (ev) => {
+          const v = (k) => fond.querySelector(`[data-f="${k}"]`).value.trim();
+          const maj = { person: v("person"), type: v("type"), start: v("start"), end: v("end"), note: v("note") };
+          if (!isPlausibleDate(maj.start) || !isPlausibleDate(maj.end)) { window.toast("Une des dates semble incorrecte — vérifie-la."); return; }
+          if (maj.end < maj.start) { window.toast("La date de fin doit être après la date de début."); return; }
+          ev.currentTarget.disabled = true;
+          try { await updateAbsence(a.id, maj); fermer(); window.toast?.("✓ Absence modifiée"); }
+          catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); ev.currentTarget.disabled = false; }
+        };
       });
     });
     container.querySelectorAll("[data-del]").forEach(btn => {
