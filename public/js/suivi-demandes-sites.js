@@ -1070,6 +1070,6 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   });
 }
 
-export function resetVueSites() { st.site = null; st.focusId = null; st.qSite = ""; }
-export function ouvrirSite(nom) { st.site = nom; st.q = ""; st.vuAvant = null; st.focusId = null; }
-export function ouvrirDemandeSeule(id, site) { st.site = site; st.q = ""; st.vuAvant = null; st.focusId = id; }
+export function resetVueSites() { st.ie = ""; st.site = null; st.focusId = null; st.qSite = ""; }
+export function ouvrirSite(nom) { st.ie = ""; st.site = nom; st.q = ""; st.vuAvant = null; st.focusId = null; }
+export function ouvrirDemandeSeule(id, site) { st.ie = ""; st.site = site; st.q = ""; st.vuAvant = null; st.focusId = id; }
