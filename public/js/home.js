@@ -380,12 +380,13 @@ function bandeauLogementsHTML() {
   if (!mesLogements.length) return "";
   const auj = new Date(); auj.setHours(0, 0, 0, 0);
   const lib = (d) => { const x = new Date(d + "T00:00:00"); const j = Math.round((x - auj) / 86400000); return j === 0 ? "aujourd'hui" : j === 1 ? "demain" : j < 0 ? `en retard (${x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })})` : x.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "2-digit" }); };
-  return `<section class="gh-urgences gh-logts">
+  const jourJ = mesLogements.some(x => x.date <= new Date(auj.getTime() - auj.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+  return `<section class="gh-urgences gh-logts ${jourJ ? "jour-j" : ""}">
     <div class="gh-urg-tete">🏠 <b>${mesLogements.length} logement${mesLogements.length > 1 ? "s" : ""} à faire</b><span>Bâtiments A / B — les 5 prochains jours</span></div>
     <div class="gh-urg-liste">${mesLogements.map(x => `
-      <div class="gh-urg">
+      <div class="gh-urg ${lib(x.date) === "aujourd'hui" || lib(x.date).startsWith("en retard") ? "jour-j" : ""}">
         <button type="button" data-logts-ouvrir class="gh-urg-corps">
-          <span class="gh-urg-badge" style="background:#3b7dd8">${esc(lib(x.date))}${x.creneau ? ` · ${x.creneau === "matin" ? "matin" : "après-midi"}` : ""}</span>
+          <span class="gh-urg-badge">${esc(lib(x.date))}${x.creneau ? ` · ${x.creneau === "matin" ? "matin" : "après-midi"}` : ""}</span>
           <span class="gh-urg-txt"><b>Chambre ${esc(x.numero)} · ${esc(x.bat)} · ${esc(x.etage)}</b>${x.note ? `<small>${esc(x.note)}</small>` : ""}</span>
           <span class="gh-urg-go">Ouvrir →</span>
         </button>

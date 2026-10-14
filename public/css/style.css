@@ -3516,3 +3516,10 @@ body.clo-ouvert{overflow:hidden}
 .dps-ie-filtre button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:6px 12px;font:700 12.5px system-ui,sans-serif;cursor:pointer}
 .dps-ie-filtre button.on{background:var(--gold);border-color:var(--gold);color:#111}
 .dps-ie-filtre small{opacity:.7}
+/* Accueil : bandeau « logements à faire » (orange, clignote le jour J) */
+.gh-urgences.gh-logts{background:linear-gradient(135deg,#e8650a,#f59e0b)!important;border-color:#f59e0b!important;box-shadow:0 8px 24px rgba(232,101,10,.35)}
+.gh-logts .gh-urg-badge{background:#fff!important;color:#b45309!important}
+.gh-logts .gh-urg.jour-j .gh-urg-badge{background:#7c2d12!important;color:#fff!important}
+.gh-urgences.gh-logts.jour-j{animation:gh-logts-clignote 1.2s ease-in-out infinite}
+@keyframes gh-logts-clignote{50%{filter:brightness(1.25);box-shadow:0 0 0 4px rgba(255,200,80,.6),0 8px 30px rgba(232,101,10,.6)}}
+@media (prefers-reduced-motion:reduce){.gh-urgences.gh-logts.jour-j{animation:none}}
