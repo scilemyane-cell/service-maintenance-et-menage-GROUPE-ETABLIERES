@@ -71,6 +71,8 @@
   const mountStockSites = aLaDemande(charger_stock_sites, "mountStockSites");
   const charger_stock_site_catalogue = () => import("./stock-site-catalogue.js");
   const mountStockCatalogueSite = aLaDemande(charger_stock_site_catalogue, "mountStockCatalogueSite");
+  const charger_stock_sites_devis = () => import("./stock-sites-devis.js");
+  const mountStockSitesDevis = aLaDemande(charger_stock_sites_devis, "mountStockSitesDevis");
   const charger_fournisseurs = () => import("./fournisseurs.js");
   const mountFournisseurs = aLaDemande(charger_fournisseurs, "mountFournisseurs");
   const charger_heures = () => import("./heures.js");
@@ -117,7 +119,7 @@
   let modulesPrecharges = false;
   function prechargerModules() {
     if (modulesPrecharges) return; modulesPrecharges = true;
-    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_logements, charger_statistiques, charger_corbeille, charger_connexions];
+    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_stock_sites_devis, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_logements, charger_statistiques, charger_corbeille, charger_connexions];
     const suivant = () => { const f = liste.shift(); if (!f) return; f().catch(() => {}).finally(() => setTimeout(suivant, 30)); };
     (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(() => { suivant(); suivant(); suivant(); }, { timeout: 1500 });
   }
@@ -383,24 +385,32 @@
         ],
       },
       {
-        id: "stock", label: "Stock maintenance", icon: "📦", desc: "Produits, inventaire QR, commandes",
+        id: "stock", label: "Stock maintenance", icon: "📦", desc: "Stock atelier : produits, inventaire QR, commandes",
         badgeAtelier: stockAlertCount.central > 0 ? stockAlertCount.central : null,
-        badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
         subtabs: [
           { id: "produits",   label: "Produits",   icon: "📦", roles: GESTION,              mount: mountStockProduits },
           { id: "inventaire", label: "Inventaire", icon: "📷", roles: [...GESTION,"technicien"], mount: mountStockInventaire },
           { id: "commandes",  label: "Commandes",  icon: "📧", roles: [...GESTION,"direction"],  mount: mountStockCommandes },
+          { id: "fournisseurs", label: "Fournisseurs", icon: "🏭", roles: GESTION, mount: mountFournisseurs },
+        ],
+      },
+      {
+        // Même droit d'accès que "Stock maintenance" (permId) : pas de
+        // nouvelle case à cocher dans "Gérer l'accès".
+        id: "stock-deporte", permId: "stock", label: "Stock déporté", icon: "🏢", desc: "Stock gardé sur les sites : articles, liste type, demande de devis globale",
+        badgeSites: stockAlertCount.deporte > 0 ? stockAlertCount.deporte : null,
+        subtabs: [
           { id: "sites",      label: "Sites",       icon: "🏢", roles: [...GESTION,"technicien"], mount: mountStockSites },
           { id: "catalogue-sites", label: "Catalogue sites", icon: "🗂️", roles: GESTION, mount: mountStockCatalogueSite },
-          { id: "fournisseurs", label: "Fournisseurs", icon: "🏭", roles: GESTION, mount: mountFournisseurs },
+          { id: "devis",      label: "Demande de devis", icon: "📧", roles: [...GESTION,"direction"], mount: mountStockSitesDevis },
         ],
       },
     ];
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte];
   }
 
   watchAuth((user) => {
@@ -439,7 +449,7 @@
     // Idem pour un article de stock déporté par site : .../app.html?stocksite=ID
     const stockSiteParam = new URLSearchParams(window.location.search).get("stocksite");
     if (stockSiteParam && currentCategory === null) {
-      currentCategory = "stock";
+      currentCategory = "stock-deporte";
       currentSubtab = "sites";
       window.stockSiteDeepLinkId = stockSiteParam;
       history.replaceState(null, "", window.location.pathname);
@@ -448,7 +458,7 @@
     // l'inventaire de ce site : .../app.html?stocksiterapide=ID_DOSSIER
     const stockSiteRapideParam = new URLSearchParams(window.location.search).get("stocksiterapide");
     if (stockSiteRapideParam && currentCategory === null) {
-      currentCategory = "stock";
+      currentCategory = "stock-deporte";
       currentSubtab = "sites";
       window.stockSiteRapideDeepLinkId = stockSiteRapideParam;
       history.replaceState(null, "", window.location.pathname);
@@ -574,8 +584,8 @@
       if (TUILES_INTERDITES_DIRECTION.includes(category.id)) return [];
       return category.subtabs;
     }
-    if (ROLES_ACCES_CAS_PAR_CAS.includes(user.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id)) {
-      const niveau = (user.permissions || {})[category.id] || "none";
+    if (ROLES_ACCES_CAS_PAR_CAS.includes(user.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.permId || category.id)) {
+      const niveau = (user.permissions || {})[category.permId || category.id] || "none";
       if (niveau === "none") return [];
       return category.subtabs.filter(s => s.roles.includes(user.role));
     }
@@ -597,7 +607,11 @@
     // catégorie nouvelle (pas encore dans l'ordre — ex. nouveau
     // dispositif) à la suite, dans son ordre naturel.
     const parId = new Map(visibles.map(c => [c.id, c]));
-    const classees = homeOrder.map(id => parId.get(id)).filter(Boolean);
+    // "Stock déporté" (séparé de "Stock maintenance") : placé juste après
+    // lui tant qu'il n'a pas encore de place dans l'ordre sauvegardé.
+    const ordre = (homeOrder.includes("stock") && !homeOrder.includes("stock-deporte"))
+      ? homeOrder.flatMap(id => id === "stock" ? ["stock", "stock-deporte"] : [id]) : homeOrder;
+    const classees = ordre.map(id => parId.get(id)).filter(Boolean);
     const idsClasses = new Set(classees.map(c => c.id));
     const nouvelles = visibles.filter(c => !idsClasses.has(c.id));
     return [...classees, ...nouvelles];
@@ -794,7 +808,7 @@
       const cats = visibleCategoriesFor(currentUser);
       // QUOTA : les badges d'alerte stock relisent tout le stock (central +
       // sites) à chaque ouverture : seulement pour ceux qui voient la tuile.
-      if (!stockAlertSubscribed && cats.some(c => c.id === "stock")) {
+      if (!stockAlertSubscribed && cats.some(c => c.id === "stock" || c.id === "stock-deporte")) {
         stockAlertSubscribed = true;
         watchStockAlertCount((counts) => { stockAlertCount = counts; if (currentCategory === null) render(); });
       }
@@ -835,8 +849,8 @@
       // categorySubtabsFor (la tuile n'apparaîtrait pas), donc ici seul
       // "read" (voir sans modifier) nous intéresse — transmis au module
       // via user.lectureSeule plutôt que de changer la signature mount().
-      const niveauTuile = (ROLES_ACCES_CAS_PAR_CAS.includes(currentUser.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.id))
-        ? ((currentUser.permissions || {})[category.id] || "none")
+      const niveauTuile = (ROLES_ACCES_CAS_PAR_CAS.includes(currentUser.role) && TUILES_GEREES_PAR_UTILISATEUR.includes(category.permId || category.id))
+        ? ((currentUser.permissions || {})[category.permId || category.id] || "none")
         : null;
       const userPourModule = (niveauTuile === "read" || currentUser.role === "direction") ? { ...currentUser, lectureSeule: true } : currentUser;
       if (estFermeConstruction(category.id, currentUser)) { content.innerHTML = ecranChantier(category); return; }
