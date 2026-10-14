@@ -6,8 +6,9 @@
 // en permanence sur place.
 
 import { esc } from "./astreinte-logic.js";
+import { activerGlisserDeposer } from "./drag-reorder.js";
 import {
-  watchCatalogueSite, ajouterProduitCatalogueSite, modifierProduitCatalogueSite, supprimerProduitCatalogueSite,
+  watchCatalogueSite, ajouterProduitCatalogueSite, modifierProduitCatalogueSite, supprimerProduitCatalogueSite, definirOrdreCatalogueSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
@@ -33,13 +34,15 @@ function render() {
     <div class="stack">
       <p class="hint">Liste type utilisée pour configurer rapidement le stock déporté d'un site (case "Concerné" + quantité cible). Indépendante du catalogue du stock central — propre à ce que les sites doivent garder sur place.</p>
       <button class="add-btn" id="csc-new" style="width:fit-content">➕ Ajouter un produit</button>
+      ${state.produits.length > 1 ? `<p class="hint" style="margin:0">Maintiens l'icône ☰ appuyée puis fais glisser pour réordonner la liste.</p>` : ""}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Produit</th><th>Catégorie</th><th>Unité</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Produit</th><th>Catégorie</th><th>Unité</th><th></th></tr></thead>
           <tbody>
-            ${state.produits.length === 0 ? `<tr><td colspan="4" class="empty-row">Liste vide pour l'instant.</td></tr>` :
-              state.produits.map(p => `
-                <tr>
+            ${state.produits.length === 0 ? `<tr><td colspan="5" class="empty-row">Liste vide pour l'instant.</td></tr>` :
+              state.produits.map((p, idx) => `
+                <tr data-drag-index="${idx}">
+                  <td style="white-space:nowrap;width:1%"><span data-drag-handle style="font-size:16px;color:var(--text-dim);cursor:grab;padding:4px;user-select:none">☰</span></td>
                   <td>${esc(p.nom)}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.categorie || "—")}</td>
                   <td style="font-size:12px;color:var(--text-dim)">${esc(p.unite || "pièce")}</td>
@@ -57,6 +60,12 @@ function render() {
 
   document.getElementById("csc-new").addEventListener("click", () => { ui.editId = "new"; render(); });
   mountedContainer.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => { ui.editId = btn.dataset.edit; render(); }));
+  const listeAffichee = [...state.produits];
+  activerGlisserDeposer(mountedContainer, "tbody tr[data-drag-index]", async (nouvelOrdre) => {
+    const nouvelleListe = nouvelOrdre.map(ancienIndex => listeAffichee[ancienIndex]);
+    if (nouvelleListe.every((p, i) => p === listeAffichee[i])) return;
+    await definirOrdreCatalogueSite(nouvelleListe.map((p, i) => ({ id: p.id, ordre: i })));
+  });
   mountedContainer.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", async () => {
     const p = state.produits.find(x => x.id === btn.dataset.del);
     if (confirm(`Retirer "${p.nom}" de la liste type ? (les articles déjà configurés sur des sites ne sont pas affectés)`)) await supprimerProduitCatalogueSite(p.id);
@@ -91,7 +100,8 @@ function renderForm(p) {
     };
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
     try {
-      if (p) await modifierProduitCatalogueSite(p.id, payload); else await ajouterProduitCatalogueSite(payload);
+      if (p) await modifierProduitCatalogueSite(p.id, payload);
+      else await ajouterProduitCatalogueSite({ ...payload, ordre: state.produits.reduce((m, x) => Math.max(m, x.ordre ?? -1), state.produits.length - 1) + 1 });
       ui.editId = null; render();
     } catch (e) {
       statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message || String(e))}</span>`;

@@ -20,7 +20,7 @@ export function watchCatalogueSite(callback) {
   return onSnapshot(collection(db, CATALOGUE_SITE), (snap) => {
     const list = [];
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-    callback(list.sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || "")));
+    callback(list.sort((a, b) => (a.ordre ?? 999999) - (b.ordre ?? 999999) || (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || "")));
   }, (err) => { console.error("watchCatalogueSite:", err); callback([]); });
 }
 
@@ -28,11 +28,16 @@ export async function listerCatalogueSite() {
   const snap = await getDocs(collection(db, CATALOGUE_SITE));
   const list = [];
   snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
-  return list.sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || ""));
+  return list.sort((a, b) => (a.ordre ?? 999999) - (b.ordre ?? 999999) || (a.categorie || "").localeCompare(b.categorie || "") || (a.nom || "").localeCompare(b.nom || ""));
 }
 
 export async function ajouterProduitCatalogueSite(item) {
   await addDoc(collection(db, CATALOGUE_SITE), item);
+}
+
+// Enregistre un nouvel ordre d'affichage de la liste type (glisser-déposer).
+export async function definirOrdreCatalogueSite(paires) {
+  await Promise.all(paires.map(({ id, ordre }) => updateDoc(doc(db, CATALOGUE_SITE, id), { ordre })));
 }
 
 export async function modifierProduitCatalogueSite(id, fields) {
