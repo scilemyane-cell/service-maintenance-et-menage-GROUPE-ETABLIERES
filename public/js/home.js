@@ -88,7 +88,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchPeople((p) => { people = p; scheduleRender(); }));
   unsubs.push(watchAbsences((a) => { absences = a; scheduleRender(); }));
   unsubs.push(watchTransferts((t) => { transferts = t; scheduleRender(); }));
-  unsubs.push(watchSitesDossiers((d) => { dossiers = d; scheduleRender(); }));
+  unsubs.push(watchSitesDossiers((d) => { dossiers = d; calculerDepots(user); scheduleRender(); }));
   unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
@@ -102,8 +102,11 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   uidsImm.forEach(u => unsubs.push(watchActionsImmediates(u, (l) => { immediates[u] = l; scheduleRender(); })));
   // Nouveaux commentaires sur les demandes des sites dont je suis le technicien référent
   comDemandes = []; comAff = {}; comDocs = [];
+  // Dépôts de stock à faire sur les sites dont je suis le technicien titulaire
+  depotTit = null; depotItems = []; depotItemsCle = ""; depotItemsUnsub = null; depotMod = null; depotUser = user;
+  if (user.uid) import("./stock-site-data.js").then((m) => { if (uidVues !== user.uid) return; depotMod = m; unsubs.push(m.watchTitulairesStock((t) => { depotTit = t || {}; calculerDepots(user); })); unsubs.push(() => depotItemsUnsub?.()); }).catch(() => {});
   if (user.uid) {
-    import("./affectations-sites-data.js").then(({ watchAffectationsSites }) => { if (uidVues !== user.uid) return; unsubs.push(watchAffectationsSites((a) => { comAff = a || {}; calculerComNotifs(user); })); }).catch(() => {});
+    import("./affectations-sites-data.js").then(({ watchAffectationsSites }) => { if (uidVues !== user.uid) return; unsubs.push(watchAffectationsSites((a) => { comAff = a || {}; calculerComNotifs(user); calculerDepots(user); })); }).catch(() => {});
     import("./firestore-data.js").then(({ watchDemandes }) => { if (uidVues !== user.uid) return; unsubs.push(watchDemandes((l) => { comDocs = l || []; calculerComNotifs(user); })); }).catch(() => {});
   }
   // Logements Bât. A / B attribués (5 jours avant l'intervention)
@@ -394,6 +397,42 @@ function calculerComNotifs(user) {
   scheduleRender();
 }
 
+// ---- Bandeau « dépôt de stock à faire » (technicien titulaire du site) ----
+let depotTit = null, depotItems = [], depotItemsCle = "", depotItemsUnsub = null, depotMod = null, depotUser = null;
+function sitesDepotTitulaire(user) {
+  if (!depotMod || depotTit === null || !user?.uid) return [];
+  return dossiers.filter(d => d.stockDeporte && !d.supprimeLe && depotMod.titulairesDuSite({ id: d.id, nom: d.nom }, depotTit, comAff).includes(user.uid));
+}
+function calculerDepots(user) {
+  if (!depotMod || depotTit === null) return;
+  const ids = sitesDepotTitulaire(user).map(d => d.id).sort();
+  const cle = ids.join(",");
+  if (cle !== depotItemsCle) {
+    depotItemsCle = cle; depotItemsUnsub?.(); depotItemsUnsub = null; depotItems = [];
+    if (ids.length) depotItemsUnsub = depotMod.watchArticlesDesSites(ids, (l) => { depotItems = l; scheduleRender(); });
+  }
+  scheduleRender();
+}
+function bandeauDepotsHTML() {
+  if (!depotItems.length || !catsRef.some(c => c.id === "stock-deporte")) return "";
+  const sites = sitesDepotTitulaire(depotUser).map(d => {
+    const manquants = depotItems.filter(it => it.dossierId === d.id && (it.quantite ?? 0) < (it.quantiteCible ?? 0));
+    return { d, nb: manquants.length, unites: manquants.reduce((s, it) => s + (it.quantiteCible ?? 0) - (it.quantite ?? 0), 0) };
+  }).filter(x => x.nb > 0);
+  if (!sites.length) return "";
+  return `<section class="gh-urgences gh-logts">
+    <div class="gh-urg-tete">📥 <b>Dépôt de stock à faire</b><span>Produits à déposer sur ${sites.length > 1 ? "tes sites" : "ton site"}</span></div>
+    <div class="gh-urg-liste">${sites.map(x => `
+      <div class="gh-urg">
+        <button type="button" data-depot-ouvrir="${esc(x.d.id)}" class="gh-urg-corps">
+          <span class="gh-urg-badge">${x.unites} produit${x.unites > 1 ? "s" : ""}</span>
+          <span class="gh-urg-txt"><b>${esc(x.d.nom || "Site")}</b><small>${x.nb} article${x.nb > 1 ? "s" : ""} sous la quantité cible</small></span>
+          <span class="gh-urg-go">Déposer →</span>
+        </button>
+      </div>`).join("")}
+    </div></section>`;
+}
+
 // ---- Bandeau « logements à faire » (technicien, 5 jours avant) ----
 let mesLogements = [];
 function bandeauLogementsHTML() {
@@ -666,6 +705,7 @@ function render() {
       ${transfertBannerHTML(next, confirmedRecord)}
       ${bandeauImmediatHTML()}
       ${bandeauLogementsHTML()}
+      ${bandeauDepotsHTML()}
       ${bandeauUrgencesHTML()}
       ${bandeauNouvellesHTML()}
 
@@ -747,6 +787,11 @@ function render() {
     onSelectRef("astreinte");
   });
   mountedContainer.querySelectorAll("[data-logts-ouvrir]").forEach(b => b.addEventListener("click", () => onSelectRef("logements")));
+  mountedContainer.querySelectorAll("[data-depot-ouvrir]").forEach(b => b.addEventListener("click", () => {
+    window.stockSiteDepotDeepLinkId = b.dataset.depotOuvrir;
+    window.ouvrirSousOnglet = "sites";
+    onSelectRef("stock-deporte");
+  }));
   mountedContainer.querySelectorAll("[data-urg-ouvrir]").forEach(b => b.addEventListener("click", () => {
     if (b.dataset.nouvId) marquerVus(CLE_NOUV_VUES, "nouvellesVues", [b.dataset.nouvId]);
     window.__suiviOuvrir = { id: b.dataset.urgOuvrir, site: b.dataset.urgSite };

@@ -6,7 +6,7 @@
 
 import { db } from "./firebase-init.js";
 import {
-  doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs,
+  doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs,
   collection, query, where, onSnapshot, serverTimestamp,
 } from "./firestore-compte.js";
 
@@ -203,4 +203,61 @@ export async function listerCatalogueCentral() {
   const list = [];
   snap.forEach((d) => { if (!d.data().supprimeLe) list.push({ id: d.id, ...d.data() }); });
   return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+}
+
+// ---------- Dépôt de produits sur un site par le technicien titulaire ----------
+// Titulaires du stock de chaque site (config/stock-site-titulaires :
+// { titulaires: { "<id dossier>": [uid, …] } }). Sans choix explicite, on
+// reprend les techniciens attribués au site dans Suivi des demandes.
+const REF_TITULAIRES = doc(db, "config", "stock-site-titulaires");
+
+export function watchTitulairesStock(callback) {
+  return onSnapshot(REF_TITULAIRES, (snap) => callback(snap.exists() ? (snap.data().titulaires || {}) : {}),
+    (err) => { console.error("watchTitulairesStock:", err); callback({}); });
+}
+
+export async function enregistrerTitulairesStock(dossierId, uids) {
+  await setDoc(REF_TITULAIRES, { titulaires: { [dossierId]: uids }, majLe: Date.now() }, { merge: true });
+}
+
+const cleNomSite = (s) => String(s || "").replace(/\(.*?\)/g, "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// Titulaires d'un site : choix explicite, sinon techniciens attribués au
+// site du même nom dans Suivi des demandes (config/sites-techniciens).
+export function titulairesDuSite(site, titulaires, affectations) {
+  const explicites = (titulaires || {})[site.id];
+  if (Array.isArray(explicites)) return explicites;
+  const k = cleNomSite(site.nom);
+  if (!k) return [];
+  return [...new Set(Object.entries(affectations || {})
+    .filter(([n]) => { const c = cleNomSite(n); return c && (c === k || c.startsWith(k) || k.startsWith(c)); })
+    .flatMap(([, l]) => l || []))];
+}
+
+// Dépôt validé par le technicien : ajoute les quantités déposées au stock
+// du site (le technicien ne modifie que "quantite", autorisé par les
+// règles) et journalise chaque dépôt.
+export async function enregistrerDepotSite(lignes, uid, nom) {
+  for (const { itemId, quantite } of lignes) {
+    if (!(quantite > 0)) continue;
+    const ref = doc(db, COLLECTION, itemId);
+    const snap = await getDoc(ref);
+    const avant = snap.exists() ? (snap.data().quantite ?? 0) : 0;
+    const apres = avant + quantite;
+    await updateDoc(ref, { quantite: apres });
+    await addDoc(collection(db, MOUVEMENTS), {
+      itemId, type: "depot", quantiteAvant: avant, quantiteApres: apres,
+      quantiteDeposee: quantite, uid: uid || null, par: nom || "", date: serverTimestamp(),
+    });
+  }
+}
+
+// Articles de quelques sites, en temps réel (alerte de dépôt à l'accueil).
+export function watchArticlesDesSites(dossierIds, callback) {
+  const q = query(collection(db, COLLECTION), where("dossierId", "in", dossierIds.slice(0, 30)));
+  return onSnapshot(q, (snap) => {
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    callback(list);
+  }, (err) => { console.error("watchArticlesDesSites:", err); callback([]); });
 }

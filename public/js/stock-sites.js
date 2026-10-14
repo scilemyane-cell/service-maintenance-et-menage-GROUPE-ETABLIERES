@@ -7,6 +7,8 @@
 
 import { esc } from "./astreinte-logic.js";
 import { activerGlisserDeposer } from "./drag-reorder.js";
+import { watchAffectationsSites } from "./affectations-sites-data.js";
+import { watchUsers } from "./users-data.js";
 import { getAccessToken, uploadToDrive, getImageThumbUrls, STOCK_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { dessinerFluxSVG } from "./flux-svg.js";
@@ -17,18 +19,19 @@ import {
   configurerArticlesSiteDepuisCatalogue, listerCatalogueSite, listerCatalogueCentral,
   qrPayloadForSite, getArticleSiteAvecResidence, actualiserStockSite, enregistrerSortieSite,
   listerMouvementsSite, supprimerMouvementSite, trierArticlesSite, definirOrdreArticlesSite, modifierProduitCatalogueSite,
+  watchTitulairesStock, enregistrerTitulairesStock, titulairesDuSite, enregistrerDepotSite,
 } from "./stock-site-data.js";
 
 let mountedContainer = null;
 let mountedUser = null;
-let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null, vue: vueMemorisee() };
+let state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null, titulaires: {}, affectations: {}, utilisateurs: [] };
+let ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null, depotSiteId: null, vue: vueMemorisee() };
 
 export async function mountStockSites(container, user) {
   mountedContainer = container;
   mountedUser = user;
-  state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null };
-  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null, vue: vueMemorisee() };
+  state = { sites: [], items: [], catalogueSite: null, catalogueCentral: null, titulaires: {}, affectations: {}, utilisateurs: [] };
+  ui = { screen: "liste", qrId: null, ajusteId: null, addingSiteId: null, addingMode: null, ouverts: new Set(), rapideSiteId: null, rapideIndex: 0, qrRapideOuvert: null, fluxSiteId: null, jaugesSiteId: null, historiqueSiteId: null, depotSiteId: null, vue: vueMemorisee() };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   await load();
 
@@ -42,6 +45,14 @@ export async function mountStockSites(container, user) {
   }
   // Lien direct vers le mode rapide d'un site (QR unique par résidence,
   // imprimé une fois) — voir app.html, paramètre ?stocksiterapide=
+  // Alerte « dépôt à faire » de l'accueil : ouvre directement le dépôt du site.
+  if (window.stockSiteDepotDeepLinkId) {
+    const id = window.stockSiteDepotDeepLinkId;
+    window.stockSiteDepotDeepLinkId = null;
+    ui.screen = "depot";
+    ui.depotSiteId = id;
+    render();
+  }
   if (window.stockSiteRapideDeepLinkId) {
     const id = window.stockSiteRapideDeepLinkId;
     window.stockSiteRapideDeepLinkId = null;
@@ -60,6 +71,9 @@ async function load() {
   state.sites = sites;
   state.items = items;
   state.catalogueSite = catalogueSite;
+  [state.titulaires, state.affectations, state.utilisateurs] = await Promise.all([
+    premiereValeur(watchTitulairesStock, {}), premiereValeur(watchAffectationsSites, {}), premiereValeur(watchUsers, []),
+  ]);
   // Photos des articles issus du catalogue central : chargé seulement si
   // un site en contient (évite de relire tout le stock central).
   if (!state.catalogueCentral && items.some(it => it.catalogueOrigine === "central")) {
@@ -78,6 +92,7 @@ function render() {
   if (ui.screen === "flux") return renderFlux();
   if (ui.screen === "jauges") return renderJauges();
   if (ui.screen === "historique") return renderHistorique();
+  if (ui.screen === "depot") return renderDepot();
   if (ui.rapideSiteId) return renderRapide();
   renderListe();
 }
@@ -85,6 +100,94 @@ function render() {
 // =================================================================
 // Liste
 // =================================================================
+// Première valeur d'un flux temps réel, puis désabonnement (lecture ponctuelle).
+function premiereValeur(watch, defaut) {
+  return new Promise((resolve) => {
+    let unsub = null, fini = false;
+    const t = setTimeout(() => { if (!fini) { fini = true; unsub?.(); resolve(defaut); } }, 8000);
+    unsub = watch((v) => {
+      if (fini) return;
+      fini = true; clearTimeout(t);
+      resolve(v ?? defaut);
+      setTimeout(() => unsub?.(), 0);
+    });
+  });
+}
+
+// ---- Technicien titulaire du stock d'un site ----
+function nomUtilisateur(uid) {
+  const u = (state.utilisateurs || []).find(x => x.uid === uid);
+  return u ? (u.nom || u.email) : "";
+}
+function titulaireHTML(site) {
+  const titulaires = titulairesDuSite(site, state.titulaires, state.affectations);
+  if (peutGerer()) {
+    const techs = (state.utilisateurs || []).filter(u => !u.supprimeLe && (u.role === "technicien" || u.role === "n1" || titulaires.includes(u.uid)))
+      .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
+    return `<div class="ssx-titulaire"><span>👷 Titulaire (reçoit l'alerte de dépôt) :</span>
+      ${techs.map(u => `<button type="button" class="ssx-tit-btn ${titulaires.includes(u.uid) ? "on" : ""}" data-titulaire="${esc(u.uid)}" data-titulaire-site="${site.id}">${titulaires.includes(u.uid) ? "✓ " : ""}${esc(u.nom || u.email)}</button>`).join("")}
+    </div>`;
+  }
+  const noms = titulaires.map(nomUtilisateur).filter(Boolean);
+  return noms.length ? `<div class="ssx-titulaire"><span>👷 Titulaire : ${esc(noms.join(", "))}</span></div>` : "";
+}
+
+// ---- Dépôt de produits sur le site (validé par le technicien) ----
+function renderDepot() {
+  const site = state.sites.find(s => s.id === ui.depotSiteId);
+  if (!site) { ui.screen = "liste"; ui.depotSiteId = null; render(); return; }
+  const manquants = state.items.filter(it => it.dossierId === site.id && (it.quantite ?? 0) < (it.quantiteCible ?? 0)).sort(trierArticlesSite);
+  mountedContainer.innerHTML = `
+    <div class="stack">
+      <button class="nav-btn" id="ssx-depot-retour" style="width:fit-content">← Retour</button>
+      <div class="form-card">
+        <h3 style="margin:0 0 4px;font-size:15px;color:var(--gold)">📥 Dépôt en stock — ${esc(site.nom)}</h3>
+        <p class="hint" style="margin:0 0 12px">Quantités proposées = ce qu'il manque pour atteindre la cible. S'il te manque des produits, indique ce que tu as <b>réellement déposé</b> (0 si rien), puis valide : le stock du site est mis à jour automatiquement.</p>
+        ${manquants.length === 0 ? `<div class="stat-chip ok" style="width:fit-content">✓ Rien à déposer, le stock est complet</div>` : `
+        <div class="ssx-depot-liste">
+          ${manquants.map(it => {
+            const manque = (it.quantiteCible ?? 0) - (it.quantite ?? 0);
+            return `
+            <div class="ssx-depot-ligne">
+              <div class="ssx-depot-nom"><b>${esc(it.nom)}</b><small>En stock ${it.quantite ?? 0} / cible ${it.quantiteCible ?? 0} — manque ${manque} ${esc(it.unite || "")}</small></div>
+              <div class="ssx-depot-qte">
+                <button type="button" class="nav-btn" data-moins="${it.id}">−</button>
+                <input type="number" min="0" step="1" inputmode="numeric" value="${manque}" data-depot-qte="${it.id}">
+                <button type="button" class="nav-btn" data-plus="${it.id}">+</button>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap">
+          <button class="add-btn" id="ssx-depot-valider">✓ Valider le dépôt</button>
+          <span id="ssx-depot-statut" style="font-size:12px"></span>
+        </div>`}
+      </div>
+    </div>`;
+  const retour = () => { ui.screen = "liste"; ui.depotSiteId = null; ui.ouverts.add(site.id); render(); };
+  document.getElementById("ssx-depot-retour").addEventListener("click", retour);
+  const champ = (id) => mountedContainer.querySelector(`[data-depot-qte="${id}"]`);
+  mountedContainer.querySelectorAll("[data-moins]").forEach(b => b.addEventListener("click", () => { const i = champ(b.dataset.moins); i.value = Math.max(0, (parseInt(i.value, 10) || 0) - 1); }));
+  mountedContainer.querySelectorAll("[data-plus]").forEach(b => b.addEventListener("click", () => { const i = champ(b.dataset.plus); i.value = (parseInt(i.value, 10) || 0) + 1; }));
+  document.getElementById("ssx-depot-valider")?.addEventListener("click", async (e) => {
+    const lignes = manquants.map(it => ({ itemId: it.id, quantite: Math.max(0, parseInt(champ(it.id).value, 10) || 0) })).filter(l => l.quantite > 0);
+    const statut = document.getElementById("ssx-depot-statut");
+    if (!lignes.length) { statut.innerHTML = `<span style="color:var(--red)">Aucune quantité saisie.</span>`; return; }
+    e.target.disabled = true;
+    statut.innerHTML = `<span style="color:var(--text-dim)">⏳ Enregistrement…</span>`;
+    try {
+      await enregistrerDepotSite(lignes, mountedUser?.uid, mountedUser?.nom || mountedUser?.email || "");
+      const total = lignes.reduce((s, l) => s + l.quantite, 0);
+      window.toast(`✓ Dépôt enregistré : ${total} produit(s) ajouté(s) au stock de ${site.nom}`);
+      await load();
+      retour();
+    } catch (err) {
+      e.target.disabled = false;
+      statut.innerHTML = `<span style="color:var(--red)">❌ ${esc(err.message || String(err))}</span>`;
+    }
+  });
+}
+
 function vueMemorisee() {
   try { return localStorage.getItem("ssx-vue") === "liste" ? "liste" : "tuiles"; } catch (e) { return "tuiles"; }
 }
@@ -294,7 +397,10 @@ function renderListe() {
               <button class="nav-btn" data-flux-site="${site.id}" style="border-color:var(--teal);color:var(--teal)">🌊 Flux des sorties</button>
               <button class="nav-btn" data-jauges-site="${site.id}" style="border-color:var(--gold);color:var(--gold)">📊 Jauges des sorties</button>
               <button class="nav-btn" data-historique-site="${site.id}">🗂️ Historique des sorties</button>
+              ${!mountedUser?.lectureSeule && itemsManquants.length && (peutGerer() || titulairesDuSite(site, state.titulaires, state.affectations).includes(mountedUser?.uid))
+                ? `<button class="add-btn" data-depot-site="${site.id}">📥 Déposer en stock (${itemsManquants.length})</button>` : ""}
             </div>
+            ${titulaireHTML(site)}
             <div id="ssx-qr-rapide-holder-${site.id}" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px;margin-bottom:12px">
               <div id="ssx-qr-rapide-canvas-${site.id}" style="width:200px;height:200px;margin:0 auto"></div>
               <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller une seule fois sur ce site — scanné avec l'appareil photo du téléphone, ouvre directement la mise à jour du stock de <b>${esc(site.nom)}</b>, sans compte ni code à saisir.</p>
@@ -332,6 +438,20 @@ function renderListe() {
   }));
   mountedContainer.querySelectorAll("[data-jauges-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.screen = "jauges"; ui.jaugesSiteId = btn.dataset.jaugesSite; render();
+  }));
+  mountedContainer.querySelectorAll("[data-depot-site]").forEach(btn => btn.addEventListener("click", () => {
+    ui.screen = "depot"; ui.depotSiteId = btn.dataset.depotSite; render();
+  }));
+  mountedContainer.querySelectorAll("[data-titulaire]").forEach(btn => btn.addEventListener("click", async () => {
+    const site = state.sites.find(s => s.id === btn.dataset.titulaireSite);
+    const actuels = titulairesDuSite(site, state.titulaires, state.affectations);
+    const uid = btn.dataset.titulaire;
+    const nouveaux = actuels.includes(uid) ? actuels.filter(u => u !== uid) : [...actuels, uid];
+    try {
+      await enregistrerTitulairesStock(site.id, nouveaux);
+      state.titulaires = { ...state.titulaires, [site.id]: nouveaux };
+      render();
+    } catch (e) { window.toast("Échec : " + (e.message || e)); }
   }));
   mountedContainer.querySelectorAll("[data-historique-site]").forEach(btn => btn.addEventListener("click", () => {
     ui.screen = "historique"; ui.historiqueSiteId = btn.dataset.historiqueSite; render();

@@ -3537,3 +3537,14 @@ body.clo-ouvert{overflow:hidden}
 .ssx-champs label{ display:flex; flex-direction:column; gap:2px; }
 .ssx-champs input{ width:62px; }
 .ssx-champs span{ padding-bottom:6px; }
+
+.ssx-titulaire{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 12px; font-size:12px; color:var(--text-dim); }
+.ssx-tit-btn{ border:1px solid var(--border); background:var(--panel); color:var(--text); border-radius:999px; padding:3px 10px; font-size:12px; cursor:pointer; font-family:inherit; }
+.ssx-tit-btn.on{ background:var(--gold); border-color:var(--gold); color:#fff; font-weight:700; }
+.ssx-depot-liste{ display:flex; flex-direction:column; gap:8px; }
+.ssx-depot-ligne{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--panel); }
+.ssx-depot-nom{ display:flex; flex-direction:column; min-width:0; }
+.ssx-depot-nom small{ color:var(--text-dim); font-size:12px; }
+.ssx-depot-qte{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.ssx-depot-qte input{ width:64px; text-align:center; font-size:16px; font-weight:700; }
+.ssx-depot-qte .nav-btn{ width:36px; height:36px; padding:0; font-size:18px; }
