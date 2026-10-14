@@ -7,6 +7,7 @@
 
 import { esc } from "./astreinte-logic.js";
 import { renderQrWithLogo } from "./qr-logo.js";
+import { getImageDisplayUrl } from "./sharepoint-storage.js";
 import { watchStockProduits } from "./stock-data.js";
 import { qrPayloadFor } from "./stock.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -146,6 +147,8 @@ async function genererEtImprimer() {
   const colonnes = estPetit ? 3 : 2;
   const taille = estPetit ? 150 : 190; // le rendu SVG est net à n'importe quelle taille, plus besoin de sur-dimensionner en interne avant de réduire
 
+  const tailleAvecPhoto = estPetit ? 105 : 150; // QR + photo du produit côte à côte
+  const photoDe = (it) => it.photo && (it.photo.itemId || it.photo.url) ? it.photo : null;
   const titreFeuille = { produits: "Étiquettes QR — Produits", sites: "Fiches QR — Dossiers de site", articlesSite: "Étiquettes QR — Stock déporté", menage: "Étiquettes QR — Stock Ménage" }[state.type];
 
   const html = `
@@ -155,7 +158,10 @@ async function genererEtImprimer() {
       <div style="display:grid;grid-template-columns:repeat(${colonnes},1fr);gap:${estPetit ? "10px" : "18px"}">
         ${items.map((it, i) => `
           <div style="text-align:center;border:1px solid #ccc;border-radius:8px;padding:${estPetit ? "8px" : "16px"};page-break-inside:avoid;break-inside:avoid">
-            <div id="qm-qr-${i}" style="width:${taille}px;height:${taille}px;margin:0 auto;overflow:hidden"></div>
+            ${photoDe(it) ? `<div style="display:flex;gap:8px;justify-content:center;align-items:center">
+              <div id="qm-qr-${i}" style="width:${tailleAvecPhoto}px;height:${tailleAvecPhoto}px;overflow:hidden;flex:none"></div>
+              <img data-qm-photo="${i}" alt="" style="width:${tailleAvecPhoto}px;height:${tailleAvecPhoto}px;object-fit:contain;border-radius:6px;border:1px solid #ddd;flex:none;background:#fafafa">
+            </div>` : `<div id="qm-qr-${i}" style="width:${taille}px;height:${taille}px;margin:0 auto;overflow:hidden"></div>`}
             <p style="margin:6px 0 0;font-size:${estPetit ? 10 : 13}px;font-weight:700;line-height:1.2">${esc(libellePour(it))}</p>
           </div>
         `).join("")}
@@ -172,7 +178,20 @@ async function genererEtImprimer() {
   // Les QR se dessinent en SVG (vectoriel, net à n'importe quelle taille)
   // — il faut attendre que chacun soit prêt avant d'imprimer, sinon
   // certaines cases resteraient vides sur le papier.
-  await Promise.all(items.map((it, i) => renderQrWithLogo(document.getElementById(`qm-qr-${i}`), payloadPour(it), taille)));
+  // Photos des produits (SharePoint : lien frais à chaque fois), attendues
+  // avant l'impression (8 s maximum, sinon on imprime sans).
+  const photos = items.map(async (it, i) => {
+    const ph = photoDe(it); if (!ph) return;
+    const img = printRoot.querySelector(`[data-qm-photo="${i}"]`); if (!img) return;
+    try {
+      img.src = ph.itemId ? await getImageDisplayUrl(ph.itemId) : ph.url;
+      await new Promise(ok => { if (img.complete) return ok(); img.onload = img.onerror = ok; });
+    } catch { img.style.visibility = "hidden"; }
+  });
+  await Promise.all([
+    ...items.map((it, i) => renderQrWithLogo(document.getElementById(`qm-qr-${i}`), payloadPour(it), photoDe(it) ? tailleAvecPhoto : taille)),
+    Promise.race([Promise.all(photos), new Promise(ok => setTimeout(ok, 8000))]),
+  ]);
 
   statusEl.innerHTML = "";
   window.print();

@@ -47,6 +47,16 @@ export async function renderQrWithLogo(container, text, size = 220, sansLogo = f
   }
   if (!container.isConnected) return; // l'écran a peut-être changé entre-temps
   qr.append(container);
+  // Identifiants des « clipPath » rendus uniques : la librairie numérote
+  // ses dessins (clip-path-dot-color-0, -1…) ; si deux QR portent le même
+  // numéro (librairie rechargée, QR déjà affiché ailleurs dans l'écran
+  // masqué), le QR imprimé pointe sur celui de l'écran caché et sort BLANC
+  // à l'impression (vu sur les étiquettes QR en masse).
+  const svg = container.querySelector("svg");
+  if (svg) {
+    const suf = "-q" + Math.random().toString(36).slice(2, 9);
+    svg.innerHTML = svg.innerHTML.replace(/(id="|#)(clip-path-[\w-]+)/g, `$1$2${suf}`);
+  }
 }
 
 // Imprime UNIQUEMENT la carte QR passée en paramètre (élément portant la
