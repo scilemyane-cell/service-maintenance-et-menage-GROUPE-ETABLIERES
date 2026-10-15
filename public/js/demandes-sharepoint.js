@@ -82,6 +82,9 @@ export async function demandesDepuisClasseur(wb, XLSX) {
   const out = [];
   for (const r of lignes.slice(iEntete + 1)) {
     if (!r || !(r[0] || r[6])) continue;
+    // Ligne vide portant seulement un N° (N° pré-rempli dans l'Excel) : ni
+    // descriptif, ni site réel, ni date → ignorée (évite les « Non renseigné »).
+    if (!txt(r[6]) && (!txt(r[3]) || sa(r[3]) === "non renseigne") && !txt(r[1])) continue;
     const dDem = versIso(r[1]);
     const annee = dDem ? +dDem.slice(0, 4) : undefined;
     const intervenantCat = txt(r[10]), cont = contact(r[11]);
