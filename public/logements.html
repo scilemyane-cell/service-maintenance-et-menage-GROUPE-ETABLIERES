@@ -2413,6 +2413,36 @@ if(smmUser){
     openPanel(floorIdx, roomIdx);
   }
 
+  // Note, date d'intervention et créneau PROPRES À CHAQUE STATUT : en changeant
+  // de statut, on ne voit que ce qui a été saisi pour ce statut-là ; en y
+  // revenant, on retrouve ce qui avait été noté. (room.parStatut[clé])
+  let draftMemo = {};
+  const videStatut = () => ({ occupant: '', interventionDate: '', creneau: '' });
+  function memoStatuts(room){
+    const m = (room.parStatut && typeof room.parStatut === 'object') ? JSON.parse(JSON.stringify(room.parStatut)) : {};
+    if(!m[room.status]) m[room.status] = { occupant: room.occupant || '', interventionDate: room.interventionDate || '', creneau: room.creneau || '' };
+    return m;
+  }
+  function nettoyerMemo(m){
+    const out = {};
+    Object.keys(m).forEach(k => { const v = m[k] || {}; if(STATUSES[k] && (v.occupant || v.interventionDate || v.creneau)) out[k] = { occupant: v.occupant || '', interventionDate: v.interventionDate || '', creneau: v.interventionDate ? (v.creneau || '') : '' }; });
+    return out;
+  }
+  // Change le statut d'une chambre hors du panneau (transfert) en gardant la mémoire par statut.
+  function changerStatut(room, nouveau){
+    const m = memoStatuts(room);
+    m[room.status] = { occupant: room.occupant || '', interventionDate: room.interventionDate || '', creneau: room.creneau || '' };
+    const v = m[nouveau] || videStatut();
+    room.status = nouveau; room.occupant = v.occupant || ''; room.interventionDate = v.interventionDate || ''; room.creneau = v.creneau || '';
+    room.parStatut = nettoyerMemo(m);
+  }
+  function setCreneau(v){
+    draftCreneau = v || '';
+    document.querySelectorAll('#creneauBtns [data-creneau]').forEach(x => x.classList.toggle('active', x.dataset.creneau === draftCreneau));
+  }
+  function lireFormStatut(){ return { occupant: occupantInput.value.trim(), interventionDate: interventionDateInput.value || '', creneau: draftCreneau || '' }; }
+  function remplirFormStatut(v){ v = v || videStatut(); occupantInput.value = v.occupant || ''; interventionDateInput.value = v.interventionDate || ''; setCreneau(v.creneau || ''); }
+
   function openPanel(floorIdx, roomIdx){
     panelTarget = {bldg:currentBldg, floorIdx, roomIdx};
     const room = data[currentBldg].floors[floorIdx].rooms[roomIdx];
@@ -2420,10 +2450,9 @@ if(smmUser){
     document.getElementById('saveConfirm').textContent = '';
     panelTitle.textContent = `Chambre ${room.number}`;
     panelSub.textContent = `${data[currentBldg].label} — ${data[currentBldg].floors[floorIdx].name}`;
-    occupantInput.value = room.occupant || '';
-    interventionDateInput.value = room.interventionDate || '';
-    draftCreneau = room.creneau || '';
-    document.querySelectorAll('#creneauBtns [data-creneau]').forEach(b => { b.classList.toggle('active', b.dataset.creneau === draftCreneau); b.onclick = () => { draftCreneau = b.dataset.creneau; document.querySelectorAll('#creneauBtns [data-creneau]').forEach(x => x.classList.toggle('active', x === b)); }; });
+    draftMemo = memoStatuts(room);
+    document.querySelectorAll('#creneauBtns [data-creneau]').forEach(b => { b.onclick = () => setCreneau(b.dataset.creneau); });
+    remplirFormStatut(draftMemo[draftStatus]);
     {
       const sel = document.getElementById('assigneSelect');
       const techs = lireTechs().slice();
@@ -2438,6 +2467,7 @@ if(smmUser){
       btn.className='status-btn'+(draftStatus===key?' active':'');
       btn.innerHTML=`<span class="dot" style="background:${STATUSES[key].color}"></span>${STATUSES[key].label}`;
       btn.onclick=()=>{
+        if(key !== draftStatus){ draftMemo[draftStatus] = lireFormStatut(); remplirFormStatut(draftMemo[key]); }
         draftStatus = key;
         Array.from(statusBtns.children).forEach(c=>c.classList.remove('active'));
         btn.classList.add('active');
@@ -2464,6 +2494,8 @@ if(smmUser){
     const oldDate = room.interventionDate || '';
     const newOccupant = occupantInput.value.trim();
     const newDate = interventionDateInput.value || '';
+    draftMemo[draftStatus] = lireFormStatut();
+    room.parStatut = nettoyerMemo(draftMemo);
     room.status = draftStatus;
     room.occupant = newOccupant;
     room.interventionDate = newDate;
@@ -2540,10 +2572,13 @@ if(smmUser){
     }
 
     const occupantName = src.occupant;
-    dest.status = src.status==='dispo' ? 'occupe' : src.status;
+    const ancienSrc = src.status;
+    changerStatut(dest, src.status==='dispo' ? 'occupe' : src.status);
     dest.occupant = occupantName;
-    src.status = 'dispo';
-    src.occupant = '';
+    dest.parStatut = nettoyerMemo({ ...memoStatuts(dest), [dest.status]: { occupant: occupantName, interventionDate: dest.interventionDate || '', creneau: dest.creneau || '' } });
+    changerStatut(src, 'dispo');
+    // L'occupant est parti : on n'en garde pas la trace sous l'ancien statut de la chambre source.
+    if(src.parStatut && src.parStatut[ancienSrc]){ delete src.parStatut[ancienSrc]; }
 
     logHistory(`Transfert : ${src.number} (${data[transferSource.bldg].label}) → ${dest.number} (${data[destBldg].label})${occupantName?' — '+occupantName:''}`);
 
