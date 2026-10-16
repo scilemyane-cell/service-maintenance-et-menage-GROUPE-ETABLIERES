@@ -18,6 +18,14 @@ import { doc, getDoc, getDocs, query, where, setDoc, collection, writeBatch, ser
 const DOSSIER = "Demandes";
 const COPIE = "SG_Suivi_Demandes_GroupeEtablieres.xlsx";
 const FICHIER_MAJ = "mises-a-jour-demandes.json";
+// Colonne « ID appli » (tout à droite du tableau Excel) : identifiant interne
+// et définitif de la demande dans l'appli. Écrit par le flux Power Automate
+// n° 3 (fichier tatouage-demandes.json). Quand une ligne le porte, c'est LUI
+// qui fait le lien appli ↔ fichier : le N° SG peut alors changer sans rien casser.
+export const ENTETE_ID = "ID appli";
+const FICHIER_TATOUAGE = "tatouage-demandes.json";
+export const MAX_TATOUAGE = 300; // lignes par passage du flux (quota d'actions)
+const indexColonneId = (entete) => (entete || []).findIndex(h => sa(h).replace(/[^a-z]/g, "") === "idappli");
 // Accusé de traitement écrit par le flux Power Automate n° 2 à la fin de son
 // passage (copie du fichier traité) : on n'envoie ensuite que ce qui a changé
 // depuis → quelques lignes au lieu de centaines (quota d'actions du flux).
@@ -76,6 +84,7 @@ export async function demandesDepuisClasseur(wb, XLSX) {
   const lignes = XLSX.utils.sheet_to_json(wb.Sheets[nomFeuille], { header: 1, raw: true, defval: null });
   const iEntete = lignes.findIndex(r => /^n.{0,2}demande/.test(sa(r?.[0])));
   if (iEntete < 0) throw new Error("En-tête « N° demande » introuvable dans la copie du fichier.");
+  const iId = indexColonneId(lignes[iEntete]);
   const feuilleListes = wb.Sheets[wb.SheetNames.find(n => sa(n) === "listes")];
   const typesRef = feuilleListes ? XLSX.utils.sheet_to_json(feuilleListes, { header: 1, defval: null }).slice(1).map(r => r[5]).filter(Boolean) : [];
   const typeNorm = (v) => { const t = sa(v); if (!t) return ""; return typesRef.find(x => sa(x) === t || sa(x).startsWith(t)) || txt(v); };
@@ -95,8 +104,10 @@ export async function demandesDepuisClasseur(wb, XLSX) {
       intervenant: cont, categorieIntervenant: intervenantCat, contact: cont,
       local: txt(r[7]), demandeur: txt(r[4]), logementOccupe: txt(r[9]),
       dateIntervention: versIso(r[12], annee), dateStatut: versIso(r[14], annee), commentaireTech: txt(r[15]),
+      idAppli: iId >= 0 ? txt(r[iId]) : "",
     });
   }
+  out.colonneId = iId >= 0;
   return out;
 }
 
@@ -123,6 +134,20 @@ export function sansJumeaux(nouvelles, demandesApp) {
     (c.length ? ecartees : gardees).push(f);
   });
   return { gardees, ecartees };
+}
+
+// Lignes portant un « ID appli » : la demande correspondante prend le N° de
+// la ligne (N° renuméroté dans l'Excel → suivi, pas un décalage). Renvoie une
+// copie des demandes alignée + les renumérotations à enregistrer. Fonction pure.
+export function appliquerIdsFichier(fichier, demandesApp) {
+  const parId = new Map((demandesApp || []).map(d => [d.id, d]));
+  const renum = new Map();
+  (fichier || []).forEach(f => {
+    const d = f.idAppli && parId.get(f.idAppli);
+    if (d && f.numero && d.numero !== f.numero && !String(f.numero).startsWith("SN-")) renum.set(d.id, f.numero);
+  });
+  const app = renum.size ? (demandesApp || []).map(d => (renum.has(d.id) ? { ...d, numero: renum.get(d.id) } : d)) : (demandesApp || []);
+  return { app, renum };
 }
 
 // Rapprochement lignes du fichier ↔ demandes de l'appli (fonction pure, testable).
@@ -221,11 +246,12 @@ export async function comparerAvecFichier(demandesApp, { onProgress = () => {} }
   const app = (demandesApp || []).filter(d => !d.lieeA);
   const parCle = new Map(), parNum = new Map();
   app.forEach(d => { parCle.set(`${d.numero}|${emp(d)}`, d); parNum.set(d.numero, [...(parNum.get(d.numero) || []), d]); });
+  const parId = new Map(app.map(d => [d.id, d]));
   const vus = new Set();
   const stNorm = (v) => { const t = sa(v); return t.startsWith("realis") ? "realise" : t.startsWith("annul") ? "annule" : (!t || t === "non renseigne") ? "" : t; };
   const manquantes = [], statutDiff = [], siteDiff = [];
   fichier.forEach(f => {
-    const d = parCle.get(`${f.numero}|${emp(f)}`) || ((parNum.get(f.numero) || []).length === 1 ? parNum.get(f.numero)[0] : null);
+    const d = (f.idAppli && parId.get(f.idAppli)) || parCle.get(`${f.numero}|${emp(f)}`) || ((parNum.get(f.numero) || []).length === 1 ? parNum.get(f.numero)[0] : null);
     if (!d) { manquantes.push(f); return; }
     vus.add(d.id);
     if (stNorm(f.statut) !== stNorm(d.statut)) statutDiff.push({ f, d });
@@ -236,8 +262,10 @@ export async function comparerAvecFichier(demandesApp, { onProgress = () => {} }
   // N° présents plusieurs fois dans l'Excel : le flux Power Automate met à
   // jour la PREMIÈRE ligne trouvée → les mises à jour partent sur la mauvaise.
   const compte = {}; fichier.forEach(f => { (compte[f.numero] = compte[f.numero] || []).push(f); });
-  const doublonsFichier = Object.entries(compte).filter(([, l]) => l.length > 1).map(([numero, l]) => ({ numero, lignes: l }));
-  return { total: fichier.length, totalApp: app.length, manquantes, statutDiff, siteDiff, absentes, nouvellesApp, doublonsFichier };
+  // Doublon de N° dont TOUTES les lignes ont un ID appli distinct : le flux les retrouve par l'ID → plus bloquant.
+  const doublonsFichier = Object.entries(compte).filter(([, l]) => l.length > 1 && !(l.every(f => f.idAppli) && new Set(l.map(f => f.idAppli)).size === l.length)).map(([numero, l]) => ({ numero, lignes: l }));
+  const tatouees = fichier.filter(f => f.idAppli).length;
+  return { total: fichier.length, totalApp: app.length, manquantes, statutDiff, siteDiff, absentes, nouvellesApp, doublonsFichier, tatouees, colonneId: !!fichier.colonneId };
 }
 
 // 1) Lecture de la copie dans appsmm → nouvelles demandes + mises à jour
@@ -261,6 +289,7 @@ export function signesDecalage(nouvelles, majs, demandesApp) {
   return { total: conflits.length + descrChanges.length, conflits: conflits.length, descrChanges: descrChanges.length, exemples };
 }
 
+const sansIdAppli = (o) => { const { idAppli, ...reste } = o; return reste; };
 export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false, forcer = false, reference = null } = {}) {
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return null;
@@ -289,19 +318,34 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
         const snap = await getDocs(query(collection(db, "demandes"), where("numero", "in", nums.slice(i, i + 30))));
         snap.forEach(d => demandesApp.push({ id: d.id, ...d.data() }));
       }
+      // Lignes « ID appli » dont le N° a changé dans l'Excel : la demande est
+      // retrouvée par son ID (au-delà de 200, relecture complète).
+      const ids = [...new Set(fichier.map(f => f.idAppli).filter(Boolean))].filter(id => !demandesApp.some(d => d.id === id));
+      if (ids.length > 200) {
+        const snap = await getDocs(collection(db, "demandes"));
+        demandesApp = []; snap.forEach(d => demandesApp.push({ id: d.id, ...d.data() }));
+      } else {
+        for (const id of ids) { try { const s = await getDoc(doc(db, "demandes", id)); if (s?.exists()) demandesApp.push({ id: s.id, ...s.data() }); } catch { /* */ } }
+      }
     }
   }
-  const r0 = rapprocherLignes(fichier, demandesApp);
+  const { app: appAligne, renum } = appliquerIdsFichier(fichier, demandesApp);
+  const r0 = rapprocherLignes(fichier, appAligne);
   // Ne JAMAIS recréer une demande qui existe déjà dans l'appli sous un autre N°
   // (même site + même descriptif + même local) : c'est ce qui faisait « revenir »
   // des interventions déjà validées quand un N° ou un texte bougeait dans l'Excel.
-  const { gardees: nouvelles, ecartees } = sansJumeaux(r0.nouvelles, reference || demandesApp);
+  const { gardees: nouvelles, ecartees } = sansJumeaux(r0.nouvelles, reference || appAligne);
   const majs = r0.majs;
+  // N° changé dans l'Excel sur une ligne « ID appli » : la demande suit.
+  renum.forEach((numero, id) => {
+    const champs = { numero, ancienNumero: (demandesApp.find(d => d.id === id) || {}).numero || "", renumeroteParFichierLe: Date.now() };
+    const e = majs.find(m => m[0] === id); if (e) Object.assign(e[1], champs); else majs.push([id, champs]);
+  });
   if (ecartees.length) { try { await setDoc(REF_SYNCHRO, { dernieresEcartees: ecartees.slice(0, 30).map(f => `${f.numero} · ${f.site} · ${String(f.descriptif || "").slice(0, 40)}`), dernieresEcarteesLe: Date.now() }, { merge: true }); } catch { /* */ } }
-  if (simulation) return { nouvelles, majs, total: fichier.length }; // aperçu : rien n'est écrit
+  if (simulation) return { nouvelles, majs, total: fichier.length, renumerotees: renum.size }; // aperçu : rien n'est écrit
   // Décalage des N° détecté : on n'écrit RIEN et on suspend la synchro auto
   // (import ET envoi vers le fichier, qui écrirait sur les mauvaises lignes).
-  const decalage = signesDecalage(nouvelles, majs, demandesApp);
+  const decalage = signesDecalage(nouvelles, majs, appAligne);
   if (!forcer && decalage.total >= SEUIL_DECALAGE) {
     await setDoc(REF_SYNCHRO, { suspendu: { le: Date.now(), ...decalage, nouvelles: nouvelles.length } }, { merge: true });
     return { suspendu: true, ...decalage, nouvelles: nouvelles.length, misesAJour: majs.length, total: fichier.length };
@@ -311,7 +355,7 @@ export async function recupererDepuisCopie(demandesApp, { interactif = true, onP
     onProgress(`Enregistrement ${Math.min(i + 400, ops.length)} / ${ops.length}…`);
     const batch = writeBatch(db);
     ops.slice(i, i + 400).forEach(o => o[0] === "set"
-      ? batch.set(doc(collection(db, "demandes")), { ...o[1], importeLe: serverTimestamp(), importMajLe: serverTimestamp() })
+      ? batch.set(doc(collection(db, "demandes")), { ...sansIdAppli(o[1]), importeLe: serverTimestamp(), importMajLe: serverTimestamp() })
       : batch.update(doc(db, "demandes", o[1]), { ...o[2], importMajLe: serverTimestamp() }));
     await batch.commit();
   }
@@ -381,8 +425,12 @@ async function lignesCopieParNumero(token) {
   const lignes = XLSX.utils.sheet_to_json(wb.Sheets[nomFeuille], { header: 1, raw: true, defval: null });
   const iEntete = lignes.findIndex(r => /^n.{0,2}demande/.test(sa(r?.[0])));
   if (iEntete < 0) return null;
-  const m = new Map();
-  lignes.slice(iEntete + 1).forEach(r => { const n = String(r?.[0] ?? "").trim(); if (n) m.set(n, [...(m.get(n) || []), r]); });
+  const m = new Map(); const iId = indexColonneId(lignes[iEntete]); const parId = new Map();
+  lignes.slice(iEntete + 1).forEach(r => {
+    const n = String(r?.[0] ?? "").trim(); if (n) m.set(n, [...(m.get(n) || []), r]);
+    const id = iId >= 0 ? String(r?.[iId] ?? "").trim() : ""; if (id) parId.set(id, [...(parId.get(id) || []), r]);
+  });
+  m.parId = parId; m.iId = iId; m.classeur = wb; m.XLSX = XLSX;
   return m;
 }
 // Même valeur côté appli et côté fichier ? (dates comparées en AAAA-MM-JJ, textes sans accents/espaces)
@@ -441,6 +489,8 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier))
     .filter(d => { if (d.lieeA || d.supprimeeLe) return false; /* doublon relié : la demande gardée porte le suivi pour ce N° */ if (compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
     numero: d.numero,
+    // Clé de la ligne pour le flux n° 2 : « id » = chercher la ligne par la colonne ID appli, « numero » = par le N° (ligne pas encore tatouée).
+    id: d.id, cle: "numero",
     statut: d.statut === "Réalisé – à valider" ? "RÉALISÉ" : d.statut && d.statut !== "Non renseigné" ? d.statut.toUpperCase() : "",
     validation: d.validation === "OUI" ? "OUI" : "", dateValidation: fr(d.dateValidation), validePar: d.validePar || "",
     // Urgence réelle (requalifiée dans l'appli si besoin), au format du fichier.
@@ -453,13 +503,15 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   }));
   // Comparaison avec la copie du fichier : on retire ce qui y est déjà
   // (inutile de le réécrire) et les N° absents du fichier (le flux échouerait).
-  let dejaAJour = 0, absentsFichier = []; const diffs = {}; let exemple = null;
+  let dejaAJour = 0, absentsFichier = []; const diffs = {}; let exemple = null; let copie = null;
   try {
     onProgress("Comparaison avec le fichier Excel…");
-    const copie = await lignesCopieParNumero(token);
+    copie = await lignesCopieParNumero(token);
     if (copie) {
       for (let i = lignes.length - 1; i >= 0; i--) {
-        const rows = copie.get(String(lignes[i].numero).trim());
+        const parIdRows = copie.parId?.get(String(lignes[i].id));
+        if (parIdRows) lignes[i].cle = "id";
+        const rows = parIdRows || copie.get(String(lignes[i].numero).trim());
         if (!rows) { absentsFichier.push(lignes[i].numero); lignes.splice(i, 1); }
         else if (rows.length === 1 && dejaDansFichier(lignes[i], rows[0])) { dejaAJour++; lignes.splice(i, 1); }
         else if (rows.length === 1) { const c = champsDifferents(lignes[i], rows[0]); c.forEach(k => { diffs[k] = (diffs[k] || 0) + 1; }); if (!exemple && c.length) exemple = { numero: lignes[i].numero, champ: c[0], app: String(({ "statut": lignes[i].statut, "date intervention": lignes[i].dateIntervention, "date statut": lignes[i].dateStatut, "intervenant": lignes[i].categorieIntervenant, "contact": lignes[i].intervenant, "commentaire": lignes[i].commentaire, "urgence": lignes[i].urgence, "validation": lignes[i].validation, "date validation": lignes[i].dateValidation, "validé par": lignes[i].validePar })[c[0]] ?? "").slice(0, 60), fichier: String(rows[0][({ "statut": 13, "date intervention": 12, "date statut": 14, "intervenant": 10, "contact": 11, "commentaire": 15, "urgence": 8, "validation": 16, "date validation": 17, "validé par": 18 })[c[0]]] ?? "").slice(0, 60) }; }
@@ -468,7 +520,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   } catch (e) { console.warn("Comparaison avec la copie impossible :", e); }
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
-    numero: d.numero, dateDemande: fr(d.dateDemande), association: d.association === "École" ? "Ecole" : (d.association || ""), site: d.site || "",
+    numero: d.numero, id: d.id, dateDemande: fr(d.dateDemande), association: d.association === "École" ? "Ecole" : (d.association || ""), site: d.site || "",
     demandeur: d.demandeur || "", type: d.type || "", descriptif: d.descriptif || "", local: d.local || "", urgence: d.urgence || "",
     logementOccupe: d.logementOccupe || "", statut: (d.statut || "").toUpperCase(),
   }));
@@ -476,7 +528,18 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), nouvelles, lignes }, null, 1)], FICHIER_MAJ, { type: "application/json" });
   await remplacerPetitFichier(fichier, token, DOSSIER, FICHIER_MAJ);
   await setDoc(REF_SYNCHRO, { dernierDepot: Date.now(), dernierDepotLignes: lignes.length, dernierDepotIgnores: [...new Set(ignorees)], dernierTraitementFlux: depuisTraite || null, dernierDepotDejaAJour: dejaAJour, dernierDepotAbsents: absentsFichier.slice(0, 50) }, { merge: true });
-  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)], dejaAJour, absentsFichier, diffs, exemple };
+  // Tatouage au fil de l'eau (une fois le premier tatouage validé par un humain) :
+  // les lignes sans ID appli reçoivent le leur au prochain passage du flux n° 3.
+  let tatouees = 0;
+  if (etatSynchro?.tatouageActif && copie?.classeur && copie.iId >= 0) {
+    try {
+      const f2 = await demandesDepuisClasseur(copie.classeur, copie.XLSX);
+      const { paires } = pairesTatouage(f2, demandesApp);
+      const sig = hashCourt(JSON.stringify(paires.slice(0, MAX_TATOUAGE).map(p => p.numero + "=" + p.id)));
+      if (paires.length && sig !== etatSynchro.tatouageSig) tatouees = await deposerTatouage(paires, { token, sig });
+    } catch (e) { console.warn("Tatouage ID appli :", e); }
+  }
+  return { envoyees: lignes.length, ignorees: [...new Set(ignorees)], dejaAJour, absentsFichier, diffs, exemple, tatouees };
 }
 
 export async function lireDerniereSynchro() {
@@ -602,4 +665,37 @@ export async function appliquerRecalage({ renumeros, liens, etiquettes }) {
   // Empreintes effacées : la prochaine synchro relit tout proprement.
   try { await setDoc(REF_EMPREINTES, { e: null, le: Date.now() }); } catch { /* */ }
   return ops.length;
+}
+
+// ── Tatouage « ID appli » ────────────────────────────────────────────────
+// Paires (N° de la ligne Excel → ID de la demande) pour les lignes SANS ID.
+// Lien sûr uniquement : N° unique dans l'Excel ET une seule demande de l'appli
+// avec ce N° et le même début de descriptif. Le reste est listé, jamais deviné.
+// Fonction pure : ne modifie rien.
+export function pairesTatouage(fichier, demandesApp) {
+  const emp = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const compte = {}; (fichier || []).forEach(f => { if (f.numero) compte[f.numero] = (compte[f.numero] || 0) + 1; });
+  const actives = (demandesApp || []).filter(d => !d.lieeA && !d.supprimeeLe);
+  const parNum = new Map(); actives.forEach(d => parNum.set(d.numero, [...(parNum.get(d.numero) || []), d]));
+  const idsPris = new Set((fichier || []).map(f => f.idAppli).filter(Boolean));
+  const paires = [], exclues = []; let dejaTatouees = 0;
+  (fichier || []).forEach(f => {
+    if (f.idAppli) { dejaTatouees++; return; }
+    if (!emp(f) || !f.numero || String(f.numero).startsWith("SN-")) return;
+    if (compte[f.numero] > 1) { exclues.push({ f, raison: "N° en double dans l'Excel" }); return; }
+    const c = (parNum.get(f.numero) || []).filter(d => emp(d) === emp(f) && !idsPris.has(d.id));
+    if (c.length === 1) { paires.push({ numero: f.numero, id: c[0].id, site: f.site, descriptif: f.descriptif }); idsPris.add(c[0].id); }
+    else exclues.push({ f, raison: c.length ? "plusieurs demandes identiques dans l'appli" : "aucune demande de l'appli avec ce N° et ce descriptif" });
+  });
+  return { paires, exclues, dejaTatouees };
+}
+// Dépôt de appsmm/Demandes/tatouage-demandes.json pour le flux n° 3 (au plus
+// MAX_TATOUAGE lignes ; la suite part aux envois suivants, automatiquement).
+export async function deposerTatouage(paires, { token = null, sig = null } = {}) {
+  token = token || await getGraphToken(); if (!token) return 0;
+  const lot = (paires || []).slice(0, MAX_TATOUAGE).map(p => ({ numero: p.numero, id: p.id }));
+  const fichier = new File([JSON.stringify({ genereLe: new Date().toISOString(), colonne: ENTETE_ID, lignes: lot }, null, 1)], FICHIER_TATOUAGE, { type: "application/json" });
+  await remplacerPetitFichier(fichier, token, DOSSIER, FICHIER_TATOUAGE);
+  await setDoc(REF_SYNCHRO, { tatouageActif: true, dernierTatouage: Date.now(), dernierTatouageLignes: lot.length, tatouageRestant: Math.max(0, (paires || []).length - lot.length), tatouageSig: sig || hashCourt(JSON.stringify(lot.map(p => p.numero + "=" + p.id))) }, { merge: true });
+  return lot.length;
 }

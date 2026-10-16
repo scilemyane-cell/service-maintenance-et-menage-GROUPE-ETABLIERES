@@ -33,7 +33,7 @@ import { renderPrestataires } from "./prestataires.js";
 import { renderParSite, blocActionHTML, blocRetourHTML, brancherActions, ouvrirSite, ouvrirDemandeSeule, resetVueSites } from "./suivi-demandes-sites.js";
 import { watchUsers } from "./users-data.js";
 import { capturerSaisies, restaurerSaisies } from "./saisies-preservees.js";
-import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier, doublonsDecalage, relierDoublonsDecalage, reprendreSynchro, recalerSurFichier, lireFichierDemandes, appliquerRecalage } from "./demandes-sharepoint.js";
+import { recupererDepuisCopie, deposerMisesAJour, lireDerniereSynchro, regrouperDoublonsImport, comparerAvecFichier, doublonsDecalage, relierDoublonsDecalage, reprendreSynchro, recalerSurFichier, lireFichierDemandes, appliquerRecalage, pairesTatouage, deposerTatouage, MAX_TATOUAGE, ENTETE_ID } from "./demandes-sharepoint.js";
 import { getGraphTokenSilentOnly } from "./graph-auth.js";
 
 const COULEUR_STATUT = { "Réalisé": "var(--teal)", "En cours / à traiter": "var(--gold)", "Annulé": "var(--red)" };
@@ -344,7 +344,7 @@ function permsUtilisateur() {
   // Agents d'entretien / mi-temps avec « Modification » sur la tuile : traitent comme un technicien.
   const isTech = role === "technicien" || (["menage", "mi_temps"].includes(role) && (mountedUser?.permissions || {})["suivi-demandes"] === "write");
   const lectureSeule = !!mountedUser?.lectureSeule || (!!mountedUser?.postePartage && !identite().uid); // poste partagé : choisir son nom d'abord // "Lecture" (cas par cas) : voit le tableau mais ne peut pas traiter
-  return { isEditor, isTech, lectureSeule, peutTraiter: (isEditor || isTech) && !lectureSeule };
+  return { isEditor, isTech, lectureSeule, peutTraiter: (isEditor || isTech) && !lectureSeule, isSuperAdmin: role === "super_admin" };
 }
 
 function objATableau(obj, couleurs) {
@@ -813,7 +813,7 @@ function renderTableau(container) {
     <div class="stack">
       <div class="demandes-source-note">
         📥 Demandes importées depuis le fichier Excel <b>${esc(DEMANDES_SEED_NOM)}</b>${perms.peutTraiter ? " — change le statut ou l'intervenant directement dans le tableau, ça s'enregistre tout de suite." : "."}
-        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn" id="demandes-doublons-decalage" title="Recaler l'appli sur le fichier Excel par le contenu (N° décalés, copies en double)">🚑 Doublons du décalage</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button><span id="demandes-suspendu"></span><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
+        ${perms.isEditor ? `<div class="dsp-synchro"><button type="button" class="dsp-btn" id="demandes-recuperer-sp">📥 Récupérer les demandes du fichier</button><button type="button" class="dsp-btn" id="demandes-deposer-sp">📤 Envoyer les mises à jour vers le fichier</button><button type="button" class="dsp-btn" id="demandes-doublons-decalage" title="Recaler l'appli sur le fichier Excel par le contenu (N° décalés, copies en double)">🚑 Doublons du décalage</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-doublons-import" title="Regrouper les demandes importées deux fois">🧹 Doublons d'import</button>${perms.isSuperAdmin ? `<button type="button" class="dsp-btn dsp-btn-clair" id="demandes-tatouage" title="Écrire l'identifiant de chaque demande dans la colonne « ${ENTETE_ID} » du fichier Excel (aperçu avant écriture)">🏷️ ID appli</button>` : ""}<span id="demandes-suspendu"></span><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-comparer" title="Contrôle de cohérence entre l'appli et le fichier Excel (ne modifie rien)">🔍 Comparer avec le fichier</button><button type="button" class="dsp-btn dsp-btn-clair" id="demandes-reparer" title="Remettre les commentaires et actions sur la bonne demande (N° en double)">🩹 Réparer les suivis mélangés</button><span id="demandes-synchro-statut" class="dsp-statut">${messageSynchro}</span></div>` : ""}
       </div>
 
       ${toggleVueHTML()}
@@ -930,7 +930,7 @@ function renderTableau(container) {
       msg("⏳ Comparaison avec le fichier (lecture seule)…");
       const r = await comparerAvecFichier(await toutesLesDemandesPourOutil(), { onProgress: (t) => msg("⏳ " + esc(t)) });
       if (!r) { msg(""); return; }
-      msg(`🔍 Fichier : ${r.total} lignes · appli : ${r.totalApp} demandes · ${r.manquantes.length} absente(s) de l'appli · ${r.statutDiff.length} statut(s) différent(s).`);
+      msg(`🔍 Fichier : ${r.total} lignes · appli : ${r.totalApp} demandes · ${r.manquantes.length} absente(s) de l'appli · ${r.statutDiff.length} statut(s) différent(s)${r.colonneId ? ` · 🏷️ ${r.tatouees} ligne(s) avec ID appli` : ""}.`);
       ouvrirComparaison(r);
     } catch (err) { console.error("Comparaison :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
@@ -1017,6 +1017,46 @@ function renderTableau(container) {
         } catch (err) { console.error(err); ev.target.disabled = false; ev.target.textContent = "🚑 Valider le recalage"; alert("❌ " + (err?.message || err)); }
       });
     } catch (err) { console.error(err); msg(erreurSp(err)); }
+    finally { e.target.disabled = false; }
+  });
+  document.getElementById("demandes-tatouage")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      const su = (await lireDerniereSynchro())?.suspendu;
+      if (su) { alert("⛔ La synchro est suspendue (N° décalés). Recale d'abord l'appli sur le fichier (🚑 Doublons du décalage), puis reviens ici : le tatouage se fait sur des N° justes."); return; }
+      msg("⏳ Lecture du fichier Excel et des demandes (aperçu, rien n'est écrit)…");
+      const fichier = await lireFichierDemandes(); if (!fichier) { msg(""); return; }
+      if (!fichier.colonneId) {
+        msg("");
+        alert(`La colonne « ${ENTETE_ID} » n'existe pas encore dans le fichier Excel.\n\n1. Dans l'Excel (tableau des demandes), ajoute une colonne TOUT À DROITE du tableau, avec l'en-tête exact : ${ENTETE_ID}\n2. Attends que la copie appsmm se mette à jour (quelques minutes)\n3. Reviens cliquer sur 🏷️ ID appli.`);
+        return;
+      }
+      const toutes = await toutesLesDemandesPourOutil();
+      const r = pairesTatouage(fichier, toutes);
+      msg(`🏷️ Aperçu : ${r.dejaTatouees} ligne(s) déjà avec ID, ${r.paires.length} à tatouer, ${r.exclues.length} non tatouée(s) (à vérifier).`);
+      const court = (t, n = 55) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
+      const m = document.createElement("div"); m.className = "ndm-fond";
+      m.innerHTML = `<div class="ndm" style="max-width:760px;max-height:88vh;overflow:auto">
+        <div class="ndm-tete"><h3>🏷️ ID appli — aperçu avant écriture</h3><button type="button" class="ndm-x" data-x>✕</button></div>
+        <p class="hint">🔒 Rien n'est écrit tant que tu n'as pas validé. Une sauvegarde complète est téléchargée avant. L'appli écrit, dans la colonne « ${esc(ENTETE_ID)} », l'identifiant de la demande sur la ligne qui a <b>le même N° et le même descriptif</b>. Les cas douteux ne sont jamais devinés.</p>
+        <p style="font-size:13px">✅ <b>${r.dejaTatouees}</b> ligne(s) ont déjà leur ID · 🏷️ <b>${r.paires.length}</b> à écrire${r.paires.length > MAX_TATOUAGE ? ` (par lots de ${MAX_TATOUAGE} : le 1er part maintenant, la suite automatiquement aux envois suivants)` : ""} · ❓ <b>${r.exclues.length}</b> non tatouée(s)</p>
+        <details open><summary><b>🏷️ ${r.paires.length} ID à écrire</b></summary><ul style="font-size:12px">${r.paires.slice(0, 400).map(p => `<li><b>${esc(p.numero)}</b> · ${esc(p.site || "")} — ${esc(court(p.descriptif))} → <code>${esc(p.id)}</code></li>`).join("")}${r.paires.length > 400 ? `<li>… et ${r.paires.length - 400} autre(s)</li>` : ""}</ul></details>
+        <details><summary><b>❓ ${r.exclues.length} ligne(s) non tatouée(s)</b> — restent rapprochées par le N° comme aujourd'hui</summary><ul style="font-size:12px">${r.exclues.slice(0, 200).map(x => `<li><b>${esc(x.f.numero)}</b> · ${esc(x.f.site || "")} — ${esc(court(x.f.descriptif))} <i>(${esc(x.raison)})</i></li>`).join("")}</ul></details>
+        <div class="ndm-btns"><button type="button" class="dps-annuler" data-x>Fermer sans rien changer</button>${r.paires.length ? `<button type="button" class="dps-enregistrer" data-ok>🏷️ Valider l'écriture des ID</button>` : ""}</div>
+      </div>`;
+      document.body.append(m);
+      m.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => m.remove()));
+      m.querySelector("[data-ok]")?.addEventListener("click", async (ev) => {
+        if (!confirm(`Confirmer ?\n• Sauvegarde téléchargée d'abord\n• ${Math.min(r.paires.length, MAX_TATOUAGE)} ID déposés maintenant pour le flux Power Automate n° 3${r.paires.length > MAX_TATOUAGE ? `\n• ${r.paires.length - MAX_TATOUAGE} autres aux envois suivants` : ""}\n• Ensuite, chaque nouvelle demande recevra son ID automatiquement`)) return;
+        ev.target.disabled = true; ev.target.textContent = "⏳ Dépôt…";
+        try {
+          sauvegarderDemandes(toutes);
+          const n = await deposerTatouage(r.paires);
+          m.remove();
+          msg(`✓ ${n} ID déposé(s) (tatouage-demandes.json). Le flux Power Automate n° 3 les écrira dans la colonne « ${esc(ENTETE_ID)} ». Sauvegarde téléchargée.`);
+        } catch (err) { console.error(err); ev.target.disabled = false; ev.target.textContent = "🏷️ Valider l'écriture des ID"; alert("❌ " + (err?.message || err)); }
+      });
+    } catch (err) { console.error("Tatouage :", err); msg(erreurSp(err)); }
     finally { e.target.disabled = false; }
   });
   document.getElementById("demandes-doublons-import")?.addEventListener("click", async (e) => {
