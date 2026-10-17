@@ -486,7 +486,13 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   // → on ne les envoie pas, ils sont signalés à part.
   const compteNum = {}; (demandesApp || []).filter(d => !d.lieeA).forEach(d => { compteNum[d.numero] = (compteNum[d.numero] || 0) + 1; });
   const ignorees = [];
-  const lignes = (demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier))
+  // Toutes les demandes suivies dans l'appli sont candidates (pas seulement
+  // les 10 derniers jours) : la comparaison avec la copie ci-dessous ne garde
+  // que celles dont le fichier DIFFÈRE. Ainsi une clôture perdue côté Excel
+  // (fichier restauré, envoi bloqué par un doublon…) est renvoyée d'office.
+  // Sans copie lisible, on retombe sur la fenêtre récente (quota du flux).
+  const recentes = new Set((demandesApp || []).filter(d => d.dateMaj && ms(d) >= depuis).map(d => d.id));
+  const lignes = (demandesApp || []).filter(d => d.dateMaj && !String(d.numero).startsWith("SN-") && !(d.creeDansApp && !d.vuDansFichier))
     .filter(d => { if (d.lieeA || d.supprimeeLe) return false; /* doublon relié : la demande gardée porte le suivi pour ce N° */ if (compteNum[d.numero] > 1) { ignorees.push(d.numero); return false; } return true; }).map(d => ({
     numero: d.numero,
     // Clé de la ligne pour le flux n° 2 : « id » = chercher la ligne par la colonne ID appli, « numero » = par le N° (ligne pas encore tatouée).
@@ -512,12 +518,20 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
         const parIdRows = copie.parId?.get(String(lignes[i].id));
         if (parIdRows) lignes[i].cle = "id";
         const rows = parIdRows || copie.get(String(lignes[i].numero).trim());
-        if (!rows) { absentsFichier.push(lignes[i].numero); lignes.splice(i, 1); }
+        if (!rows) { if (recentes.has(lignes[i].id)) absentsFichier.push(lignes[i].numero); lignes.splice(i, 1); }
         else if (rows.length === 1 && dejaDansFichier(lignes[i], rows[0])) { dejaAJour++; lignes.splice(i, 1); }
         else if (rows.length === 1) { const c = champsDifferents(lignes[i], rows[0]); c.forEach(k => { diffs[k] = (diffs[k] || 0) + 1; }); if (!exemple && c.length) exemple = { numero: lignes[i].numero, champ: c[0], app: String(({ "statut": lignes[i].statut, "date intervention": lignes[i].dateIntervention, "date statut": lignes[i].dateStatut, "intervenant": lignes[i].categorieIntervenant, "contact": lignes[i].intervenant, "commentaire": lignes[i].commentaire, "urgence": lignes[i].urgence, "validation": lignes[i].validation, "date validation": lignes[i].dateValidation, "validé par": lignes[i].validePar })[c[0]] ?? "").slice(0, 60), fichier: String(rows[0][({ "statut": 13, "date intervention": 12, "date statut": 14, "intervenant": 10, "contact": 11, "commentaire": 15, "urgence": 8, "validation": 16, "date validation": 17, "validé par": 18 })[c[0]]] ?? "").slice(0, 60) }; }
       }
     }
   } catch (e) { console.warn("Comparaison avec la copie impossible :", e); }
+  if (!copie) { for (let i = lignes.length - 1; i >= 0; i--) if (!recentes.has(lignes[i].id)) lignes.splice(i, 1); }
+  // Plafond par dépôt (quota d'actions du flux) : les plus récemment modifiées d'abord, la suite au dépôt suivant.
+  const MAX_ENVOI = 250;
+  if (lignes.length > MAX_ENVOI) {
+    const quand = new Map((demandesApp || []).map(d => [d.id, ms(d)]));
+    lignes.sort((a, b) => (quand.get(b.id) || 0) - (quand.get(a.id) || 0));
+    lignes.length = MAX_ENVOI;
+  }
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
   const nouvelles = (demandesApp || []).filter(d => d.creeDansApp && !d.vuDansFichier).map(d => ({
     numero: d.numero, id: d.id, dateDemande: fr(d.dateDemande), association: d.association === "École" ? "Ecole" : (d.association || ""), site: d.site || "",
