@@ -3572,3 +3572,39 @@ body.clo-ouvert{overflow:hidden}
 .dps-version-prec div{margin:6px 0}
 .dps-version-prec button{border:1px solid #fb923c;background:#fff;border-radius:8px;padding:5px 10px;font-weight:700;cursor:pointer}
 .dps-suppr-btn{color:#b42318!important;border-color:#f3b3b3!important}
+
+/* Stats demandes : rapport direction (synthèse, comparatif, tableaux, impression) */
+.dst-imprimer{align-self:flex-end;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;font:700 12px "Montserrat",system-ui,sans-serif;padding:8px 14px;border-radius:99px;cursor:pointer}
+.dst-imprimer:hover{background:rgba(255,255,255,.2)}
+.dst-ev{font-size:11.5px;font-weight:700;color:var(--text-dim)}
+.dst-ev.bon,.dst .bon{color:#0a7f0a}.dst-ev.mauvais,.dst .mauvais{color:var(--dst-crit)}
+html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .bon{color:#5fd35f}
+.dst-kpi .dst-ev{color:rgba(255,255,255,.62)}.dst-kpi .dst-ev.bon{color:#8fe3b0}.dst-kpi .dst-ev.mauvais{color:#ffb199}
+.dst-synthese{border-left:5px solid var(--dst-s1)}
+.dst-synthese ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:9px}
+.dst-synthese li{font-size:14px;line-height:1.55;color:var(--text)}
+.dst-synthese li::marker{color:var(--dst-s1)}
+.dst-tab{width:100%;border-collapse:collapse;font-size:13px}
+.dst-tab th{font:800 10.5px "Montserrat",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);text-align:right;padding:0 8px 10px;border-bottom:1px solid var(--border);vertical-align:bottom}
+.dst-tab th small{display:block;font-weight:600;text-transform:none;letter-spacing:0;font-size:10.5px}
+.dst-tab th:first-child,.dst-tab td:first-child{text-align:left;padding-left:2px}
+.dst-tab td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:right;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dst-tab td:first-child{white-space:normal}
+.dst-tab tbody tr:last-child td{border-bottom:0}
+.dst-tab .dst-tot td{font-weight:800;border-top:2px solid var(--border);background:var(--dst-track)}
+.dst-comp .dst-c0{font-weight:800;background:color-mix(in srgb,var(--dst-s1) 7%,transparent)}
+.dst-pt{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+.dst-part{display:inline-block;width:60px;height:8px;border-radius:99px;background:var(--dst-track);margin-right:8px;vertical-align:middle;overflow:hidden}
+.dst-part i{display:block;height:100%;border-radius:99px}
+.dst-carte{overflow-x:auto}
+.dst-print-only{display:none}
+@media (max-width:760px){.dst-tab{font-size:12px}.dst-tab td,.dst-tab th{padding-left:5px;padding-right:5px}.dst-imprimer{display:none}}
+@media print{
+  .dst.print-fiche{position:static !important;border:0 !important;padding:0 !important}
+  .dst-impression .demandes-vue-toggle,.dst-impression .dst-filtres,.dst-impression .dst-alertes,.dst-impression .dst-mois-nav,.dst-impression .dst-mois{display:none !important}
+  .dst-impression .dst-print-only{display:block !important}
+  .dst-impression .dst-carte,.dst-impression .dst-hero{break-inside:avoid;box-shadow:none !important}
+  .dst-impression .dst-hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .dst-impression .dst-carte{border:1px solid #ccc !important;background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .dst-impression{gap:12px !important}
+}
