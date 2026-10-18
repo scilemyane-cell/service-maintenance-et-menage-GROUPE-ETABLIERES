@@ -61,10 +61,10 @@ export async function mesPrets(uid) {
   const s = await getDocs(query(collection(db, PRETS), where("appareilUid", "==", uid)));
   return s.docs.map(d => ({ id: d.id, ...d.data() }));
 }
-export async function emprunter({ uid, cle, nom, retourMax }) {
+export async function emprunter({ uid, cle, nom, retourMax, pretePour = "" }) {
   await addDoc(collection(db, PRETS), {
     type: "temporaire", statut: "en-cours", appareilUid: uid, cleId: cle.id, cleNom: cle.nom || "", cleRepere: cle.repere || "", cleType: cle.type || "Clé",
-    siteId: cle.siteId || "", siteNom: cle.siteNom || "", personneNom: nom, personneEmail: "", sortieLe: Date.now(), retourMax: retourMax || null,
+    siteId: cle.siteId || "", siteNom: cle.siteNom || "", personneNom: nom, personneEmail: "", pretePour: pretePour || "", sortieLe: Date.now(), retourMax: retourMax || null,
   });
   await updateDoc(doc(db, CLES, cle.id), { sortis: increment(1) });
 }

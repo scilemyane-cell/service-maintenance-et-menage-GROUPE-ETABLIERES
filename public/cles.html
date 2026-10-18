@@ -71,7 +71,7 @@
         </div>
       </div>
       ${prets.length ? `<div class="clg-carte"><h3>Mes clés en cours</h3>${prets.map(p => `
-        <div class="clg-pret ${enRetard(p) ? "retard" : ""}"><div><b>${esc(p.cleNom)}</b>${p.cleRepere ? ` <small>n° ${esc(p.cleRepere)}</small>` : ""}<small>${esc(p.siteNom || "")} · sortie ${quand(p.sortieLe)}</small>
+        <div class="clg-pret ${enRetard(p) ? "retard" : ""}"><div><b>${esc(p.cleNom)}</b>${p.cleRepere ? ` <small>n° ${esc(p.cleRepere)}</small>` : ""}<small>${esc(p.siteNom || "")} · sortie ${quand(p.sortieLe)}</small>${p.pretePour ? `<small>👤 prêtée à ${esc(p.pretePour)}</small>` : ""}
           ${p.retourMax ? `<small class="${enRetard(p) ? "rouge" : ""}">${enRetard(p) ? "⚠️ en retard — " : ""}à rendre avant ${quand(p.retourMax)}</small>` : ""}</div>
           ${p.type === "temporaire" ? `<button class="clg-mini" data-rendre="${p.id}">Je la rends</button>` : `<small>remise longue durée</small>`}</div>`).join("")}</div>` : ""}
       <p class="clg-pied">Ce n'est pas toi ? <a href="#" id="clg-changer">Changer de nom</a></p>`);
@@ -107,17 +107,34 @@
         <label><input type="radio" name="retour" value="autre"><span>Autre date</span></label>
       </div>
       <input type="date" id="clg-date" class="clg-date" style="display:none" min="${ce.toISOString().slice(0, 10)}">
+      <h3>Pour qui ?</h3>
+      <div class="clg-dates">
+        <label><input type="radio" name="pour" value="moi" checked><span>Pour moi</span></label>
+        <label><input type="radio" name="pour" value="autre"><span>Je la prête à quelqu'un</span></label>
+      </div>
+      <div id="clg-autre" style="display:none;flex-direction:column;gap:10px">
+        <label class="clg-l">Nom de la personne<input id="clg-pour-nom" placeholder="ex. Jean Dupont"></label>
+        <label class="clg-l">Entreprise / service <small>(facultatif)</small><input id="clg-pour-ste" placeholder="ex. Électricité Martin"></label>
+        <p class="hint" style="margin:0">Tu restes responsable de la clé jusqu'à son retour.</p>
+      </div>
       <button class="clg-btn" id="clg-valider">Je prends la clé</button>` : ""}
       <button class="clg-btn clair" id="clg-retour">← Retour</button>
     </div>`);
     document.getElementById("clg-retour").onclick = () => accueil();
+    app.querySelectorAll('[name="pour"]').forEach(r => r.onchange = () => { document.getElementById("clg-autre").style.display = app.querySelector('[name="pour"]:checked').value === "autre" ? "flex" : "none"; });
     app.querySelectorAll('[name="retour"]').forEach(r => r.onchange = () => { document.getElementById("clg-date").style.display = r.value === "autre" && r.checked ? "block" : "none"; });
     document.getElementById("clg-valider")?.addEventListener("click", async () => {
       const id = app.querySelector('[name="cle"]:checked')?.value; if (!id) { alert("Choisis une clé."); return; }
       let r = app.querySelector('[name="retour"]:checked').value;
       if (r === "autre") { const v = document.getElementById("clg-date").value; if (!v) { alert("Choisis la date de retour."); return; } const [y, m, d] = v.split("-").map(Number); r = new Date(y, m - 1, d, 18, 0).getTime(); }
       const cle = cles.find(c => c.id === id);
-      try { await emprunter({ uid, cle, nom: `${moi.prenom} ${moi.nom}`, retourMax: Number(r) }); accueil(`✅ C'est noté ${esc(moi.prenom)} : « ${esc(cle.nom)} » à rendre avant ${quand(Number(r))}. Rescanne le QR code pour la rendre.`); }
+      let pretePour = "";
+      if (app.querySelector('[name="pour"]:checked').value === "autre") {
+        const n = document.getElementById("clg-pour-nom").value.trim(), st = document.getElementById("clg-pour-ste").value.trim();
+        if (!n) { alert("Indique le nom de la personne à qui tu prêtes la clé."); return; }
+        pretePour = st ? `${n} (${st})` : n;
+      }
+      try { await emprunter({ uid, cle, nom: `${moi.prenom} ${moi.nom}`, retourMax: Number(r), pretePour }); accueil(`✅ C'est noté ${esc(moi.prenom)} : « ${esc(cle.nom)} »${pretePour ? ` prêtée à ${esc(pretePour)}` : ""}, à rendre avant ${quand(Number(r))}. Rescanne le QR code pour la rendre.`); }
       catch (e) { erreur(e); }
     });
   }

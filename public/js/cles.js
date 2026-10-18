@@ -29,7 +29,7 @@ function mailSignature(p) {
 }
 function mailRelance(p) {
   return outlook(p.personneEmail || "", `Rappel — retour de la clé « ${p.cleNom} »`,
-    `Bonjour ${prenom(p.personneNom)},\n\nSauf erreur, la clé « ${p.cleNom} »${p.siteNom ? ` (${p.siteNom})` : ""} sortie le ${jour(p.sortieLe)} devait être rendue${p.retourMax ? ` le ${jour(p.retourMax)}` : ""}.\n\nMerci de la rapporter dès que possible${p.type === "temporaire" ? " et de rescanner le QR code du tableau à clés pour enregistrer le retour" : ""}.\n\nCordialement,\nService Maintenance`);
+    `Bonjour ${prenom(p.personneNom)},\n\nSauf erreur, la clé « ${p.cleNom} »${p.siteNom ? ` (${p.siteNom})` : ""} sortie le ${jour(p.sortieLe)}${p.pretePour ? ` et prêtée à ${p.pretePour}` : ""} devait être rendue${p.retourMax ? ` le ${jour(p.retourMax)}` : ""}.\n\nMerci de la rapporter dès que possible${p.type === "temporaire" ? " et de rescanner le QR code du tableau à clés pour enregistrer le retour" : ""}.\n\nCordialement,\nService Maintenance`);
 }
 
 export async function mountCles(container, user) {
@@ -48,7 +48,7 @@ function rendu(container, par) {
   const encours = state.prets.filter(p => p.statut !== "rendue").sort((a, b) => (enRetard(b) - enRetard(a)) || (a.retourMax || 9e15) - (b.retourMax || 9e15));
   const retards = encours.filter(enRetard), aSigner = encours.filter(p => p.statut === "a-signer");
   const r = ui.recherche.trim().toLowerCase();
-  const filtre = (p) => !r || [p.cleNom, p.personneNom, p.siteNom, p.cleRepere].some(x => String(x || "").toLowerCase().includes(r));
+  const filtre = (p) => !r || [p.cleNom, p.personneNom, p.pretePour, p.siteNom, p.cleRepere].some(x => String(x || "").toLowerCase().includes(r));
   const nomSite = (id) => state.sites.find(s => s.id === id)?.nom || "";
   const parSite = new Map(); state.cles.forEach(c => { const k = c.siteId || ""; parSite.set(k, [...(parSite.get(k) || []), c]); });
   const sitesTries = [...parSite.keys()].sort((a, b) => (nomSite(a) || "zzz").localeCompare(nomSite(b) || "zzz"));
@@ -57,7 +57,7 @@ function rendu(container, par) {
 
   const ligneEncours = (p) => `<tr class="${enRetard(p) ? "cl-retard" : ""}">
     <td><b>${esc(p.cleNom)}</b>${p.cleRepere ? `<small>n° ${esc(p.cleRepere)}</small>` : ""}<small>${esc(p.siteNom || "")}</small></td>
-    <td><b>${esc(p.personneNom)}</b>${p.personneEmail ? `<small>${esc(p.personneEmail)}</small>` : ""}</td>
+    <td><b>${esc(p.personneNom)}</b>${p.pretePour ? `<small>👤 prêtée à <b>${esc(p.pretePour)}</b></small>` : ""}${p.personneEmail ? `<small>${esc(p.personneEmail)}</small>` : ""}</td>
     <td>${p.type === "longue" ? "Longue durée" : "Temporaire (QR)"}</td>
     <td>${jourH(p.sortieLe)}</td><td>${p.retourMax ? jour(p.retourMax) : "—"}</td><td>${badge(p)}</td>
     <td class="cl-act">
@@ -94,12 +94,12 @@ function rendu(container, par) {
           if (ui.edition === c.id) return `<tr><td colspan="6"><div class="cl-form"><label>Nom<input id="cl-e-nom" value="${esc(c.nom)}"></label><label>Type<select id="cl-e-type">${TYPES_CLE.map(t => `<option ${t === c.type ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>N° / repère<input id="cl-e-rep" value="${esc(c.repere || "")}"></label><label>Site<select id="cl-e-site">${optSites(c.siteId)}</select></label><label>Exemplaires<input id="cl-e-ex" type="number" min="1" value="${Number(c.exemplaires) || 1}"></label><label class="cl-cb"><input type="checkbox" id="cl-e-qr" ${c.pretable !== false ? "checked" : ""}> Empruntable par QR</label><button class="nav-btn cl-ok" data-enreg="${c.id}">Enregistrer</button><button class="nav-btn" data-annuler>Annuler</button><button class="nav-btn cl-sup" data-supprimer="${c.id}">🗑 Supprimer</button></div></td></tr>`;
           return `<tr><td><b>${esc(c.nom)}</b>${c.repere ? `<small>n° ${esc(c.repere)}</small>` : ""}${c.pretable === false ? `<small>remise longue durée uniquement</small>` : ""}</td><td>${esc(c.type || "Clé")}</td><td>${Number(c.exemplaires) || 1}</td>
             <td><b class="${disponibles(c) ? "" : "cl-zero"}">${disponibles(c)}</b></td>
-            <td>${sorties.map(p => `<span class="cl-det ${enRetard(p) ? "ret" : ""}">${esc(p.personneNom)}${p.type === "longue" ? " 🖊" : ""}</span>`).join(" ") || "—"}</td>
+            <td>${sorties.map(p => `<span class="cl-det ${enRetard(p) ? "ret" : ""}">${esc(p.personneNom)}${p.pretePour ? ` → ${esc(p.pretePour)}` : ""}${p.type === "longue" ? " 🖊" : ""}</span>`).join(" ") || "—"}</td>
             <td class="cl-act"><button class="nav-btn" data-remise="${c.id}" ${disponibles(c) ? "" : "disabled"}>✍️ Remise longue durée</button><button class="nav-btn" data-edit="${c.id}">✏️</button></td></tr>`;
         }).join("")}</tbody></table></div></div>`).join("") || `<p class="hint">Aucune clé enregistrée. Ajoute la première ci-dessus.</p>`}` : ""}
 
     ${ui.vue === "historique" ? (() => { const h = state.prets.filter(p => p.statut === "rendue").filter(filtre).sort((a, b) => (b.retourLe || 0) - (a.retourLe || 0)).slice(0, 300);
-      return `<div class="form-card">${h.length ? `<div class="cl-scroll"><table class="cl-tab"><thead><tr><th>Clé</th><th>Personne</th><th>Type</th><th>Sortie</th><th>Rendue</th><th>Durée</th></tr></thead><tbody>${h.map(p => `<tr class="${p.retourMax && p.retourLe > p.retourMax ? "cl-retard" : ""}"><td><b>${esc(p.cleNom)}</b><small>${esc(p.siteNom || "")}</small></td><td>${esc(p.personneNom)}</td><td>${p.type === "longue" ? "Longue durée" : "Temporaire"}</td><td>${jourH(p.sortieLe)}</td><td>${jourH(p.retourLe)}${p.retourMax && p.retourLe > p.retourMax ? `<small>rendue en retard</small>` : ""}</td><td>${Math.max(0, Math.round((p.retourLe - p.sortieLe) / 86400000))} j</td></tr>`).join("")}</tbody></table></div>` : `<p class="hint">Aucun retour enregistré pour l'instant.</p>`}</div>`; })() : ""}
+      return `<div class="form-card">${h.length ? `<div class="cl-scroll"><table class="cl-tab"><thead><tr><th>Clé</th><th>Personne</th><th>Type</th><th>Sortie</th><th>Rendue</th><th>Durée</th></tr></thead><tbody>${h.map(p => `<tr class="${p.retourMax && p.retourLe > p.retourMax ? "cl-retard" : ""}"><td><b>${esc(p.cleNom)}</b><small>${esc(p.siteNom || "")}</small></td><td>${esc(p.personneNom)}${p.pretePour ? `<small>👤 prêtée à ${esc(p.pretePour)}</small>` : ""}</td><td>${p.type === "longue" ? "Longue durée" : "Temporaire"}</td><td>${jourH(p.sortieLe)}</td><td>${jourH(p.retourLe)}${p.retourMax && p.retourLe > p.retourMax ? `<small>rendue en retard</small>` : ""}</td><td>${Math.max(0, Math.round((p.retourLe - p.sortieLe) / 86400000))} j</td></tr>`).join("")}</tbody></table></div>` : `<p class="hint">Aucun retour enregistré pour l'instant.</p>`}</div>`; })() : ""}
 
     ${ui.vue === "qr" ? `<div class="form-card"><h3>📱 QR codes des tableaux à clés</h3><p class="hint">Imprime le QR du site et colle-le sur le tableau ou la boîte à clés. La personne le scanne avec son téléphone : la 1ʳᵉ fois elle donne son nom, ensuite le téléphone est reconnu (« Bonjour Fabrice, tu prends ou tu rends une clé ? »), avec une date de retour et un rappel au scan suivant si elle est dépassée.</p>
       <div class="cl-qrs">${[["", "Tous les sites"], ...sitesTries.filter(Boolean).map(s => [s, nomSite(s)])].map(([sid, nom]) => `
