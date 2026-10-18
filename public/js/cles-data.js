@@ -10,6 +10,7 @@
 //        (l'identifiant du document = jeton secret du lien).
 //  • « cles-appareils » : le téléphone reconnu (nom/prénom saisis une fois).
 import { db } from "./firebase-init.js";
+import { engagementTexte, VERSION_ENGAGEMENT } from "./cles-attestation.js";
 import { collection, doc, addDoc, setDoc, updateDoc, getDoc, getDocs, onSnapshot, query, where, increment } from "./firestore-compte.js";
 
 export const CLES = "cles", PRETS = "cles-prets", APPAREILS = "cles-appareils";
@@ -33,12 +34,13 @@ export const creerCle = (data) => addDoc(collection(db, CLES), { ...data, sortis
 export const modifierCle = (id, data) => updateDoc(doc(db, CLES, id), data);
 export const supprimerCle = (id, par) => updateDoc(doc(db, CLES, id), { supprimeLe: Date.now(), supprimePar: par || "" });
 
-export async function creerRemiseLongue({ cle, nom, email, retourMax, par, note }) {
+export async function creerRemiseLongue({ cle, nom, email, retourMax, par, note, fonction = "", service = "", motif = "" }) {
   const t = jeton();
   await setDoc(doc(db, PRETS, t), {
     type: "longue", statut: "a-signer", cleId: cle.id, cleNom: cle.nom || "", cleRepere: cle.repere || "", cleType: cle.type || "Clé",
     siteId: cle.siteId || "", siteNom: cle.siteNom || "", personneNom: nom, personneEmail: email, note: note || "",
-    sortieLe: Date.now(), retourMax: retourMax || null, creePar: par || "", appareilUid: "",
+    personneFonction: fonction, personneService: service, motif, engagement: engagementTexte(cle.type || "Clé"), engagementVersion: VERSION_ENGAGEMENT,
+    sortieLe: Date.now(), creeLe: Date.now(), retourMax: retourMax || null, creePar: par || "", appareilUid: "",
   });
   await updateDoc(doc(db, CLES, cle.id), { sortis: increment(1) });
   return t;
@@ -75,4 +77,4 @@ export async function rendre(p, nom) {
 
 // ---------- signature d'une remise longue durée (page cle-signature.html) ----------
 export async function lirePret(t) { const s = await getDoc(doc(db, PRETS, t)); return s.exists() ? { id: s.id, ...s.data() } : null; }
-export const signer = (t, { signature, nom, uid }) => updateDoc(doc(db, PRETS, t), { statut: "en-cours", signature, signeLe: Date.now(), signeNom: nom, signeAppareil: uid || "" });
+export const signer = (t, { signature, nom, uid, signeLe, preuve }) => updateDoc(doc(db, PRETS, t), { statut: "en-cours", signature, signeLe: signeLe || Date.now(), signeNom: nom, signeAppareil: uid || "", preuve: preuve || {} });

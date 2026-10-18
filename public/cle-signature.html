@@ -1,66 +1,91 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="clair">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Remise de clé — signature</title>
-<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"clair";}catch(e){}</script>
+<title>Attestation de remise de clé — signature</title>
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="clg-body">
-<div id="app"><div class="clg"><div class="clg-carte"><p class="hint">Chargement…</p></div></div></div>
+<body class="sg-body">
+<div id="app"><div class="sg"><p class="hint">Chargement…</p></div></div>
 <script type="module">
   import { auth } from "./js/firebase-init.js";
   import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { lirePret, signer } from "./js/cles-data.js";
+  import { attestationHTML, engagementTexte, reference, infosAppareil, empreinte, contenuScelle } from "./js/cles-attestation.js";
 
+  const ouvertLe = Date.now();
   const t = new URLSearchParams(location.search).get("t") || "";
   const app = document.getElementById("app");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const date = (ms) => new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-  const cadre = (h) => { app.innerHTML = `<div class="clg"><div class="clg-tete"><span>Groupe Établières · Service Maintenance</span><b>🔑 Remise de clé</b></div>${h}</div>`; };
+  const message = (titre, txt) => { app.innerHTML = `<div class="sg"><div class="sg-doc sg-msg"><h1>${titre}</h1><p>${txt}</p></div></div>`; };
 
-  function pad(canvas) {
-    const ctx = canvas.getContext("2d"); let dessine = false, vide = true, last = null;
-    const ajuster = () => { const r = canvas.getBoundingClientRect(), k = window.devicePixelRatio || 1; canvas.width = r.width * k; canvas.height = r.height * k; ctx.setTransform(k, 0, 0, k, 0, 0); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, r.width, r.height); ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#0b1d3a"; vide = true; };
-    ajuster();
+  function pad(canvas, zone) {
+    const ctx = canvas.getContext("2d"); let dessine = false, vide = true, last = null, onChange = () => {};
+    const ajuster = () => { const r = canvas.getBoundingClientRect(), k = window.devicePixelRatio || 1; canvas.width = r.width * k; canvas.height = r.height * k; ctx.setTransform(k, 0, 0, k, 0, 0); ctx.clearRect(0, 0, r.width, r.height); ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#0b1d3a"; vide = true; zone.classList.remove("rempli"); onChange(); };
+    ajuster(); window.addEventListener("resize", () => { if (vide) ajuster(); });
     const pos = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     canvas.addEventListener("pointerdown", (e) => { dessine = true; last = pos(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
-    canvas.addEventListener("pointermove", (e) => { if (!dessine) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(...last); ctx.lineTo(...p); ctx.stroke(); last = p; vide = false; e.preventDefault(); });
-    ["pointerup", "pointercancel", "pointerleave"].forEach(ev => canvas.addEventListener(ev, () => { dessine = false; }));
-    return { effacer: ajuster, vide: () => vide, image: () => { const c = document.createElement("canvas"); c.width = 500; c.height = Math.round(500 * canvas.height / canvas.width); const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(canvas, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } };
+    canvas.addEventListener("pointermove", (e) => { if (!dessine) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(...last); ctx.lineTo(...p); ctx.stroke(); last = p; if (vide) { vide = false; zone.classList.add("rempli"); onChange(); } e.preventDefault(); });
+    ["pointerup", "pointercancel"].forEach(ev => canvas.addEventListener(ev, () => { dessine = false; }));
+    return { effacer: ajuster, vide: () => vide, set onChange(f) { onChange = f; },
+      image: () => { const c = document.createElement("canvas"); c.width = 600; c.height = Math.round(600 * canvas.height / canvas.width); const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(canvas, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.75); } };
   }
 
   async function afficher() {
-    let p; try { p = await lirePret(t); } catch (e) { return cadre(`<div class="clg-carte"><h2>Lien invalide</h2><p>${esc(e.message)}</p></div>`); }
-    if (!t || !p || p.type !== "longue") return cadre(`<div class="clg-carte"><h2>Lien invalide</h2><p>Ce lien de signature n'existe pas ou a expiré. Demande au service maintenance de te le renvoyer.</p></div>`);
-    if (p.statut !== "a-signer") return cadre(`<div class="clg-carte"><h2>✅ Déjà signée</h2><p>La remise de « ${esc(p.cleNom)} » a été signée${p.signeLe ? ` le ${date(p.signeLe)}` : ""}${p.signeNom ? ` par ${esc(p.signeNom)}` : ""}.</p>${p.statut === "rendue" ? `<p>La clé a été rendue${p.retourLe ? ` le ${date(p.retourLe)}` : ""}.</p>` : ""}</div>`);
-    cadre(`<div class="clg-carte">
-      <h2>Bonjour ${esc((p.personneNom || "").split(" ")[0])},</h2>
-      <p>Le service maintenance te remet :</p>
-      <div class="clg-recap"><b>${esc(p.cleType || "Clé")} — ${esc(p.cleNom)}</b>${p.cleRepere ? `<span>N° / repère : ${esc(p.cleRepere)}</span>` : ""}${p.siteNom ? `<span>Site : ${esc(p.siteNom)}</span>` : ""}
-        <span>Remise le ${date(p.sortieLe)}${p.retourMax ? ` · à restituer au plus tard le ${date(p.retourMax)}` : " · durée indéterminée"}</span>${p.note ? `<span>${esc(p.note)}</span>` : ""}</div>
-      <p class="clg-engagement">Je soussigné(e) reconnais avoir reçu ${p.cleType === "Badge" ? "ce badge" : "cette clé"}. Je m'engage à ne pas ${p.cleType === "Badge" ? "le" : "la"} prêter ni ${p.cleType === "Badge" ? "le" : "la"} reproduire, à signaler immédiatement toute perte ou vol au service maintenance, et à ${p.cleType === "Badge" ? "le" : "la"} restituer à la fin de ma mission ou sur simple demande.</p>
-      <label class="clg-l">Nom et prénom<input id="sg-nom" value="${esc(p.personneNom || "")}"></label>
-      <div class="clg-l">Signature <small>(avec le doigt ou la souris)</small></div>
-      <canvas id="sg-pad" class="clg-pad"></canvas>
-      <div class="clg-ligne"><button class="clg-btn clair" id="sg-effacer">Effacer</button><button class="clg-btn" id="sg-ok">✍️ Je signe</button></div>
-    </div>`);
-    const s = pad(document.getElementById("sg-pad"));
+    let p; try { p = await lirePret(t); } catch (e) { return message("Lien invalide", esc(e.message)); }
+    if (!t || !p || p.type !== "longue") return message("Lien invalide", "Ce lien de signature n'existe pas ou n'est plus valable. Demande au service Maintenance de te le renvoyer.");
+    if (p.statut !== "a-signer") {
+      app.innerHTML = `<div class="sg"><div class="sg-bandeau ok">✅ Cette attestation est déjà signée${p.signeLe ? ` (le ${date(p.signeLe)})` : ""}.</div><div class="sg-doc print-fiche">${attestationHTML(p)}</div><button class="sg-btn clair" onclick="window.print()">🖨 Imprimer / enregistrer en PDF</button></div>`;
+      return;
+    }
+    const eng = p.engagement || engagementTexte(p.cleType);
+    app.innerHTML = `<div class="sg">
+      <div class="sg-doc">
+        <div class="att">
+          <div class="att-tete"><img src="img/logo-etablieres.png" alt="" onerror="this.remove()"><div><b>Groupe Établières</b><span>Service Maintenance &amp; Ménage</span></div><div class="att-ref"><span>Référence</span><b>${esc(reference(p))}</b></div></div>
+          <h1>Attestation de remise ${p.cleType === "Badge" ? "de badge" : "de clé"}</h1>
+          <p>Bonjour <b>${esc((p.personneNom || "").split(" ")[0])}</b>, merci de lire cette attestation puis de la signer en bas de page.</p>
+          <h2>Bénéficiaire</h2><p><b>${esc(p.personneNom)}</b> — ${esc(p.personneEmail)}${p.personneFonction ? ` — ${esc(p.personneFonction)}` : ""}${p.personneService ? ` (${esc(p.personneService)})` : ""}</p>
+          <h2>Objet remis</h2>
+          <div class="sg-objet"><span class="sg-ico">${p.cleType === "Badge" ? "🪪" : "🔑"}</span><div><b>${esc(p.cleType || "Clé")} — ${esc(p.cleNom)}</b>${p.cleRepere ? `<span>N° / repère : ${esc(p.cleRepere)}</span>` : ""}${p.siteNom ? `<span>Site : ${esc(p.siteNom)}</span>` : ""}
+            <span>Remise le ${date(p.sortieLe)} · ${p.retourMax ? `à restituer au plus tard le ${date(p.retourMax)}` : "durée indéterminée"}</span>${p.motif ? `<span>Motif : ${esc(p.motif)}</span>` : ""}${p.note ? `<span>${esc(p.note)}</span>` : ""}</div></div>
+          <h2>Engagement</h2>
+          <ol class="att-eng">${eng.map(x => `<li>${esc(x)}</li>`).join("")}</ol>
+        </div>
+      </div>
+      <div class="sg-doc sg-signer">
+        <label class="sg-accepte"><input type="checkbox" id="sg-acc"><span>J'ai lu et j'accepte les conditions ci-dessus.</span></label>
+        <label class="sg-l">Nom et prénom<input id="sg-nom" value="${esc(p.personneNom || "")}" autocomplete="name"></label>
+        <div class="sg-l">Signature</div>
+        <div class="sg-zone" id="sg-zone"><canvas id="sg-pad"></canvas><span class="sg-place">Signe ici avec le doigt ou la souris</span><span class="sg-ligne"></span><span class="sg-x">✕</span><button type="button" class="sg-effacer" id="sg-effacer">Effacer</button></div>
+        <p class="sg-fait">Fait le ${date(Date.now())}. En signant, tu confirmes avoir reçu ${p.cleType === "Badge" ? "ce badge" : "cette clé"}. Un exemplaire de l'attestation reste consultable à tout moment avec ce lien.</p>
+        <button class="sg-btn" id="sg-ok" disabled>✍️ Je signe l'attestation</button>
+      </div></div>`;
+    const s = pad(document.getElementById("sg-pad"), document.getElementById("sg-zone"));
+    const ok = document.getElementById("sg-ok"), acc = document.getElementById("sg-acc");
+    const maj = () => { ok.disabled = !acc.checked || s.vide() || !document.getElementById("sg-nom").value.trim(); };
+    s.onChange = maj; acc.onchange = maj; document.getElementById("sg-nom").oninput = maj;
     document.getElementById("sg-effacer").onclick = () => s.effacer();
-    document.getElementById("sg-ok").onclick = async (e) => {
+    ok.onclick = async () => {
       const nom = document.getElementById("sg-nom").value.trim();
-      if (!nom) return alert("Indique ton nom et prénom.");
-      if (s.vide()) return alert("Signe dans le cadre blanc.");
-      e.target.disabled = true;
-      try { await signer(t, { signature: s.image(), nom, uid: auth.currentUser?.uid }); cadre(`<div class="clg-carte"><h2>✅ Merci ${esc(nom.split(" ")[0])}</h2><p>La remise de « ${esc(p.cleNom)} » est signée. Le service maintenance en est informé. Tu peux fermer cette page.</p></div>`); }
-      catch (err) { e.target.disabled = false; alert("Enregistrement impossible : " + (err?.message || err)); }
+      ok.disabled = true; ok.textContent = "Enregistrement…";
+      try {
+        const signeLe = Date.now(), signature = s.image();
+        const preuve = { accepte: true, ouvertLe, dureeLectureS: Math.round((signeLe - ouvertLe) / 1000), appareil: infosAppareil(),
+          empreinte: await empreinte(contenuScelle(p, { nom, signeLe, signature })) };
+        await signer(t, { signature, nom, uid: auth.currentUser?.uid, signeLe, preuve });
+        const signe = { ...p, statut: "en-cours", signature, signeLe, signeNom: nom, signeAppareil: auth.currentUser?.uid || "", preuve };
+        app.innerHTML = `<div class="sg"><div class="sg-bandeau ok">✅ Merci ${esc(nom.split(" ")[0])}, l'attestation est signée. Le service Maintenance en est informé.</div><div class="sg-doc print-fiche">${attestationHTML(signe)}</div><button class="sg-btn clair" onclick="window.print()">🖨 Garder mon exemplaire (imprimer / PDF)</button></div>`;
+        window.scrollTo(0, 0);
+      } catch (err) { ok.disabled = false; ok.textContent = "✍️ Je signe l'attestation"; alert("Enregistrement impossible : " + (err?.message || err)); }
     };
   }
 
   onAuthStateChanged(auth, async (u) => {
-    if (!u) { try { await signInAnonymously(auth); } catch (e) { cadre(`<div class="clg-carte"><h2>Connexion impossible</h2><p>Vérifie le réseau puis recharge la page.</p></div>`); } return; }
+    if (!u) { try { await signInAnonymously(auth); } catch (e) { message("Connexion impossible", "Vérifie le réseau puis recharge la page."); } return; }
     afficher();
   });
 </script>

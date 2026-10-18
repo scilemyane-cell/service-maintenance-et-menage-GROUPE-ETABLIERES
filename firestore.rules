@@ -388,7 +388,7 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'retourLe', 'retourPar']))
         || (isSignedIn() && resource.data.type == 'longue' && resource.data.statut == 'a-signer'
             && request.resource.data.statut == 'en-cours'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'signature', 'signeLe', 'signeNom', 'signeAppareil']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'signature', 'signeLe', 'signeNom', 'signeAppareil', 'preuve']));
       allow delete: if isSuperAdmin();
     }
     // ---- Previsionnel travaux/investissement (budget, conseil d'administration) ----
