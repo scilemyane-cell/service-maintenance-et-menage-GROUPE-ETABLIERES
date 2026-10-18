@@ -714,6 +714,25 @@ export function pairesTatouage(fichier, demandesApp) {
     if (c.length === 1) { paires.push({ numero: f.numero, id: c[0].id, site: f.site, descriptif: f.descriptif }); idsPris.add(c[0].id); }
     else exclues.push({ f, raison: c.length ? "plusieurs demandes identiques dans l'appli" : "aucune demande de l'appli avec ce N° et ce descriptif" });
   });
+  // 2e passe, par le CONTENU (site + descriptif) : ligne sans ID dont le N° ne
+  // correspond à aucune demande de l'appli (doublon relié, N° différent dans
+  // l'appli…). Appairage seulement si c'est UNIQUE des deux côtés : une seule
+  // ligne du fichier et une seule demande de l'appli (sans ID déjà posé) avec
+  // ce site et ce descriptif. L'appli prendra ensuite le N° du fichier.
+  // Site non renseigné dans le fichier : on ne compare que le descriptif.
+  const sansSite = (x) => { const t = sa(x.site); return !t || t === "non renseigne"; };
+  const cle = (x) => (sansSite(x) ? "*" : sa(x.site).replace(/[^a-z0-9]/g, "")) + "|" + emp(x);
+  const restantes = exclues.filter(x => x.raison.startsWith("aucune demande"));
+  const nbFichier = {}; restantes.forEach(x => { const k = cle(x.f); nbFichier[k] = (nbFichier[k] || 0) + 1; });
+  const libres = (demandesApp || []).filter(d => !d.supprimeeLe && !idsPris.has(d.id) && emp(d));
+  const parCle = new Map(); libres.forEach(d => { for (const k of [cle(d), "*|" + emp(d)]) parCle.set(k, [...(parCle.get(k) || []), d]); });
+  restantes.forEach(x => {
+    const k = cle(x.f), c = (parCle.get(k) || []).filter(d => !idsPris.has(d.id));
+    if (nbFichier[k] === 1 && c.length === 1) {
+      paires.push({ numero: x.f.numero, id: c[0].id, site: x.f.site, descriptif: x.f.descriptif, parContenu: c[0].numero });
+      idsPris.add(c[0].id); exclues.splice(exclues.indexOf(x), 1);
+    }
+  });
   return { paires, exclues, dejaTatouees };
 }
 // Dépôt de appsmm/Demandes/tatouage-demandes.json pour le flux n° 3 (au plus
