@@ -434,6 +434,7 @@ async function lignesCopieParNumero(token) {
   return m;
 }
 // Même valeur côté appli et côté fichier ? (dates comparées en AAAA-MM-JJ, textes sans accents/espaces)
+const txtBrut = (v) => (v == null ? "" : String(v));
 const egalTexte = (a, b) => sa(a).replace(/\s+/g, " ") === sa(b).replace(/\s+/g, " ");
 const egalDate = (a, b) => (versIso(a) || "") === (versIso(b) || "");
 const egalStatut = (a, b) => { const n = (v) => { const t = sa(v); return t.startsWith("realis") ? "realise" : t.startsWith("annul") ? "annule" : t; }; return n(a) === n(b); };
@@ -520,7 +521,15 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
         const rows = parIdRows || copie.get(String(lignes[i].numero).trim());
         if (!rows) { if (recentes.has(lignes[i].id)) absentsFichier.push(lignes[i].numero); lignes.splice(i, 1); }
         else if (rows.length === 1 && dejaDansFichier(lignes[i], rows[0])) { dejaAJour++; lignes.splice(i, 1); }
-        else if (rows.length === 1) { const c = champsDifferents(lignes[i], rows[0]); c.forEach(k => { diffs[k] = (diffs[k] || 0) + 1; }); if (!exemple && c.length) exemple = { numero: lignes[i].numero, champ: c[0], app: String(({ "statut": lignes[i].statut, "date intervention": lignes[i].dateIntervention, "date statut": lignes[i].dateStatut, "intervenant": lignes[i].categorieIntervenant, "contact": lignes[i].intervenant, "commentaire": lignes[i].commentaire, "urgence": lignes[i].urgence, "validation": lignes[i].validation, "date validation": lignes[i].dateValidation, "validé par": lignes[i].validePar })[c[0]] ?? "").slice(0, 60), fichier: String(rows[0][({ "statut": 13, "date intervention": 12, "date statut": 14, "intervenant": 10, "contact": 11, "commentaire": 15, "urgence": 8, "validation": 16, "date validation": 17, "validé par": 18 })[c[0]]] ?? "").slice(0, 60) }; }
+        else if (rows.length === 1 && !recentes.has(lignes[i].id) && !champsDifferents(lignes[i], rows[0]).some(k => k !== "commentaire" && k !== "validé par")) {
+          // Ancienne demande dont seul le commentaire diffère : on ne touche pas l'Excel
+          // (commentaire saisi à la main dans le fichier, mise en forme différente…).
+          dejaAJour++; lignes.splice(i, 1);
+        }
+        else if (rows.length === 1) {
+          // Ancienne demande (rattrapage d'un statut perdu) : on garde le commentaire du fichier tel quel.
+          if (!recentes.has(lignes[i].id)) { lignes[i].commentaire = txtBrut(rows[0][15]); lignes[i].rattrapage = true; }
+          const c = champsDifferents(lignes[i], rows[0]); c.forEach(k => { diffs[k] = (diffs[k] || 0) + 1; }); if (!exemple && c.length) exemple = { numero: lignes[i].numero, champ: c[0], app: String(({ "statut": lignes[i].statut, "date intervention": lignes[i].dateIntervention, "date statut": lignes[i].dateStatut, "intervenant": lignes[i].categorieIntervenant, "contact": lignes[i].intervenant, "commentaire": lignes[i].commentaire, "urgence": lignes[i].urgence, "validation": lignes[i].validation, "date validation": lignes[i].dateValidation, "validé par": lignes[i].validePar })[c[0]] ?? "").slice(0, 60), fichier: String(rows[0][({ "statut": 13, "date intervention": 12, "date statut": 14, "intervenant": 10, "contact": 11, "commentaire": 15, "urgence": 8, "validation": 16, "date validation": 17, "validé par": 18 })[c[0]]] ?? "").slice(0, 60) }; }
       }
     }
   } catch (e) { console.warn("Comparaison avec la copie impossible :", e); }
@@ -529,7 +538,8 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   const MAX_ENVOI = 250;
   if (lignes.length > MAX_ENVOI) {
     const quand = new Map((demandesApp || []).map(d => [d.id, ms(d)]));
-    lignes.sort((a, b) => (quand.get(b.id) || 0) - (quand.get(a.id) || 0));
+    // Modifiées récemment d'abord, puis les rattrapages de statut.
+    lignes.sort((a, b) => (a.rattrapage ? 1 : 0) - (b.rattrapage ? 1 : 0) || (quand.get(b.id) || 0) - (quand.get(a.id) || 0));
     lignes.length = MAX_ENVOI;
   }
   // Demandes créées dans l'appli, pas encore vues dans le fichier : lignes à AJOUTER.
