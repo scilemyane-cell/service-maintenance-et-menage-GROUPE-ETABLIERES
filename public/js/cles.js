@@ -73,6 +73,7 @@ function rendu(container, par) {
       <div class="${retards.length ? "rouge" : ""}"><span>En retard</span><b>${retards.length}</b><small>date de retour dépassée</small></div>
       <div class="${aSigner.length ? "orange" : ""}"><span>À signer</span><b>${aSigner.length}</b><small>remises en attente de signature</small></div>
     </div>
+    <button class="cl-remise-btn" data-nouvelle-remise>✍️ Remise de clé à un salarié <small>signature par mail sur sa boîte pro</small></button>
     <div class="cl-onglets">${[["encours", `🔓 En cours (${encours.length})`], ["trousseau", "🗝️ Trousseau"], ["historique", "📜 Historique"], ["qr", "📱 QR codes"]].map(([k, l]) => `<button data-vue="${k}" class="${ui.vue === k ? "on" : ""}">${l}</button>`).join("")}
       <input class="cl-cherche" placeholder="🔎 Clé, personne, site…" value="${esc(ui.recherche)}"></div>
 
@@ -131,14 +132,20 @@ function rendu(container, par) {
     if (encours.some(p => p.cleId === c.id)) return alert("Cette clé est encore sortie : enregistre d'abord son retour.");
     if (!confirm(`Supprimer « ${c.nom} » du trousseau ? (l'historique de ses prêts est conservé)`)) return; try { await supprimerCle(c.id, par); ui.edition = null; } catch (err) { alert("Impossible : " + err.message); } });
   container.querySelectorAll("[data-remise]").forEach(b => b.onclick = () => ouvrirRemise(state.cles.find(c => c.id === b.dataset.remise), par));
+  container.querySelector("[data-nouvelle-remise]").onclick = () => {
+    if (!state.cles.length) { alert("Ajoute d'abord la clé dans l'onglet 🗝️ Trousseau."); ui.vue = "trousseau"; re(); return; }
+    ouvrirRemise(null, par);
+  };
   container.querySelectorAll("[data-qr]").forEach(el => renderQrWithLogo(el, lienQR(el.dataset.qr), 170));
   container.querySelectorAll("[data-imprimer]").forEach(b => b.onclick = () => printQrCard(document.getElementById(`cl-qr-${b.dataset.imprimer}`)));
 }
 
 function ouvrirRemise(cle, par) {
   const m = document.createElement("div"); m.className = "ndm-fond";
-  m.innerHTML = `<div class="ndm"><div class="ndm-tete"><h3>✍️ Remise longue durée</h3><button type="button" class="ndm-x" data-x>✕</button></div>
-    <p><b>${esc(cle.type || "Clé")} — ${esc(cle.nom)}</b>${cle.repere ? ` · n° ${esc(cle.repere)}` : ""}<br><small>${esc(cle.siteNom || "")}</small></p>
+  const dispo = state.cles.filter(c => disponibles(c) > 0).sort((a, b) => (a.siteNom || "").localeCompare(b.siteNom || "") || (a.nom || "").localeCompare(b.nom || ""));
+  m.innerHTML = `<div class="ndm"><div class="ndm-tete"><h3>✍️ Remise de clé à un salarié</h3><button type="button" class="ndm-x" data-x>✕</button></div>
+    ${cle ? `<p><b>${esc(cle.type || "Clé")} — ${esc(cle.nom)}</b>${cle.repere ? ` · n° ${esc(cle.repere)}` : ""}<br><small>${esc(cle.siteNom || "")}</small></p>`
+      : `<label class="cl-l">Clé ou badge remis<select id="rm-cle">${dispo.map(c => `<option value="${c.id}">${esc(c.siteNom || "")} — ${esc(c.nom)}${c.repere ? ` (n° ${esc(c.repere)})` : ""}</option>`).join("")}</select></label>`}
     <label class="cl-l">Nom et prénom de la personne<input id="rm-nom" placeholder="ex. Fabrice Noirault"></label>
     <label class="cl-l">Adresse mail pro<input id="rm-mail" type="email" placeholder="prenom.nom@etablieres.fr"></label>
     <label class="cl-l">À restituer au plus tard <small>(facultatif)</small><input id="rm-date" type="date"></label>
@@ -148,6 +155,8 @@ function ouvrirRemise(cle, par) {
   document.body.append(m);
   m.querySelectorAll("[data-x]").forEach(b => b.onclick = () => m.remove());
   m.querySelector("#rm-ok").onclick = async () => {
+    if (!cle) cle = state.cles.find(c => c.id === m.querySelector("#rm-cle")?.value);
+    if (!cle) return alert("Choisis la clé remise.");
     const nom = m.querySelector("#rm-nom").value.trim(), email = m.querySelector("#rm-mail").value.trim(), d = m.querySelector("#rm-date").value;
     if (!nom) return alert("Indique le nom de la personne.");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert("Indique une adresse mail valide.");
