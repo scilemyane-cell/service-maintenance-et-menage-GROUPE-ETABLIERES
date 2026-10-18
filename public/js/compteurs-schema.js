@@ -126,7 +126,7 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const info = aParent && !estDeduit(c);
     const bloque = !opts.virtuel && lier && (lier === c.id || descendants(lier).has(c.id));
     const cible = !opts.virtuel && lier && !bloque;
-    const role = opts.virtuel ? `<span class="sx-r reste">= Reste (calcul)</span>`
+    const role = opts.virtuel ? `<span class="sx-r reste">${opts.role || "= Reste (calcul)"}</span>`
       : chaude ? `<span class="sx-r chaude">♨️ Eau chaude${info ? " · pour info" : " · déduite"}</span>`
       : info ? `<span class="sx-r info">ℹ️ Pour info · non déduit</span>`
       : aParent ? `<span class="sx-r deduit">− Déduit</span>`
@@ -154,7 +154,25 @@ export function reseauxHTML({ liste, E, conso, debut, fin, sites = [], associati
     const ded = e.filter(estDeduit);
     const formule = b === null ? "" : `${fmt2(b)} ${ded.map(x => `− ${fmt2(brut(x) || 0)}`).join(" ")}`;
     const reste = !ded.length ? "" : `<li class="sx-li-reste">${noeud(null, { virtuel: true, valeur: p !== null ? Math.max(0, p) : null, part: p !== null ? pc(Math.max(0, p)) : null, titre: `Reste — ${nomCourt(c.nom || c.dossierNom)}`, sous: formule ? `${formule} ${unite}` : `hors ${ded.map(x => x.nom || "sous-compteur").join(", ")}`, alerte: p !== null && p < 0 ? "les sous-compteurs dépassent le général : relevés à vérifier" : "" })}</li>`;
-    return `<li class="${info ? "info" : ""}">${noeud(c, { part })}<ul>${e.map(x => branche(x, pc(brut(x)))).join("")}${reste}</ul></li>`;
+    // Plusieurs compteurs déduits sur le MÊME site (ex. 2 compteurs du centre
+    // équestre) : case « Total » qui les additionne, juste après eux.
+    const parSite = new Map(); ded.forEach(x => parSite.set(x.dossierId || x.dossierNom, [...(parSite.get(x.dossierId || x.dossierNom) || []), x]));
+    const totaux = [...parSite.values()].filter(g => g.length > 1);
+    const dejaTotal = new Set();
+    const items = e.map(x => {
+      let h = branche(x, pc(brut(x)));
+      const g = totaux.find(t => t.includes(x));
+      if (g && g[g.length - 1] === x && !dejaTotal.has(g)) {
+        dejaTotal.add(g);
+        const vals = g.map(brut), somme = vals.some(v => v === null) ? null : vals.reduce((t, v) => t + v, 0);
+        const connus = vals.filter(v => v !== null);
+        h += `<li class="sx-li-reste">${noeud(null, { virtuel: true, role: "Σ Total (calcul)", valeur: somme, part: somme !== null ? pc(somme) : null,
+          titre: `Total — ${nomCourt(g[0].dossierNom)}`, sous: `${g.map((y, i) => vals[i] === null ? "?" : fmt2(vals[i])).join(" + ")} ${unite}`,
+          alerte: somme === null && connus.length ? `${g.length - connus.length} compteur${g.length - connus.length > 1 ? "s" : ""} sans mesure : total partiel ${fmt2(connus.reduce((t, v) => t + v, 0))} ${unite}` : "" })}</li>`;
+      }
+      return h;
+    }).join("");
+    return `<li class="${info ? "info" : ""}">${noeud(c, { part })}<ul>${items}${reste}</ul></li>`;
   };
   const reseau = (c) => `<div class="sx-scroll"><ul class="sx-org">${branche(c)}</ul></div>`;
 
