@@ -701,13 +701,16 @@ export function pairesTatouage(fichier, demandesApp) {
   const compte = {}; (fichier || []).forEach(f => { if (f.numero) compte[f.numero] = (compte[f.numero] || 0) + 1; });
   const actives = (demandesApp || []).filter(d => !d.lieeA && !d.supprimeeLe);
   const parNum = new Map(); actives.forEach(d => parNum.set(d.numero, [...(parNum.get(d.numero) || []), d]));
+  const parNumLiees = new Map(); (demandesApp || []).filter(d => d.lieeA && !d.supprimeeLe).forEach(d => parNumLiees.set(d.numero, [...(parNumLiees.get(d.numero) || []), d]));
   const idsPris = new Set((fichier || []).map(f => f.idAppli).filter(Boolean));
   const paires = [], exclues = []; let dejaTatouees = 0;
   (fichier || []).forEach(f => {
     if (f.idAppli) { dejaTatouees++; return; }
     if (!emp(f) || !f.numero || String(f.numero).startsWith("SN-")) return;
     if (compte[f.numero] > 1) { exclues.push({ f, raison: "N° en double dans l'Excel" }); return; }
-    const c = (parNum.get(f.numero) || []).filter(d => emp(d) === emp(f) && !idsPris.has(d.id));
+    let c = (parNum.get(f.numero) || []).filter(d => emp(d) === emp(f) && !idsPris.has(d.id));
+    // Ligne du fichier qui est un doublon relié dans l'appli (« 🔗 Doublon de … ») : elle reçoit l'ID de sa propre fiche doublon.
+    if (!c.length) c = (parNumLiees.get(f.numero) || []).filter(d => emp(d) === emp(f) && !idsPris.has(d.id));
     if (c.length === 1) { paires.push({ numero: f.numero, id: c[0].id, site: f.site, descriptif: f.descriptif }); idsPris.add(c[0].id); }
     else exclues.push({ f, raison: c.length ? "plusieurs demandes identiques dans l'appli" : "aucune demande de l'appli avec ce N° et ce descriptif" });
   });
