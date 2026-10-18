@@ -56,7 +56,13 @@ const lienSignature = (t) => `${base()}/cle-signature.html?t=${t}`;
 const lienQR = (siteId) => `${base()}/cles.html${siteId ? `?s=${encodeURIComponent(siteId)}` : ""}`;
 const jour = (ms) => (ms ? new Date(ms).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const jourH = (ms) => (ms ? new Date(ms).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
-const outlook = (to, subject, body) => `https://outlook.office.com/mail/deeplink/compose?${[["to", to], ["subject", subject], ["body", body]].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
+// Sur téléphone, le lien Outlook Web ouvre l'appli sans le brouillon : on passe
+// par « mailto: », que l'appli mail du téléphone (Outlook compris) préremplit.
+const SUR_MOBILE = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+const CIBLE = SUR_MOBILE ? "" : 'target="_blank" rel="noopener"';
+const outlook = (to, subject, body) => SUR_MOBILE
+  ? `mailto:${to || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  : `https://outlook.office.com/mail/deeplink/compose?${[["to", to], ["subject", subject], ["body", body]].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
 const prenom = (n) => String(n || "").trim().split(/\s+/)[0] || "";
 
 function mailSignature(p) {
@@ -107,9 +113,9 @@ function rendu(container, par) {
     <td>${p.type === "longue" ? "Longue durée" : "Temporaire (QR)"}</td>
     <td>${jourH(p.sortieLe)}</td><td>${p.retourMax ? jour(p.retourMax) : "—"}</td><td>${badge(p)}</td>
     <td class="cl-act">
-      ${p.statut === "a-signer" ? `<a class="nav-btn" href="${esc(mailSignature(p))}" target="_blank" rel="noopener">📧 Renvoyer</a><button class="nav-btn" data-copier="${p.id}">🔗 Lien</button>` : ""}
+      ${p.statut === "a-signer" ? `<a class="nav-btn" href="${esc(mailSignature(p))}" ${CIBLE}>📧 Renvoyer</a><button class="nav-btn" data-copier="${p.id}">🔗 Lien</button>` : ""}
       ${p.type === "longue" ? `<button class="nav-btn" data-attestation="${p.id}">📄 Attestation${p.spFichier && p.spStatut === p.statut ? " ☁️" : ""}</button>` : ""}
-      ${enRetard(p) ? `<a class="nav-btn" href="${esc(mailRelance(p))}" target="_blank" rel="noopener">📧 Relancer</a>` : ""}
+      ${enRetard(p) ? `<a class="nav-btn" href="${esc(mailRelance(p))}" ${CIBLE}>📧 Relancer</a>` : ""}
       <button class="nav-btn cl-ok" data-retour="${p.id}">✅ Rendue</button></td></tr>`;
 
   container.innerHTML = `<div class="stack cl">
@@ -207,14 +213,27 @@ function ouvrirRemise(cle, par) {
     const nom = m.querySelector("#rm-nom").value.trim(), email = m.querySelector("#rm-mail").value.trim(), d = m.querySelector("#rm-date").value;
     if (!nom) return alert("Indique le nom de la personne.");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert("Indique une adresse mail valide.");
-    const fenetre = window.open("about:blank", "_blank");
+    const ok = m.querySelector("#rm-ok"); ok.disabled = true; ok.textContent = "Création…";
     try {
       const retourMax = d ? (() => { const [y, mo, j] = d.split("-").map(Number); return new Date(y, mo - 1, j, 18).getTime(); })() : null;
       const t = await creerRemiseLongue({ cle, nom, email, retourMax, par, note: m.querySelector("#rm-note").value.trim(), fonction: m.querySelector("#rm-fonction").value.trim(), service: m.querySelector("#rm-service").value.trim(), motif: m.querySelector("#rm-motif").value });
       const url = mailSignature({ id: t, personneNom: nom, personneEmail: email, cleNom: cle.nom, cleType: cle.type, cleRepere: cle.repere, siteNom: cle.siteNom, retourMax });
-      if (fenetre) fenetre.location.href = url; else window.open(url, "_blank");
-      m.remove(); window.toast?.("✓ Remise créée — envoie le mail ouvert dans Outlook");
-    } catch (e) { fenetre?.close(); alert("Impossible : " + e.message); }
+      const lien = lienSignature(t);
+      // Écran de confirmation : la remise est créée, le lien n'est jamais perdu
+      // (mail, copie, partage SMS/Teams… ou plus tard via « 📧 Renvoyer »).
+      m.querySelector(".ndm").innerHTML = `<div class="ndm-tete"><h3>✅ Remise créée</h3><button type="button" class="ndm-x" data-x>✕</button></div>
+        <p><b>${esc(cle.nom)}</b> pour <b>${esc(nom)}</b> — en attente de signature.</p>
+        <p class="hint" style="margin:0">Envoie-lui le lien de signature :</p>
+        <a class="cl-gros-btn" href="${esc(url)}" ${SUR_MOBILE ? "" : `target="_blank" rel="noopener"`}>📧 Ouvrir le mail prêt à envoyer</a>
+        ${navigator.share ? `<button class="cl-gros-btn clair" data-partager>💬 Partager le lien (SMS, Teams, WhatsApp…)</button>` : ""}
+        <button class="cl-gros-btn clair" data-copier-lien>🔗 Copier le lien de signature</button>
+        <input class="cl-lien" readonly value="${esc(lien)}">
+        <p class="hint" style="margin:0">Si le mail ne s'ouvre pas, pas de souci : la remise reste dans « 🔓 En cours » avec le bouton <b>📧 Renvoyer</b>.</p>
+        <button class="nav-btn" data-x>Terminer</button>`;
+      m.querySelectorAll("[data-x]").forEach(b => b.onclick = () => m.remove());
+      m.querySelector("[data-copier-lien]").onclick = async () => { try { await navigator.clipboard.writeText(lien); window.toast?.("✓ Lien copié"); } catch (e) { const i = m.querySelector(".cl-lien"); i.select(); document.execCommand?.("copy"); } };
+      m.querySelector("[data-partager]")?.addEventListener("click", () => navigator.share({ title: "Attestation de remise de clé", text: `Bonjour ${prenom(nom)}, merci de signer l'attestation de remise de « ${cle.nom} » :`, url: lien }).catch(() => {}));
+    } catch (e) { ok.disabled = false; ok.textContent = "📧 Créer et envoyer le mail"; alert("Impossible : " + e.message); }
   };
 }
 
@@ -223,7 +242,7 @@ function ouvrirAttestation(p) {
   const m = document.createElement("div"); m.className = "ndm-fond";
   let rh = ""; try { rh = localStorage.getItem("smm-cles-mail-rh") || ""; } catch (e) {}
   m.innerHTML = `<div class="ndm cl-att-modal"><div class="ndm-tete"><h3>📄 Attestation ${esc(reference(p))}</h3><button type="button" class="ndm-x" data-x>✕</button></div>
-    <div class="cl-att-actions"><button class="nav-btn cl-ok" data-imp>🖨 Imprimer / PDF</button><button class="nav-btn" data-sp ${p.statut === "a-signer" ? "disabled title=\"Disponible une fois signée\"" : ""}>☁️ ${p.spFichier ? "Remettre" : "Enregistrer"} sur SharePoint</button><button class="nav-btn" data-rh>📧 Transmettre aux RH</button>${p.statut === "a-signer" ? `<a class="nav-btn" href="${esc(mailSignature(p))}" target="_blank" rel="noopener">📧 Renvoyer le lien de signature</a>` : ""}</div>
+    <div class="cl-att-actions"><button class="nav-btn cl-ok" data-imp>🖨 Imprimer / PDF</button><button class="nav-btn" data-sp ${p.statut === "a-signer" ? "disabled title=\"Disponible une fois signée\"" : ""}>☁️ ${p.spFichier ? "Remettre" : "Enregistrer"} sur SharePoint</button><button class="nav-btn" data-rh>📧 Transmettre aux RH</button>${p.statut === "a-signer" ? `<a class="nav-btn" href="${esc(mailSignature(p))}" ${CIBLE}>📧 Renvoyer le lien de signature</a>` : ""}</div>
     ${p.spFichier ? `<p class="hint" style="margin:0">☁️ Sur SharePoint : <b>ExportsDonnees › Clés et badges › Attestations › ${esc(p.siteNom || "Sans site")}</b> › ${esc(p.spFichier)} — le ${jourH(p.spLe)}</p>` : p.statut !== "a-signer" ? `<p class="hint" style="margin:0">☁️ Envoi automatique sur SharePoint en cours…</p>` : ""}
     <div class="print-fiche cl-att-doc">${attestationHTML(p)}</div></div>`;
   document.body.append(m);
@@ -236,7 +255,7 @@ function ouvrirAttestation(p) {
   m.querySelector("[data-rh]").onclick = () => {
     const a = prompt("Adresse mail des RH (mémorisée pour la prochaine fois) :", rh); if (a === null) return;
     try { localStorage.setItem("smm-cles-mail-rh", a.trim()); } catch (e) {}
-    window.open(outlook(a.trim(), `Attestation de remise ${p.cleType === "Badge" ? "de badge" : "de clé"} — ${p.personneNom} — ${reference(p)}`, texteRH(p)), "_blank");
+    const u = outlook(a.trim(), `Attestation de remise ${p.cleType === "Badge" ? "de badge" : "de clé"} — ${p.personneNom} — ${reference(p)}`, texteRH(p)); if (SUR_MOBILE) location.href = u; else window.open(u, "_blank");
     alert("Le mail aux RH est ouvert dans Outlook.\n\nPour joindre l'attestation complète (signature, preuve) : clique sur « 🖨 Imprimer / PDF », choisis « Enregistrer au format PDF », puis joins le fichier au mail.");
   };
 }
