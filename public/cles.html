@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clés — Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="clg-body">
+<div id="app"><div class="clg"><div class="clg-carte"><p class="hint">Chargement…</p></div></div></div>
+
+<script type="module">
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { lireAppareil, enregistrerAppareil, clesDuSite, mesPrets, emprunter, rendre, disponibles, enRetard } from "./js/cles-data.js";
+
+  const params = new URLSearchParams(location.search);
+  const siteId = params.get("s") || "";
+  const cleCible = params.get("c") || "";
+  const app = document.getElementById("app");
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const jourFr = (ms) => new Date(ms).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const heureFr = (ms) => new Date(ms).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const quand = (ms) => { const d = new Date(ms), a = new Date(); const memeJour = d.toDateString() === a.toDateString();
+    const demain = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 1).toDateString() === d.toDateString();
+    return `${memeJour ? "aujourd'hui" : demain ? "demain" : jourFr(ms)} à ${heureFr(ms)}`; };
+  const cadre = (html) => { app.innerHTML = `<div class="clg"><div class="clg-tete"><span>Groupe Établières</span><b>🔑 Prêt de clés</b></div>${html}</div>`; };
+  const erreur = (e) => cadre(`<div class="clg-carte"><h2>Oups</h2><p>${esc(e?.message || e)}</p><button class="clg-btn" onclick="location.reload()">Réessayer</button></div>`);
+
+  let uid = null, moi = null, cles = [], prets = [];
+
+  async function charger() {
+    [cles, prets] = await Promise.all([clesDuSite(siteId), mesPrets(uid)]);
+    prets = prets.filter(p => p.statut === "en-cours").sort((a, b) => (a.retourMax || 9e15) - (b.retourMax || 9e15));
+  }
+
+  function ecranIdentite(changer = false) {
+    cadre(`<div class="clg-carte">
+      <h2>${changer ? "Qui utilise ce téléphone ?" : "Bienvenue 👋"}</h2>
+      <p>${changer ? "" : "C'est ta première fois ici. Indique ton nom une seule fois : ce téléphone s'en souviendra pour les prochaines fois."}</p>
+      <label class="clg-l">Prénom<input id="clg-prenom" autocomplete="given-name" value="${esc(moi?.prenom || "")}"></label>
+      <label class="clg-l">Nom<input id="clg-nom" autocomplete="family-name" value="${esc(moi?.nom || "")}"></label>
+      <label class="clg-l">Fonction <small>(facultatif)</small><input id="clg-fonction" placeholder="ex. Adjoint de direction" value="${esc(moi?.fonction || "")}"></label>
+      <button class="clg-btn" id="clg-ok">Continuer</button>
+    </div>`);
+    document.getElementById("clg-ok").onclick = async () => {
+      const prenom = document.getElementById("clg-prenom").value.trim(), nom = document.getElementById("clg-nom").value.trim();
+      if (!prenom || !nom) { alert("Indique ton prénom et ton nom."); return; }
+      moi = { prenom, nom, fonction: document.getElementById("clg-fonction").value.trim() };
+      try { await enregistrerAppareil(uid, { ...moi, premiereVisite: moi.premiereVisite || Date.now() }); accueil(); } catch (e) { erreur(e); }
+    };
+  }
+
+  async function accueil(message = "") {
+    try { await charger(); } catch (e) { return erreur(e); }
+    const retards = prets.filter(enRetard);
+    const sitesNom = cles[0]?.siteNom || "";
+    cadre(`
+      ${message ? `<div class="clg-ok">${message}</div>` : ""}
+      <div class="clg-carte">
+        <h2>Bonjour ${esc(moi.prenom)} 👋</h2>
+        <p>${prets.length ? `Tu as actuellement <b>${prets.length} clé${prets.length > 1 ? "s" : ""}</b> empruntée${prets.length > 1 ? "s" : ""}.` : "Tu n'as aucune clé empruntée en ce moment."}${sitesNom ? `<br><small>${esc(sitesNom)}</small>` : ""}</p>
+        ${retards.length ? `<div class="clg-alerte">⏰ <b>Rappel :</b> ${retards.map(p => `« ${esc(p.cleNom)} » devait être rendue ${quand(p.retourMax)}`).join(" · ")}. Merci de la rendre dès que possible.</div>` : ""}
+        <div class="clg-choix">
+          ${prets.length ? `<button class="clg-gros rendre" id="clg-rendre">↩️<b>Rendre une clé</b><small>${prets.length} en cours</small></button>` : ""}
+          <button class="clg-gros prendre" id="clg-prendre">🔑<b>Prendre une clé</b><small>${cles.filter(c => disponibles(c) > 0).length} disponible${cles.filter(c => disponibles(c) > 0).length > 1 ? "s" : ""}</small></button>
+        </div>
+      </div>
+      ${prets.length ? `<div class="clg-carte"><h3>Mes clés en cours</h3>${prets.map(p => `
+        <div class="clg-pret ${enRetard(p) ? "retard" : ""}"><div><b>${esc(p.cleNom)}</b>${p.cleRepere ? ` <small>n° ${esc(p.cleRepere)}</small>` : ""}<small>${esc(p.siteNom || "")} · sortie ${quand(p.sortieLe)}</small>
+          ${p.retourMax ? `<small class="${enRetard(p) ? "rouge" : ""}">${enRetard(p) ? "⚠️ en retard — " : ""}à rendre avant ${quand(p.retourMax)}</small>` : ""}</div>
+          ${p.type === "temporaire" ? `<button class="clg-mini" data-rendre="${p.id}">Je la rends</button>` : `<small>remise longue durée</small>`}</div>`).join("")}</div>` : ""}
+      <p class="clg-pied">Ce n'est pas toi ? <a href="#" id="clg-changer">Changer de nom</a></p>`);
+    document.getElementById("clg-prendre").onclick = () => ecranPrendre();
+    document.getElementById("clg-rendre")?.addEventListener("click", () => prets.filter(p => p.type === "temporaire").length === 1 ? confirmerRendre(prets.find(p => p.type === "temporaire")) : document.querySelector(".clg-pret")?.scrollIntoView({ behavior: "smooth" }));
+    document.getElementById("clg-changer").onclick = (e) => { e.preventDefault(); ecranIdentite(true); };
+    app.querySelectorAll("[data-rendre]").forEach(b => b.onclick = () => confirmerRendre(prets.find(p => p.id === b.dataset.rendre)));
+    if (cleCible && !message && cles.some(c => c.id === cleCible)) {
+      const dejaSortie = prets.find(p => p.cleId === cleCible && p.type === "temporaire");
+      if (dejaSortie) confirmerRendre(dejaSortie); else ecranPrendre(cleCible);
+    }
+  }
+
+  async function confirmerRendre(p) {
+    if (!p) return;
+    if (!confirm(`Tu rends « ${p.cleNom} » maintenant ?`)) return;
+    try { await rendre(p, `${moi.prenom} ${moi.nom}`); accueil(`✅ Merci ${esc(moi.prenom)}, « ${esc(p.cleNom)} » est bien rendue.`); } catch (e) { erreur(e); }
+  }
+
+  function ecranPrendre(preselection = "") {
+    const dispo = cles.filter(c => disponibles(c) > 0).sort((a, b) => (a.siteNom || "").localeCompare(b.siteNom || "") || (a.nom || "").localeCompare(b.nom || ""));
+    const ce = new Date(); const soir = new Date(ce.getFullYear(), ce.getMonth(), ce.getDate(), 18, 0); if (soir < ce) soir.setDate(soir.getDate() + 1);
+    const demain = new Date(ce.getFullYear(), ce.getMonth(), ce.getDate() + 1, 18, 0), semaine = new Date(ce.getFullYear(), ce.getMonth(), ce.getDate() + 7, 18, 0);
+    cadre(`<div class="clg-carte">
+      <h2>🔑 Quelle clé prends-tu ?</h2>
+      ${dispo.length ? `<div class="clg-liste">${dispo.map(c => `<label class="clg-cle"><input type="radio" name="cle" value="${c.id}" ${c.id === preselection ? "checked" : ""}><span><b>${esc(c.nom)}</b>${c.repere ? ` <small>n° ${esc(c.repere)}</small>` : ""}<small>${esc(c.type || "Clé")}${c.siteNom ? " · " + esc(c.siteNom) : ""}${(Number(c.exemplaires) || 1) > 1 ? ` · ${disponibles(c)} dispo` : ""}</small></span></label>`).join("")}</div>`
+        : `<p>Aucune clé disponible en ce moment.</p>`}
+      ${dispo.length ? `<h3>À rendre au plus tard</h3>
+      <div class="clg-dates">
+        <label><input type="radio" name="retour" value="${soir.getTime()}" checked><span>${soir.toDateString() === ce.toDateString() ? "Ce soir" : "Demain"} 18 h</span></label>
+        ${soir.getTime() !== demain.getTime() ? `<label><input type="radio" name="retour" value="${demain.getTime()}"><span>Demain 18 h</span></label>` : ""}
+        <label><input type="radio" name="retour" value="${semaine.getTime()}"><span>Dans 1 semaine</span></label>
+        <label><input type="radio" name="retour" value="autre"><span>Autre date</span></label>
+      </div>
+      <input type="date" id="clg-date" class="clg-date" style="display:none" min="${ce.toISOString().slice(0, 10)}">
+      <button class="clg-btn" id="clg-valider">Je prends la clé</button>` : ""}
+      <button class="clg-btn clair" id="clg-retour">← Retour</button>
+    </div>`);
+    document.getElementById("clg-retour").onclick = () => accueil();
+    app.querySelectorAll('[name="retour"]').forEach(r => r.onchange = () => { document.getElementById("clg-date").style.display = r.value === "autre" && r.checked ? "block" : "none"; });
+    document.getElementById("clg-valider")?.addEventListener("click", async () => {
+      const id = app.querySelector('[name="cle"]:checked')?.value; if (!id) { alert("Choisis une clé."); return; }
+      let r = app.querySelector('[name="retour"]:checked').value;
+      if (r === "autre") { const v = document.getElementById("clg-date").value; if (!v) { alert("Choisis la date de retour."); return; } const [y, m, d] = v.split("-").map(Number); r = new Date(y, m - 1, d, 18, 0).getTime(); }
+      const cle = cles.find(c => c.id === id);
+      try { await emprunter({ uid, cle, nom: `${moi.prenom} ${moi.nom}`, retourMax: Number(r) }); accueil(`✅ C'est noté ${esc(moi.prenom)} : « ${esc(cle.nom)} » à rendre avant ${quand(Number(r))}. Rescanne le QR code pour la rendre.`); }
+      catch (e) { erreur(e); }
+    });
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { try { await signInAnonymously(auth); } catch (e) { erreur("Connexion impossible. Vérifie le réseau puis réessaie."); } return; }
+    uid = user.uid;
+    try { moi = await lireAppareil(uid); } catch (e) { return erreur(e); }
+    if (!moi?.prenom) ecranIdentite(); else { enregistrerAppareil(uid, {}).catch(() => {}); accueil(); }
+  });
+</script>
+</body>
+</html>

@@ -61,6 +61,8 @@
   const mountCompteurs = aLaDemande(charger_compteurs, "mountCompteurs");
   const charger_masterlock = () => import("./masterlock.js");
   const mountMasterlock = aLaDemande(charger_masterlock, "mountMasterlock");
+  const charger_cles = () => import("./cles.js");
+  const mountCles = aLaDemande(charger_cles, "mountCles");
   const charger_stock = () => import("./stock.js");
   const mountStockProduits = aLaDemande(charger_stock, "mountStockProduits");
   const charger_stock_inventaire = () => import("./stock-inventaire.js");
@@ -119,7 +121,7 @@
   let modulesPrecharges = false;
   function prechargerModules() {
     if (modulesPrecharges) return; modulesPrecharges = true;
-    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_stock_sites_devis, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_logements, charger_statistiques, charger_corbeille, charger_connexions];
+    const liste = [charger_planning, charger_site_dossier, charger_compteurs, charger_masterlock, charger_cles, charger_stock, charger_stock_inventaire, charger_stock_commandes, charger_stock_sites, charger_stock_site_catalogue, charger_stock_sites_devis, charger_fournisseurs, charger_heures, charger_heures_repartition, charger_heures_archive, charger_tracabilite, charger_parametres, charger_migration_tool, charger_export_sharepoint_admin, charger_qr_print_masse, charger_taches, charger_suivi_demandes, charger_permissions_doc, charger_previsionnel, charger_stock_menage, charger_logements, charger_statistiques, charger_corbeille, charger_connexions];
     const suivant = () => { const f = liste.shift(); if (!f) return; f().catch(() => {}).finally(() => setTimeout(suivant, 30)); };
     (window.requestIdleCallback || ((cb) => setTimeout(cb, 300)))(() => { suivant(); suivant(); suivant(); }, { timeout: 1500 });
   }
@@ -341,6 +343,12 @@
         ],
       },
       {
+        id: "cles", label: "Clés & badges", icon: "🔑", desc: "Prêts de clés par QR code, remises longue durée signées par mail",
+        subtabs: [
+          { id: "liste", label: "Clés", icon: "🔑", roles: GESTION, mount: mountCles },
+        ],
+      },
+      {
         id: "previsionnel", label: "Prévisionnel Travaux", icon: "📋", desc: "Budget travaux/investissement, pour le conseil d'administration",
         subtabs: [
           { id: "liste", label: "Besoins", icon: "📋", roles: [...GESTION,"technicien"], mount: mountPrevisionnel },
@@ -409,8 +417,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte];
   }
 
   watchAuth((user) => {

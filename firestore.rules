@@ -359,6 +359,38 @@ service cloud.firestore {
       allow create: if isEditor();
       allow update, delete: if isSuperAdmin();
     }
+    // ---- Clés & badges ----
+    // Trousseau : lecture par tout connecté (y compris le téléphone anonyme
+    // qui scanne le QR du tableau à clés) ; seul le compteur « sortis » peut
+    // être mis à jour hors gestionnaires (prise / retour d'une clé).
+    match /cles/{docId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isEditor();
+      allow update: if isEditor()
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sortis']));
+    }
+    // Téléphone reconnu (nom saisi une fois) : chacun le sien.
+    match /cles-appareils/{uid} {
+      allow read, write: if isSignedIn() && (request.auth.uid == uid || isEditor());
+    }
+    // Prêts : un téléphone ne voit / ne crée / ne rend que SES prêts
+    // temporaires ; une remise longue durée (id = jeton secret du lien
+    // envoyé par mail) ne peut qu'être signée, une seule fois.
+    match /cles-prets/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isEditor() || (isSignedIn() && resource.data.appareilUid == request.auth.uid);
+      allow create: if isEditor()
+        || (isSignedIn() && request.resource.data.appareilUid == request.auth.uid
+            && request.resource.data.type == 'temporaire' && request.resource.data.statut == 'en-cours');
+      allow update: if isEditor()
+        || (isSignedIn() && resource.data.type == 'temporaire' && resource.data.appareilUid == request.auth.uid
+            && resource.data.statut == 'en-cours' && request.resource.data.statut == 'rendue'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'retourLe', 'retourPar']))
+        || (isSignedIn() && resource.data.type == 'longue' && resource.data.statut == 'a-signer'
+            && request.resource.data.statut == 'en-cours'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'signature', 'signeLe', 'signeNom', 'signeAppareil']));
+      allow delete: if isSuperAdmin();
+    }
     // ---- Previsionnel travaux/investissement (budget, conseil d'administration) ----
     // Lecture ouverte a tous les connectes ; creation ouverte a tous
     // (un technicien peut signaler un besoin repere sur le terrain) ;

@@ -3608,3 +3608,76 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
   .dst-impression .dst-carte{border:1px solid #ccc !important;background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .dst-impression{gap:12px !important}
 }
+
+/* =====================  Clés & badges  ===================== */
+.cl-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.cl-kpis>div{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.cl-kpis span{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:800;color:var(--text-dim)}
+.cl-kpis b{font:800 28px/1.1 "Montserrat",system-ui,sans-serif;color:var(--text)}
+.cl-kpis small{font-size:12px;color:var(--text-dim)}
+.cl-kpis .rouge{border-left:5px solid #d03b3b}.cl-kpis .rouge b{color:#d03b3b}
+.cl-kpis .orange{border-left:5px solid #eda100}
+.cl-onglets{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cl-onglets button{border:1px solid var(--border);background:var(--panel);color:var(--text);font:700 13px "Montserrat",system-ui,sans-serif;padding:8px 14px;border-radius:99px;cursor:pointer}
+.cl-onglets button.on{background:var(--gold,#f3c565);color:#1a1305;border-color:transparent}
+.cl-cherche{margin-left:auto;min-width:220px;padding:8px 12px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text)}
+.cl-scroll{overflow-x:auto}
+.cl-tab{width:100%;border-collapse:collapse;font-size:13px}
+.cl-tab th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);padding:6px 8px;border-bottom:1px solid var(--border)}
+.cl-tab td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text)}
+.cl-tab td small{display:block;color:var(--text-dim);font-size:11.5px}
+.cl-tab tr.cl-retard td{background:color-mix(in srgb,#d03b3b 7%,transparent)}
+.cl-act{white-space:nowrap;text-align:right}.cl-act .nav-btn{margin-left:4px;padding:5px 9px;font-size:12px;text-decoration:none;display:inline-block}
+.nav-btn.cl-ok{border-color:#1baf7a;color:#1baf7a}.nav-btn.cl-sup{border-color:#d03b3b;color:#d03b3b}
+.cl-b{font-style:normal;font-weight:800;font-size:11.5px;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.cl-b.sig{background:color-mix(in srgb,#eda100 22%,transparent);color:#8a5a00}.cl-b.ret{background:color-mix(in srgb,#d03b3b 15%,transparent);color:#d03b3b}
+.cl-b.lon{background:color-mix(in srgb,#1baf7a 16%,transparent);color:#0a7f55}.cl-b.tmp{background:color-mix(in srgb,#2a78d6 14%,transparent);color:#2a78d6}
+.cl-det{display:inline-block;font-size:12px;background:var(--panel-alt);border-radius:8px;padding:2px 7px;margin:1px}.cl-det.ret{color:#d03b3b;font-weight:700}
+.cl-zero{color:#d03b3b}
+.cl-form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.cl-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--text-dim)}
+.cl-form input,.cl-form select,.cl-l input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
+.cl-form label.cl-cb{flex-direction:row;align-items:center}
+.cl-l{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700}
+.cl-qrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.cl-qr{background:#fff;color:#111;border-radius:14px;padding:14px;text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid var(--border)}
+.cl-qr b{font-size:15px}.cl-qr small{font-size:12px;color:#333}.cl-qr .cl-qr-txt{color:#666;font-size:11px}
+.cl-qr-img{width:170px;height:170px}
+@media (max-width:760px){.cl-kpis{grid-template-columns:1fr 1fr}.cl-cherche{margin-left:0;width:100%}}
+
+/* Page publique (QR du tableau à clés, signature) */
+.clg-body{background:var(--bg,#0b1d3a);min-height:100vh}
+.clg{max-width:520px;margin:0 auto;padding:18px 14px 40px;display:flex;flex-direction:column;gap:14px;font-family:"Montserrat",system-ui,sans-serif}
+.clg-tete{display:flex;flex-direction:column;gap:2px;padding:6px 4px}
+.clg-tete span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f3c565;font-weight:800}
+.clg-tete b{font-size:22px;color:var(--text)}
+.clg-carte{background:var(--panel,#fff);color:var(--text);border:1px solid var(--border);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 6px 20px rgba(0,0,0,.12)}
+.clg-carte h2{margin:0;font-size:22px}.clg-carte h3{margin:4px 0 0;font-size:15px}.clg-carte p{margin:0;line-height:1.5}
+.clg-l{display:flex;flex-direction:column;gap:5px;font-weight:700;font-size:14px}
+.clg-l input,.clg-date{padding:13px 14px;border-radius:12px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:600 16px "Montserrat",system-ui,sans-serif}
+.clg-btn{border:0;border-radius:14px;padding:15px;font:800 16px "Montserrat",system-ui,sans-serif;background:#1baf7a;color:#fff;cursor:pointer}
+.clg-btn.clair{background:var(--panel-alt);color:var(--text);border:1px solid var(--border)}
+.clg-btn:disabled{opacity:.5}
+.clg-choix{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.clg-choix>button:only-child{grid-column:1/-1}
+.clg-gros{border:0;border-radius:18px;padding:20px 12px;display:flex;flex-direction:column;align-items:center;gap:4px;font:800 30px "Montserrat",system-ui,sans-serif;cursor:pointer;color:#fff}
+.clg-gros b{font-size:15px}.clg-gros small{font-size:12px;font-weight:600;opacity:.85}
+.clg-gros.prendre{background:linear-gradient(135deg,#2a78d6,#1c5cab)}.clg-gros.rendre{background:linear-gradient(135deg,#1baf7a,#0f8a5f)}
+.clg-alerte{background:color-mix(in srgb,#d03b3b 14%,transparent);border-left:5px solid #d03b3b;padding:12px;border-radius:12px;font-size:14px;line-height:1.45}
+.clg-ok{background:color-mix(in srgb,#1baf7a 16%,var(--panel,#fff));color:var(--text);border-left:5px solid #1baf7a;padding:14px;border-radius:14px;font-weight:700;line-height:1.45}
+.clg-pret{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+.clg-pret small{display:block;color:var(--text-dim);font-size:12.5px}.clg-pret small.rouge{color:#d03b3b;font-weight:700}
+.clg-pret.retard b{color:#d03b3b}
+.clg-mini{border:1px solid #1baf7a;color:#1baf7a;background:transparent;border-radius:10px;padding:9px 12px;font:800 13px "Montserrat",system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+.clg-liste{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow-y:auto}
+.clg-cle{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:14px;cursor:pointer}
+.clg-cle input{width:22px;height:22px;flex-shrink:0}.clg-cle small{display:block;color:var(--text-dim);font-size:12.5px}
+.clg-cle:has(input:checked){border-color:#2a78d6;background:color-mix(in srgb,#2a78d6 9%,transparent)}
+.clg-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.clg-dates label{display:flex;gap:8px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:12px;font-weight:700;font-size:14px;cursor:pointer}
+.clg-dates label:has(input:checked){border-color:#1baf7a;background:color-mix(in srgb,#1baf7a 10%,transparent)}
+.clg-pied{text-align:center;font-size:13px;color:var(--text-dim)}.clg-pied a{color:inherit}
+.clg-recap{display:flex;flex-direction:column;gap:3px;background:var(--panel-alt);border-radius:12px;padding:12px;font-size:14px}
+.clg-engagement{font-size:13px;color:var(--text-dim);font-style:italic}
+.clg-pad{width:100%;height:180px;border:2px dashed var(--border);border-radius:14px;background:#fff;touch-action:none}
+.clg-ligne{display:grid;grid-template-columns:1fr 2fr;gap:10px}

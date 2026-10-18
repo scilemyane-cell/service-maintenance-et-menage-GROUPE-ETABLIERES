@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remise de clé — signature</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"clair";}catch(e){}</script>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="clg-body">
+<div id="app"><div class="clg"><div class="clg-carte"><p class="hint">Chargement…</p></div></div></div>
+<script type="module">
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { lirePret, signer } from "./js/cles-data.js";
+
+  const t = new URLSearchParams(location.search).get("t") || "";
+  const app = document.getElementById("app");
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const date = (ms) => new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  const cadre = (h) => { app.innerHTML = `<div class="clg"><div class="clg-tete"><span>Groupe Établières · Service Maintenance</span><b>🔑 Remise de clé</b></div>${h}</div>`; };
+
+  function pad(canvas) {
+    const ctx = canvas.getContext("2d"); let dessine = false, vide = true, last = null;
+    const ajuster = () => { const r = canvas.getBoundingClientRect(), k = window.devicePixelRatio || 1; canvas.width = r.width * k; canvas.height = r.height * k; ctx.setTransform(k, 0, 0, k, 0, 0); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, r.width, r.height); ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#0b1d3a"; vide = true; };
+    ajuster();
+    const pos = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    canvas.addEventListener("pointerdown", (e) => { dessine = true; last = pos(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
+    canvas.addEventListener("pointermove", (e) => { if (!dessine) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(...last); ctx.lineTo(...p); ctx.stroke(); last = p; vide = false; e.preventDefault(); });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(ev => canvas.addEventListener(ev, () => { dessine = false; }));
+    return { effacer: ajuster, vide: () => vide, image: () => { const c = document.createElement("canvas"); c.width = 500; c.height = Math.round(500 * canvas.height / canvas.width); const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(canvas, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } };
+  }
+
+  async function afficher() {
+    let p; try { p = await lirePret(t); } catch (e) { return cadre(`<div class="clg-carte"><h2>Lien invalide</h2><p>${esc(e.message)}</p></div>`); }
+    if (!t || !p || p.type !== "longue") return cadre(`<div class="clg-carte"><h2>Lien invalide</h2><p>Ce lien de signature n'existe pas ou a expiré. Demande au service maintenance de te le renvoyer.</p></div>`);
+    if (p.statut !== "a-signer") return cadre(`<div class="clg-carte"><h2>✅ Déjà signée</h2><p>La remise de « ${esc(p.cleNom)} » a été signée${p.signeLe ? ` le ${date(p.signeLe)}` : ""}${p.signeNom ? ` par ${esc(p.signeNom)}` : ""}.</p>${p.statut === "rendue" ? `<p>La clé a été rendue${p.retourLe ? ` le ${date(p.retourLe)}` : ""}.</p>` : ""}</div>`);
+    cadre(`<div class="clg-carte">
+      <h2>Bonjour ${esc((p.personneNom || "").split(" ")[0])},</h2>
+      <p>Le service maintenance te remet :</p>
+      <div class="clg-recap"><b>${esc(p.cleType || "Clé")} — ${esc(p.cleNom)}</b>${p.cleRepere ? `<span>N° / repère : ${esc(p.cleRepere)}</span>` : ""}${p.siteNom ? `<span>Site : ${esc(p.siteNom)}</span>` : ""}
+        <span>Remise le ${date(p.sortieLe)}${p.retourMax ? ` · à restituer au plus tard le ${date(p.retourMax)}` : " · durée indéterminée"}</span>${p.note ? `<span>${esc(p.note)}</span>` : ""}</div>
+      <p class="clg-engagement">Je soussigné(e) reconnais avoir reçu ${p.cleType === "Badge" ? "ce badge" : "cette clé"}. Je m'engage à ne pas ${p.cleType === "Badge" ? "le" : "la"} prêter ni ${p.cleType === "Badge" ? "le" : "la"} reproduire, à signaler immédiatement toute perte ou vol au service maintenance, et à ${p.cleType === "Badge" ? "le" : "la"} restituer à la fin de ma mission ou sur simple demande.</p>
+      <label class="clg-l">Nom et prénom<input id="sg-nom" value="${esc(p.personneNom || "")}"></label>
+      <div class="clg-l">Signature <small>(avec le doigt ou la souris)</small></div>
+      <canvas id="sg-pad" class="clg-pad"></canvas>
+      <div class="clg-ligne"><button class="clg-btn clair" id="sg-effacer">Effacer</button><button class="clg-btn" id="sg-ok">✍️ Je signe</button></div>
+    </div>`);
+    const s = pad(document.getElementById("sg-pad"));
+    document.getElementById("sg-effacer").onclick = () => s.effacer();
+    document.getElementById("sg-ok").onclick = async (e) => {
+      const nom = document.getElementById("sg-nom").value.trim();
+      if (!nom) return alert("Indique ton nom et prénom.");
+      if (s.vide()) return alert("Signe dans le cadre blanc.");
+      e.target.disabled = true;
+      try { await signer(t, { signature: s.image(), nom, uid: auth.currentUser?.uid }); cadre(`<div class="clg-carte"><h2>✅ Merci ${esc(nom.split(" ")[0])}</h2><p>La remise de « ${esc(p.cleNom)} » est signée. Le service maintenance en est informé. Tu peux fermer cette page.</p></div>`); }
+      catch (err) { e.target.disabled = false; alert("Enregistrement impossible : " + (err?.message || err)); }
+    };
+  }
+
+  onAuthStateChanged(auth, async (u) => {
+    if (!u) { try { await signInAnonymously(auth); } catch (e) { cadre(`<div class="clg-carte"><h2>Connexion impossible</h2><p>Vérifie le réseau puis recharge la page.</p></div>`); } return; }
+    afficher();
+  });
+</script>
+</body>
+</html>
