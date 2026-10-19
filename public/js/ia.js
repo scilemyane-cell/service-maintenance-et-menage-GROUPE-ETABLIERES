@@ -269,20 +269,31 @@ export async function corrigerOrthographe(texte) {
   } finally { clearTimeout(t); }
 }
 
+// Notes de terrain souvent télégraphiques (« devis valider interventions le 21
+// et 22 octobre ») : le simple correcteur ne sait ni accorder ni rétablir
+// « validé » / « les 21 et 22 ». On demande d'abord à l'IA (consigne stricte,
+// sans rien inventer) ; si elle est indisponible ou part trop loin, repli sur
+// le correcteur orthographique.
 export async function redigerCommentaireDemande(f) {
   ajouterMotsConnus(f.mots);
-  try { return await corrigerOrthographe(f.notes); }
-  catch (e) { console.warn("Correcteur indisponible, repli sur l'IA Gemini :", e); }
-  return genererTexte(`Corrige et reformule légèrement le texte ci-dessous, écrit dans le champ « commentaire » d'une demande d'intervention (service maintenance, Groupe Établières).
-RÈGLE ABSOLUE : garde EXACTEMENT le sens et la nature du texte.
-- Si c'est une question ou un message adressé à quelqu'un (ex. « Bonjour Julie, as-tu fait… ? »), rends une question / un message, avec le même destinataire et la même signature. Ne le transforme JAMAIS en constat ou en action réalisée.
-- Si c'est une note de travaux, rends une note factuelle courte.
-- N'ajoute AUCUNE information, cause, action, résultat ou suite qui n'est pas écrite. Ne supprime rien d'important (noms, initiales, organismes, références).
-- Corrige l'orthographe, la ponctuation et les majuscules (noms propres, ex. Vendée Habitat). Reste bref, même longueur ou presque.
-- Réponds uniquement par le texte corrigé : pas de guillemets, pas de titre, pas de Markdown.
+  const notes = String(f.notes || "").trim();
+  try {
+    let t = await genererTexte(`Tu corriges une note écrite vite par un technicien de maintenance (Groupe Établières), dans le champ « commentaire » d'une demande d'intervention.
+OBJECTIF : un français correct et professionnel, en gardant EXACTEMENT le sens, le style télégraphique et la longueur.
+À CORRIGER : orthographe, accords (genre et nombre), participes passés à la place des infinitifs (« devis valider » → « devis validé », « fuite reparer » → « fuite réparée »), articles et prépositions manquants ou faux (« le 21 et 22 octobre » → « les 21 et 22 octobre »), ponctuation entre les idées, majuscule en début de phrase, noms propres (Vendée Habitat, Sonepar…).
+INTERDIT : ajouter une information, une cause, une action, une date, un résultat ou une formule de politesse qui n'est pas écrite ; supprimer un nom, une initiale, une référence, un chiffre ; transformer une question ou un message adressé à quelqu'un en constat (garde la question, le destinataire et la signature).
+Exemples :
+- « devis valider interventions le 21 et 22 octobre » → « Devis validé, interventions les 21 et 22 octobre. »
+- « joint siphon changer fuite stopper » → « Joint de siphon changé, fuite stoppée. »
+- « bonjour julie as tu relancer l entreprise ? VB » → « Bonjour Julie, as-tu relancé l'entreprise ? VB »
+Réponds UNIQUEMENT par le texte corrigé, sans guillemets, sans Markdown.
 
 Contexte de la demande (ne pas recopier) : ${f.descr || "—"}
 
 Texte à corriger :
-${f.notes}`, { rapide: true });
+${notes}`, { rapide: true });
+    t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
+    if (t && t.length <= Math.max(40, notes.length * 1.8)) return t;
+  } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
+  return corrigerOrthographe(notes);
 }
