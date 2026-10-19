@@ -184,7 +184,8 @@ function render() {
 
       ${opened ? `
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="add-btn" id="tr-print">🖨️ Exporter en PDF (imprimer)</button>
+        <button class="add-btn" id="tr-print">🖨️ PDF sans photos</button>
+        ${(opened.photos || []).length ? `<button class="add-btn" id="tr-print-photos">📷 PDF avec photos (${opened.photos.length})</button>` : ""}
         <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
       </div>
@@ -200,7 +201,8 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
   });
   document.getElementById("tr-reconst")?.addEventListener("click", ouvrirReconstitution);
   document.getElementById("tr-qr")?.addEventListener("click", ouvrirQrLecture);
-  document.getElementById("tr-print")?.addEventListener("click", imprimerFiche);
+  document.getElementById("tr-print")?.addEventListener("click", () => imprimerFiche(false));
+  document.getElementById("tr-print-photos")?.addEventListener("click", () => imprimerFiche(true));
   document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
     if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {

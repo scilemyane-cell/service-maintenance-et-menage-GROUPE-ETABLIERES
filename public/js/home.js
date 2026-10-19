@@ -364,6 +364,8 @@ function urgencesAAfficher() {
     .sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
 }
 function bandeauUrgencesHTML() {
+  // Agents d'entretien (dispositif MNA, ménage, mi-temps) : pas de bandeau des urgences maintenance.
+  if (["menage", "mi_temps"].includes(mountedUser?.role)) return "";
   const l = urgencesAAfficher(); if (!l.length) return "";
   const cliquable = catsRef.some(c => c.id === "suivi-demandes");
   return `<section class="gh-urgences ${replieCls("urgences")}">

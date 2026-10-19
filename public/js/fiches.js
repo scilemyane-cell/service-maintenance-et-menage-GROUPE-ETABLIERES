@@ -117,6 +117,23 @@ function fichesReconstitueesVides(agentUid) {
     .sort((a, b) => String(a.weekStart).localeCompare(String(b.weekStart)));
 }
 
+// Photos stockées DANS la fiche (Firestore), compressées (~100 Ko) : aucun
+// compte Microsoft nécessaire pour l'agent ; plafond pour rester sous la
+// limite de taille d'un document.
+const MAX_PHOTOS = 6;
+async function compresserPhoto(fichier) {
+  const url = URL.createObjectURL(fichier);
+  try {
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error("Image illisible")); i.src = url; });
+    const max = 1000, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    let q = 0.62, out = c.toDataURL("image/jpeg", q);
+    while (out.length > 140000 && q > 0.3) { q -= 0.08; out = c.toDataURL("image/jpeg", q); }
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+
 function currentFiche() {
   const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
   const agent = effectiveAgent();
@@ -537,6 +554,21 @@ function renderInterne() {
 
       ${ui.vue === "jour" ? vueJourHTML(site, data) : vueSemaineHTML(site, data)}
 
+      <div class="form-card fc-photos">
+        <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">📷 Photos de la semaine <small style="color:var(--text-dim);font-weight:500">(${(data.photos || []).length}/${MAX_PHOTOS})</small></h3>
+        <p class="hint" style="margin:0 0 10px">Une pièce terminée, un souci constaté… Les photos apparaissent sur la fiche imprimée « avec photos ».</p>
+        <div class="fc-ph-grille">${(data.photos || []).map((p, i) => `
+          <figure class="fc-ph"><img src="${p.data}" alt="" data-ph-voir="${i}">
+            <figcaption>
+              <select data-ph-piece="${i}"><option value="">— Pièce —</option>${(site.rooms || []).map(r => `<option ${r.name === p.piece ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
+              <input data-ph-leg="${i}" value="${esc(p.legende || "")}" placeholder="Légende (facultatif)">
+              <small>${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
+              <button type="button" class="del-btn" data-ph-del="${i}" title="Supprimer la photo">🗑️</button>
+            </figcaption></figure>`).join("")}</div>
+        ${(data.photos || []).length < MAX_PHOTOS ? `<label class="fc-ph-add">📷 Prendre ou ajouter une photo<input type="file" accept="image/*" capture="environment" id="fc-ph-input" hidden></label>` : `<p class="hint" style="margin:6px 0 0">Maximum ${MAX_PHOTOS} photos par fiche.</p>`}
+        <span id="fc-ph-etat" class="hint"></span>
+      </div>
+
       ${site.literie ? `
       <div class="form-card">
         <h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">Literie sur demande</h3>
@@ -633,6 +665,23 @@ function renderInterne() {
       scheduleSave(id, data);
     });
   });
+  mountedContainer.querySelector("#fc-ph-input")?.addEventListener("change", async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const etat = mountedContainer.querySelector("#fc-ph-etat"); if (etat) etat.textContent = "⏳ Préparation de la photo…";
+    try {
+      const dataUrl = await compresserPhoto(f);
+      data.photos = [...(data.photos || []), { data: dataUrl, le: Date.now(), jour: ui.vue === "jour" ? ui.jour : "", piece: "", legende: "", par: effectiveAgent()?.nom || "" }];
+      await sauverFiche(id, data); render();
+      window.toast?.("✓ Photo ajoutée à la fiche");
+    } catch (err) { if (etat) etat.textContent = ""; alert("Photo impossible : " + (err?.message || err)); }
+  });
+  mountedContainer.querySelectorAll("[data-ph-del]").forEach(b => b.addEventListener("click", () => {
+    if (!confirm("Supprimer cette photo de la fiche ?")) return;
+    data.photos = (data.photos || []).filter((_, i) => i !== Number(b.dataset.phDel)); scheduleSave(id, data); render();
+  }));
+  mountedContainer.querySelectorAll("[data-ph-piece]").forEach(s => s.addEventListener("change", () => { data.photos[Number(s.dataset.phPiece)].piece = s.value; scheduleSave(id, data); }));
+  mountedContainer.querySelectorAll("[data-ph-leg]").forEach(inp => inp.addEventListener("input", () => { data.photos[Number(inp.dataset.phLeg)].legende = inp.value; scheduleSave(id, data); }));
+  mountedContainer.querySelectorAll("[data-ph-voir]").forEach(img => img.addEventListener("click", () => { const w = window.open(""); if (w) w.document.write(`<img src="${img.src}" style="max-width:100%">`); }));
   mountedContainer.querySelectorAll("[data-obs]").forEach(inp => {
     inp.addEventListener("input", () => {
       data.obs[inp.dataset.obs] = inp.value;

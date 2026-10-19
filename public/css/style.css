@@ -3754,3 +3754,12 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
 .pst-note small{font-weight:500;color:var(--text-dim)}
 .pst-note textarea{padding:7px 9px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;font-weight:500;resize:vertical}
 .pst-com-int>summary{cursor:pointer;font-size:12px;color:var(--text-dim)}
+
+/* Photos sur la fiche de traçabilité ménage */
+.fc-ph-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.fc-ph{margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--panel-alt)}
+.fc-ph img{width:100%;height:130px;object-fit:cover;display:block;cursor:zoom-in}
+.fc-ph figcaption{display:flex;flex-direction:column;gap:5px;padding:7px}
+.fc-ph select,.fc-ph input{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;font-size:12px}
+.fc-ph small{color:var(--text-dim);font-size:11px}.fc-ph .del-btn{align-self:flex-end}
+.fc-ph-add{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:12px 16px;border-radius:12px;background:#2a78d6;color:#fff;font-weight:800;cursor:pointer}

@@ -81,14 +81,18 @@ export function ficheHTML(opened, openedSite, dispositif = "") {
         </table>` : ""}
 
         <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
+        ${(opened.photos || []).length ? `<div class="trac-photos"><p style="font-size:13px;font-weight:700;margin:16px 0 6px">PHOTOS (${opened.photos.length})</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${opened.photos.map(p => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:4px;break-inside:avoid">
+            <img src="${p.data}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:4px;display:block">
+            <figcaption style="font-size:10px;margin-top:3px">${p.piece ? `<b>${esc(p.piece)}</b> · ` : ""}${esc(p.legende || "")}<br><span style="color:#666">${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`).join("")}</div></div>` : ""}
         ${mentionHTML(opened) ? `<p style="font-size:9px;margin-top:28px;color:#777">${mentionHTML(opened)}</p>` : ""}
       </div>`;
 }
 
 // Impression d'une fiche en A4 portrait (le reste de l'appli imprime en paysage).
-export function imprimerFiche() {
+export function imprimerFiche(avecPhotos = true) {
   const st = document.createElement("style");
-  st.textContent = "@page{size:A4 portrait;margin:9mm 9mm 11mm 9mm}";
+  st.textContent = "@page{size:A4 portrait;margin:9mm 9mm 11mm 9mm}" + (avecPhotos ? "" : "@media print{.trac-photos{display:none !important}}");
   document.head.appendChild(st);
   const fin = () => { st.remove(); window.removeEventListener("afterprint", fin); };
   window.addEventListener("afterprint", fin);
