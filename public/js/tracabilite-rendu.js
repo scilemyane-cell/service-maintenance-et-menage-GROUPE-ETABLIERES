@@ -13,9 +13,10 @@ export function mentionHTML(f, court = false) {
   return "";
 }
 
-const vignettes = (liste) => `<div class="trac-photos" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 10px">${liste.map(p => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
+const ORDRE_J = ["LUN", "MAR", "MER", "JEU", "VEN"];
+const vignettes = (l0) => { const liste = [...l0].sort((a, b) => ORDRE_J.indexOf(a.jour) - ORDRE_J.indexOf(b.jour) || a.le - b.le); return `<div class="trac-photos" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 10px">${liste.map(p => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
   <img src="${p.data}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:4px;display:block">
-  <figcaption style="font-size:9.5px;margin-top:2px">${p.legende ? `${esc(p.legende)}<br>` : ""}<span style="color:#666">📷 ${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`).join("")}</div>`;
+  <figcaption style="font-size:9.5px;margin-top:2px">${p.jour ? `<b>${({ LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" })[p.jour] || p.jour}</b> · ` : ""}${p.legende ? `${esc(p.legende)}<br>` : ""}<span style="color:#666">📷 ${new Date(p.le).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`).join("")}</div>`; };
 
 export function taskCompletion(fiche, site) {
   if (!site) return { done: 0, total: 0 };

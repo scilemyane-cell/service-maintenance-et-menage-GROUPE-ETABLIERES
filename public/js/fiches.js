@@ -120,24 +120,29 @@ function fichesReconstitueesVides(agentUid) {
 // Photos stockées DANS la fiche (Firestore), compressées (~100 Ko) : aucun
 // compte Microsoft nécessaire pour l'agent ; plafond pour rester sous la
 // limite de taille d'un document.
-const MAX_PHOTOS = 6;
+const MAX_PHOTOS = 12;
 async function compresserPhoto(fichier) {
   const url = URL.createObjectURL(fichier);
   try {
     const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error("Image illisible")); i.src = url; });
-    const max = 1000, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const max = 820, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    let q = 0.62, out = c.toDataURL("image/jpeg", q);
-    while (out.length > 140000 && q > 0.3) { q -= 0.08; out = c.toDataURL("image/jpeg", q); }
+    let q = 0.58, out = c.toDataURL("image/jpeg", q);
+    while (out.length > 80000 && q > 0.3) { q -= 0.08; out = c.toDataURL("image/jpeg", q); }
     return out;
   } finally { URL.revokeObjectURL(url); }
 }
 
 // Vignettes d'une pièce (ou des photos sans pièce si roomName === null) + bouton d'ajout.
+// Vue « Ma journée » : seulement les photos du jour affiché ; vue semaine : toutes, avec le jour.
 function photosPieceHTML(site, data, roomName) {
   const noms = new Set((site.rooms || []).map(r => r.name));
-  const liste = (data.photos || []).map((p, i) => ({ p, i })).filter(({ p }) => roomName === null ? !p.piece || !noms.has(p.piece) : p.piece === roomName);
+  const duJour = ui.vue === "jour";
+  const liste = (data.photos || []).map((p, i) => ({ p, i }))
+    .filter(({ p }) => roomName === null ? !p.piece || !noms.has(p.piece) : p.piece === roomName)
+    .filter(({ p }) => roomName === null || !duJour || p.jour === ui.jour)
+    .sort((a, b) => JOURS_KEYS.indexOf(a.p.jour) - JOURS_KEYS.indexOf(b.p.jour) || a.p.le - b.p.le);
   const plein = (data.photos || []).length >= MAX_PHOTOS;
   if (roomName === null && !liste.length) return "";
   return `<div class="fc-ph-zone">
@@ -146,10 +151,10 @@ function photosPieceHTML(site, data, roomName) {
         <figcaption>
           ${roomName === null ? `<select data-ph-piece="${i}"><option value="">— Pièce —</option>${(site.rooms || []).map(r => `<option>${esc(r.name)}</option>`).join("")}</select>` : ""}
           <input data-ph-leg="${i}" value="${esc(p.legende || "")}" placeholder="Légende (facultatif)">
-          <small>${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
+          <small>${p.jour ? `<b>${JOURS_LONGS[p.jour] || p.jour}</b> · ` : ""}${new Date(p.le).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
           <button type="button" class="del-btn" data-ph-del="${i}" title="Supprimer la photo">🗑️</button>
         </figcaption></figure>`).join("")}</div>` : ""}
-    ${roomName !== null ? (plein ? `<small class="hint">Maximum ${MAX_PHOTOS} photos par fiche atteint.</small>` : `<label class="fc-ph-add petit">📷 Photo de cette pièce<input type="file" accept="image/*" capture="environment" data-ph-room="${esc(roomName)}" hidden></label>`) : ""}
+    ${roomName !== null ? (plein ? `<small class="hint">Maximum ${MAX_PHOTOS} photos par fiche atteint.</small>` : `<label class="fc-ph-add petit">📷 Photo de cette pièce${duJour ? ` — ${(JOURS_LONGS[ui.jour] || "").toLowerCase()}` : ""}<input type="file" accept="image/*" capture="environment" data-ph-room="${esc(roomName)}" hidden></label>`) : ""}
   </div>`;
 }
 
@@ -679,7 +684,10 @@ function renderInterne() {
     const etat = mountedContainer.querySelector("#fc-ph-etat"); if (etat) etat.textContent = "⏳ Préparation de la photo…";
     try {
       const dataUrl = await compresserPhoto(f);
-      data.photos = [...(data.photos || []), { data: dataUrl, le: Date.now(), jour: ui.vue === "jour" ? ui.jour : "", piece: inp.dataset.phRoom, legende: "", par: effectiveAgent()?.nom || "" }];
+      // Jour de la photo : celui affiché (Ma journée), sinon le jour de la prise si dans la semaine.
+      const jAuj = JOURS_KEYS[(new Date().getDay() + 6) % 7] || "";
+      const jour = ui.vue === "jour" ? ui.jour : (JOURS_KEYS.includes(jAuj) && jourISO(jAuj) === dateKey(new Date()) ? jAuj : "");
+      data.photos = [...(data.photos || []), { data: dataUrl, le: Date.now(), jour, piece: inp.dataset.phRoom, legende: "", par: effectiveAgent()?.nom || "" }];
       await sauverFiche(id, data); render();
       window.toast?.("✓ Photo ajoutée");
     } catch (err) { if (etat) etat.textContent = ""; alert("Photo impossible : " + (err?.message || err)); }
