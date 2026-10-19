@@ -65,7 +65,7 @@ function statut(v) {
   if (t.startsWith("realis")) return "Réalisé";
   if (t.startsWith("annul")) return "Annulé";
   if (t.startsWith("arbitrage")) return "Arbitrage budgétaire"; // demande mise en pause
-  if ((t.startsWith("attente") || t.startsWith("en attente")) && t.includes("date")) return "Attente de date d'intervention";
+  if ((t.startsWith("attente") || t.startsWith("en attente")) && t.includes("date")) return "En attente de date d'intervention";
   return { "pris en compte": "Pris en compte", "demande de devis": "Demande de devis", "planifie": "Planifié", "intervenant sollicite": "Intervenant sollicité", "commande en cours": "Commande en cours", "autre": "Autre" }[t] || txt(v);
 }
 const urgence = (v) => ({ normal: "Normal", urgent: "Urgent", "a planifier": "À planifier", critique: "Critique" }[sa(v)] || "Non renseignée");
