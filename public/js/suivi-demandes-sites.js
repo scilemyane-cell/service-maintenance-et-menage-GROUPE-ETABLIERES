@@ -393,7 +393,7 @@ const comNouveau = (l, depuis, moi) => !!l.commentaireTech && !!l.commentaireMaj
 const estNouvelle = (l, depuis) => !!l.importeMs && l.importeMs > depuis && !TRAITE(l.statut) && l.statut !== A_VALIDER;
 
 const ieDe = (l) => { const ci = String(l.categorieIntervenant || "").toLowerCase(); return ci.startsWith("interne") ? "interne" : ci.startsWith("externe") ? "externe" : "nd"; };
-const st = { ie: "", site: null, q: "", association: "", voirTraitees: false, toutVoir: false, brouillons: {}, tech: "", tri: "urgence", qSite: "" };
+const st = { ie: "", site: null, q: "", association: "", voirTraitees: false, toutVoir: false, brouillons: {}, tech: "", tri: "urgence", qSite: "", lierOuvert: new Set(), lierQ: {} };
 // Tri des demandes d'un site (mémorisé sur l'appareil).
 try { st.tri = localStorage.getItem("etablieres-dps-tri") || "urgence"; } catch {}
 const ORDRE_AVANCEMENT = { "Non renseigné": 0, "Pris en compte": 1, "Intervenant sollicité": 2, "Demande de devis": 3, "Planifié": 4, "Commande en cours": 5, "Autre": 6 };
@@ -728,7 +728,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   // Bloc des demandes liées, affiché en haut de la carte principale.
   const lieesHTML = (l) => {
     const liees = lieesDe(l.id); if (!liees.length) return "";
-    return `<details class="dps-liees"><summary>🔗 Regroupe ${liees.length + 1} demandes <small>${liees.map(x => esc(x.n)).join(", ")}</small></summary>
+    return `<details class="dps-liees" open><summary>🔗 Regroupe ${liees.length + 1} demandes <small>${liees.map(x => esc(x.n)).join(", ")}</small></summary>
       ${liees.map(x => `<div class="dps-liee"><span class="dps-num">${esc(x.n)}</span><span>${x.date ? fr(x.date) : ""}${x.demandeur ? ` · ${esc(x.demandeur)}` : ""}${x.local ? ` · 📍 ${esc(x.local)}` : ""}<br><i>${esc((x.descr || "").slice(0, 110))}</i></span>${perms.peutTraiter ? `<button type="button" class="dps-delier" data-delier="${esc(x.id)}" title="Détacher cette demande">✂ Délier</button>` : ""}</div>`).join("")}
       <small>Ce qui est enregistré sur ${esc(l.n)} est recopié sur ${liees.length > 1 ? "ces demandes" : "cette demande"}.</small></details>`;
   };
@@ -797,13 +797,23 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : ""}</div>`}
       ${(() => {
         const liees = lieesDe(l.id);
-        const candidats = tousDuSite.filter(x => x.id !== l.id && !x.lieeA && !lieesDe(x.id).length && !TRAITE(x.statut));
+        // Toutes les demandes du site (sauf celle-ci, celles déjà reliées ici et
+        // celles qui regroupent déjà d'autres demandes), le MÊME LOGEMENT en tête.
+        const loc = (x) => sa(x.local).replace(/^(logt|logement|lgt|ch|chambre|log|appt?|n°)\s*/, "").replace(/[^a-z0-9]/g, "");
+        const memeLog = (x) => l.local && loc(x) && loc(x) === loc(l);
+        const candidats = tousDuSite.filter(x => x.id !== l.id && x.lieeA !== l.id && !lieesDe(x.id).length)
+          .sort((a, b) => (memeLog(b) - memeLog(a)) || (TRAITE(a.statut) - TRAITE(b.statut)) || String(b.date || "").localeCompare(String(a.date || "")));
+        const ligneCand = (x) => `<button type="button" class="dps-cand ${memeLog(x) ? "meme" : ""}" data-lier-cible="${esc(x.id)}" data-lier="${esc(l.id)}" data-q="${esc(sa(`${x.n} ${x.local} ${x.descr} ${x.demandeur}`))}">
+            <span class="dps-num">${esc(x.n)}</span><span class="dps-cand-t"><b>${x.local ? `📍 ${esc(x.local)} · ` : ""}${x.date ? fr(x.date) : "?"}</b>${TRAITE(x.statut) ? ` <em>${esc(x.statut)}</em>` : ""}${x.lieeA ? ` <em>déjà reliée à ${esc(x.lieeANumero || "une autre")}</em>` : ""}<br>${esc((x.descr || "").slice(0, 90))}</span><span class="dps-cand-go">🔗 Relier</span></button>`;
+        const nMeme = candidats.filter(memeLog).length;
         const mails = Array.isArray(l.mailsEnvoyes) ? l.mailsEnvoyes : [];
         return `${mails.length ? `<div class="dps-mails">${mails.slice(-3).map(m => `<span>📧 Mail à <b>${esc(m.a)}</b> le ${fr(m.le)}${m.par ? ` par ${esc(m.par)}` : ""}</span>`).join("")}</div>` : ""}
         ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button>${perms.isEditor ? `<button type="button" class="dps-mail-btn dps-suppr-btn" data-suppr-dem="${esc(l.id)}" title="Supprimer cette demande (erreur) — restaurable depuis l'onglet « 🗑 Supprimées »">🗑 Supprimer</button>` : ""}</div>` : ""}
-        ${perms.peutTraiter && candidats.length ? `<details class="dps-lier"><summary>🔗 Relier un doublon à cette demande</summary>
-          <div class="dps-lier-champs"><select data-lier-choix><option value="">— Choisir la demande en double —</option>${candidats.map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
-          <button type="button" class="dps-action-ok" data-lier="${esc(l.id)}">🔗 Relier</button></div></details>` : ""}
+        ${perms.peutTraiter && candidats.length ? `<details class="dps-lier" data-lier-box="${esc(l.id)}" ${st.lierOuvert.has(l.id) ? "open" : ""}><summary>🔗 Relier une autre demande à celle-ci (doublon)${nMeme ? ` <small>${nMeme} du même logement</small>` : ""}</summary>
+          <input type="search" class="dps-cand-q" data-lier-q="${esc(l.id)}" placeholder="🔎 N°, logement, mot du descriptif…" value="${esc(st.lierQ[l.id] || "")}">
+          <div class="dps-cands">${nMeme ? `<div class="dps-cand-titre">📍 Même logement${l.local ? ` (${esc(l.local)})` : ""}</div>${candidats.filter(memeLog).map(ligneCand).join("")}` : ""}
+            ${candidats.length > nMeme ? `<div class="dps-cand-titre">Autres demandes du site</div>${candidats.filter(x => !memeLog(x)).map(ligneCand).join("")}` : ""}</div>
+          <small class="dps-echanger-aide">La demande reliée suivra le traitement de ${esc(l.n)} (statut, date, commentaire). Elle apparaîtra dans le bloc « 🔗 Regroupe » en haut de cette carte.</small></details>` : ""}
         ${perms.isEditor && tousDuSite.length > 1 ? `<details class="dps-lier dps-echanger"><summary>↔️ Suivi sur la mauvaise demande ? Échanger avec une autre</summary>
           <p class="dps-echanger-aide">Échange le statut, le commentaire, l'intervenant, la clôture et l'action entre cette demande et celle choisie. Le descriptif, le N° et le local ne bougent pas.</p>
           <div class="dps-lier-champs"><select data-echanger-choix><option value="">— Choisir la bonne demande —</option>${tousDuSite.filter(x => x.id !== l.id).sort((a, b) => (a.local || "").localeCompare(b.local || "", "fr", { numeric: true })).map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
@@ -887,15 +897,20 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   brancherValidation();
   brancherActions(container, { lignes, maj, utilisateur, utilisateurs, uid });
   brancherNouvelle();
-  container.querySelectorAll("[data-lier]").forEach(b => b.addEventListener("click", async () => {
-    const sel = b.parentElement.querySelector("[data-lier-choix]"), idDoublon = sel.value;
-    if (!idDoublon) { sel.focus(); return; }
+  container.querySelectorAll("[data-lier-box]").forEach(d => d.addEventListener("toggle", () => { if (d.open) st.lierOuvert.add(d.dataset.lierBox); else st.lierOuvert.delete(d.dataset.lierBox); }));
+  container.querySelectorAll("[data-lier-q]").forEach(inp => {
+    const filtrer = () => { const q = sa(inp.value.trim()); st.lierQ[inp.dataset.lierQ] = inp.value;
+      inp.parentElement.querySelectorAll(".dps-cand").forEach(c => { c.hidden = !!q && !q.split(/\s+/).every(m => c.dataset.q.includes(m)); }); };
+    inp.addEventListener("input", filtrer); if (inp.value) filtrer();
+  });
+  container.querySelectorAll("[data-lier-cible]").forEach(b => b.addEventListener("click", async () => {
+    const idDoublon = b.dataset.lierCible;
     const principale = lignes.find(x => x.id === b.dataset.lier), doublon = lignes.find(x => x.id === idDoublon);
-    if (!confirm(`Relier ${doublon?.n} à ${principale?.n} ?\n${doublon?.n} suivra le traitement de ${principale?.n} (statut, date, commentaire…).`)) return;
-    b.disabled = true;
+    if (!confirm(`Relier ${doublon?.n}${doublon?.local ? ` (${doublon.local})` : ""} à ${principale?.n} ?\n\n« ${(doublon?.descr || "").slice(0, 80)} »\n\n${doublon?.n} suivra le traitement de ${principale?.n} (statut, date, commentaire…).`)) return;
+    b.disabled = true; b.querySelector(".dps-cand-go").textContent = "⏳";
     const champs = { lieeA: principale.id, lieeANumero: principale.n };
     CHAMPS_PROPAGES.forEach(k => { if (principale[k]) champs[k] = principale[k]; });
-    try { await maj(idDoublon, champs); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
+    try { await maj(idDoublon, champs); window.toast?.(`✓ ${doublon?.n} reliée à ${principale?.n}`); } catch (e) { console.error(e); alert("Échec : " + (e?.message || e)); b.disabled = false; }
   }));
   container.querySelectorAll("[data-mail]").forEach(b => b.addEventListener("click", async () => {
     const { ouvrirEnvoiMail } = await import("./demandes-mail.js");

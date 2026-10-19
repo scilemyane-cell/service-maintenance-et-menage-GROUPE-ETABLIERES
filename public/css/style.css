@@ -3738,3 +3738,14 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
 .cl-gros-btn{display:block;text-align:center;text-decoration:none;border:0;border-radius:14px;padding:14px;font:800 15px "Montserrat",system-ui,sans-serif;background:#1baf7a;color:#fff;cursor:pointer}
 .cl-gros-btn.clair{background:var(--panel-alt);color:var(--text);border:1px solid var(--border)}
 .cl-lien{width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text-dim);font-size:12px}
+
+/* Relier un doublon : liste cliquable, même logement en tête */
+.dps-cand-q{width:100%;margin-top:8px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit}
+.dps-cands{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:340px;overflow-y:auto}
+.dps-cand-titre{font:800 11px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);margin-top:4px}
+.dps-cand{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;text-align:left;padding:9px 10px;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--text);font:500 12.5px system-ui,sans-serif;cursor:pointer}
+.dps-cand:hover{border-color:#2a78d6;background:color-mix(in srgb,#2a78d6 6%,var(--panel))}
+.dps-cand.meme{border-left:4px solid #2a78d6}
+.dps-cand-t em{font-style:normal;font-size:11px;background:var(--panel-alt);border-radius:6px;padding:1px 6px;color:var(--text-dim)}
+.dps-cand-go{font-weight:800;color:#2a78d6;white-space:nowrap}
+.dps-cand[hidden]{display:none}
