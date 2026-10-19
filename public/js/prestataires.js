@@ -34,7 +34,7 @@ function bilan(lignes, e) {
 }
 
 function texteMail(b) {
-  const l = b.aFaire.map(x => `- ${x.n} · ${x.site}${x.local ? ` (${x.local})` : ""} : ${x.descr || ""}${x.urgence && !/non/i.test(x.urgence) ? ` [${x.urgence}]` : ""}`);
+  const l = b.aFaire.map(x => `- ${x.n} · ${x.site}${x.local ? ` (${x.local})` : ""} : ${x.descr || ""}${x.urgence && !/non/i.test(x.urgence) ? ` [${x.urgence}]` : ""}${x.notePresta ? `\n    → ${x.notePresta}` : ""}`);
   let liste = "", n = 0;
   for (const x of l) { if (liste.length + x.length > 1500) break; liste += x + "\n"; n++; }
   if (n < l.length) liste += `… et ${l.length - n} autre(s) (voir le récapitulatif joint).\n`;
@@ -94,7 +94,9 @@ export function renderPrestataires(container, lignes, { toggleHTML, onToggle, ma
         ${mode === "afaire" && j !== null ? `<span class="pst-age ${j > RETARD_J ? "vieux" : ""}">${l.attribueLe ? "confiée" : "demandée"} il y a ${j} j</span>` : ""}
         ${mode === "faites" ? `<span class="pst-age ok">✓ ${fr(l.dateIntervention || l.dateStatut)}</span>` : ""}</div>
       <p>${esc(l.descr || "") || "<i>Sans descriptif</i>"}</p>
-      ${l.commentaireTech ? `<small class="pst-com">💬 ${esc(l.commentaireTech)}</small>` : ""}
+      <label class="pst-note"><span>📝 Note pour l'entreprise <small>(seule note imprimée sur sa feuille)</small></span>
+        <textarea rows="2" data-pst-note="${esc(l.id)}" placeholder="ex. Accès par le gardien, logement libre à partir du 25/10…">${esc(l.notePresta || "")}</textarea></label>
+      ${l.commentaireTech ? `<details class="pst-com-int"><summary>💬 Commentaire interne (non imprimé)</summary><small class="pst-com">${esc(l.commentaireTech)}</small></details>` : ""}
       <div class="pst-dem-act">
         ${mode === "afaire" ? `<select data-pst-statut="${esc(l.id)}" title="Avancement">${[...new Set([...STATUTS, l.statut])].filter(s => s && s !== "Non renseigné").map(s => `<option ${s === l.statut ? "selected" : ""}>${esc(s)}</option>`).join("")}${!l.statut || l.statut === "Non renseigné" ? `<option selected value="">— statut —</option>` : ""}</select>
           <button type="button" class="pst-btn ok" data-pst-fait="${esc(l.id)}">✓ Réalisée</button>
@@ -245,11 +247,16 @@ export function renderPrestataires(container, lignes, { toggleHTML, onToggle, ma
     if (cle(l.intervenant) === cle(courant?.e.nom)) { ch.intervenant = ""; ch.categorieIntervenant = ""; }
     try { await maj(l.id, ch); } catch (e) { alert("Échec : " + (e?.message || e)); }
   }));
+  container.querySelectorAll("[data-pst-note]").forEach(t => t.addEventListener("change", async () => {
+    const l = ligne(t.dataset.pstNote); if (!l) return;
+    try { await maj(l.id, { notePresta: t.value.trim(), notePrestaLe: aujourdhui() }); window.toast?.("✓ Note pour l'entreprise enregistrée"); }
+    catch (e) { alert("Échec : " + (e?.message || e)); }
+  }));
   container.querySelectorAll("[data-pst-ouvrir]").forEach(b => b.addEventListener("click", () => { const [id, site] = b.dataset.pstOuvrir.split("|"); ouvrirDemande?.(id, site); }));
   $("[data-pst-imprimer]")?.addEventListener("click", () => {
     const b = courant; if (!b) return;
     const coord = [b.e.metier, b.e.contact, b.e.tel, b.e.email].filter(Boolean).map(esc).join(" · ");
-    imprimerListe({ titre: `🏢 ${b.e.nom}`, sousTitre: coord, sections: [{ titre: "À faire", liste: b.aFaire }, { titre: "En attente de validation", liste: b.enValid }, { titre: "Réalisées (30 derniers jours)", liste: b.faites.filter(l => (jours(l.dateIntervention || l.dateStatut) ?? 99) <= 30) }] });
+    imprimerListe({ titre: `🏢 ${b.e.nom}`, sousTitre: coord, pourEntreprise: true, sections: [{ titre: "À faire", liste: b.aFaire }, { titre: "En attente de validation", liste: b.enValid }, { titre: "Réalisées (30 derniers jours)", liste: b.faites.filter(l => (jours(l.dateIntervention || l.dateStatut) ?? 99) <= 30) }] });
   });
   $("[data-pst-mail]")?.addEventListener("click", () => {
     const b = courant; if (!b) return;

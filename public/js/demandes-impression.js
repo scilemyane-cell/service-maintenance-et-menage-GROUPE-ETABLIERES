@@ -18,8 +18,15 @@ function suivi(l) {
 
 // Statut en pastille de couleur (lisible même imprimé en noir et blanc : texte en gras).
 const COUL_ST = (s) => /^r[ée]alis/i.test(s) ? "ok" : /^annul/i.test(s) ? "ko" : /devis|attente|arbitrage/i.test(s) ? "att" : /planifi|commande|sollicit/i.test(s) ? "enc" : "neu";
-function suiviClair(l) {
+function suiviClair(l, pourEntreprise = false) {
   const t = [];
+  // Feuille remise à une entreprise : uniquement la note choisie pour elle
+  // (« 📝 Note pour l'entreprise »), jamais l'historique interne.
+  if (pourEntreprise) {
+    if (l.notePresta) t.push(`<div class="com">${esc(l.notePresta)}</div>`);
+    if (l.dateIntervention) t.push(`<small>📅 Intervention prévue / faite le ${fr(l.dateIntervention)}</small>`);
+    return t.join("") || `<small class="vide">—</small>`;
+  }
   if (l.commentaireTech) t.push(`<div class="com">${esc(l.commentaireTech)}${l.commentaireTechPar ? `<small> — ${esc(nomPropre(l.commentaireTechPar))}</small>` : ""}</div>`);
   if (l.actionTexte) t.push(`<div class="act">${l.actionFaiteLe ? "✓ Action faite" : "📌 Action"} → <b>${esc(nomPropre(l.actionPourNom))}</b> : ${esc(l.actionTexte)}${l.actionEcheance && !l.actionFaiteLe ? ` (avant le ${fr(l.actionEcheance)})` : ""}</div>`);
   if (l.intervenant) t.push(`<small>👷 ${esc(l.intervenant)}${l.dateIntervention ? ` · intervention le ${fr(l.dateIntervention)}` : ""}</small>`);
@@ -27,27 +34,27 @@ function suiviClair(l) {
 }
 // Liste multi-sites (récap d'une entreprise, etc.) : un bloc par RÉSIDENCE / site,
 // logements dans l'ordre, statut bien visible et commentaire en clair.
-function tableauParSite(titre, liste) {
+function tableauParSite(titre, liste, pourEntreprise = false) {
   if (!liste.length) return "";
   const parSite = new Map(); liste.forEach(l => { const k = l.site || "Sans site"; parSite.set(k, [...(parSite.get(k) || []), l]); });
   const sites = [...parSite.keys()].sort((a, b) => a.localeCompare(b, "fr"));
   return `<h2>${titre} <span>(${liste.length})</span></h2>` + sites.map(site => {
     const l2 = parSite.get(site).sort((a, b) => (a.local || "zzz").localeCompare(b.local || "zzz", "fr", { numeric: true }) || String(a.n).localeCompare(String(b.n), "fr", { numeric: true }));
     return `<section class="res"><h3>🏠 ${esc(site)} <span>${l2.length} demande${l2.length > 1 ? "s" : ""}</span></h3>
-    <table><thead><tr><th class="c-lg">Logement</th><th class="c-n">N° · date</th><th>Demande</th><th class="c-st">Statut</th><th class="c-sv2">Commentaire / suivi</th><th class="c-f">Fait / notes</th></tr></thead>
+    <table><thead><tr><th class="c-lg">Logement</th><th class="c-n">N° · date</th><th>Demande</th><th class="c-st">Statut</th><th class="c-sv2">${pourEntreprise ? "Précisions" : "Commentaire / suivi"}</th><th class="c-f">Fait / notes</th></tr></thead>
     <tbody>${l2.map(l => `<tr class="${l.urgence === "Critique" ? "crit" : ""}">
       <td class="c-lg"><b class="lg">${esc(l.local || "—")}</b>${l.logementOccupe ? `<small>Occupé : ${esc(l.logementOccupe)}</small>` : ""}</td>
       <td class="c-n"><b>${esc(l.n)}</b><small>${fr(l.date)}</small></td>
       <td>${esc(l.descr)}${l.type || l.demandeur ? `<small>${[l.type, l.demandeur ? `demandé par ${l.demandeur}` : ""].filter(Boolean).map(esc).join(" · ")}</small>` : ""}${l.urgence && !["Non renseignée", "Normal"].includes(l.urgence) ? `<span class="urg ${l.urgence === "Critique" || l.urgence === "Urgent" ? "fort" : ""}">${esc(l.urgence)}</span>` : ""}</td>
       <td class="c-st"><span class="st ${COUL_ST(l.statut)}">${esc(l.statut)}</span></td>
-      <td class="c-sv2">${suiviClair(l)}</td>
+      <td class="c-sv2">${suiviClair(l, pourEntreprise)}</td>
       <td class="c-f"></td></tr>`).join("")}</tbody></table></section>`;
   }).join("");
 }
 
-function tableau(titre, liste, parLocal, avecSite = false) {
+function tableau(titre, liste, parLocal, avecSite = false, pourEntreprise = false) {
   if (!liste.length) return "";
-  if (avecSite) return tableauParSite(titre, liste);
+  if (avecSite) return tableauParSite(titre, liste, pourEntreprise);
   const tri = [...liste].sort((a, b) => parLocal
     ? (a.local || "zzz").localeCompare(b.local || "zzz", "fr", { numeric: true }) || String(a.n).localeCompare(String(b.n), "fr", { numeric: true })
     : (ORDRE_URG[a.urgence] ?? 5) - (ORDRE_URG[b.urgence] ?? 5) || (a.date || "").localeCompare(b.date || ""));
@@ -64,7 +71,7 @@ function tableau(titre, liste, parLocal, avecSite = false) {
     <td class="c-f"></td></tr>`).join("")}</tbody></table>`;
 }
 
-function pageHTML({ site, techs, sections, parLocal, sousTitre = "", avecSite = false }) {
+function pageHTML({ site, techs, sections, parLocal, sousTitre = "", avecSite = false, pourEntreprise = false }) {
   const total = sections.reduce((n, s) => n + s.liste.length, 0);
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Demandes – ${esc(site)}</title>
@@ -109,7 +116,7 @@ footer{margin-top:10px;color:#666;font-size:10px}
 <div class="imp"><button onclick="window.print()">🖨 Imprimer</button><button class="sec" onclick="window.close()">Fermer</button></div>
 <header><div><h1>${esc(site)}</h1><p>${sousTitre ? `${sousTitre}<br>` : ""}Récapitulatif des demandes — ${total} demande${total > 1 ? "s" : ""}${techs ? ` · 👷 ${esc(techs)}` : ""}${avecSite ? " · classées par résidence et logement" : parLocal ? " · classées par logement" : " · classées par urgence"}</p></div>
 <p>Groupe Établières — Service Maintenance<br>Imprimé le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p></header>
-${sections.map(s => tableau(s.titre, s.liste, parLocal, avecSite)).join("") || "<p>Aucune demande.</p>"}
+${sections.map(s => tableau(s.titre, s.liste, parLocal, avecSite, pourEntreprise)).join("") || "<p>Aucune demande.</p>"}
 <footer>Document généré depuis l'appli Service Maintenance et Ménage.</footer>
 <script>window.addEventListener("load",()=>setTimeout(()=>{try{window.print()}catch(e){}},400));</script>
 </body></html>`;
@@ -117,8 +124,8 @@ ${sections.map(s => tableau(s.titre, s.liste, parLocal, avecSite)).join("") || "
 
 // Page imprimable d'une liste quelconque (ex. récap d'une entreprise extérieure).
 // `fenetre` : fenêtre ouverte dans le clic (téléphones), sinon on en ouvre une.
-export function imprimerListe({ titre, sousTitre = "", sections, fenetre = null }) {
-  const html = pageHTML({ site: titre, sousTitre, sections: sections.filter(s => s.liste.length), parLocal: false, avecSite: true });
+export function imprimerListe({ titre, sousTitre = "", sections, fenetre = null, pourEntreprise = false }) {
+  const html = pageHTML({ site: titre, sousTitre, sections: sections.filter(s => s.liste.length), parLocal: false, avecSite: true, pourEntreprise });
   const w = fenetre || window.open("", "_blank");
   if (w) { w.document.open(); w.document.write(html); w.document.close(); return; }
   const a = document.createElement("a");

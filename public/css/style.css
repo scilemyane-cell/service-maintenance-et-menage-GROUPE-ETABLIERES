@@ -3749,3 +3749,8 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
 .dps-cand-t em{font-style:normal;font-size:11px;background:var(--panel-alt);border-radius:6px;padding:1px 6px;color:var(--text-dim)}
 .dps-cand-go{font-weight:800;color:#2a78d6;white-space:nowrap}
 .dps-cand[hidden]{display:none}
+
+.pst-note{display:flex;flex-direction:column;gap:4px;margin:6px 0;font-size:12.5px;font-weight:700;color:var(--text)}
+.pst-note small{font-weight:500;color:var(--text-dim)}
+.pst-note textarea{padding:7px 9px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;font-weight:500;resize:vertical}
+.pst-com-int>summary{cursor:pointer;font-size:12px;color:var(--text-dim)}
