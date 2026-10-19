@@ -12,7 +12,7 @@ const jours = (d) => d ? Math.max(0, Math.floor((Date.now() - new Date(String(d)
 const TRAITE = (s) => s === "Réalisé" || s === "Annulé";
 const A_VALIDER = (s) => /à valider/i.test(s || "");
 const ORDRE_URG = { Critique: 0, Urgent: 1, "À planifier": 2, Normal: 3 };
-const STATUTS = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "Planifié", "Commande en cours"];
+const STATUTS = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "En attente date d'intervention", "Planifié", "Commande en cours"];
 const sa = (x) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const urgCls = (u) => u === "Critique" ? "crit" : u === "Urgent" ? "urg" : u === "À planifier" ? "plan" : u === "Normal" ? "norm" : "nr";
 const RETARD_J = 30;

@@ -139,7 +139,7 @@ async function basculerFavori(nomSite) {
   catch (e) { console.error("saveFavorisDemandes:", e); window.toast?.("Favori non enregistré."); }
 }
 
-const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "Planifié", "Commande en cours", "Réalisé", "Annulé", "Arbitrage budgétaire"];
+const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "En attente date d'intervention", "Planifié", "Commande en cours", "Réalisé", "Annulé", "Arbitrage budgétaire"];
 const ORDRE_URG = { "Critique": 0, "Urgent": 1, "À planifier": 2, "Normal": 3, "Non renseignée": 4 };
 const TRAITE = (s) => s === "Réalisé" || s === "Annulé";
 // Circuit de validation : le technicien déclare « Réalisé », la demande passe
@@ -396,7 +396,7 @@ const ieDe = (l) => { const ci = String(l.categorieIntervenant || "").toLowerCas
 const st = { ie: "", site: null, q: "", association: "", voirTraitees: false, toutVoir: false, brouillons: {}, tech: "", tri: "urgence", qSite: "", lierOuvert: new Set(), lierQ: {} };
 // Tri des demandes d'un site (mémorisé sur l'appareil).
 try { st.tri = localStorage.getItem("etablieres-dps-tri") || "urgence"; } catch {}
-const ORDRE_AVANCEMENT = { "Non renseigné": 0, "Pris en compte": 1, "Intervenant sollicité": 2, "Demande de devis": 3, "Planifié": 4, "Commande en cours": 5, "Autre": 6 };
+const ORDRE_AVANCEMENT = { "Non renseigné": 0, "Pris en compte": 1, "Intervenant sollicité": 2, "Demande de devis": 3, "En attente date d'intervention": 3.5, "Planifié": 4, "Commande en cours": 5, "Autre": 6 };
 const TRIS = {
   urgence: ["🔴 Urgence", (a, b) => ((ORDRE_URG[a.urgence] ?? 9) - (ORDRE_URG[b.urgence] ?? 9)) || (a.date || "").localeCompare(b.date || "")],
   recentes: ["📅 Plus récentes", (a, b) => (b.date || "").localeCompare(a.date || "") || String(b.n).localeCompare(String(a.n), "fr", { numeric: true })],
