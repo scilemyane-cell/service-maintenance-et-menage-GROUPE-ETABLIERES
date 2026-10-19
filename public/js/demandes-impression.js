@@ -16,8 +16,38 @@ function suivi(l) {
   return t.join("<br>");
 }
 
+// Statut en pastille de couleur (lisible même imprimé en noir et blanc : texte en gras).
+const COUL_ST = (s) => /^r[ée]alis/i.test(s) ? "ok" : /^annul/i.test(s) ? "ko" : /devis|attente|arbitrage/i.test(s) ? "att" : /planifi|commande|sollicit/i.test(s) ? "enc" : "neu";
+function suiviClair(l) {
+  const t = [];
+  if (l.commentaireTech) t.push(`<div class="com">${esc(l.commentaireTech)}${l.commentaireTechPar ? `<small> — ${esc(nomPropre(l.commentaireTechPar))}</small>` : ""}</div>`);
+  if (l.actionTexte) t.push(`<div class="act">${l.actionFaiteLe ? "✓ Action faite" : "📌 Action"} → <b>${esc(nomPropre(l.actionPourNom))}</b> : ${esc(l.actionTexte)}${l.actionEcheance && !l.actionFaiteLe ? ` (avant le ${fr(l.actionEcheance)})` : ""}</div>`);
+  if (l.intervenant) t.push(`<small>👷 ${esc(l.intervenant)}${l.dateIntervention ? ` · intervention le ${fr(l.dateIntervention)}` : ""}</small>`);
+  return t.join("") || `<small class="vide">Aucun commentaire</small>`;
+}
+// Liste multi-sites (récap d'une entreprise, etc.) : un bloc par RÉSIDENCE / site,
+// logements dans l'ordre, statut bien visible et commentaire en clair.
+function tableauParSite(titre, liste) {
+  if (!liste.length) return "";
+  const parSite = new Map(); liste.forEach(l => { const k = l.site || "Sans site"; parSite.set(k, [...(parSite.get(k) || []), l]); });
+  const sites = [...parSite.keys()].sort((a, b) => a.localeCompare(b, "fr"));
+  return `<h2>${titre} <span>(${liste.length})</span></h2>` + sites.map(site => {
+    const l2 = parSite.get(site).sort((a, b) => (a.local || "zzz").localeCompare(b.local || "zzz", "fr", { numeric: true }) || String(a.n).localeCompare(String(b.n), "fr", { numeric: true }));
+    return `<section class="res"><h3>🏠 ${esc(site)} <span>${l2.length} demande${l2.length > 1 ? "s" : ""}</span></h3>
+    <table><thead><tr><th class="c-lg">Logement</th><th class="c-n">N° · date</th><th>Demande</th><th class="c-st">Statut</th><th class="c-sv2">Commentaire / suivi</th><th class="c-f">Fait / notes</th></tr></thead>
+    <tbody>${l2.map(l => `<tr class="${l.urgence === "Critique" ? "crit" : ""}">
+      <td class="c-lg"><b class="lg">${esc(l.local || "—")}</b>${l.logementOccupe ? `<small>Occupé : ${esc(l.logementOccupe)}</small>` : ""}</td>
+      <td class="c-n"><b>${esc(l.n)}</b><small>${fr(l.date)}</small></td>
+      <td>${esc(l.descr)}${l.type || l.demandeur ? `<small>${[l.type, l.demandeur ? `demandé par ${l.demandeur}` : ""].filter(Boolean).map(esc).join(" · ")}</small>` : ""}${l.urgence && !["Non renseignée", "Normal"].includes(l.urgence) ? `<span class="urg ${l.urgence === "Critique" || l.urgence === "Urgent" ? "fort" : ""}">${esc(l.urgence)}</span>` : ""}</td>
+      <td class="c-st"><span class="st ${COUL_ST(l.statut)}">${esc(l.statut)}</span></td>
+      <td class="c-sv2">${suiviClair(l)}</td>
+      <td class="c-f"></td></tr>`).join("")}</tbody></table></section>`;
+  }).join("");
+}
+
 function tableau(titre, liste, parLocal, avecSite = false) {
   if (!liste.length) return "";
+  if (avecSite) return tableauParSite(titre, liste);
   const tri = [...liste].sort((a, b) => parLocal
     ? (a.local || "zzz").localeCompare(b.local || "zzz", "fr", { numeric: true }) || String(a.n).localeCompare(String(b.n), "fr", { numeric: true })
     : (ORDRE_URG[a.urgence] ?? 5) - (ORDRE_URG[b.urgence] ?? 5) || (a.date || "").localeCompare(b.date || ""));
@@ -62,10 +92,22 @@ small{color:#555}
 .type{font-weight:700;color:#333}
 .c-n{width:62px}.c-d{width:76px;white-space:nowrap}.c-l{width:110px}.c-u{width:66px}.c-s{width:90px}.c-sv{width:24%}.c-f{width:15%}
 footer{margin-top:10px;color:#666;font-size:10px}
+.res{margin:10px 0 14px;page-break-inside:auto}
+.res h3{margin:0;padding:6px 10px;background:#0b1d3a;color:#fff;font-size:13px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-after:avoid}
+.res h3 span{font-weight:400;font-size:11px;opacity:.85}
+.res table{border-top:0}
+.c-lg{width:72px;text-align:center}.res .c-n{width:84px}.lg{font-size:15px;display:block}
+.c-n small,.c-lg small,td small{display:block;color:#666;font-size:9.5px}
+.c-st{width:118px}.c-sv2{width:30%}
+.st{display:inline-block;font-weight:800;font-size:10px;padding:3px 7px;border-radius:99px;border:1px solid #999;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.st.ok{background:#dff3e8;border-color:#5bb98a;color:#0a5a35}.st.ko{background:#f6dede;border-color:#d08a8a;color:#8a1c1c}
+.st.att{background:#fff1cf;border-color:#e2b54b;color:#7a5200}.st.enc{background:#e1ecfb;border-color:#7ea6dd;color:#1f4f8f}.st.neu{background:#eee;color:#333}
+.com{font-size:11px}.act{font-size:10.5px;margin-top:3px}.vide{color:#999}
+.urg{display:inline-block;margin:3px 0 0 6px;font-size:9.5px;font-weight:700;border:1px solid #bbb;border-radius:4px;padding:0 5px}.urg.fort{border-color:#c8102e;color:#c8102e}
 @media print{.imp{display:none}body{padding:0}}
 </style></head><body>
 <div class="imp"><button onclick="window.print()">🖨 Imprimer</button><button class="sec" onclick="window.close()">Fermer</button></div>
-<header><div><h1>${esc(site)}</h1><p>${sousTitre ? `${sousTitre}<br>` : ""}Récapitulatif des demandes — ${total} demande${total > 1 ? "s" : ""}${techs ? ` · 👷 ${esc(techs)}` : ""}${parLocal ? " · classées par logement" : " · classées par urgence"}</p></div>
+<header><div><h1>${esc(site)}</h1><p>${sousTitre ? `${sousTitre}<br>` : ""}Récapitulatif des demandes — ${total} demande${total > 1 ? "s" : ""}${techs ? ` · 👷 ${esc(techs)}` : ""}${avecSite ? " · classées par résidence et logement" : parLocal ? " · classées par logement" : " · classées par urgence"}</p></div>
 <p>Groupe Établières — Service Maintenance<br>Imprimé le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p></header>
 ${sections.map(s => tableau(s.titre, s.liste, parLocal, avecSite)).join("") || "<p>Aucune demande.</p>"}
 <footer>Document généré depuis l'appli Service Maintenance et Ménage.</footer>
