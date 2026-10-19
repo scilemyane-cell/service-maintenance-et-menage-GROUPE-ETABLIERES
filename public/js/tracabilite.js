@@ -158,6 +158,25 @@ function render() {
         ${isEditorUser(mountedUser) ? `<button type="button" class="nav-btn" id="tr-reconst" style="align-self:flex-end">🧾 Reconstituer des fiches disparues</button><button type="button" class="nav-btn" id="tr-qr" style="align-self:flex-end">📱 QR lecture seule</button>` : ""}
       </div>
 
+      ${(() => {
+        // Suivi EN DIRECT de la semaine en cours : chaque coche de l'agent est
+        // enregistrée tout de suite, pas besoin qu'elle « termine » sa fiche.
+        const t = new Date(), lundi = dateKey(addDays(t, -((t.getDay() + 6) % 7)));
+        const cle = ["LUN", "MAR", "MER", "JEU", "VEN"][(t.getDay() + 6) % 7];
+        const enCours = filtered.filter(f => f.weekStart === lundi);
+        if (!enCours.length) return "";
+        const ms = (v) => v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0;
+        const ilYa = (m) => { if (!m) return "—"; const mn = Math.round((Date.now() - m) / 60000); return mn < 1 ? "à l'instant" : mn < 60 ? `il y a ${mn} min` : mn < 1440 ? `il y a ${Math.round(mn / 60)} h` : `il y a ${Math.round(mn / 1440)} j`; };
+        return `<div class="form-card tr-direct"><h3 style="margin:0 0 4px;font-size:15px">🟢 En direct — semaine en cours</h3><p class="hint" style="margin:0 0 10px">Mis à jour à chaque case cochée par l'agent, même si la fiche n'est pas encore « terminée ».</p>
+          <div class="tr-direct-liste">${enCours.map(f => {
+            const site = state.sites.find(s => s.id === f.siteId); const { done, total } = taskCompletion(f, site);
+            let jd = 0, jt = 0; (site?.rooms || []).forEach((room, ri) => { if (!cle || !room.days.includes(cle)) return; room.tasks.forEach((task, ti) => { jt++; if (f.cells?.[`${ri}-${ti}-${cle}`]) jd++; }); });
+            const pct = total ? Math.round(done / total * 100) : 0, nbPh = (f.photos || []).length;
+            return `<button type="button" class="tr-direct-l" data-open="${f.id}"><b>${esc(f.agentNom)}</b><span>${esc(f.siteName)}</span>
+              <span class="tr-direct-barre"><i style="width:${pct}%"></i></span><span><b>${done}/${total}</b> semaine${jt ? ` · aujourd'hui ${jd}/${jt}` : ""}${nbPh ? ` · 📷 ${nbPh}` : ""}</span>
+              <small>${f.submitted ? "✓ terminée" : `dernière saisie ${ilYa(ms(f.majLe))}`}</small></button>`; }).join("")}</div></div>`;
+      })()}
+
       <div class="table-wrap">
         <table>
           <thead><tr><th>Semaine</th><th>Site</th><th>Agent</th><th>Avancement</th><th>État</th><th></th></tr></thead>
