@@ -57,11 +57,15 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
       const nom = ordre[k];
       try {
         // Sans « réflexion » (thinking) : réponse beaucoup plus rapide pour ces textes courts.
-        const m = getGenerativeModel(ai, { model: nom, generationConfig: { maxOutputTokens: rapide ? 400 : 1200, temperature: 0.3, ...(ordre.__sansThinking ? {} : { thinkingConfig: /gemini-3|latest/.test(nom) ? { thinkingLevel: "MINIMAL" } : { thinkingBudget: 0 } }) } });
+        const m = getGenerativeModel(ai, { model: nom, generationConfig: { maxOutputTokens: rapide ? 1024 : 2048, temperature: 0.3, ...(ordre.__sansThinking ? {} : { thinkingConfig: /gemini-3|latest/.test(nom) ? { thinkingLevel: "MINIMAL" } : { thinkingBudget: 0 } }) } });
         essais.push(nom);
         // 15 s max par modèle : un modèle saturé ne fait pas attendre indéfiniment.
         const r = await Promise.race([m.generateContent(prompt), new Promise((_, rej) => setTimeout(() => rej(new Error("[503] délai dépassé (15 s)")), 15000))]);
         const t = r.response.text();
+        // Réponse coupée (plafond de longueur atteint, souvent à cause de la
+        // « réflexion » du modèle) : on ne la rend jamais, on passe au suivant.
+        const fin = r.response.candidates?.[0]?.finishReason;
+        if (fin && /MAX_TOKENS/i.test(String(fin))) { erreurs[nom] = "réponse coupée (MAX_TOKENS)"; continue; }
         if (t && t.trim()) {
           if (rapide) { modeleRapideQuiMarche = nom; try { localStorage.setItem("etablieres-ia-modele-rapide", nom); } catch {} }
           else { modeleQuiMarche = nom; try { localStorage.setItem("etablieres-ia-modele", nom); } catch {} }
@@ -293,7 +297,9 @@ Contexte de la demande (ne pas recopier) : ${f.descr || "—"}
 Texte à corriger :
 ${notes}`, { rapide: true });
     t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
-    if (t && t.length <= Math.max(40, notes.length * 1.8)) return t;
+    // Garde-fous : ni trop longue (invention), ni tronquée (« en attente d'un »).
+    const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
+    if (t && t.length <= Math.max(40, notes.length * 1.8) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return t;
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
   return corrigerOrthographe(notes);
 }
