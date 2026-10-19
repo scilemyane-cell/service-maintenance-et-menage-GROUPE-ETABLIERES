@@ -13,6 +13,10 @@ export function mentionHTML(f, court = false) {
   return "";
 }
 
+const vignettes = (liste) => `<div class="trac-photos" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 10px">${liste.map(p => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
+  <img src="${p.data}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:4px;display:block">
+  <figcaption style="font-size:9.5px;margin-top:2px">${p.legende ? `${esc(p.legende)}<br>` : ""}<span style="color:#666">📷 ${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`).join("")}</div>`;
+
 export function taskCompletion(fiche, site) {
   if (!site) return { done: 0, total: 0 };
   let done = 0, total = 0;
@@ -59,7 +63,7 @@ export function ficheHTML(opened, openedSite, dispositif = "") {
                 </tr>
               `).join("")}
             </tbody>
-          </table></div>`).join("") : ""}
+          </table>${(() => { const ph = (opened.photos || []).filter(p => p.piece === room.name); return ph.length ? vignettes(ph) : ""; })()}</div>`).join("") : ""}
 
         ${opened.chambres && opened.chambres.length ? `
         <p style="font-size:13px;font-weight:700;margin:16px 0 6px">LITERIE SUR DEMANDE</p>
@@ -81,10 +85,8 @@ export function ficheHTML(opened, openedSite, dispositif = "") {
         </table>` : ""}
 
         <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(opened.observationsGenerales || "")}</p>
-        ${(opened.photos || []).length ? `<div class="trac-photos"><p style="font-size:13px;font-weight:700;margin:16px 0 6px">PHOTOS (${opened.photos.length})</p>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${opened.photos.map(p => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:4px;break-inside:avoid">
-            <img src="${p.data}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:4px;display:block">
-            <figcaption style="font-size:10px;margin-top:3px">${p.piece ? `<b>${esc(p.piece)}</b> · ` : ""}${esc(p.legende || "")}<br><span style="color:#666">${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`).join("")}</div></div>` : ""}
+        ${(() => { const noms = new Set(((openedSite && openedSite.rooms) || []).map(r => r.name)); const autres = (opened.photos || []).filter(p => !p.piece || !noms.has(p.piece));
+          return autres.length ? `<div class="trac-photos"><p style="font-size:13px;font-weight:700;margin:16px 0 6px">AUTRES PHOTOS</p>${vignettes(autres)}</div>` : ""; })()}
         ${mentionHTML(opened) ? `<p style="font-size:9px;margin-top:28px;color:#777">${mentionHTML(opened)}</p>` : ""}
       </div>`;
 }

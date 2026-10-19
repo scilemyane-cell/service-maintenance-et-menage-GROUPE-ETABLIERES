@@ -3763,3 +3763,6 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
 .fc-ph select,.fc-ph input{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;font-size:12px}
 .fc-ph small{color:var(--text-dim);font-size:11px}.fc-ph .del-btn{align-self:flex-end}
 .fc-ph-add{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:12px 16px;border-radius:12px;background:#2a78d6;color:#fff;font-weight:800;cursor:pointer}
+
+.fc-ph-zone{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.fc-ph-add.petit{margin-top:0;padding:8px 12px;font-size:13px;width:fit-content}

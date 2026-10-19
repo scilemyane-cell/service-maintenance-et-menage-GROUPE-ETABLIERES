@@ -134,6 +134,25 @@ async function compresserPhoto(fichier) {
   } finally { URL.revokeObjectURL(url); }
 }
 
+// Vignettes d'une pièce (ou des photos sans pièce si roomName === null) + bouton d'ajout.
+function photosPieceHTML(site, data, roomName) {
+  const noms = new Set((site.rooms || []).map(r => r.name));
+  const liste = (data.photos || []).map((p, i) => ({ p, i })).filter(({ p }) => roomName === null ? !p.piece || !noms.has(p.piece) : p.piece === roomName);
+  const plein = (data.photos || []).length >= MAX_PHOTOS;
+  if (roomName === null && !liste.length) return "";
+  return `<div class="fc-ph-zone">
+    ${liste.length ? `<div class="fc-ph-grille">${liste.map(({ p, i }) => `
+      <figure class="fc-ph"><img src="${p.data}" alt="" data-ph-voir="${i}">
+        <figcaption>
+          ${roomName === null ? `<select data-ph-piece="${i}"><option value="">— Pièce —</option>${(site.rooms || []).map(r => `<option>${esc(r.name)}</option>`).join("")}</select>` : ""}
+          <input data-ph-leg="${i}" value="${esc(p.legende || "")}" placeholder="Légende (facultatif)">
+          <small>${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
+          <button type="button" class="del-btn" data-ph-del="${i}" title="Supprimer la photo">🗑️</button>
+        </figcaption></figure>`).join("")}</div>` : ""}
+    ${roomName !== null ? (plein ? `<small class="hint">Maximum ${MAX_PHOTOS} photos par fiche atteint.</small>` : `<label class="fc-ph-add petit">📷 Photo de cette pièce<input type="file" accept="image/*" capture="environment" data-ph-room="${esc(roomName)}" hidden></label>`) : ""}
+  </div>`;
+}
+
 function currentFiche() {
   const site = state.sites.find(s => s.id === ui.siteId) || state.sites[0];
   const agent = effectiveAgent();
@@ -208,6 +227,7 @@ function vueSemaineHTML(site, data) {
               </tbody>
             </table>
           </div>
+          ${photosPieceHTML(site, data, room.name)}
         </div>
       `).join("")}</div>`;
 }
@@ -389,6 +409,7 @@ function vueJourHTML(site, data) {
             </div>
           </div>`;
         }).join("")}
+        ${photosPieceHTML(site, data, room.name)}
       </div>`;
     }).join("")}
   </div>`;
@@ -554,20 +575,8 @@ function renderInterne() {
 
       ${ui.vue === "jour" ? vueJourHTML(site, data) : vueSemaineHTML(site, data)}
 
-      <div class="form-card fc-photos">
-        <h3 style="margin:0 0 4px;font-size:14px;color:var(--gold)">📷 Photos de la semaine <small style="color:var(--text-dim);font-weight:500">(${(data.photos || []).length}/${MAX_PHOTOS})</small></h3>
-        <p class="hint" style="margin:0 0 10px">Une pièce terminée, un souci constaté… Les photos apparaissent sur la fiche imprimée « avec photos ».</p>
-        <div class="fc-ph-grille">${(data.photos || []).map((p, i) => `
-          <figure class="fc-ph"><img src="${p.data}" alt="" data-ph-voir="${i}">
-            <figcaption>
-              <select data-ph-piece="${i}"><option value="">— Pièce —</option>${(site.rooms || []).map(r => `<option ${r.name === p.piece ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
-              <input data-ph-leg="${i}" value="${esc(p.legende || "")}" placeholder="Légende (facultatif)">
-              <small>${new Date(p.le).toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
-              <button type="button" class="del-btn" data-ph-del="${i}" title="Supprimer la photo">🗑️</button>
-            </figcaption></figure>`).join("")}</div>
-        ${(data.photos || []).length < MAX_PHOTOS ? `<label class="fc-ph-add">📷 Prendre ou ajouter une photo<input type="file" accept="image/*" capture="environment" id="fc-ph-input" hidden></label>` : `<p class="hint" style="margin:6px 0 0">Maximum ${MAX_PHOTOS} photos par fiche.</p>`}
-        <span id="fc-ph-etat" class="hint"></span>
-      </div>
+      ${photosPieceHTML(site, data, null) ? `<div class="form-card fc-photos"><h3 style="margin:0 0 8px;font-size:14px;color:var(--gold)">📷 Photos sans pièce</h3><p class="hint" style="margin:0 0 8px">Choisis la pièce pour ranger la photo sous la bonne catégorie.</p>${photosPieceHTML(site, data, null)}</div>` : ""}
+      <span id="fc-ph-etat" class="hint"></span>
 
       ${site.literie ? `
       <div class="form-card">
@@ -665,21 +674,21 @@ function renderInterne() {
       scheduleSave(id, data);
     });
   });
-  mountedContainer.querySelector("#fc-ph-input")?.addEventListener("change", async (e) => {
+  mountedContainer.querySelectorAll("[data-ph-room]").forEach(inp => inp.addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const etat = mountedContainer.querySelector("#fc-ph-etat"); if (etat) etat.textContent = "⏳ Préparation de la photo…";
     try {
       const dataUrl = await compresserPhoto(f);
-      data.photos = [...(data.photos || []), { data: dataUrl, le: Date.now(), jour: ui.vue === "jour" ? ui.jour : "", piece: "", legende: "", par: effectiveAgent()?.nom || "" }];
+      data.photos = [...(data.photos || []), { data: dataUrl, le: Date.now(), jour: ui.vue === "jour" ? ui.jour : "", piece: inp.dataset.phRoom, legende: "", par: effectiveAgent()?.nom || "" }];
       await sauverFiche(id, data); render();
-      window.toast?.("✓ Photo ajoutée à la fiche");
+      window.toast?.("✓ Photo ajoutée");
     } catch (err) { if (etat) etat.textContent = ""; alert("Photo impossible : " + (err?.message || err)); }
-  });
+  }));
   mountedContainer.querySelectorAll("[data-ph-del]").forEach(b => b.addEventListener("click", () => {
     if (!confirm("Supprimer cette photo de la fiche ?")) return;
     data.photos = (data.photos || []).filter((_, i) => i !== Number(b.dataset.phDel)); scheduleSave(id, data); render();
   }));
-  mountedContainer.querySelectorAll("[data-ph-piece]").forEach(s => s.addEventListener("change", () => { data.photos[Number(s.dataset.phPiece)].piece = s.value; scheduleSave(id, data); }));
+  mountedContainer.querySelectorAll("[data-ph-piece]").forEach(s => s.addEventListener("change", () => { data.photos[Number(s.dataset.phPiece)].piece = s.value; scheduleSave(id, data); render(); }));
   mountedContainer.querySelectorAll("[data-ph-leg]").forEach(inp => inp.addEventListener("input", () => { data.photos[Number(inp.dataset.phLeg)].legende = inp.value; scheduleSave(id, data); }));
   mountedContainer.querySelectorAll("[data-ph-voir]").forEach(img => img.addEventListener("click", () => { const w = window.open(""); if (w) w.document.write(`<img src="${img.src}" style="max-width:100%">`); }));
   mountedContainer.querySelectorAll("[data-obs]").forEach(inp => {
