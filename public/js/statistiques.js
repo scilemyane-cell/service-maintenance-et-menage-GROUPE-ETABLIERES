@@ -24,6 +24,7 @@ import { watchDemandes, watchInterventions, estEnPause } from "./firestore-data.
 import { ecoutePartagee } from "./ecoute-partagee.js";
 import { ecouteDelta } from "./cache-delta.js";
 import { watchRelevesCompteurs } from "./compteurs-data.js";
+import { tableauDeBordHTML } from "./tracabilite-stats.js";
 
 let mountedContainer = null;
 let graphiquesActifs = {};
@@ -84,6 +85,8 @@ async function collecterDonnees() {
   // programmé, pas de l'astreinte.
   try { const snap = await getDoc(doc(db, "config", "people")); data.astreinteActive = (snap.exists() && snap.data().astreinteActive) || {}; }
   catch (e) { console.error("Statistiques — config/people:", e); data.astreinteActive = {}; }
+  try { const snap = await getDoc(doc(db, "config", "menage-sites")); data.sitesMenage = (snap.exists() && snap.data().sites) || []; }
+  catch (e) { console.error("Statistiques — sites ménage:", e); data.sitesMenage = []; }
   resultats.forEach((r, idx) => {
     const cle = cles[idx];
     data[cle] = [];
@@ -600,6 +603,10 @@ function render() {
       <div class="form-card">
         ${titre("🧽 Fiches ménage — activité terrain", `${s.fiches.length} fiche(s) sur la période, dont ${s.fichesSoumises} soumise(s) · graphique : 12 dernières semaines`)}
         ${canvas("stat-chart-fiches-semaine")}
+      </div>
+      <div class="form-card">
+        ${titre("🧽 Ménage — réalisation des tâches par site", "8 dernières semaines · tâches quotidiennes prévues sur les fiches de traçabilité")}
+        ${tableauDeBordHTML(cache?.fiches || [], cache?.sitesMenage || [])}
       </div>
       ` : ""}
     </div>
