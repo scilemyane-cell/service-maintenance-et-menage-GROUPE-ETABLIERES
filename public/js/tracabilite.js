@@ -174,7 +174,7 @@ function render() {
             const pct = total ? Math.round(done / total * 100) : 0, nbPh = (f.photos || []).length;
             return `<button type="button" class="tr-direct-l" data-open="${f.id}"><b>${esc(f.agentNom)}</b><span>${esc(f.siteName)}</span>
               <span class="tr-direct-barre"><i style="width:${pct}%"></i></span><span><b>${done}/${total}</b> semaine${jt ? ` · aujourd'hui ${jd}/${jt}` : ""}${nbPh ? ` · 📷 ${nbPh}` : ""}</span>
-              <small>${f.submitted ? "✓ terminée" : `dernière saisie ${ilYa(ms(f.majLe))}`}</small></button>`; }).join("")}</div></div>`;
+              <small>${f.submitted ? "✓ terminée" : `dernière saisie ${ilYa(ms(f.majLe))}`}</small></button>${nbPh ? `<div class="tr-direct-ph">${[...f.photos].map((p, i) => ({ p, i })).sort((a, b) => (b.p.le || 0) - (a.p.le || 0)).slice(0, 8).map(({ p, i }) => `<figure data-ph-grand="${f.id}|${i}"><img src="${p.data}" alt="" loading="lazy"><figcaption>${esc(p.piece || "")}${p.jour ? ` · ${esc(p.jour.toLowerCase())}` : ""}<br>${p.le ? new Date(p.le).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : ""}</figcaption></figure>`).join("")}</div>` : ""}`; }).join("")}</div></div>`;
       })()}
 
       <div class="table-wrap">
@@ -215,6 +215,12 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
   document.getElementById("tr-disp")?.addEventListener("change", (e) => { ui.filterDispositif = e.target.value; ui.filterSite = "Tous"; render(); });
   document.getElementById("tr-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; render(); });
   document.getElementById("tr-agent").addEventListener("change", (e) => { ui.filterAgent = e.target.value; render(); });
+  mountedContainer.querySelectorAll("[data-ph-grand]").forEach(fg => fg.addEventListener("click", () => {
+    const [fid, i] = fg.dataset.phGrand.split("|"), p = state.fiches.find(x => x.id === fid)?.photos?.[Number(i)]; if (!p) return;
+    const v = document.createElement("div"); v.className = "tr-ph-plein";
+    v.innerHTML = `<img src="${p.data}" alt=""><p>${esc([p.piece, p.jour, p.par, p.le ? new Date(p.le).toLocaleString("fr-FR") : "", p.legende].filter(Boolean).join(" · "))}</p>`;
+    v.onclick = () => v.remove(); document.body.appendChild(v);
+  }));
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });

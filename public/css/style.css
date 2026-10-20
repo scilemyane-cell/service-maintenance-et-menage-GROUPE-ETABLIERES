@@ -3772,3 +3772,9 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
 .tr-direct-barre{height:8px;border-radius:99px;background:var(--border);overflow:hidden}.tr-direct-barre i{display:block;height:100%;background:var(--teal,#1baf7a)}
 .tr-direct-l small{color:var(--text-dim)}
 @media (max-width:700px){.tr-direct-l{grid-template-columns:1fr 1fr}}
+
+.tr-direct-ph{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 8px}
+.tr-direct-ph figure{margin:0;flex:0 0 92px;cursor:zoom-in}.tr-direct-ph img{width:92px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block}
+.tr-direct-ph figcaption{font-size:10px;line-height:1.25;color:var(--text-dim);margin-top:2px}
+.tr-ph-plein{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;cursor:zoom-out}
+.tr-ph-plein img{max-width:100%;max-height:85vh;border-radius:8px}.tr-ph-plein p{color:#fff;font-size:13px;margin:0;text-align:center}
