@@ -434,6 +434,30 @@ async function lignesCopieParNumero(token) {
   m.parId = parId; m.iId = iId; m.classeur = wb; m.XLSX = XLSX;
   return m;
 }
+// Fonction pure : demandes à marquer « hors Excel » ([id, champs]).
+export function horsExcel(demandesApp, copie, compteNum) {
+  const emp = (v) => sa(v).replace(/[^a-z0-9]/g, "").slice(0, 25);
+  const tousTextes = new Set(); copie.forEach(rows => rows.forEach(r => { const e = emp(r?.[6]); if (e) tousTextes.add(e); }));
+  const ops = [];
+  Object.entries(compteNum).filter(([n, c]) => c > 1 && n && !String(n).startsWith("SN-") && !String(n).startsWith("SMM-")).forEach(([n]) => {
+    const rows = copie.get(n); if (!rows || rows.length !== 1) return;
+    const r = rows[0], idLigne = copie.iId >= 0 ? String(r?.[copie.iId] ?? "").trim() : "";
+    const cands = (demandesApp || []).filter(d => d.numero === n && !d.lieeA && !d.supprimeeLe);
+    const proprio = cands.filter(d => d.id === idLigne).length === 1 ? cands.find(d => d.id === idLigne) : (cands.filter(d => emp(d.descriptif) === emp(r?.[6])).length === 1 ? cands.find(d => emp(d.descriptif) === emp(r?.[6])) : null);
+    if (!proprio) return;
+    cands.filter(d => d.id !== proprio.id && !copie.parId?.has(d.id) && emp(d.descriptif) && !tousTextes.has(emp(d.descriptif)))
+      .forEach(d => ops.push([d.id, { numero: `${n} (hors Excel)`, ancienNumero: n, horsExcel: true, horsExcelLe: Date.now() }]));
+  });
+  return ops;
+}
+async function marquerHorsExcel(demandesApp, copie, compteNum) {
+  const ops = horsExcel(demandesApp, copie, compteNum);
+  if (!ops.length) return 0;
+  const batch = writeBatch(db);
+  ops.forEach(([id, c]) => { batch.update(doc(db, "demandes", id), { ...c, importMajLe: serverTimestamp() }); const d = demandesApp.find(x => x.id === id); if (d) Object.assign(d, c); });
+  await batch.commit();
+  return ops.length;
+}
 // Même valeur côté appli et côté fichier ? (dates comparées en AAAA-MM-JJ, textes sans accents/espaces)
 const txtBrut = (v) => (v == null ? "" : String(v));
 const egalTexte = (a, b) => sa(a).replace(/\s+/g, " ") === sa(b).replace(/\s+/g, " ");
@@ -515,6 +539,11 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   try {
     onProgress("Comparaison avec le fichier Excel…");
     copie = await lignesCopieParNumero(token);
+    // N° en double dans l'appli dont l'un n'est PLUS dans l'Excel (ligne
+    // supprimée → le N° « LIGNE()-4 » est repris par la ligne suivante) :
+    // celle qui n'est plus dans le fichier est marquée « hors Excel » et
+    // libère le N° (sinon aucune des deux n'est plus jamais synchronisée).
+    if (copie) { try { await marquerHorsExcel(demandesApp, copie, compteNum); } catch (e) { console.warn("Hors Excel :", e); } }
     if (copie) {
       for (let i = lignes.length - 1; i >= 0; i--) {
         const parIdRows = copie.parId?.get(String(lignes[i].id));
