@@ -646,7 +646,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div class="dps-valid-tete"><h3>🆕 ${aa.length} demande${aa.length > 1 ? "s" : ""} à attribuer</h3><p>Choisis le technicien ou l'entreprise : le technicien ne verra que les demandes qui lui sont attribuées.</p></div>
         <div class="dps-aa-liste">${aa.slice(0, 30).map(l => `
           <div class="dps-aa" data-id="${esc(l.id)}">
-            <div class="dps-aa-txt"><span class="dps-num">${esc(l.n)}</span>${badgeUrg(l.urgence)}<b>${esc(l.site)}</b>${l.local ? ` <small>📍 ${esc(l.local)}</small>` : ""}<p>${esc((l.descr || "").slice(0, 140)) || "<i>Sans descriptif</i>"}</p></div>
+            <div class="dps-aa-txt"><span class="dps-num">${esc(l.n)}</span>${badgeUrg(l.urgence)}<b>${esc(l.site)}</b>${l.local ? ` <small>📍 ${esc(l.local)}</small>` : ""}<p>${esc((l.descr || "").slice(0, 140)) || "<i>Sans descriptif</i>"}</p><button type="button" class="dps-aa-voir" data-ouvrir-dem="${esc(l.id)}" data-ouvrir-site="${esc(l.site)}">✏️ Ouvrir le ticket / modifier</button></div>
             <div class="dps-aa-choix">${techsDuSite(l.site).filter(id => techs.some(t => t.uid === id)).map(id => `<button type="button" class="dps-aa-rapide" data-attrib-rapide="${esc(l.id)}|${esc(id)}">👷 ${esc(nomDe(id))}</button>`).join("")}${selectAttribHTML(l)}</div>
           </div>`).join("")}${aa.length > 30 ? `<div class="hint">+ ${aa.length - 30} autre(s)</div>` : ""}</div>
       </section>` : "";
@@ -757,6 +757,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       ${l.validation === "REFUSEE" && !TRAITE(l.statut) ? `<div class="dps-refus">↩ <b>Clôture refusée</b>${l.refusPar ? ` par ${esc(l.refusPar)}` : ""}${l.refusLe ? ` le ${fr(l.refusLe)}` : ""}${l.refusMotif ? ` : « ${esc(l.refusMotif)} »` : ""}<small>Complète puis renvoie la clôture.</small></div>` : ""}
       <p class="dps-descr">${esc(l.descr) || "<i>Sans descriptif</i>"}</p>
+      ${perms.isEditor ? `<details class="dps-corr" ${st.corrOuvert === l.id ? "open" : ""} data-corr-det="${esc(l.id)}"><summary>✏️ Corriger la demande (texte, local)</summary>
+        <label>Local / logement<input data-corr-local value="${esc(l.local)}" placeholder="ex. 26, CH 301…"></label>
+        <label>Descriptif<textarea spellcheck="true" lang="fr" rows="3" data-corr-descr data-ia-cible>${esc(l.descr)}</textarea>${btnIA()}</label>
+        ${l.descr !== l.descrOrigine || l.local !== l.localOrigine ? `<small class="hint">Corrigé dans l'appli${l.descrCorrigePar ? ` par ${esc(l.descrCorrigePar)}` : ""}. Texte d'origine (Excel) : « ${esc(l.descrOrigine)} »${l.localOrigine !== l.local ? ` · local « ${esc(l.localOrigine)} »` : ""}</small>` : ""}
+        <button type="button" class="dps-enregistrer" data-corr-ok="${esc(l.id)}">💾 Enregistrer la correction</button></details>` : ""}
       <div class="dps-meta">${l.date ? `Demandé le ${fr(l.date)}` : ""}${l.demandeur ? ` par <b>${esc(l.demandeur)}</b>` : ""}${l.type ? ` · ${esc(l.type)}` : ""}</div>
       ${l.versionPrecedente && (l.versionPrecedente.descriptif !== l.descr || l.versionPrecedente.site !== l.site) ? `<details class="dps-version-prec"><summary>🕘 Cette demande a été modifiée par l'Excel le ${new Date(l.versionPrecedente.le).toLocaleDateString("fr-FR")} — voir l'ancienne version</summary>
         <div><b>${esc(l.versionPrecedente.site)}</b>${l.versionPrecedente.local ? ` · 📍 ${esc(l.versionPrecedente.local)}` : ""}${l.versionPrecedente.demandeur ? ` · par ${esc(l.versionPrecedente.demandeur)}` : ""}${l.versionPrecedente.dateDemande ? ` · ${fr(l.versionPrecedente.dateDemande)}` : ""}<br><i>${esc(l.versionPrecedente.descriptif || "(sans descriptif)")}</i></div>
@@ -937,6 +942,19 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     if (motif === null) return;
     b.disabled = true;
     try { await maj(l.id, { supprimeeLe: Date.now(), supprimeePar: utilisateur, supprimeeMotif: motif.trim() }); window.toast?.(`🗑 ${l.n} supprimée`); }
+    catch (e) { alert("Échec : " + (e?.message || e)); b.disabled = false; }
+  }));
+  container.querySelectorAll("[data-corr-det]").forEach(d => d.addEventListener("toggle", () => { if (d.open) st.corrOuvert = d.dataset.corrDet; else if (st.corrOuvert === d.dataset.corrDet) st.corrOuvert = null; }));
+  container.querySelectorAll("[data-corr-ok]").forEach(b => b.addEventListener("click", async () => {
+    const l = lignes.find(x => x.id === b.dataset.corrOk); if (!l) return;
+    const det = b.closest(".dps-corr"), descr = det.querySelector("[data-corr-descr]").value.trim(), local = det.querySelector("[data-corr-local]").value.trim();
+    if (!descr) { alert("Le descriptif ne peut pas être vide."); return; }
+    const champs = {};
+    if (descr !== l.descr) Object.assign(champs, { descriptifCorrige: descr === l.descrOrigine ? null : descr, descrCorrigePar: utilisateur, descrCorrigeLe: Date.now() });
+    if (local !== l.local) champs.localCorrige = local === l.localOrigine ? null : local;
+    if (!Object.keys(champs).length) { window.toast?.("Rien à corriger."); return; }
+    b.disabled = true;
+    try { await maj(l.id, champs); st.corrOuvert = null; window.toast?.(`✓ ${l.n} corrigée`); }
     catch (e) { alert("Échec : " + (e?.message || e)); b.disabled = false; }
   }));
   container.querySelectorAll("[data-site-corr]").forEach(sel => sel.addEventListener("change", async () => {

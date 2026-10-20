@@ -668,11 +668,11 @@ function attacherToggleVue(container) {
 function ligneDepuisDoc(d) {
   return {
     id: d.id, n: d.numero || "—", date: d.dateDemande || null, site: d.site || "Non renseigné",
-    association: d.association || "Autres", type: d.type || "", descr: d.descriptif || "",
+    association: d.association || "Autres", type: d.type || "", descr: d.descriptifCorrige || d.descriptif || "", descrOrigine: d.descriptif || "", descrCorrigePar: d.descrCorrigePar || "", localOrigine: d.local || "", localCorrige: d.localCorrige != null,
     urgence: d.urgenceCorrigee || d.urgence || "Non renseignée", urgenceDemandee: d.urgence || "Non renseignée", urgenceCorrigee: d.urgenceCorrigee || "", urgenceCorrigeePar: d.urgenceCorrigeePar || "", statut: d.statut || "Non renseigné",
     intervenant: d.intervenant && d.intervenant !== d.categorieIntervenant ? d.intervenant : "", commentaireTech: d.commentaireTech || "",
     dateIntervention: d.dateIntervention || "", dateStatut: d.dateStatut || "", contact: d.contact || "", categorieIntervenant: d.categorieIntervenant || "",
-    local: d.local || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
+    local: (d.localCorrige != null ? d.localCorrige : d.local) || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "", validation: d.validation || "", refusPar: d.refusPar || "", refusLe: d.refusLe || "", refusMotif: d.refusMotif || "",
     importeMs: d.importeLe?.toMillis ? d.importeLe.toMillis() : (d.importeLe?.seconds ? d.importeLe.seconds * 1000 : 0),
     lieeA: d.lieeA || "", lieeANumero: d.lieeANumero || "", mailsEnvoyes: Array.isArray(d.mailsEnvoyes) ? d.mailsEnvoyes : [],
