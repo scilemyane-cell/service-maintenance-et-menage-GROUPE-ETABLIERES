@@ -1,4 +1,5 @@
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
+import { modulesMasquesPour } from "./modules-construction-data.js";
 import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
 import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
@@ -366,6 +367,8 @@ function urgencesAAfficher() {
 function bandeauUrgencesHTML() {
   // Agents d'entretien (dispositif MNA, ménage, mi-temps) : pas de bandeau des urgences maintenance.
   if (["menage", "mi_temps"].includes(mountedUser?.role)) return "";
+  // Suivi des demandes en standby (🚧) : plus de bandeau pour les autres.
+  if (modulesMasquesPour(mountedUser).includes("suivi-demandes")) return "";
   const l = urgencesAAfficher(); if (!l.length) return "";
   const cliquable = catsRef.some(c => c.id === "suivi-demandes");
   return `<section class="gh-urgences ${replieCls("urgences")}">
@@ -696,7 +699,7 @@ function render() {
       if (aValider) notifs.push({ cat: "astreinte", sub: "interventions", mois, icone: "🗓️", texte: `Clôture de ${nomMois} : ${aValider} intervention${aValider > 1 ? "s" : ""} d'astreinte à valider — relevés d'heures et notes de frais km à imprimer`, niveau: "rouge" });
     }
   }
-  if (comDemandes.length) {
+  if (comDemandes.length && !modulesMasquesPour(mountedUser).includes("suivi-demandes")) {
     const sites = [...new Set(comDemandes.map(d => d.site))];
     notifs.unshift({ cat: "suivi-demandes", com: comDemandes.length === 1 ? comDemandes[0] : null, icone: "💬", niveau: "orange",
       texte: `${comDemandes.length} nouveau${comDemandes.length > 1 ? "x" : ""} commentaire${comDemandes.length > 1 ? "s" : ""} sur tes demandes — ${sites.slice(0, 3).join(", ")}${sites.length > 3 ? "…" : ""}${comDemandes.length === 1 ? ` (N° ${comDemandes[0].numero || "?"} : « ${String(comDemandes[0].commentaireTech).slice(0, 80)} »)` : ""}` });
