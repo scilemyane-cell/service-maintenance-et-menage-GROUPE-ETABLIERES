@@ -14,9 +14,19 @@ export function mentionHTML(f, court = false) {
 }
 
 const ORDRE_J = ["LUN", "MAR", "MER", "JEU", "VEN"];
-const vignettes = (l0) => { const liste = [...l0].sort((a, b) => ORDRE_J.indexOf(a.jour) - ORDRE_J.indexOf(b.jour) || a.le - b.le); return `<div class="trac-photos" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 10px">${liste.map(p => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
+const NOMS_J = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" };
+const ORDRE_M = ["avant", "apres", ""];
+const figure = (p) => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
   <img src="${p.data}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:4px;display:block">
-  <figcaption style="font-size:9.5px;margin-top:2px">${p.jour ? `<b>${({ LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" })[p.jour] || p.jour}</b> · ` : ""}${p.legende ? `${esc(p.legende)}<br>` : ""}<span style="color:#666">📷 ${new Date(p.le).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`).join("")}</div>`; };
+  <figcaption style="font-size:9.5px;margin-top:2px">${p.moment ? `<b style="color:${p.moment === "avant" ? "#c25e00" : "#11845b"}">${p.moment === "avant" ? "AVANT" : "APRÈS"}</b> · ` : ""}${p.legende ? `${esc(p.legende)}<br>` : ""}<span style="color:#666">📷 ${new Date(p.le).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></figcaption></figure>`;
+// Photos d'une pièce, par jour : avant puis après (puis les autres).
+const vignettes = (l0) => {
+  const jours = [...ORDRE_J, ""].filter(j => l0.some(p => (p.jour || "") === j));
+  return `<div class="trac-photos" style="margin:4px 0 10px">${jours.map(j => {
+    const l = l0.filter(p => (p.jour || "") === j).sort((a, b) => ORDRE_M.indexOf(a.moment || "") - ORDRE_M.indexOf(b.moment || "") || a.le - b.le);
+    return `<div style="break-inside:avoid;margin-bottom:6px">${j ? `<p style="font-size:10px;font-weight:700;margin:6px 0 3px">${NOMS_J[j]}</p>` : ""}<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${l.map(figure).join("")}</div></div>`;
+  }).join("")}</div>`;
+};
 
 export function taskCompletion(fiche, site) {
   if (!site) return { done: 0, total: 0 };

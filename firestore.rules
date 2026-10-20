@@ -227,6 +227,17 @@ service cloud.firestore {
       allow update: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid) && auditFicheOk();
       allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
     }
+    // ---- Photos des fiches de traçabilité (une photo = un document, ≈ 80 Ko) ----
+    // L'agent gère ses propres photos ; un éditeur peut tout gérer (archivage
+    // SharePoint en fin de semaine puis suppression).
+    match /fiches-photos/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid)
+        && request.resource.data.data is string && request.resource.data.data.size() < 900000;
+      allow update: if isSignedIn() && (isEditor() || resource.data.agentUid == request.auth.uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['legende', 'piece', 'moment', 'jour']);
+      allow delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
+    }
     // ---- Répartition hebdomadaire des heures par tâche ----
     // Même logique que fiches : chacun gère ses propres enregistrements,
     // un éditeur (admin/n1) peut tout gérer (y compris remplir au nom

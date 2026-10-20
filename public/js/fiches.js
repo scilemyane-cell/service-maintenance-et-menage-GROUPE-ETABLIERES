@@ -4,11 +4,13 @@ import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId, corrigerDateSaisie } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
 import { watchAccess, hasAccess } from "./access-data.js";
+import { photosFusion, watchPhotosFiche, ajouterPhoto, majPhoto, supprimerPhoto } from "./fiches-photos.js";
 
 const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
 const MENAGE_ROLES = ["menage", "mi_temps"];
 
-let state = { fiches: [], sites: [], agents: [], allAgents: [], access: {} };
+let state = { fiches: [], sites: [], agents: [], allAgents: [], access: {}, photosDocs: [] };
+let photosFicheId = null, unsubPhotos = null;
 let ui = { dispositif: null, lockDispositif: false, siteId: null, weekStart: null, actingUid: null, actingNom: null, vue: "jour", jour: null };
 const JOURS_KEYS = ["LUN", "MAR", "MER", "JEU", "VEN"];
 const JOURS_LONGS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "Vendredi" };
@@ -43,7 +45,14 @@ let mountedContainer = null;
 let mountedUser = null;
 let saveTimer = null;
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; if (unsubPhotos) unsubPhotos(); unsubPhotos = null; photosFicheId = null; state.photosDocs = []; }
+// Photos de la fiche affichée : écoute en direct de ses documents photo.
+function suivrePhotos(id) {
+  if (id === photosFicheId) return;
+  if (unsubPhotos) unsubPhotos();
+  photosFicheId = id; state.photosDocs = [];
+  unsubPhotos = watchPhotosFiche(id, (docs) => { state.photosDocs = docs; if (saisieEnCours()) renderEnAttente = true; else render(); });
+}
 
 function siteDispositif(site) { return site.dispositif || "Dispositif MNA"; }
 
@@ -117,10 +126,8 @@ function fichesReconstitueesVides(agentUid) {
     .sort((a, b) => String(a.weekStart).localeCompare(String(b.weekStart)));
 }
 
-// Photos stockées DANS la fiche (Firestore), compressées (~100 Ko) : aucun
-// compte Microsoft nécessaire pour l'agent ; plafond pour rester sous la
-// limite de taille d'un document.
-const MAX_PHOTOS = 12;
+// Photos : une photo = un document à part (fiches-photos.js) → pas de plafond.
+// Les anciennes photos rangées dans la fiche restent affichées (clé "f:i").
 async function compresserPhoto(fichier) {
   const url = URL.createObjectURL(fichier);
   try {
@@ -133,29 +140,32 @@ async function compresserPhoto(fichier) {
     return out;
   } finally { URL.revokeObjectURL(url); }
 }
-
-// Vignettes d'une pièce (ou des photos sans pièce si roomName === null) + bouton d'ajout.
-// Vue « Ma journée » : seulement les photos du jour affiché ; vue semaine : toutes, avec le jour.
+const MOMENTS = { avant: "Avant", apres: "Après", "": "Autre" };
+function vignettePhoto(site, p, sansPiece) {
+  return `<figure class="fc-ph"><img src="${p.data}" alt="" data-ph-voir>
+    <figcaption>
+      ${sansPiece ? `<select data-ph-piece="${p.cle}"><option value="">— Pièce —</option>${(site.rooms || []).map(r => `<option>${esc(r.name)}</option>`).join("")}</select>` : ""}
+      <input data-ph-leg="${p.cle}" value="${esc(p.legende || "")}" placeholder="Légende (facultatif)">
+      <small>${p.jour ? `<b>${JOURS_LONGS[p.jour] || p.jour}</b> · ` : ""}${new Date(p.le).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
+      <button type="button" class="del-btn" data-ph-del="${p.cle}" title="Supprimer la photo">🗑️</button>
+    </figcaption></figure>`;
+}
+// Photos d'une pièce, rangées Avant | Après (et « Autre »), par jour.
+// Vue « Ma journée » : seulement le jour affiché ; vue semaine : chaque jour.
 function photosPieceHTML(site, data, roomName) {
   const noms = new Set((site.rooms || []).map(r => r.name));
   const duJour = ui.vue === "jour";
-  const liste = (data.photos || []).map((p, i) => ({ p, i }))
-    .filter(({ p }) => roomName === null ? !p.piece || !noms.has(p.piece) : p.piece === roomName)
-    .filter(({ p }) => roomName === null || !duJour || p.jour === ui.jour)
-    .sort((a, b) => JOURS_KEYS.indexOf(a.p.jour) - JOURS_KEYS.indexOf(b.p.jour) || a.p.le - b.p.le);
-  const plein = (data.photos || []).length >= MAX_PHOTOS;
-  if (roomName === null && !liste.length) return "";
-  return `<div class="fc-ph-zone">
-    ${liste.length ? `<div class="fc-ph-grille">${liste.map(({ p, i }) => `
-      <figure class="fc-ph"><img src="${p.data}" alt="" data-ph-voir="${i}">
-        <figcaption>
-          ${roomName === null ? `<select data-ph-piece="${i}"><option value="">— Pièce —</option>${(site.rooms || []).map(r => `<option>${esc(r.name)}</option>`).join("")}</select>` : ""}
-          <input data-ph-leg="${i}" value="${esc(p.legende || "")}" placeholder="Légende (facultatif)">
-          <small>${p.jour ? `<b>${JOURS_LONGS[p.jour] || p.jour}</b> · ` : ""}${new Date(p.le).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small>
-          <button type="button" class="del-btn" data-ph-del="${i}" title="Supprimer la photo">🗑️</button>
-        </figcaption></figure>`).join("")}</div>` : ""}
-    ${roomName !== null ? (plein ? `<small class="hint">Maximum ${MAX_PHOTOS} photos par fiche atteint.</small>` : `<label class="fc-ph-add petit">📷 Photo de cette pièce${duJour ? ` — ${(JOURS_LONGS[ui.jour] || "").toLowerCase()}` : ""}<input type="file" accept="image/*" capture="environment" data-ph-room="${esc(roomName)}" hidden></label>`) : ""}
-  </div>`;
+  const toutes = photosFusion(data, state.photosDocs)
+    .filter(p => roomName === null ? !p.piece || !noms.has(p.piece) : p.piece === roomName)
+    .sort((a, b) => JOURS_KEYS.indexOf(a.jour) - JOURS_KEYS.indexOf(b.jour) || a.le - b.le);
+  if (roomName === null) return toutes.length ? `<div class="fc-ph-grille">${toutes.map(p => vignettePhoto(site, p, true)).join("")}</div>` : "";
+  const bouton = (m) => `<label class="fc-ph-add petit ${m}">📷 ${MOMENTS[m]}<input type="file" accept="image/*" capture="environment" data-ph-room="${esc(roomName)}" data-ph-moment="${m}" hidden></label>`;
+  const colonnes = (liste) => `<div class="fc-ph-aa">${["avant", "apres"].map(m => `<div class="fc-ph-col"><b class="fc-ph-moment ${m}">${MOMENTS[m]}</b>${liste.filter(p => p.moment === m).map(p => vignettePhoto(site, p, false)).join("") || `<span class="hint">—</span>`}</div>`).join("")}</div>
+    ${liste.some(p => !p.moment) ? `<div class="fc-ph-grille">${liste.filter(p => !p.moment).map(p => vignettePhoto(site, p, false)).join("")}</div>` : ""}`;
+  let corps = "";
+  if (duJour) { const l = toutes.filter(p => p.jour === ui.jour); corps = l.length ? colonnes(l) : ""; }
+  else corps = [...JOURS_KEYS, ""].map(j => { const l = toutes.filter(p => (p.jour || "") === j); return l.length ? `<div class="fc-ph-jour"><b>${JOURS_LONGS[j] || "Sans jour"}</b>${colonnes(l)}</div>` : ""; }).join("");
+  return `<div class="fc-ph-zone">${corps}<div class="fc-ph-btns">${bouton("avant")}${bouton("apres")}${duJour ? `<small class="hint">${(JOURS_LONGS[ui.jour] || "").toLowerCase()}</small>` : ""}</div></div>`;
 }
 
 function currentFiche() {
@@ -503,6 +513,7 @@ function renderInterne() {
   const weekStartDate = new Date(ui.weekStart);
   const weekEndDate = addDays(weekStartDate, 4);
   const { id, data } = currentFiche();
+  suivrePhotos(id);
   renderEnAttente = false;
   if (!ui.jour || !JOURS_KEYS.includes(ui.jour)) ui.jour = jourParDefaut();
 
@@ -681,24 +692,34 @@ function renderInterne() {
   });
   mountedContainer.querySelectorAll("[data-ph-room]").forEach(inp => inp.addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
-    const etat = mountedContainer.querySelector("#fc-ph-etat"); if (etat) etat.textContent = "⏳ Préparation de la photo…";
+    const etat = mountedContainer.querySelector("#fc-ph-etat"); if (etat) etat.textContent = "⏳ Envoi de la photo…";
+    window.toast?.("⏳ Envoi de la photo…");
     try {
       const dataUrl = await compresserPhoto(f);
       // Jour de la photo : celui affiché (Ma journée), sinon le jour de la prise si dans la semaine.
       const jAuj = JOURS_KEYS[(new Date().getDay() + 6) % 7] || "";
       const jour = ui.vue === "jour" ? ui.jour : (JOURS_KEYS.includes(jAuj) && jourISO(jAuj) === dateKey(new Date()) ? jAuj : "");
-      data.photos = [...(data.photos || []), { data: dataUrl, le: Date.now(), jour, piece: inp.dataset.phRoom, legende: "", par: effectiveAgent()?.nom || "" }];
-      await sauverFiche(id, data); render();
+      if (!state.fiches.some(x => x.id === id)) await sauverFiche(id, data); // la fiche doit exister (suivi en direct)
+      await ajouterPhoto({ ficheId: id, siteId: data.siteId || "", siteName: data.siteName || "", weekStart: data.weekStart, agentUid: data.agentUid, agentNom: data.agentNom || "",
+        piece: inp.dataset.phRoom, jour, moment: inp.dataset.phMoment || "", data: dataUrl, par: effectiveAgent()?.nom || "" });
+      if (etat) etat.textContent = "";
       window.toast?.("✓ Photo ajoutée");
     } catch (err) { if (etat) etat.textContent = ""; alert("Photo impossible : " + (err?.message || err)); }
   }));
+  // Clé "f:i" = ancienne photo rangée dans la fiche ; "d:id" = document photo.
+  const surPhoto = (cle, ancienne, nouvelle) => { const [t, v] = String(cle).split(":"); return t === "f" ? ancienne(Number(v)) : nouvelle(v); };
   mountedContainer.querySelectorAll("[data-ph-del]").forEach(b => b.addEventListener("click", () => {
     if (!confirm("Supprimer cette photo de la fiche ?")) return;
-    data.photos = (data.photos || []).filter((_, i) => i !== Number(b.dataset.phDel)); scheduleSave(id, data); render();
+    surPhoto(b.dataset.phDel, (i) => { data.photos = (data.photos || []).filter((_, k) => k !== i); scheduleSave(id, data); render(); },
+      (pid) => supprimerPhoto(pid).catch(err => alert("Suppression impossible : " + (err?.message || err))));
   }));
-  mountedContainer.querySelectorAll("[data-ph-piece]").forEach(s => s.addEventListener("change", () => { data.photos[Number(s.dataset.phPiece)].piece = s.value; scheduleSave(id, data); render(); }));
-  mountedContainer.querySelectorAll("[data-ph-leg]").forEach(inp => inp.addEventListener("input", () => { data.photos[Number(inp.dataset.phLeg)].legende = inp.value; scheduleSave(id, data); }));
-  mountedContainer.querySelectorAll("[data-ph-voir]").forEach(img => img.addEventListener("click", () => { const w = window.open(""); if (w) w.document.write(`<img src="${img.src}" style="max-width:100%">`); }));
+  mountedContainer.querySelectorAll("[data-ph-piece]").forEach(sel => sel.addEventListener("change", () => surPhoto(sel.dataset.phPiece,
+    (i) => { data.photos[i].piece = sel.value; scheduleSave(id, data); render(); }, (pid) => majPhoto(pid, { piece: sel.value }))));
+  const timersLeg = {};
+  mountedContainer.querySelectorAll("[data-ph-leg]").forEach(inp => inp.addEventListener("input", () => surPhoto(inp.dataset.phLeg,
+    (i) => { data.photos[i].legende = inp.value; scheduleSave(id, data); },
+    (pid) => { clearTimeout(timersLeg[pid]); timersLeg[pid] = setTimeout(() => majPhoto(pid, { legende: inp.value }).catch(() => {}), 800); })));
+  mountedContainer.querySelectorAll("[data-ph-voir]").forEach(img => img.addEventListener("click", () => { const v = document.createElement("div"); v.className = "tr-ph-plein"; v.innerHTML = `<img src="${img.src}" alt="">`; v.onclick = () => v.remove(); document.body.appendChild(v); }));
   mountedContainer.querySelectorAll("[data-obs]").forEach(inp => {
     inp.addEventListener("input", () => {
       data.obs[inp.dataset.obs] = inp.value;

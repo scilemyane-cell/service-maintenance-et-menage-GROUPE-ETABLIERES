@@ -4,15 +4,40 @@ import { watchFiches, deleteFiche, saveFiche, ficheId } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
 import { mentionHTML, taskCompletion, ficheHTML, imprimerFiche } from "./tracabilite-rendu.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
+import { photosFusion, watchPhotosSemaine, watchPhotosFiche } from "./fiches-photos.js";
+import { tableauDeBordHTML } from "./tracabilite-stats.js";
+import { archiverSemainesTerminees, DOSSIER_DEPT, DOSSIER_INTERNE } from "./tracabilite-archive.js";
 
-let state = { fiches: [], sites: [], agents: [] };
-let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null };
+let state = { fiches: [], sites: [], agents: [], photosSemaine: [], photosOuverte: [] };
+let unsubOuverte = null, ouverteSuivie = null;
+const lundiCourant = () => { const t = new Date(); return dateKey(addDays(t, -((t.getDay() + 6) % 7))); };
+const photosDe = (f) => photosFusion(f, f.id === ouverteSuivie ? state.photosOuverte : state.photosSemaine.filter(p => p.ficheId === f.id));
+let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null, vue: "fiches" };
+let archiveEtat = "";
+// Fin de semaine : PDF Département (sans photos) + Interne (avec photos) sur
+// SharePoint, puis les photos sont retirées de l'appli. Tout seul, en silence.
+async function lancerArchive(interactif = false) {
+  archiveEtat = "⏳ Archivage SharePoint…"; render();
+  try {
+    const r = await archiverSemainesTerminees({ interactif, onProgress: (t) => { archiveEtat = "⏳ " + t; const el = document.getElementById("tr-archive-etat"); if (el) el.textContent = archiveEtat; } });
+    archiveEtat = r.sansCompte ? (interactif ? "Connexion Microsoft nécessaire." : "")
+      : r.archivees ? `☁️ ${r.archivees} fiche(s) archivée(s) sur SharePoint${r.photosSupprimees ? ` · ${r.photosSupprimees} photo(s) libérée(s)` : ""}${r.restantes ? ` · ${r.restantes} restantes (prochain passage)` : ""}`
+      : (interactif ? "☁️ Tout est déjà archivé." : "");
+    if (r.archivees) window.toast?.(archiveEtat);
+  } catch (e) { console.warn("Archive traçabilité :", e); archiveEtat = "⚠️ Archivage impossible : " + (e?.message || e); }
+  render();
+}
 let unsubs = [];
 let mountedContainer = null;
 let mountedUser = null;
 let lockedDispositif = null;
 
-function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
+function cleanup() { unsubs.forEach(u => u()); unsubs = []; if (unsubOuverte) unsubOuverte(); unsubOuverte = null; ouverteSuivie = null; }
+function suivreOuverte(id) {
+  if (id === ouverteSuivie) return;
+  if (unsubOuverte) unsubOuverte(); unsubOuverte = null; ouverteSuivie = id; state.photosOuverte = [];
+  if (id) unsubOuverte = watchPhotosFiche(id, (docs) => { state.photosOuverte = docs; render(); });
+}
 
 function siteDispositif(site) { return site?.dispositif || "Dispositif MNA"; }
 function ficheDispositif(fiche) { return siteDispositif(state.sites.find(s => s.id === fiche.siteId)); }
@@ -38,7 +63,9 @@ function mountInternal(container, user) {
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
+  unsubs.push(watchPhotosSemaine(lundiCourant(), (p) => { state.photosSemaine = p; render(); }));
   unsubs.push(watchUsers((u) => { state.agents = u.filter(x => ["menage", "mi_temps"].includes(x.role)); }));
+  if (isEditorUser(user)) setTimeout(() => { if (mountedContainer === container) lancerArchive(false); }, 4000);
 }
 
 // Cases du planning prévu : chaque tâche quotidienne (sans fréquence
@@ -146,7 +173,9 @@ function render() {
     .filter(f => ui.filterAgent === "Tous" || f.agentNom === ui.filterAgent)
     .sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
 
-  const opened = ui.openId ? state.fiches.find(f => f.id === ui.openId) : null;
+  suivreOuverte(ui.openId && state.fiches.some(f => f.id === ui.openId) ? ui.openId : null);
+  const opened0 = ui.openId ? state.fiches.find(f => f.id === ui.openId) : null;
+  const opened = opened0 ? { ...opened0, photos: photosDe(opened0) } : null;
   const openedSite = opened ? state.sites.find(s => s.id === opened.siteId) : null;
 
   mountedContainer.innerHTML = `
@@ -161,7 +190,7 @@ function render() {
       ${(() => {
         // Suivi EN DIRECT de la semaine en cours : chaque coche de l'agent est
         // enregistrée tout de suite, pas besoin qu'elle « termine » sa fiche.
-        const t = new Date(), lundi = dateKey(addDays(t, -((t.getDay() + 6) % 7)));
+        const t = new Date(), lundi = lundiCourant();
         const cle = ["LUN", "MAR", "MER", "JEU", "VEN"][(t.getDay() + 6) % 7];
         const enCours = filtered.filter(f => f.weekStart === lundi);
         if (!enCours.length) return "";
@@ -171,12 +200,15 @@ function render() {
           <div class="tr-direct-liste">${enCours.map(f => {
             const site = state.sites.find(s => s.id === f.siteId); const { done, total } = taskCompletion(f, site);
             let jd = 0, jt = 0; (site?.rooms || []).forEach((room, ri) => { if (!cle || !room.days.includes(cle)) return; room.tasks.forEach((task, ti) => { jt++; if (f.cells?.[`${ri}-${ti}-${cle}`]) jd++; }); });
-            const pct = total ? Math.round(done / total * 100) : 0, nbPh = (f.photos || []).length;
+            const pct = total ? Math.round(done / total * 100) : 0, phs = photosDe(f), nbPh = phs.length;
             return `<button type="button" class="tr-direct-l" data-open="${f.id}"><b>${esc(f.agentNom)}</b><span>${esc(f.siteName)}</span>
               <span class="tr-direct-barre"><i style="width:${pct}%"></i></span><span><b>${done}/${total}</b> semaine${jt ? ` · aujourd'hui ${jd}/${jt}` : ""}${nbPh ? ` · 📷 ${nbPh}` : ""}</span>
-              <small>${f.submitted ? "✓ terminée" : `dernière saisie ${ilYa(ms(f.majLe))}`}</small></button>${nbPh ? `<div class="tr-direct-ph">${[...f.photos].map((p, i) => ({ p, i })).sort((a, b) => (b.p.le || 0) - (a.p.le || 0)).slice(0, 8).map(({ p, i }) => `<figure data-ph-grand="${f.id}|${i}"><img src="${p.data}" alt="" loading="lazy"><figcaption>${esc(p.piece || "")}${p.jour ? ` · ${esc(p.jour.toLowerCase())}` : ""}<br>${p.le ? new Date(p.le).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : ""}</figcaption></figure>`).join("")}</div>` : ""}`; }).join("")}</div></div>`;
+              <small>${f.submitted ? "✓ terminée" : `dernière saisie ${ilYa(ms(f.majLe))}`}</small></button>${nbPh ? `<div class="tr-direct-ph">${[...phs].sort((a, b) => (b.le || 0) - (a.le || 0)).slice(0, 10).map(p => `<figure data-ph-grand="${f.id}|${p.cle}"><img src="${p.data}" alt="" loading="lazy"><figcaption>${p.moment ? `<b class="tr-m ${p.moment}">${p.moment === "avant" ? "Avant" : "Après"}</b> ` : ""}${esc(p.piece || "")}${p.jour ? ` · ${esc(p.jour.toLowerCase())}` : ""}<br>${p.le ? new Date(p.le).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : ""}</figcaption></figure>`).join("")}</div>` : ""}`; }).join("")}</div></div>`;
       })()}
 
+      <div class="tr-vues"><button type="button" class="${ui.vue === "fiches" ? "actif" : ""}" data-tr-vue="fiches">📋 Fiches</button><button type="button" class="${ui.vue === "stats" ? "actif" : ""}" data-tr-vue="stats">📊 Tableau de bord</button>
+        ${isEditorUser(mountedUser) ? `<button type="button" class="tr-arch" id="tr-archive" title="PDF Département (sans photos) et Interne (avec photos) des semaines terminées">☁️ Archiver sur SharePoint</button>` : ""}<small id="tr-archive-etat" class="hint">${esc(archiveEtat)}</small></div>
+      ${ui.vue === "stats" ? tableauDeBordHTML(filtered, state.sites) : `
       <div class="table-wrap">
         <table>
           <thead><tr><th>Semaine</th><th>Site</th><th>Agent</th><th>Avancement</th><th>État</th><th></th></tr></thead>
@@ -190,7 +222,7 @@ function render() {
                   <td>${esc(f.siteName)}</td>
                   <td>${esc(f.agentNom)}</td>
                   <td>${done}/${total}</td>
-                  <td>${f.submitted ? `<span class="tag" style="background:var(--teal)">Terminée</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">${f.reconstituee && !done ? "À compléter" : "En cours"}</span>`} ${mentionHTML(f, true)}</td>
+                  <td>${f.submitted ? `<span class="tag" style="background:var(--teal)">Terminée</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">${f.reconstituee && !done ? "À compléter" : "En cours"}</span>`} ${f.archiveSP ? `<span class="tag" style="background:#e3eefc;color:#1d4f91" title="Archivée sur SharePoint le ${new Date(f.archiveSP.le).toLocaleDateString("fr-FR")}">☁️ SharePoint</span>` : ""} ${mentionHTML(f, true)}</td>
                   <td style="white-space:nowrap">
                     <button class="nav-btn" data-open="${f.id}" style="padding:4px 10px;font-size:11px">Voir</button>
                     ${isEditorUser(mountedUser) ? `<button class="del-btn" data-del-fiche="${f.id}">🗑️</button>` : ""}
@@ -199,13 +231,14 @@ function render() {
               }).join("")}
           </tbody>
         </table>
-      </div>
+      </div>`}
 
-      ${opened ? `
+      ${opened && ui.vue === "fiches" ? `
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="add-btn" id="tr-print">🖨️ PDF sans photos</button>
         ${(opened.photos || []).length ? `<button class="add-btn" id="tr-print-photos">📷 PDF avec photos (${opened.photos.length})</button>` : ""}
         <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
+        ${opened.archiveSP ? `<p class="hint" style="width:100%;margin:0">☁️ Archivée sur SharePoint le ${new Date(opened.archiveSP.le).toLocaleDateString("fr-FR")} — ExportsDonnees › Traçabilité ménage › <b>${DOSSIER_DEPT}</b> (à envoyer au Département) et <b>${DOSSIER_INTERNE}</b>${opened.archiveSP.nbPhotos ? ` (${opened.archiveSP.nbPhotos} photo(s), retirées de l'appli)` : ""}.</p>` : ""}
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
       </div>
 ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
@@ -216,11 +249,13 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
   document.getElementById("tr-site").addEventListener("change", (e) => { ui.filterSite = e.target.value; render(); });
   document.getElementById("tr-agent").addEventListener("change", (e) => { ui.filterAgent = e.target.value; render(); });
   mountedContainer.querySelectorAll("[data-ph-grand]").forEach(fg => fg.addEventListener("click", () => {
-    const [fid, i] = fg.dataset.phGrand.split("|"), p = state.fiches.find(x => x.id === fid)?.photos?.[Number(i)]; if (!p) return;
+    const [fid, cle] = fg.dataset.phGrand.split("|"), fi = state.fiches.find(x => x.id === fid), p = fi && photosDe(fi).find(x => x.cle === cle); if (!p) return;
     const v = document.createElement("div"); v.className = "tr-ph-plein";
-    v.innerHTML = `<img src="${p.data}" alt=""><p>${esc([p.piece, p.jour, p.par, p.le ? new Date(p.le).toLocaleString("fr-FR") : "", p.legende].filter(Boolean).join(" · "))}</p>`;
+    v.innerHTML = `<img src="${p.data}" alt=""><p>${esc([p.moment === "avant" ? "AVANT" : p.moment === "apres" ? "APRÈS" : "", p.piece, p.jour, p.par, p.le ? new Date(p.le).toLocaleString("fr-FR") : "", p.legende].filter(Boolean).join(" · "))}</p>`;
     v.onclick = () => v.remove(); document.body.appendChild(v);
   }));
+  mountedContainer.querySelectorAll("[data-tr-vue]").forEach(b => b.addEventListener("click", () => { ui.vue = b.dataset.trVue; render(); }));
+  document.getElementById("tr-archive")?.addEventListener("click", () => lancerArchive(true));
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
   });
