@@ -59,6 +59,16 @@ async function chargerColonnes() {
 
 const champ = (f, nom) => f[colonnes[nom]] ?? "";
 
+// Les colonnes « Plusieurs lignes de texte » de SharePoint renvoient du HTML
+// (<div class="ExternalClass…">, &#58;…) : on le remet en texte simple.
+function texteSimple(v) {
+  const s = String(v ?? "");
+  if (!/[<&]/.test(s)) return s;
+  const html = s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr)>/gi, "\n");
+  const d = new DOMParser().parseFromString(html, "text/html");
+  return (d.body.textContent || "").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 async function chargerMails() {
   await chargerColonnes();
   const tous = [];
@@ -74,13 +84,13 @@ async function chargerMails() {
       id: it.id,
       objet: f.Title || "(sans objet)",
       expediteur: champ(f, "Expediteur"),
-      date: champ(f, "DateReception") || it.createdDateTime,
+      date: it.createdDateTime || champ(f, "DateReception"),
       corps: champ(f, "Corps"),
       statut: champ(f, "Statut") || "Nouveau",
-      categorie: champ(f, "Categorie"),
+      categorie: texteSimple(champ(f, "Categorie")),
       priorite: champ(f, "Priorite") || "Normal",
-      resume: champ(f, "Resume"),
-      brouillon: champ(f, "Brouillon"),
+      resume: texteSimple(champ(f, "Resume")),
+      brouillon: texteSimple(champ(f, "Brouillon")),
     };
   });
 }
