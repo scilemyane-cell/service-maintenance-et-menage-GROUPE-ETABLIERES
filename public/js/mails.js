@@ -103,6 +103,38 @@ async function majMail(id, valeurs) {
 
 // ---------- Agent (Worker Cloudflare) ----------
 
+// Lit un JSON « presque valide » : retours à la ligne et tabulations non
+// échappés dans les textes, guillemets typographiques, texte autour.
+function lireJsonTolerant(brut) {
+  const t = String(brut || "");
+  const debut = t.indexOf("{"), fin = t.lastIndexOf("}");
+  if (debut < 0) return null;
+  const bloc = fin > debut ? t.slice(debut, fin + 1) : t.slice(debut) + '"}';
+  let sortie = "", dansTexte = false, echappe = false;
+  for (const c of bloc) {
+    if (dansTexte) {
+      if (echappe) { sortie += c; echappe = false; continue; }
+      if (c === "\\") { sortie += c; echappe = true; continue; }
+      if (c === '"') { dansTexte = false; sortie += c; continue; }
+      if (c === "\n") { sortie += "\\n"; continue; }
+      if (c === "\r") continue;
+      if (c === "\t") { sortie += "\\t"; continue; }
+      sortie += c;
+    } else {
+      if (c === '"') dansTexte = true;
+      sortie += c;
+    }
+  }
+  try { return JSON.parse(sortie); } catch { /* on tente champ par champ */ }
+  const champ = (nom, suivant) => {
+    const re = new RegExp(`"${nom}"\\s*:\\s*"([\\s\\S]*?)"\\s*(?:,\\s*"${suivant}"|\\}\\s*$)`);
+    const m = bloc.match(re);
+    return m ? m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"') : "";
+  };
+  const r = { categorie: champ("categorie", "priorite"), priorite: champ("priorite", "resume"), resume: champ("resume", "brouillon"), brouillon: champ("brouillon", "zzz") };
+  return r.categorie || r.resume ? r : null;
+}
+
 async function analyser(mail) {
   const token = await getGraphToken();
   const res = await fetch(WORKER_URL, {
@@ -112,6 +144,21 @@ async function analyser(mail) {
   });
   let data = null;
   try { data = await res.json(); } catch { /* réponse non JSON */ }
+  // Réponse de Claude presque en JSON (retours à la ligne bruts dans le
+  // brouillon…) : on la répare ici plutôt que d'abandonner.
+  if (data?.brut) {
+    const repare = lireJsonTolerant(data.brut);
+    if (repare) {
+      console.warn("Réponse de l'agent réparée", data.brut);
+      return {
+        categorie: repare.categorie || "autre",
+        priorite: ["Urgent", "Normal", "Faible"].includes(repare.priorite) ? repare.priorite : "Normal",
+        resume: repare.resume || "",
+        brouillon: repare.brouillon || "",
+      };
+    }
+    console.error("Réponse de l'agent illisible :", data.brut);
+  }
   if (!res.ok || !data || data.erreur) {
     throw new Error(data?.erreur ? `${data.erreur}${data.detail ? " — " + String(data.detail).slice(0, 200) : ""}` : `Agent injoignable (${res.status})`);
   }
