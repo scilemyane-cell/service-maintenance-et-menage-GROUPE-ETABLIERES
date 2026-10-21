@@ -16,6 +16,8 @@ import { toast } from "./ui-feedback.js";
 const WORKER_URL = "https://agent-mails-smm.valentin-barreteau.workers.dev/";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const LISTE = `${GRAPH}/sites/etablieresfr.sharepoint.com:/sites/appsmm:/lists/MailsEntrants`;
+const LISTE_ENVOYES = `${GRAPH}/sites/etablieresfr.sharepoint.com:/sites/appsmm:/lists/MailsEnvoyes`;
+const TITRE_GUIDE = "__GUIDE__";
 const ORDRE_PRIO = { Urgent: 0, Normal: 1, Faible: 2 };
 
 let conteneur = null;
@@ -26,6 +28,12 @@ let erreur = "";
 let enCours = false;
 let progression = "";
 let ouverts = new Set();
+// Guide de style tiré des mails envoyés (stocké dans la liste MailsEnvoyes)
+let guide = "";
+let guideItemId = null;
+let guideOuvert = false;
+let guideEnCours = "";
+let colonnesEnvoyes = null; // { corps, destinataire } : noms internes
 
 // ---------- Microsoft Graph ----------
 
@@ -37,8 +45,9 @@ async function graph(url, options = {}) {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    if (res.status === 403) throw new Error(`Accès refusé à la liste MailsEntrants (403). ${detail.slice(0, 200)}`);
-    if (res.status === 404) throw new Error(`Liste « MailsEntrants » introuvable sur le site appsmm (404).`);
+    const nomListe = (url.match(/lists\/([^/?]+)/) || [])[1] || "SharePoint";
+    if (res.status === 403) throw new Error(`Accès refusé à la liste ${nomListe} (403). ${detail.slice(0, 200)}`);
+    if (res.status === 404) throw new Error(`Liste « ${nomListe} » introuvable sur le site appsmm (404).`);
     throw new Error(`Erreur Microsoft Graph ${res.status} : ${detail.slice(0, 200)}`);
   }
   return res.status === 204 ? null : res.json();
@@ -140,7 +149,7 @@ async function analyser(mail) {
   const res = await fetch(WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ objet: mail.objet, expediteur: mail.expediteur, date: mail.date, corps: mail.corps }),
+    body: JSON.stringify({ objet: mail.objet, expediteur: mail.expediteur, date: mail.date, corps: mail.corps, contexte: guide || undefined }),
   });
   let data = null;
   try { data = await res.json(); } catch { /* réponse non JSON */ }
@@ -233,6 +242,122 @@ function carte(m) {
   </div>`;
 }
 
+// ---------- Guide (apprentissage depuis les mails envoyés) ----------
+
+async function chargerColonnesEnvoyes() {
+  if (colonnesEnvoyes) return colonnesEnvoyes;
+  const data = await graph(`${LISTE_ENVOYES}/columns?$select=name,displayName,text`);
+  const parNom = {};
+  for (const c of data.value || []) parNom[c.displayName] = c;
+  const corps = parNom.Corps;
+  if (!corps) throw new Error("Colonne « Corps » absente de la liste MailsEnvoyes");
+  colonnesEnvoyes = {
+    corps: corps.name,
+    destinataire: parNom.Destinataire?.name || null,
+  };
+  return colonnesEnvoyes;
+}
+
+async function lireEnvoyes() {
+  await chargerColonnesEnvoyes();
+  const tous = [];
+  let url = `${LISTE_ENVOYES}/items?$expand=fields&$top=200`;
+  while (url && tous.length < 2000) {
+    const data = await graph(url);
+    tous.push(...(data.value || []));
+    url = data["@odata.nextLink"] || null;
+  }
+  return tous;
+}
+
+async function chargerGuide() {
+  try {
+    const items = await lireEnvoyes();
+    const it = items.find(x => x.fields?.Title === TITRE_GUIDE);
+    guideItemId = it?.id || null;
+    guide = it ? texteSimple(it.fields[colonnesEnvoyes.corps]) : "";
+  } catch (e) {
+    // Liste pas encore créée ou inaccessible : l'agent fonctionne sans guide.
+    console.warn("Guide indisponible :", e);
+  }
+}
+
+async function enregistrerGuide(texte) {
+  await chargerColonnesEnvoyes();
+  // Écrit en HTML simple : relu correctement par texteSimple(), que la
+  // colonne soit en texte brut ou enrichi.
+  const valeur = texte.split("\n").map(l => esc(l)).join("<br>");
+  const fields = { Title: TITRE_GUIDE, [colonnesEnvoyes.corps]: valeur };
+  if (guideItemId) {
+    await graph(`${LISTE_ENVOYES}/items/${guideItemId}/fields`, { method: "PATCH", body: JSON.stringify(fields) });
+  } else {
+    const cree = await graph(`${LISTE_ENVOYES}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+    guideItemId = cree.id;
+  }
+  guide = texte;
+}
+
+function sansHistorique(t) {
+  const coupe = t.search(/\n\s*(De ?:|From ?:|-{3,} ?Message d'origine|-{3,} ?Original Message|Le .{5,80} a écrit ?:|Envoyé ?: )/i);
+  return (coupe > 0 ? t.slice(0, coupe) : t).trim();
+}
+
+async function genererGuide() {
+  if (guideEnCours) return;
+  try {
+    guideEnCours = "Lecture de tes mails envoyés…";
+    render();
+    const items = await lireEnvoyes();
+    const envoyes = items
+      .filter(x => x.fields?.Title !== TITRE_GUIDE)
+      .map(x => ({
+        objet: x.fields?.Title || "",
+        destinataire: colonnesEnvoyes.destinataire ? x.fields?.[colonnesEnvoyes.destinataire] || "" : "",
+        corps: sansHistorique(texteSimple(x.fields?.[colonnesEnvoyes.corps])).slice(0, 1200),
+      }))
+      .filter(m => m.corps.length > 20);
+    if (envoyes.length < 10) throw new Error(`Seulement ${envoyes.length} mail(s) envoyé(s) exploitable(s) dans la liste MailsEnvoyes : lance d'abord le flux « Import mails envoyés ».`);
+    guideEnCours = `Claude étudie ${envoyes.length} mails envoyés… (1 à 2 minutes)`;
+    render();
+    const token = await getGraphToken();
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ mode: "guide", mails: envoyes.slice(0, 400) }),
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* non JSON */ }
+    if (!res.ok || !data?.guide) {
+      if (data && !data.erreur && !data.guide) throw new Error("Le Worker ne connaît pas encore le mode « guide » : colle la version 2 du code dans Cloudflare.");
+      throw new Error(data?.erreur ? `${data.erreur}${data.detail ? " — " + String(data.detail).slice(0, 200) : ""}` : `Agent injoignable (${res.status})`);
+    }
+    await enregistrerGuide(data.guide);
+    guideOuvert = true;
+    toast(`Guide créé à partir de ${data.nbMails} mails`, "success");
+  } catch (e) {
+    console.error(e);
+    toast(`Guide : ${e.message || e}`, "error");
+    erreur = `Guide : ${e.message || e}`;
+  } finally {
+    guideEnCours = "";
+    render();
+  }
+}
+
+function blocGuide() {
+  if (!guideOuvert) return "";
+  return `<div class="form-card ml-guide">
+    <b>📘 Guide de l'agent</b>
+    <div class="hint">Tiré de tes mails envoyés. L'agent le lit avant chaque mail pour répondre comme toi. Tu peux le corriger à la main.</div>
+    ${guideEnCours ? `<div class="hint">⏳ ${esc(guideEnCours)}</div>` : ""}
+    <textarea class="ml-brouillon ml-guide-texte" rows="16" placeholder="Pas encore de guide.">${esc(guide)}</textarea>
+    <div class="ml-actions">
+      <button class="nav-btn" data-act="guide-generer" ${guideEnCours ? "disabled" : ""}>✨ ${guide ? "Régénérer" : "Générer"} depuis mes mails envoyés</button>
+      <button class="nav-btn" data-act="guide-enregistrer" ${guideEnCours ? "disabled" : ""}>💾 Enregistrer mes corrections</button>
+    </div>
+  </div>`;
+}
+
 function render() {
   if (!conteneur) return;
   const liste = listeFiltree();
@@ -262,8 +387,10 @@ function render() {
       <button class="nav-btn ${filtre === "faits" ? "active" : ""}" data-filtre="faits">Répondus / ignorés</button>
       <button class="nav-btn ${filtre === "tous" ? "active" : ""}" data-filtre="tous">Tous</button>
       <button class="nav-btn" data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button>
+      <button class="nav-btn ${guideOuvert ? "active" : ""}" data-act="guide">📘 Guide${guide ? "" : " (vide)"}</button>
       <small class="hint">${nbUrgents ? `${nbUrgents} urgent(s) · ` : ""}${nbNouveaux ? `${nbNouveaux} à analyser` : "tout est analysé"}</small>
     </div>
+    ${blocGuide()}
     ${progression ? `<div class="hint">⏳ ${esc(progression)}</div>` : ""}
     ${erreur ? `<div class="form-card ml-erreur">❌ ${esc(erreur)}</div>` : ""}
     ${liste.length ? liste.map(carte).join("") : `<div class="hint" style="padding:24px;text-align:center">Aucun mail dans cette vue.</div>`}`;
@@ -275,6 +402,16 @@ async function surClic(e) {
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (!act) return;
   if (act === "actualiser") { await rafraichir(); return; }
+  if (act === "guide") { guideOuvert = !guideOuvert; render(); return; }
+  if (act === "guide-generer") { await genererGuide(); return; }
+  if (act === "guide-enregistrer") {
+    try {
+      await enregistrerGuide(conteneur.querySelector(".ml-guide-texte")?.value || "");
+      toast("Guide enregistré", "success");
+    } catch (err) { toast(`Échec : ${err.message || err}`, "error"); }
+    render();
+    return;
+  }
   const el = e.target.closest(".ml-carte");
   const m = mails.find(x => x.id === el?.dataset.id);
   if (!m) return;
@@ -305,7 +442,7 @@ async function rafraichir() {
   progression = "Lecture des mails…";
   render();
   try {
-    await chargerMails();
+    await Promise.all([chargerMails(), chargerGuide()]);
     progression = "";
     render();
     await traiterNouveaux();
