@@ -4,7 +4,7 @@
 // ≈ 80 Ko chacune) pour ne pas alourdir la liste des passages.
 import { db } from "./firebase-init.js";
 import {
-  collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp,
+  collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp, getDocs,
 } from "./firestore-compte.js";
 
 const COL = "espaces-verts";
@@ -61,6 +61,12 @@ export async function creerPassage(data) {
 }
 export const majPassage = (id, data) => setDoc(doc(db, COL, id), { ...data, majLe: serverTimestamp() }, { merge: true });
 export const supprimerPassage = (id) => deleteDoc(doc(db, COL, id));
+// Suppression complète d'un passage et de ses photos (tests, erreurs).
+export async function effacerPassageComplet(id) {
+  const s = await getDocs(query(collection(db, COL_PHOTOS), where("passageId", "==", id)));
+  await Promise.all(s.docs.map(d => deleteDoc(d.ref)));
+  await deleteDoc(doc(db, COL, id));
+}
 
 export function watchPhotosPassage(passageId, cb) {
   return onSnapshot(query(collection(db, COL_PHOTOS), where("passageId", "==", passageId)),

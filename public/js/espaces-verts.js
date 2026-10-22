@@ -8,11 +8,12 @@
 import { esc, dateKey } from "./astreinte-logic.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
+import { tableauEVHTML } from "./espaces-verts-stats.js";
 import { toast, confirmDialog } from "./ui-feedback.js";
 import { db } from "./firebase-init.js";
 import { collection, query, where, getDocs } from "./firestore-compte.js";
 import {
-  GROUPES, TACHES, watchPassages, creerPassage, majPassage, supprimerPassage,
+  GROUPES, TACHES, watchPassages, creerPassage, majPassage, supprimerPassage, effacerPassageComplet,
   watchPhotosPassage, ajouterPhotoEV, majPhotoEV, supprimerPhotoEV, dernieresDates, joursDepuis, retardsSite,
 } from "./espaces-verts-data.js";
 
@@ -154,7 +155,7 @@ function vueChoix() {
       ${miens.length ? miens.map(p => `
         <div class="ev-ligne" data-ouvrir="${esc(p.id)}">
           <div><b>${esc(p.siteName || "")}</b> · ${esc(fmt(p.date))}<br><small class="hint">${esc(p.agentNom || "")} · ${tachesFaites(p).map(t => t.label).join(", ") || "rien de coché"}</small></div>
-          <span>›</span>
+          ${user?.role === "super_admin" ? `<button class="del-btn" data-ev-del="${esc(p.id)}" title="Effacer ce passage">🗑️</button>` : `<span>›</span>`}
         </div>`).join("") : `<div class="hint">Aucune intervention pour l'instant.</div>`}
     </div>`;
 }
@@ -240,9 +241,11 @@ function vueSuivi() {
   return `
     <div class="form-card ev-barre">
       <b>🌿 Suivi des espaces verts — sites MNA</b>
+      <span class="ev-vues"><button type="button" class="${ui.suiviVue !== "detail" ? "actif" : ""}" data-ev-vue="stats">📊 Tableau de bord</button><button type="button" class="${ui.suiviVue === "detail" ? "actif" : ""}" data-ev-vue="detail">📜 Détail et impression</button></span>
+      ${user?.role === "super_admin" && passages.length ? `<button type="button" class="del-btn ev-tout-effacer" data-ev-tout-effacer>🧹 Tout effacer (tests)</button>` : ""}
       <label class="hint">Année à imprimer <select class="ev-annee">${[0, 1, 2].map(k => new Date().getFullYear() - k).map(a => `<option ${a === annee ? "selected" : ""}>${a}</option>`).join("")}</select></label>
     </div>
-    ${sitesMNA().map(s => {
+    ${ui.suiviVue !== "detail" ? tableauEVHTML(passages, sitesMNA()) : sitesMNA().map(s => {
       const liste = passages.filter(p => p.siteId === s.id).sort(tri);
       const dernier = liste[0];
       const retards = retardsSite(passages, s.id);
@@ -261,7 +264,7 @@ function vueSuivi() {
             <div><b>${esc(fmt(p.date))}</b> · ${esc(p.agentNom || "")}<br>
               <small>${tachesFaites(p).map(t => esc(t.label) + (p.obs?.[t.cle] ? ` (${esc(p.obs[t.cle])})` : "")).join(" · ") || "rien de coché"}</small>
               ${p.observations ? `<br><small class="hint">💬 ${esc(p.observations)}</small>` : ""}
-            </div><span>›</span>
+            </div>${user?.role === "super_admin" ? `<button class="del-btn" data-ev-del="${esc(p.id)}" title="Effacer ce passage">🗑️</button>` : `<span>›</span>`}
           </div>`).join("") : `<div class="hint">Aucun passage.</div>`) : ""}
       </div>`;
     }).join("") || `<div class="hint">Aucun site MNA trouvé.</div>`}`;
@@ -287,12 +290,29 @@ function render() {
 // ---------- Événements ----------
 async function surClic(e) {
   const t = e.target;
+  // Super Admin : effacer des passages (tests, erreurs), photos comprises.
+  const del1 = t.closest("[data-ev-del]");
+  if (del1) {
+    e.stopPropagation();
+    const p = passages.find(x => x.id === del1.dataset.evDel); if (!p) return;
+    if (!await confirmDialog(`Effacer le passage du ${fmt(p.date)} (${p.siteName}) et ses photos ?`, { danger: true, texteValider: "Effacer" })) return;
+    try { await effacerPassageComplet(p.id); toast("Passage effacé", "success"); } catch (err) { toast("Échec : " + (err.message || err), "error"); }
+    return;
+  }
+  if (t.closest("[data-ev-tout-effacer]")) {
+    const n = passages.length;
+    if (prompt(`Effacer les ${n} passages d'espaces verts et toutes leurs photos ? C'est définitif.\nTape EFFACER pour confirmer.`) !== "EFFACER") return;
+    let ok = 0; for (const p of [...passages]) { try { await effacerPassageComplet(p.id); ok++; } catch (err) { console.warn(err); } }
+    toast(`${ok} passage(s) effacé(s)`, "success"); return;
+  }
   const voir = t.closest("[data-voir]");
   if (voir) { const w = window.open(); if (w) w.document.write(`<title>Photo</title><body style="margin:0;background:#000"><img src="${voir.src}" style="max-width:100%;max-height:100vh;display:block;margin:auto">`); return; }
   const site = t.closest("[data-site]");
   if (site) { ui.siteChoisi = site.dataset.site; render(); return; }
   const ouvrir = t.closest("[data-ouvrir]");
   if (ouvrir) { ui.passageId = ouvrir.dataset.ouvrir; statut = ""; suiviPrecId = null; suivrePhotos(ui.passageId, false); render(); window.scrollTo?.(0, 0); return; }
+  const vueB = t.closest("[data-ev-vue]");
+  if (vueB) { ui.suiviVue = vueB.dataset.evVue; render(); return; }
   const histo = t.closest("[data-histo]");
   if (histo) { const id = histo.dataset.histo; ui.ouvertsSuivi.has(id) ? ui.ouvertsSuivi.delete(id) : ui.ouvertsSuivi.add(id); render(); return; }
   const impr = t.closest("[data-imprimer]");
@@ -440,4 +460,23 @@ const STYLE = `<style>
   .ev-carte{margin-bottom:10px}
   .ev-barre{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
   .ev-barre select{margin-left:6px}
+  .ev-vues{display:flex;gap:6px}
+  .ev-tout-effacer{border:1px solid var(--red);border-radius:8px;padding:6px 12px}
+  .ev-ligne .del-btn{flex:none}
+  .ev-vues button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:99px;padding:6px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .ev-vues button.actif{background:var(--teal,#1baf7a);border-color:transparent;color:#fff}
+  .ev-etat{display:flex;flex-direction:column;gap:6px}
+  .ev-etat-l{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-left:5px solid var(--border);border-radius:10px;font-size:13px}
+  .ev-etat-l.vert{border-left-color:#1baf7a}.ev-etat-l.orange{border-left-color:#f0a020}.ev-etat-l.rouge{border-left-color:#e04848}
+  .ev-etat-l div{display:flex;flex-direction:column}.ev-etat-l div span{font-size:11.5px;color:var(--text-dim)}
+  .ev-etat-j{font-weight:700;white-space:nowrap}.ev-etat-l.rouge .ev-etat-j{color:#c23030}.ev-etat-l.vert .ev-etat-j{color:#11845b}
+  .ev-etat-n{font-size:12px;color:var(--text-dim);white-space:nowrap}
+  .ev-ok-pill{font-size:11px;font-weight:700;color:#11845b;background:#dff5ea;border-radius:99px;padding:3px 8px;white-space:nowrap}
+  .ev-hors{opacity:.55}
+  .ev-mois{display:flex;gap:6px;align-items:flex-end;justify-content:space-between;padding:6px 0}
+  .ev-mois-c{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px}
+  .ev-mois-col{width:100%;max-width:36px;height:110px;background:var(--border);border-radius:6px;display:flex;align-items:flex-end;overflow:hidden}
+  .ev-mois-col i{display:block;width:100%;background:#1baf7a}
+  .ev-mois-c small{color:var(--text-dim)}
+  @media (max-width:700px){.ev-etat-l{grid-template-columns:1fr auto}.ev-etat-n{display:none}}
 </style>`;
