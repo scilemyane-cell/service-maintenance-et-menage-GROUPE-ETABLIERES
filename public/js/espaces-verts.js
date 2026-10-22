@@ -180,12 +180,11 @@ function vueFeuille(p) {
     const j = der ? joursDepuis(der, new Date(p.date + "T00:00:00")) : null;
     const enRetard = t.jours && (!t.saison || t.saison.includes(mois)) && j !== null && j > Math.round(t.jours * 1.25);
     const info = der ? `dernière fois le ${fmtCourt(der)} (${j} j)` : (t.jours ? "jamais faite ici" : "");
-    return `<div class="ev-tache ${fait ? "fait" : ""}">
-      <button class="ev-coche" data-tache="${esc(t.cle)}" ${modif ? "" : "disabled"}>${fait ? "✅" : "⬜"}</button>
-      <div class="ev-tache-txt" data-tache="${esc(t.cle)}">
-        <b>${esc(t.label)}</b>
-        ${info ? `<small class="${enRetard ? "ev-retard" : "hint"}">${enRetard ? "⚠️ " : ""}${esc(info)}</small>` : ""}
-      </div>
+    return `<div class="fj-tache ${fait ? "faite" : ""}">
+      <button class="fj-coche ev-coche" data-tache="${esc(t.cle)}" aria-pressed="${fait}" ${modif ? "" : "disabled"}>
+        <span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="fj-label">${esc(t.label)}${info ? `<small class="fj-derniere ${enRetard ? "ev-retard" : ""}">${enRetard ? "⚠️ " : ""}${esc(info)}</small>` : ""}</span>
+      </button>
       ${fait ? `<input class="ev-note" data-note="${esc(t.cle)}" value="${esc(p.obs?.[t.cle] || "")}" placeholder="Précision (facultatif)" ${modif ? "" : "disabled"}>` : ""}
     </div>`;
   };
@@ -198,12 +197,25 @@ function vueFeuille(p) {
   return `
     <div class="ev-entete">
       <button class="nav-btn" data-act="retour">← Retour</button>
-      <div><b>🏡 ${esc(p.siteName || "")}</b><br><small class="hint">${esc(fmt(p.date))} · ${esc(p.agentNom || "")}</small></div>
       <small class="ev-statut hint">${esc(statut)}</small>
     </div>
+    ${(() => { const faits = TACHES.filter(t => p.taches?.[t.cle]).length, total = TACHES.length, pct = total ? Math.round(faits / total * 100) : 0, r = 40, c = 2 * Math.PI * r;
+      return `<div class="fj ev-fj"><div class="fj-hero">
+        <div class="fj-hero-txt">
+          <div class="fj-bonjour">🌿 ${esc(p.siteName || "")}</div>
+          <div class="fj-date">${esc(fmt(p.date))} · ${esc(p.agentNom || "")}</div>
+          <div class="fj-msg">${faits ? `${faits} tâche${faits > 1 ? "s" : ""} cochée${faits > 1 ? "s" : ""} pour ce passage.` : "Coche ce qui a été fait pendant ce passage."}</div>
+        </div>
+        <div class="fj-hero-anneau"><svg class="fj-anneau" viewBox="0 0 100 100" width="92" height="92" aria-hidden="true"><circle cx="50" cy="50" r="${r}" class="fj-anneau-fond"/><circle cx="50" cy="50" r="${r}" class="fj-anneau-val" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct / 100)}"/></svg>
+          <div class="fj-anneau-txt"><b>${pct}%</b><span>${faits}/${total}</span></div></div>
+      </div></div>`; })()}
     <div class="ev-grille">
       <div>
-        ${GROUPES.map(g => `<div class="form-card"><b>${g.icone} ${esc(g.nom)}</b>${g.taches.map(ligne).join("")}</div>`).join("")}
+        <div class="fj">${GROUPES.map((g, gi) => { const f = g.taches.filter(t => p.taches?.[t.cle]).length, n = g.taches.length, fini = n && f === n;
+          return `<div class="fj-piece ${fini ? "finie" : ""}">
+          <div class="fj-piece-tete"><div class="fj-piece-nom">${g.icone} ${esc(g.nom)}</div><div class="fj-piece-compte">${f}/${n}</div>${modif ? `<button class="fj-tout" data-ev-tout="${gi}">${fini ? "↺ Tout décocher" : "✓ Tout fait"}</button>` : ""}</div>
+          <div class="fj-piece-barre"><span style="width:${n ? f / n * 100 : 0}%"></span></div>
+          ${g.taches.map(ligne).join("")}</div>`; }).join("")}</div>
         <div class="form-card">
           <b>💬 Observations</b>
           <textarea class="ev-observations" rows="3" placeholder="Problème constaté, matériel, à prévoir au prochain passage…" ${modif ? "" : "disabled"}>${esc(p.observations || "")}</textarea>
@@ -285,7 +297,15 @@ async function surClic(e) {
   if (histo) { const id = histo.dataset.histo; ui.ouvertsSuivi.has(id) ? ui.ouvertsSuivi.delete(id) : ui.ouvertsSuivi.add(id); render(); return; }
   const impr = t.closest("[data-imprimer]");
   if (impr) { imprimer(impr.dataset.imprimer); return; }
-  const coche = t.closest(".ev-coche, .ev-tache-txt");
+  const tout = t.closest("[data-ev-tout]");
+  if (tout && ui.passageId) {
+    const p = passageOuvert(); if (!peutModifier(p)) return;
+    const g = GROUPES[Number(tout.dataset.evTout)]; if (!g) return;
+    const fini = g.taches.every(x => p.taches?.[x.cle]);
+    const taches = { ...(p.taches || {}) }; g.taches.forEach(x => { taches[x.cle] = !fini; });
+    sauverPlusTard(p.id, { taches }, 300); render(); return;
+  }
+  const coche = t.closest(".ev-coche");
   if (coche && ui.passageId) {
     const p = passageOuvert(); if (!peutModifier(p)) return;
     const cle = coche.dataset.tache;
@@ -397,7 +417,10 @@ const STYLE = `<style>
   .ev-tache-txt{display:flex;flex-direction:column;cursor:pointer}
   .ev-tache.fait .ev-tache-txt b{color:var(--teal)}
   .ev-retard{color:var(--red);font-weight:600}
-  .ev-note{grid-column:2;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
+  .ev-fj{margin-bottom:12px}
+  .ev-grille .fj-piece{margin-bottom:10px}
+  .fj-label .fj-derniere{display:block;text-decoration:none}
+  .ev-note{margin:0 0 8px 46px;width:calc(100% - 46px);box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
   .ev-observations{width:100%;box-sizing:border-box;margin-top:6px;font:inherit;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
   .ev-ph-btns{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
   .ev-ph-btns .nav-btn{padding:10px 14px}
