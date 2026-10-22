@@ -6,12 +6,12 @@
 // « Suivi » : par site, dernier passage, prestations en retard, historique
 // complet et impression.
 import { esc, dateKey } from "./astreinte-logic.js";
-import { watchSites } from "./sites-data.js";
+import { watchAssociations } from "./associations-data.js";
 import { toast, confirmDialog } from "./ui-feedback.js";
 import { db } from "./firebase-init.js";
 import { collection, query, where, getDocs } from "./firestore-compte.js";
 import {
-  GROUPES, TACHES, estSiteMNA, watchPassages, creerPassage, majPassage, supprimerPassage,
+  GROUPES, TACHES, watchPassages, creerPassage, majPassage, supprimerPassage,
   watchPhotosPassage, ajouterPhotoEV, majPhotoEV, supprimerPhotoEV, dernieresDates, joursDepuis, retardsSite,
 } from "./espaces-verts-data.js";
 
@@ -25,7 +25,18 @@ let photos = [], photosPrec = [], unsubPhotos = null, unsubPhotosPrec = null, su
 let unsubs = [], saveTimer = null, statut = "", enAttente = null, renduDiffere = false;
 
 const peutModifier = (p) => p && (EDITEURS.includes(user?.role) || p.agentUid === user?.uid);
-const sitesMNA = () => sites.filter(estSiteMNA);
+// Sites MNA = ceux du groupe « MNA » dans Administration > Associations &
+// Sites (même liste que le reste de l'appli) : un site ajouté là-bas apparaît
+// ici tout seul.
+const slug = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const sitesMNA = () => sites;
+function sitesDepuisAssociations(assos) {
+  const l = [];
+  for (const a of assos || []) for (const st of a.sites || []) {
+    if (/MNA/i.test(st.groupe || "") || /MNA/i.test(a.nom || "")) l.push({ id: "mna-" + slug(st.nom), name: st.nom, association: a.nom });
+  }
+  return l;
+}
 const fmt = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }) : "";
 const fmtCourt = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "";
 const ilYa = (j) => j <= 0 ? "aujourd'hui" : j === 1 ? "hier" : `il y a ${j} j`;
@@ -50,7 +61,7 @@ function monter(container, u, quelleVue) {
     container.dataset.evEcoute = "1";
   }
   container.innerHTML = `<div class="hint" style="padding:24px;text-align:center">Chargement…</div>`;
-  unsubs.push(watchSites(s => { sites = s || []; render(); }));
+  unsubs.push(watchAssociations(a => { sites = sitesDepuisAssociations(a); render(); }));
   unsubs.push(watchPassages((l, e) => {
     if (e) { erreur = /permission/i.test(e.message || "") ? "Accès refusé : publie la dernière version des règles Firestore (blocs « espaces-verts »)." : (e.message || String(e)); passages = []; }
     else { passages = l; erreur = ""; }
@@ -123,6 +134,7 @@ function vueChoix() {
         const ret = passages ? retardsSite(passages, s.id).filter(r => !r.jamais).length : 0;
         return `<button class="ev-site ${ui.siteChoisi === s.id ? "actif" : ""}" data-site="${esc(s.id)}">🏡 ${esc(s.name)}${ret ? ` <span class="ev-badge">${ret} en retard</span>` : ""}</button>`;
       }).join("") || `<div class="hint">Aucun site MNA trouvé.</div>`}</div>
+      ${EDITEURS.includes(user?.role) ? `<div class="hint">Il manque un site ? Ajoute-le dans ⚙️ Administration › Associations & Sites, avec le groupe « MNA ».</div>` : ""}
       <label class="hint">Date de l'intervention <input type="date" class="ev-date" value="${esc(ui.date)}" max="${dateKey(new Date())}"></label>
       <div><button class="nav-btn ev-gros" data-act="commencer" ${ui.siteChoisi ? "" : "disabled"}>📝 Ouvrir la feuille</button></div>
     </div>
