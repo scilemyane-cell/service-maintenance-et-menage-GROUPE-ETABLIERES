@@ -70,10 +70,16 @@ const champ = (f, nom) => f[colonnes[nom]] ?? "";
 
 // Les colonnes « Plusieurs lignes de texte » de SharePoint renvoient du HTML
 // (<div class="ExternalClass…">, &#58;…) : on le remet en texte simple.
+// Texte d'origine du mail, tel qu'écrit par l'expéditeur (HTML Outlook →
+// texte), historique compris, sans aucune retouche de l'IA.
+function texteOriginal(v) {
+  return texteSimple(v).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function texteSimple(v) {
   const s = String(v ?? "");
   if (!/[<&]/.test(s)) return s;
-  const html = s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr)>/gi, "\n");
+  const html = s.replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr)>/gi, "\n");
   const d = new DOMParser().parseFromString(html, "text/html");
   return (d.body.textContent || "").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -227,9 +233,9 @@ function carte(m) {
       ${m.categorie ? `<span class="ml-cat">${esc(m.categorie)}</span>` : ""}
       ${m.statut !== "Traité" ? `<span class="ml-cat ml-statut">${esc(m.statut)}</span>` : ""}
     </div>
-    ${m.resume ? `<div class="ml-resume">${esc(m.resume)}</div>` : m.statut === "Nouveau" ? `<div class="hint">En attente d'analyse…</div>` : ""}
+    <div class="ml-corps ${ouvert ? "" : "ml-apercu"}">${esc(texteOriginal(m.corps).slice(0, ouvert ? 15000 : 400))}</div>
+    ${m.resume ? `<div class="ml-resume"><small>🤖 Résumé IA :</small> ${esc(m.resume)}</div>` : m.statut === "Nouveau" ? `<div class="hint">En attente d'analyse…</div>` : ""}
     ${ouvert ? `
-      <details class="ml-original"><summary>Voir le mail d'origine</summary><div class="ml-corps">${esc(String(m.corps).replace(/<[^>]+>/g, " ").replace(/\s{3,}/g, "\n\n").slice(0, 8000))}</div></details>
       <label class="hint">Brouillon de réponse</label>
       <textarea class="ml-brouillon" rows="8" placeholder="Pas de réponse proposée">${esc(m.brouillon)}</textarea>
       <div class="ml-actions">
@@ -375,11 +381,13 @@ function render() {
       .ml-titre small{color:var(--text-dim)}
       .ml-cat{font-size:12px;padding:2px 8px;border-radius:10px;background:var(--panel-alt);border:1px solid var(--border);white-space:nowrap}
       .ml-statut{opacity:.7}
-      .ml-resume{margin-top:6px}
+      .ml-resume{margin-top:8px;font-size:13px;color:var(--text-dim);font-style:italic}
+      .ml-resume small{font-style:normal}
       .ml-brouillon{width:100%;box-sizing:border-box;margin-top:4px;font:inherit;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
       .ml-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
       .ml-original{margin:8px 0}
-      .ml-corps{white-space:pre-wrap;font-size:13px;color:var(--text-dim);max-height:300px;overflow:auto;margin-top:6px}
+      .ml-corps{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:8px;max-height:60vh;overflow:auto}
+      .ml-apercu{max-height:none;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}
       .ml-erreur{white-space:pre-wrap;color:var(--red)}
     </style>
     <div class="ml-barre">
