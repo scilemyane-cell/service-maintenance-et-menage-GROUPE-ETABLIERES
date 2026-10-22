@@ -115,6 +115,9 @@
   const mountCorbeille = aLaDemande(charger_corbeille, "mountCorbeille");
   const charger_connexions = () => import("./connexions.js");
   const mountConnexions = aLaDemande(charger_connexions, "mountConnexions");
+  const charger_espaces_verts = () => import("./espaces-verts.js");
+  const mountEspacesVertsIntervention = aLaDemande(charger_espaces_verts, "mountEspacesVertsIntervention");
+  const mountEspacesVertsSuivi = aLaDemande(charger_espaces_verts, "mountEspacesVertsSuivi");
   const charger_mails = () => import("./mails.js");
   const mountMails = aLaDemande(charger_mails, "mountMails");
   // Préchargement en arrière-plan de TOUS les modules, juste après
@@ -416,6 +419,13 @@
         ],
       },
       {
+        id: "espaces-verts", label: "Espaces verts", icon: "🌿", desc: "Feuilles de traçabilité des espaces verts des maisons MNA, avec photos et suivi des prestations",
+        subtabs: [
+          { id: "intervention", label: "Intervention", icon: "📝", roles: [...GESTION, "technicien"], mount: mountEspacesVertsIntervention },
+          { id: "suivi", label: "Suivi par site", icon: "📊", roles: [...GESTION, "direction", "technicien"], mount: mountEspacesVertsSuivi },
+        ],
+      },
+      {
         id: "mails", label: "Assistant mails", icon: "✉️", desc: "Mails Outlook triés par l'IA, avec brouillons de réponse",
         subtabs: [
           { id: "liste", label: "Mails", icon: "✉️", roles: SUPER_ADMIN_ONLY, mount: mountMails },
@@ -425,8 +435,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, mails] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, mails];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, mails] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, mails];
   }
 
   watchAuth((user) => {
