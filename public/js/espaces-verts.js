@@ -7,6 +7,7 @@
 // complet et impression.
 import { esc, dateKey } from "./astreinte-logic.js";
 import { watchAssociations } from "./associations-data.js";
+import { watchSitesDossiers } from "./site-dossier-data.js";
 import { toast, confirmDialog } from "./ui-feedback.js";
 import { db } from "./firebase-init.js";
 import { collection, query, where, getDocs } from "./firestore-compte.js";
@@ -19,7 +20,10 @@ const EDITEURS = ["super_admin", "admin", "n1"];
 const MOMENTS = { avant: "Avant", apres: "Après", "": "Autre" };
 
 let conteneur = null, user = null, vue = "intervention";
-let sites = [], passages = null, erreur = "";
+let sites = [], passages = null, erreur = "", sitesAssos = [], sitesDossiers = [];
+// Sites MNA : ceux des Dossiers de site (groupe / association / nom contenant « MNA ») ;
+// à défaut, ceux du groupe « MNA » dans Associations & Sites.
+const majSites = () => { sites = sitesDossiers.length ? sitesDossiers : sitesAssos; };
 let ui = { passageId: null, siteChoisi: "", date: dateKey(new Date()), ouvertsSuivi: new Set(), anneeImpr: new Date().getFullYear() };
 let photos = [], photosPrec = [], unsubPhotos = null, unsubPhotosPrec = null, suiviPhotos = null, suiviPrecId = null;
 let unsubs = [], saveTimer = null, statut = "", enAttente = null, renduDiffere = false;
@@ -61,7 +65,14 @@ function monter(container, u, quelleVue) {
     container.dataset.evEcoute = "1";
   }
   container.innerHTML = `<div class="hint" style="padding:24px;text-align:center">Chargement…</div>`;
-  unsubs.push(watchAssociations(a => { sites = sitesDepuisAssociations(a); render(); }));
+  unsubs.push(watchAssociations(a => { sitesAssos = sitesDepuisAssociations(a); majSites(); render(); }));
+  unsubs.push(watchSitesDossiers(l => {
+    const vus = new Set();
+    sitesDossiers = (l || []).filter(d => !d.supprimeLe && (/MNA/i.test(d.groupe || "") || /MNA/i.test(d.association || "") || /MNA/i.test(d.nom || "")))
+      .map(d => ({ id: "mna-" + slug(d.nom), name: d.nom, association: d.association || "Agropolis" }))
+      .filter(x => x.name && !vus.has(x.id) && vus.add(x.id)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    majSites(); render();
+  }));
   unsubs.push(watchPassages((l, e) => {
     if (e) { erreur = /permission/i.test(e.message || "") ? "Accès refusé : publie la dernière version des règles Firestore (blocs « espaces-verts »)." : (e.message || String(e)); passages = []; }
     else { passages = l; erreur = ""; }
@@ -134,7 +145,7 @@ function vueChoix() {
         const ret = passages ? retardsSite(passages, s.id).filter(r => !r.jamais).length : 0;
         return `<button class="ev-site ${ui.siteChoisi === s.id ? "actif" : ""}" data-site="${esc(s.id)}">🏡 ${esc(s.name)}${ret ? ` <span class="ev-badge">${ret} en retard</span>` : ""}</button>`;
       }).join("") || `<div class="hint">Aucun site MNA trouvé.</div>`}</div>
-      ${EDITEURS.includes(user?.role) ? `<div class="hint">Il manque un site ? Ajoute-le dans ⚙️ Administration › Associations & Sites, avec le groupe « MNA ».</div>` : ""}
+      ${EDITEURS.includes(user?.role) ? `<div class="hint">Il manque un site ? Dans 🏠 Dossiers de site, mets « MNA » dans son groupe.</div>` : ""}
       <label class="hint">Date de l'intervention <input type="date" class="ev-date" value="${esc(ui.date)}" max="${dateKey(new Date())}"></label>
       <div><button class="nav-btn ev-gros" data-act="commencer" ${ui.siteChoisi ? "" : "disabled"}>📝 Ouvrir la feuille</button></div>
     </div>
