@@ -104,7 +104,8 @@ function ajuster() {
   const scene = conteneur?.querySelector(".ea-scene"), ea = scene?.firstElementChild; if (!ea) return;
   const plein = !!document.fullscreenElement;
   const w = plein ? window.innerWidth : conteneur.clientWidth || window.innerWidth;
-  const h = plein ? window.innerHeight : Infinity;
+  // Hors plein écran : tout doit tenir dans la fenêtre, sans défiler.
+  const h = plein ? window.innerHeight : Math.max(300, window.innerHeight - Math.max(0, conteneur.getBoundingClientRect().top + window.scrollY) - 12);
   const k = Math.min(w / 1920, h / 1080);
   ea.style.transform = `scale(${k})`;
   scene.style.height = `${1080 * k}px`;
