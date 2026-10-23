@@ -536,7 +536,7 @@ export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, in
   // N° porté par plusieurs demandes : le flux retrouve la ligne Excel par le
   // N° seul et écrirait les deux suivis sur la même ligne (le dernier gagne)
   // → on ne les envoie pas, ils sont signalés à part.
-  const compteNum = {}; (demandesApp || []).filter(d => !d.lieeA).forEach(d => { compteNum[d.numero] = (compteNum[d.numero] || 0) + 1; });
+  const compteNum = {}; (demandesApp || []).filter(d => !d.lieeA && !d.supprimeeLe).forEach(d => { compteNum[d.numero] = (compteNum[d.numero] || 0) + 1; });
   const ignorees = [];
   // Toutes les demandes suivies dans l'appli sont candidates (pas seulement
   // les 10 derniers jours) : la comparaison avec la copie ci-dessous ne garde
