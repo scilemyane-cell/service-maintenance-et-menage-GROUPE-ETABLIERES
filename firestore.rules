@@ -240,6 +240,11 @@ service cloud.firestore {
     }
     // ---- Espaces verts : un passage par document, photos à part (≈ 80 Ko) ----
     // L'agent gère ses propres passages et photos ; un éditeur peut tout gérer.
+    // ---- Pense-bête de l'écran atelier (télé) ----
+    match /atelier-memos/{docId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isEditor() || (isSignedIn() && myRole() == 'technicien');
+    }
     match /espaces-verts/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid);

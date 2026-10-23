@@ -115,6 +115,8 @@
   const mountCorbeille = aLaDemande(charger_corbeille, "mountCorbeille");
   const charger_connexions = () => import("./connexions.js");
   const mountConnexions = aLaDemande(charger_connexions, "mountConnexions");
+  const charger_ecran_atelier = () => import("./ecran-atelier.js");
+  const mountEcranAtelier = aLaDemande(charger_ecran_atelier, "mountEcranAtelier");
   const charger_espaces_verts = () => import("./espaces-verts.js");
   const mountEspacesVertsIntervention = aLaDemande(charger_espaces_verts, "mountEspacesVertsIntervention");
   const mountEspacesVertsSuivi = aLaDemande(charger_espaces_verts, "mountEspacesVertsSuivi");
@@ -426,6 +428,12 @@
         ],
       },
       {
+        id: "ecran-atelier", label: "Écran atelier", icon: "📺", desc: "Affichage pour la télé de l'atelier : urgences en direct, pense-bête, astreinte du jour",
+        subtabs: [
+          { id: "ecran", label: "Écran", icon: "📺", roles: [...GESTION, "technicien"], mount: mountEcranAtelier },
+        ],
+      },
+      {
         id: "mails", label: "Assistant mails", icon: "✉️", desc: "Mails Outlook triés par l'IA, avec brouillons de réponse",
         subtabs: [
           { id: "liste", label: "Mails", icon: "✉️", roles: SUPER_ADMIN_ONLY, mount: mountMails },
@@ -435,8 +443,8 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, mails] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, mails];
+    const [statistiques, astreinte, administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, ecranAtelier, mails] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, ecranAtelier, mails];
   }
 
   watchAuth((user) => {
