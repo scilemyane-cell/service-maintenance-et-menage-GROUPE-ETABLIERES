@@ -14,7 +14,49 @@ import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, esc } from "./astr
 
 const COL = "atelier-memos";
 let conteneur = null, user = null, unsubs = [], timer = null, wakeLock = null;
-let urgences = [], nouvelles = [], memos = [], people = null, absences = [], coord = {}, mesDemandes = [];
+let urgences = [], nouvelles = [], memos = [], people = null, absences = [], coord = {}, mesDemandes = [], toutes = [];
+// Colonne de droite « dynamique » : les panneaux défilent tout seuls.
+const PANNEAUX = ["barometre", "nouvelles", "realisees", "anciennes"], DUREE_PANNEAU = 15000;
+let panneau = 0, minuterieRotation = null;
+const sansAccent = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const estClose = (d) => /^(realis|annul)/.test(sansAccent(d.statut));
+const estRealisee = (d) => sansAccent(d.statut).startsWith("realis");
+const dateFin = (d) => String(d.dateValidation || d.dateStatut || d.dateIntervention || "").slice(0, 10);
+const valide = (d) => !d.lieeA && !d.supprimeeLe && !sansAccent(d.statut).startsWith("arbitrage");
+
+// Chiffres du mois en cours et du mois dernier.
+function chiffresMois(decalage) {
+  const n = new Date(), d0 = new Date(n.getFullYear(), n.getMonth() - decalage, 1), cle = iso(d0).slice(0, 7);
+  const l = toutes.filter(valide);
+  const recues = l.filter(d => String(d.dateDemande || "").startsWith(cle));
+  const realisees = l.filter(d => estRealisee(d) && dateFin(d).startsWith(cle));
+  const delais = realisees.map(d => d.dateDemande && /^\d{4}-\d{2}-\d{2}/.test(dateFin(d)) ? joursEntre(String(d.dateDemande).slice(0, 10), dateFin(d)) : null).filter(x => x != null && x >= 0 && x < 400);
+  const urg = recues.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length;
+  return { nom: d0.toLocaleDateString("fr-FR", { month: "long" }), recues: recues.length, realisees: realisees.length, urg, delai: delais.length ? Math.round(delais.reduce((a, b) => a + b, 0) / delais.length) : null };
+}
+function barometreHTML() {
+  const c = chiffresMois(0), p = chiffresMois(1);
+  const ouvertes = toutes.filter(d => valide(d) && !estClose(d)).length;
+  const fl = (a, b, inverse) => { if (b == null || a == null || a === b) return `<i class="eq">=</i>`; const mieux = inverse ? a < b : a > b; return `<i class="${mieux ? "up" : "down"}">${a > b ? "▲" : "▼"} ${Math.abs(a - b)}</i>`; };
+  const ligne = (lib, a, b, inverse, suffixe = "") => `<div class="ea-b-l"><span>${lib}</span><b>${a ?? "—"}${a != null ? suffixe : ""}</b><em>${b ?? "—"}${b != null ? suffixe : ""}</em>${fl(a, b, inverse)}</div>`;
+  return `<h2>📊 Baromètre du mois</h2><p class="ea-sous">${esc(c.nom)} en cours (au ${new Date().getDate()}) comparé à ${esc(p.nom)} complet</p>
+    <div class="ea-b-tete"><span></span><span>${esc(c.nom)}</span><span>${esc(p.nom)}</span><span></span></div>
+    ${ligne("Demandes reçues", c.recues, p.recues, true)}
+    ${ligne("Demandes réalisées", c.realisees, p.realisees, false)}
+    ${ligne("Dont urgentes reçues", c.urg, p.urg, true)}
+    ${ligne("Délai moyen", c.delai, p.delai, true, " j")}
+    <div class="ea-b-gros"><b>${ouvertes}</b><span>demandes encore à traiter</span></div>`;
+}
+function realiseesHTML() {
+  const l = toutes.filter(d => valide(d) && estRealisee(d) && dateFin(d) && joursEntre(dateFin(d), iso(new Date())) <= 7).sort((a, b) => dateFin(b).localeCompare(dateFin(a)));
+  return `<h2>✅ Réalisées cette semaine <span class="ea-nb vert">${l.length}</span></h2><p class="ea-sous">7 derniers jours — bravo l'équipe</p>
+    ${l.length ? l.slice(0, 7).map(d => `<div class="ea-n"><div class="ea-n-l1"><b>${esc(d.site || "")}</b>${d.local ? `<span class="ea-n-loc">· ${esc(d.local)}</span>` : ""}<span class="ea-n-date">${new Date(dateFin(d) + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit" })}</span></div><span class="ea-n-t">${esc(String(d.descriptif || ""))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune demande réalisée ces 7 derniers jours.</div>`}`;
+}
+function anciennesHTML() {
+  const l = toutes.filter(d => valide(d) && !estClose(d) && d.dateDemande).sort((a, b) => String(a.dateDemande).localeCompare(String(b.dateDemande)));
+  return `<h2>⏳ Les plus anciennes en attente</h2><p class="ea-sous">À ne pas laisser traîner</p>
+    ${l.length ? l.slice(0, 7).map(d => `<div class="ea-n"><div class="ea-n-l1"><b>${esc(d.site || "")}</b>${d.local ? `<span class="ea-n-loc">· ${esc(d.local)}</span>` : ""}<span class="ea-n-date rouge">${joursEntre(String(d.dateDemande).slice(0, 10), iso(new Date()))} j</span></div><span class="ea-n-t">${esc(String(d.descriptif || ""))} · ${esc(d.statut || "")}</span></div>`).join("") : `<div class="ea-vide petit">Rien en retard.</div>`}`;
+}
 let dejaVues = null, sonActif = false, edition = false;
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -87,9 +129,11 @@ function render() {
         ${astreinteHTML()}
       </div>
       <div class="ea-col">
-        <section class="ea-bloc ea-nouv">
-          <h2>🆕 Nouvelles demandes</h2><p class="ea-sous">7 derniers jours</p>
-          ${nouv.length ? nouv.map(n => `<div class="ea-n"><div class="ea-n-l1">${/^SG-/.test(n.numero || "") ? `<span class="ea-num">${esc(n.numero)}</span>` : ""}<b>${esc(n.site || "")}</b>${n.local ? `<span class="ea-n-loc">· ${esc(n.local)}</span>` : ""}</div><span class="ea-n-t">${esc(String(n.descriptif || ""))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune nouvelle demande.</div>`}
+        <section class="ea-bloc ea-nouv ea-dyn" data-p="${PANNEAUX[panneau]}">
+          ${PANNEAUX[panneau] === "barometre" ? barometreHTML() : PANNEAUX[panneau] === "realisees" ? realiseesHTML() : PANNEAUX[panneau] === "anciennes" ? anciennesHTML() : `<h2>🆕 Nouvelles demandes</h2><p class="ea-sous">7 derniers jours</p>
+          ${nouv.length ? nouv.map(n => `<div class="ea-n"><div class="ea-n-l1">${/^SG-/.test(n.numero || "") ? `<span class="ea-num">${esc(n.numero)}</span>` : ""}<b>${esc(n.site || "")}</b>${n.local ? `<span class="ea-n-loc">· ${esc(n.local)}</span>` : ""}</div><span class="ea-n-t">${esc(String(n.descriptif || ""))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune nouvelle demande.</div>`}`}
+          <div class="ea-points">${PANNEAUX.map((_, i) => `<i class="${i === panneau ? "on" : ""}"></i>`).join("")}</div>
+          <div class="ea-prog"><i style="animation-duration:${DUREE_PANNEAU}ms"></i></div>
         </section>
       </div>
     </div>
@@ -152,7 +196,7 @@ async function surEnvoi(e) {
 
 function nettoyer() {
   unsubs.forEach(u => { try { u(); } catch { /* */ } }); unsubs = [];
-  clearInterval(timer); timer = null;
+  clearInterval(timer); timer = null; clearInterval(minuterieRotation); minuterieRotation = null;
   try { wakeLock?.release(); } catch { /* */ } wakeLock = null;
 }
 
@@ -174,6 +218,7 @@ export function mountEcranAtelier(container, u) {
   }));
   unsubs.push(watchNouvellesDemandes((l) => { nouvelles = l; render(); }));
   unsubs.push(watchDemandes((l) => {
+    toutes = l || [];
     mesDemandes = (l || []).filter(d => d.attribueA === u?.uid && !d.lieeA && !d.supprimeeLe && !/^(realis|annul|arbitrage)/.test(String(d.statut || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()));
     render();
   }));
@@ -182,6 +227,8 @@ export function mountEcranAtelier(container, u) {
   unsubs.push(watchAbsences((a) => { absences = a || []; render(); }));
   unsubs.push(watchCoordonnees((c) => { coord = c || {}; render(); }));
   // Horloge : on redessine chaque minute (sauf pendant une saisie).
+  clearInterval(minuterieRotation);
+  minuterieRotation = setInterval(() => { const a = document.activeElement; if (a && conteneur?.contains(a) && a.matches("input")) return; panneau = (panneau + 1) % PANNEAUX.length; render(); }, DUREE_PANNEAU);
   timer = setInterval(() => { const a = document.activeElement; if (!(a && conteneur?.contains(a) && a.matches("input"))) render(); }, 30000);
   render();
 }
@@ -228,6 +275,17 @@ const STYLE = `<style>
   .ea-n{display:flex;flex-direction:column;gap:2px;padding:7px 0;border-bottom:1px solid var(--ea-bord);font-size:.92em}.ea-n:last-child{border-bottom:none}
   .ea-n-l1{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}.ea-n-l1 b{flex:none;max-width:75%;overflow:hidden;text-overflow:ellipsis}.ea-n-l1 .ea-num{flex:none}.ea-n-loc{color:var(--ea-dim);overflow:hidden;text-overflow:ellipsis}
   .ea-n-t{color:var(--ea-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ea-n-date{margin-left:auto;flex:none;font-size:.85em;color:#5fe0a8}.ea-n-date.rouge{color:#ff8a8a;font-weight:800}
+  .ea-dyn{position:relative;display:flex;flex-direction:column;animation:ea-fondu .6s ease}
+  @keyframes ea-fondu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .ea-points{display:flex;gap:8px;justify-content:center;margin-top:auto;padding-top:10px}.ea-points i{width:10px;height:10px;border-radius:50%;background:var(--ea-bord)}.ea-points i.on{background:#3b7be0}
+  .ea-prog{height:4px;background:var(--ea-bord);border-radius:99px;overflow:hidden;margin-top:8px}.ea-prog i{display:block;height:100%;width:0;background:#3b7be0;animation:ea-barre linear forwards}
+  @keyframes ea-barre{to{width:100%}}
+  .ea-b-tete,.ea-b-l{display:grid;grid-template-columns:1.6fr .8fr .8fr .9fr;gap:8px;align-items:baseline}
+  .ea-b-tete{color:var(--ea-dim);font-size:.75em;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+  .ea-b-l{padding:10px 0;border-bottom:1px solid var(--ea-bord)}.ea-b-l span{color:var(--ea-dim);font-size:.9em}.ea-b-l b{font-size:1.6em}.ea-b-l em{font-style:normal;color:var(--ea-dim);font-size:1.15em}
+  .ea-b-l i{font-style:normal;font-weight:800;font-size:.85em}.ea-b-l i.up{color:#5fe0a8}.ea-b-l i.down{color:#ff8a8a}.ea-b-l i.eq{color:var(--ea-dim)}
+  .ea-b-gros{margin-top:16px;display:flex;align-items:baseline;gap:12px;background:#1a2440;border-radius:12px;padding:12px 16px}.ea-b-gros b{font-size:2.4em;color:#ffd27a}.ea-b-gros span{color:var(--ea-dim)}
   .ea-pied{margin-top:18px;background:var(--ea-carte);border:1px solid var(--ea-bord);border-radius:12px;padding:10px 16px;font-size:1.05em}.ea-pied .rouge{color:#ff8a8a}
   .ea-edit{position:absolute;top:150px;left:34px;right:34px;z-index:5;max-height:860px;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);font-size:20px}
   .ea-edit-liste div{font-size:18px!important}
