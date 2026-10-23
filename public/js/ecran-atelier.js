@@ -57,7 +57,7 @@ function render() {
   const actifsMemos = memos.filter(m => !m.date || joursEntre(iso(now), m.date) >= -1)
     .sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || String(a.date || "").localeCompare(String(b.date || "")) || (b.important ? 1 : 0) - (a.important ? 1 : 0));
   const urgTri = [...urgences].sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
-  const nouv = nouvelles.filter(n => !urgences.some(u => u.id === n.id)).sort((a, b) => (b.importeMs || 0) - (a.importeMs || 0)).slice(0, 9);
+  const nouv = nouvelles.filter(n => !urgences.some(u => u.id === n.id)).sort((a, b) => (b.importeMs || 0) - (a.importeMs || 0)).slice(0, 7);
   const plein = !!document.fullscreenElement;
   conteneur.innerHTML = `${STYLE}<div class="ea-scene"><div class="ea ${plein ? "plein" : ""}">
     <header class="ea-tete">
@@ -89,7 +89,7 @@ function render() {
       <div class="ea-col">
         <section class="ea-bloc ea-nouv">
           <h2>🆕 Nouvelles demandes</h2><p class="ea-sous">7 derniers jours</p>
-          ${nouv.length ? nouv.map(n => `<div class="ea-n"><span class="ea-num">${esc(n.numero || "")}</span><b>${esc(n.site || "")}</b>${n.local ? ` · ${esc(n.local)}` : ""}<span class="ea-n-t">${esc(String(n.descriptif || "").slice(0, 70))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune nouvelle demande.</div>`}
+          ${nouv.length ? nouv.map(n => `<div class="ea-n"><div class="ea-n-l1">${/^SG-/.test(n.numero || "") ? `<span class="ea-num">${esc(n.numero)}</span>` : ""}<b>${esc(n.site || "")}</b>${n.local ? `<span class="ea-n-loc">· ${esc(n.local)}</span>` : ""}</div><span class="ea-n-t">${esc(String(n.descriptif || ""))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune nouvelle demande.</div>`}
         </section>
       </div>
     </div>
@@ -198,9 +198,11 @@ const STYLE = `<style>
   .ea-cmd button{background:var(--ea-carte);color:var(--ea-txt);border:1px solid var(--ea-bord);border-radius:10px;padding:6px 14px;font:inherit;font-size:16px;cursor:pointer}
   .ea-cmd button.on{border-color:#1baf7a;color:#5fe0a8}
   .ea-grille{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr) minmax(0,.85fr);gap:22px;align-items:stretch}
-  .ea-grille>.ea-bloc,.ea-col>.ea-bloc{overflow:hidden}
+  .ea-grille{grid-template-rows:minmax(0,1fr)}
+  .ea-col{min-height:0}
+  .ea-grille>.ea-bloc,.ea-col>.ea-bloc{overflow:hidden;min-height:0}
   .ea-sous{margin:-8px 0 10px;color:var(--ea-dim);font-size:.75em}
-  .ea-col>.ea-memo{flex:1}.ea-col>.ea-nouv{flex:1}
+  .ea-col>.ea-memo{flex:1 1 auto}.ea-col>.ea-ast{flex:none}.ea-col>.ea-nouv{flex:1 1 auto}
   .ea-col{display:flex;flex-direction:column;gap:18px}
   .ea-bloc{background:var(--ea-carte);border:1px solid var(--ea-bord);border-radius:16px;padding:16px 18px}
   .ea-bloc h2{margin:0 0 12px;font-size:1.25em;display:flex;align-items:center;gap:10px}.ea-bloc h2 small{font-size:.6em;color:var(--ea-dim);font-weight:400}
@@ -223,8 +225,9 @@ const STYLE = `<style>
   .ea-m-q{font-size:.78em;color:var(--ea-dim)}.ea-m.auj .ea-m-q{color:#ff9b9b;font-weight:800}
   .ea-m-t{font-size:1.1em}
   .ea-ast-l{display:flex;align-items:baseline;gap:12px;font-size:1.15em;padding:4px 0}.ea-ast-l span{font-size:.75em;font-weight:800;background:#3b7be0;border-radius:6px;padding:1px 8px}.ea-ast-l em{font-style:normal;color:#ffd27a;margin-left:auto}
-  .ea-n{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--ea-bord);font-size:.95em;flex-wrap:wrap}.ea-n:last-child{border-bottom:none}
-  .ea-n-t{color:var(--ea-dim);flex-basis:100%}
+  .ea-n{display:flex;flex-direction:column;gap:2px;padding:7px 0;border-bottom:1px solid var(--ea-bord);font-size:.92em}.ea-n:last-child{border-bottom:none}
+  .ea-n-l1{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}.ea-n-l1 b{flex:none;max-width:75%;overflow:hidden;text-overflow:ellipsis}.ea-n-l1 .ea-num{flex:none}.ea-n-loc{color:var(--ea-dim);overflow:hidden;text-overflow:ellipsis}
+  .ea-n-t{color:var(--ea-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ea-pied{margin-top:18px;background:var(--ea-carte);border:1px solid var(--ea-bord);border-radius:12px;padding:10px 16px;font-size:1.05em}.ea-pied .rouge{color:#ff8a8a}
   .ea-edit{position:absolute;top:150px;left:34px;right:34px;z-index:5;max-height:860px;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);font-size:20px}
   .ea-edit-liste div{font-size:18px!important}
