@@ -7,7 +7,7 @@
 //   • horloge et date en grand.
 // Bouton « Plein écran » : l'écran garde l'appli affichée sans veille.
 import { db } from "./firebase-init.js";
-import { collection, doc, addDoc, deleteDoc, onSnapshot, serverTimestamp } from "./firestore-compte.js";
+import { collection, doc, addDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp } from "./firestore-compte.js";
 import { watchUrgencesOuvertes, watchNouvellesDemandes, watchPeople, watchAbsences, watchDemandes } from "./firestore-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, esc } from "./astreinte-logic.js";
@@ -299,3 +299,62 @@ const STYLE = `<style>
   .ea-edit-liste span,.ea-edit-liste small{color:var(--ea-dim)}.ea-edit-liste button{background:none;padding:4px}
   .ea-aide{color:var(--ea-dim);font-size:13px;margin:10px 0 0}
 </style>`;
+
+// ---------- Gestion du pense-bête depuis l'appli (superviseurs) ----------
+// Onglet « 📌 Pense-bête » de la tuile Écran atelier : ajouter, modifier,
+// supprimer les rappels sans passer par l'écran de la télé.
+let pbConteneur = null, pbUser = null, pbUnsub = null, pbMemos = [], pbEdit = null;
+function pbRender() {
+  if (!pbConteneur) return;
+  const auj = iso(new Date());
+  const tri = [...pbMemos].sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || String(a.date || "").localeCompare(String(b.date || "")));
+  const passes = tri.filter(m => m.date && joursEntre(auj, m.date) < -1), actifs = tri.filter(m => !passes.includes(m));
+  const ligne = (m) => pbEdit === m.id ? `<form class="pb-l pb-form" data-pb-maj="${esc(m.id)}">
+      <input name="texte" value="${esc(m.texte)}" required maxlength="140"><input name="date" type="date" value="${esc(m.date || "")}">
+      <label><input type="checkbox" name="important" ${m.important ? "checked" : ""}> ⭐</label>
+      <button class="add-btn">💾 Enregistrer</button><button type="button" class="nav-btn" data-pb-annuler>Annuler</button></form>`
+    : `<div class="pb-l ${m.date && joursEntre(auj, m.date) < 0 ? "passe" : ""}">
+      <span class="pb-q ${quand(m.date).cls}">${m.important ? "⭐ " : ""}${esc(quand(m.date).txt)}</span>
+      <b>${esc(m.texte)}</b><small>${esc(m.par || "")}</small>
+      <button class="nav-btn" data-pb-modif="${esc(m.id)}">✏️</button><button class="del-btn" data-pb-suppr="${esc(m.id)}">🗑️</button></div>`;
+  pbConteneur.innerHTML = `<style>
+    .pb{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+    .pb-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .pb-form input[name=texte]{flex:1;min-width:220px}
+    .pb-form input{padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
+    .pb-l{display:grid;grid-template-columns:200px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+    .pb-l.pb-form{display:flex}
+    .pb-l small{color:var(--text-dim)}.pb-l.passe{opacity:.55}
+    .pb-q{font-size:12.5px;font-weight:600;color:var(--text-dim)}.pb-q.auj,.pb-q.retard{color:var(--red)}.pb-q.dem{color:#c27a00}.pb-q.semaine{color:#1d4f91}
+    .pb-q::first-letter{text-transform:uppercase}
+    @media (max-width:700px){.pb-l{grid-template-columns:1fr auto auto}.pb-l b{grid-column:1/-1;order:-1}.pb-l small{display:none}}
+  </style><div class="pb">
+    <div class="form-card"><h3 style="margin:0 0 6px">📌 Pense-bête de l'atelier</h3>
+      <p class="hint" style="margin:0 0 10px">Ce que tu ajoutes ici s'affiche tout de suite sur la télé de l'atelier. Un rappel daté disparaît de la télé le lendemain de sa date.</p>
+      <form class="pb-form" data-pb-ajout><input name="texte" required maxlength="140" placeholder="Ex. Passage du contrôleur SSI au lycée"><input name="date" type="date"><label><input type="checkbox" name="important"> ⭐ Important</label><button class="add-btn">➕ Ajouter</button></form></div>
+    <div class="form-card"><b>À venir (${actifs.length})</b>${actifs.map(ligne).join("") || `<p class="hint">Aucun rappel.</p>`}</div>
+    ${passes.length ? `<details class="form-card"><summary><b>Passés (${passes.length})</b> — n'apparaissent plus sur la télé</summary>${passes.map(ligne).join("")}</details>` : ""}
+  </div>`;
+}
+async function pbClic(e) {
+  const m = e.target.closest("[data-pb-modif]"); if (m) { pbEdit = m.dataset.pbModif; pbRender(); return; }
+  if (e.target.closest("[data-pb-annuler]")) { pbEdit = null; pbRender(); return; }
+  const s = e.target.closest("[data-pb-suppr]");
+  if (s && confirm("Supprimer ce rappel ?")) { try { await deleteDoc(doc(db, COL, s.dataset.pbSuppr)); } catch (err) { alert("Suppression impossible : " + (err?.message || err)); } }
+}
+async function pbEnvoi(e) {
+  const f = e.target; if (!f.matches(".pb-form")) return; e.preventDefault();
+  const d = new FormData(f), champs = { texte: String(d.get("texte") || "").trim(), date: d.get("date") || "", important: !!d.get("important") };
+  if (!champs.texte) return;
+  try {
+    if (f.dataset.pbMaj) { await updateDoc(doc(db, COL, f.dataset.pbMaj), { ...champs, modifiePar: pbUser?.nom || "" }); pbEdit = null; }
+    else { await addDoc(collection(db, COL), { ...champs, par: pbUser?.nom || pbUser?.email || "", creeLe: serverTimestamp() }); f.reset(); }
+    window.toast?.("✓ Pense-bête mis à jour");
+  } catch (err) { alert("Enregistrement impossible : " + (err?.message || err) + "\n(Règles Firestore « atelier-memos » publiées ?)"); }
+}
+export function mountPenseBete(container, u) {
+  pbUnsub?.(); pbConteneur = container; pbUser = u; pbEdit = null;
+  if (!container.dataset.pbEcoute) { container.addEventListener("click", pbClic); container.addEventListener("submit", pbEnvoi); container.dataset.pbEcoute = "1"; }
+  pbConteneur.innerHTML = `<div class="hint">Chargement…</div>`;
+  pbUnsub = onSnapshot(collection(db, COL), (s) => { pbMemos = s.docs.map(d => ({ id: d.id, ...d.data() })); pbRender(); }, (e) => { pbConteneur.innerHTML = `<div class="form-card" style="color:var(--red)">❌ ${esc(e.message)}</div>`; });
+}

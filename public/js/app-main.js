@@ -117,6 +117,7 @@
   const mountConnexions = aLaDemande(charger_connexions, "mountConnexions");
   const charger_ecran_atelier = () => import("./ecran-atelier.js");
   const mountEcranAtelier = aLaDemande(charger_ecran_atelier, "mountEcranAtelier");
+  const mountPenseBete = aLaDemande(charger_ecran_atelier, "mountPenseBete");
   const charger_espaces_verts = () => import("./espaces-verts.js");
   const mountEspacesVertsIntervention = aLaDemande(charger_espaces_verts, "mountEspacesVertsIntervention");
   const mountEspacesVertsSuivi = aLaDemande(charger_espaces_verts, "mountEspacesVertsSuivi");
@@ -428,8 +429,9 @@
         ],
       },
       {
-        id: "ecran-atelier", label: "Écran atelier", icon: "📺", desc: "Affichage pour la télé de l'atelier : urgences en direct, pense-bête, astreinte du jour",
+        id: "ecran-atelier", label: "Écran atelier", icon: "📺", desc: "Télé de l'atelier (urgences en direct, baromètre, astreinte) et son pense-bête, modifiable d'ici",
         subtabs: [
+          { id: "pense-bete", label: "Pense-bête", icon: "📌", roles: GESTION, mount: mountPenseBete },
           { id: "ecran", label: "Écran", icon: "📺", roles: [...GESTION, "technicien"], mount: mountEcranAtelier },
         ],
       },
