@@ -456,6 +456,11 @@
     if (CANAL_TEST && user.role !== "super_admin") { window.location.replace("/app.html" + window.location.search + window.location.hash); return; }
     currentUser = user;
     suivreMembresAstreinte(() => { try { render(); } catch (e) { /* écran pas encore prêt */ } });
+    // Télé de l'atelier : .../app.html?ecran=atelier ouvre directement l'écran,
+    // en mode télé (plein écran dans la fenêtre, sans la barre de l'appli).
+    if (new URLSearchParams(window.location.search).get("ecran") === "atelier" && currentCategory === null) {
+      currentCategory = "ecran-atelier"; currentSubtab = "ecran"; window.__modeTele = true;
+    }
     // Lien direct depuis un QR produit (scanné avec l'appareil photo du
     // téléphone, hors appli) : .../app.html?stock=ID_PRODUIT
     const stockParam = new URLSearchParams(window.location.search).get("stock");

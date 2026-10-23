@@ -7,7 +7,7 @@
 //   • horloge et date en grand.
 // Bouton « Plein écran » : l'écran garde l'appli affichée sans veille.
 import { db } from "./firebase-init.js";
-import { collection, doc, addDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp } from "./firestore-compte.js";
+import { collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "./firestore-compte.js";
 import { watchUrgencesOuvertes, watchNouvellesDemandes, watchPeople, watchAbsences, watchDemandes } from "./firestore-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, esc } from "./astreinte-logic.js";
@@ -58,6 +58,9 @@ function anciennesHTML() {
     ${l.length ? l.slice(0, 7).map(d => `<div class="ea-n"><div class="ea-n-l1"><b>${esc(d.site || "")}</b>${d.local ? `<span class="ea-n-loc">· ${esc(d.local)}</span>` : ""}<span class="ea-n-date rouge">${joursEntre(String(d.dateDemande).slice(0, 10), iso(new Date()))} j</span></div><span class="ea-n-t">${esc(String(d.descriptif || ""))} · ${esc(d.statut || "")}</span></div>`).join("") : `<div class="ea-vide petit">Rien en retard.</div>`}`;
 }
 let dejaVues = null, sonActif = false, edition = false;
+const CHARGE_LE = Date.now();
+try { sonActif = localStorage.getItem("ea-son") === "1"; } catch { /* */ }
+const REF_TELECOMMANDE = () => doc(db, "config", "ecran-atelier");
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const joursEntre = (a, b) => Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5);
@@ -100,8 +103,8 @@ function render() {
     .sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || String(a.date || "").localeCompare(String(b.date || "")) || (b.important ? 1 : 0) - (a.important ? 1 : 0));
   const urgTri = [...urgences].sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
   const nouv = nouvelles.filter(n => !urgences.some(u => u.id === n.id)).sort((a, b) => (b.importeMs || 0) - (a.importeMs || 0)).slice(0, 7);
-  const plein = !!document.fullscreenElement;
-  conteneur.innerHTML = `${STYLE}<div class="ea-scene"><div class="ea ${plein ? "plein" : ""}">
+  const plein = !!document.fullscreenElement || !!window.__modeTele;
+  conteneur.innerHTML = `${STYLE}<div class="ea-scene ${window.__modeTele ? "tele" : ""}"><div class="ea ${plein ? "plein" : ""}">
     <header class="ea-tete">
       <div><div class="ea-titre">🛠️ Atelier — Service Maintenance</div><div class="ea-date">${now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div></div>
       <div class="ea-heure">${now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -146,7 +149,7 @@ function render() {
 // l'échelle de l'écran — même rendu sur la télé, un PC ou un portable.
 function ajuster() {
   const scene = conteneur?.querySelector(".ea-scene"), ea = scene?.firstElementChild; if (!ea) return;
-  const plein = !!document.fullscreenElement;
+  const plein = !!document.fullscreenElement || !!window.__modeTele;
   const w = plein ? window.innerWidth : conteneur.clientWidth || window.innerWidth;
   // Hors plein écran : tout doit tenir dans la fenêtre, sans défiler.
   const h = plein ? window.innerHeight : Math.max(300, window.innerHeight - Math.max(0, conteneur.getBoundingClientRect().top + window.scrollY) - 12);
@@ -174,7 +177,7 @@ async function surClic(e) {
   const b = e.target.closest("[data-ea]");
   if (b) {
     const a = b.dataset.ea;
-    if (a === "son") { sonActif = !sonActif; if (sonActif) bip(); render(); }
+    if (a === "son") { sonActif = !sonActif; try { localStorage.setItem("ea-son", sonActif ? "1" : "0"); } catch { /* */ } if (sonActif) bip(); render(); }
     else if (a === "edit") { edition = !edition; render(); }
     else if (a === "plein") {
       try { if (document.fullscreenElement) await document.exitFullscreen(); else await conteneur.requestFullscreen(); } catch { /* refusé */ }
@@ -223,6 +226,12 @@ export function mountEcranAtelier(container, u) {
     render();
   }));
   unsubs.push(onSnapshot(collection(db, COL), (s) => { memos = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, (e) => { console.warn("Pense-bête :", e); memos = []; render(); }));
+  // Télécommande (onglet Pense-bête des superviseurs) : son, rechargement.
+  unsubs.push(onSnapshot(REF_TELECOMMANDE(), (snap) => {
+    const t = snap.exists() ? snap.data() : {};
+    if (typeof t.son === "boolean" && t.son !== sonActif) { sonActif = t.son; try { localStorage.setItem("ea-son", sonActif ? "1" : "0"); } catch { /* */ } render(); }
+    if (t.rechargerLe && t.rechargerLe > CHARGE_LE + 5000) location.reload();
+  }, () => { /* */ }));
   unsubs.push(watchPeople((p) => { people = p; render(); }));
   unsubs.push(watchAbsences((a) => { absences = a || []; render(); }));
   unsubs.push(watchCoordonnees((c) => { coord = c || {}; render(); }));
@@ -235,6 +244,7 @@ export function mountEcranAtelier(container, u) {
 
 const STYLE = `<style>
   .ea-scene{position:relative;overflow:hidden;margin:0 auto;border-radius:14px;background:#0b1220}
+  .ea-scene.tele{position:fixed;inset:0;margin:auto;z-index:99999;border-radius:0;box-shadow:0 0 0 100vmax #0b1220}
   :fullscreen{background:#0b1220;display:flex;align-items:center;justify-content:center}
   :fullscreen .ea-scene{border-radius:0}
   .ea{--ea-bg:#0b1220;--ea-carte:#141d30;--ea-bord:#24304a;--ea-txt:#eef2f8;--ea-dim:#9aa7bd;position:absolute;top:0;left:0;width:1920px;height:1080px;box-sizing:border-box;transform-origin:0 0;background:var(--ea-bg);color:var(--ea-txt);padding:28px 34px;font-size:22px;display:flex;flex-direction:column;overflow:hidden}
@@ -320,6 +330,7 @@ function pbRender() {
   pbConteneur.innerHTML = `<style>
     .pb{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
     .pb-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .pb-tele{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .pb-form input[name=texte]{flex:1;min-width:220px}
     .pb-form input{padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
     .pb-l{display:grid;grid-template-columns:200px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
@@ -332,11 +343,19 @@ function pbRender() {
     <div class="form-card"><h3 style="margin:0 0 6px">📌 Pense-bête de l'atelier</h3>
       <p class="hint" style="margin:0 0 10px">Ce que tu ajoutes ici s'affiche tout de suite sur la télé de l'atelier. Un rappel daté disparaît de la télé le lendemain de sa date.</p>
       <form class="pb-form" data-pb-ajout><input name="texte" required maxlength="140" placeholder="Ex. Passage du contrôleur SSI au lycée"><input name="date" type="date"><label><input type="checkbox" name="important"> ⭐ Important</label><button class="add-btn">➕ Ajouter</button></form></div>
+    <div class="form-card pb-tele"><b>📺 Télécommande de la télé</b>
+      <span class="hint">Son des nouvelles urgences :</span>
+      <button class="nav-btn" data-pb-son="1">🔔 Activer</button><button class="nav-btn" data-pb-son="0">🔕 Couper</button>
+      <button class="nav-btn" data-pb-recharger>🔄 Recharger la télé</button>
+      <p class="hint" style="margin:6px 0 0;flex-basis:100%">Adresse à ouvrir sur la télé : <code>${esc(location.origin)}/app.html?ecran=atelier</code></p></div>
     <div class="form-card"><b>À venir (${actifs.length})</b>${actifs.map(ligne).join("") || `<p class="hint">Aucun rappel.</p>`}</div>
     ${passes.length ? `<details class="form-card"><summary><b>Passés (${passes.length})</b> — n'apparaissent plus sur la télé</summary>${passes.map(ligne).join("")}</details>` : ""}
   </div>`;
 }
 async function pbClic(e) {
+  const son = e.target.closest("[data-pb-son]");
+  if (son) { try { await setDoc(doc(db, "config", "ecran-atelier"), { son: son.dataset.pbSon === "1", majPar: pbUser?.nom || "" }, { merge: true }); window.toast?.(son.dataset.pbSon === "1" ? "🔔 Son activé sur la télé" : "🔕 Son coupé sur la télé"); } catch (err) { alert(err?.message || err); } return; }
+  if (e.target.closest("[data-pb-recharger]")) { try { await setDoc(doc(db, "config", "ecran-atelier"), { rechargerLe: Date.now() }, { merge: true }); window.toast?.("🔄 La télé va se recharger"); } catch (err) { alert(err?.message || err); } return; }
   const m = e.target.closest("[data-pb-modif]"); if (m) { pbEdit = m.dataset.pbModif; pbRender(); return; }
   if (e.target.closest("[data-pb-annuler]")) { pbEdit = null; pbRender(); return; }
   const s = e.target.closest("[data-pb-suppr]");
