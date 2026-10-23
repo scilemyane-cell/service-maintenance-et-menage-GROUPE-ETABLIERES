@@ -445,8 +445,9 @@ export function horsExcel(demandesApp, copie, compteNum) {
     const cands = (demandesApp || []).filter(d => d.numero === n && !d.lieeA && !d.supprimeeLe);
     const memeTexte = cands.filter(d => emp(d.descriptif) === emp(r?.[6]));
     const msMaj = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds || 0) * 1000;
-    // Ligne sans ID et plusieurs copies identiques : on garde celle qui a le suivi le plus récent.
-    const proprio = cands.find(d => d.id === idLigne) || (memeTexte.length === 1 ? memeTexte[0] : (!idLigne && memeTexte.length > 1 ? [...memeTexte].sort((a, b) => msMaj(b) - msMaj(a))[0] : null));
+    // Plusieurs copies identiques sans propriétaire sûr : on garde celle qui a le suivi le plus récent.
+    const proprio = cands.find(d => d.id === idLigne) || (memeTexte.length === 1 ? memeTexte[0] : (memeTexte.length > 1 ? [...memeTexte].sort((a, b) => msMaj(b) - msMaj(a))[0] : null));
+    // (ID de la ligne porté par une demande supprimée ou reliée : on garde la copie la plus suivie.)
     if (!proprio) return;
     cands.filter(d => d.id !== proprio.id && !copie.parId?.has(d.id)).forEach(d => {
       // Même contenu que la demande de la ligne : c'est un doublon d'import → relié.
