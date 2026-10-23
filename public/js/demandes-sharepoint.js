@@ -443,10 +443,17 @@ export function horsExcel(demandesApp, copie, compteNum) {
     const rows = copie.get(n); if (!rows || rows.length !== 1) return;
     const r = rows[0], idLigne = copie.iId >= 0 ? String(r?.[copie.iId] ?? "").trim() : "";
     const cands = (demandesApp || []).filter(d => d.numero === n && !d.lieeA && !d.supprimeeLe);
-    const proprio = cands.filter(d => d.id === idLigne).length === 1 ? cands.find(d => d.id === idLigne) : (cands.filter(d => emp(d.descriptif) === emp(r?.[6])).length === 1 ? cands.find(d => emp(d.descriptif) === emp(r?.[6])) : null);
+    const memeTexte = cands.filter(d => emp(d.descriptif) === emp(r?.[6]));
+    const msMaj = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds || 0) * 1000;
+    // Ligne sans ID et plusieurs copies identiques : on garde celle qui a le suivi le plus récent.
+    const proprio = cands.find(d => d.id === idLigne) || (memeTexte.length === 1 ? memeTexte[0] : (!idLigne && memeTexte.length > 1 ? [...memeTexte].sort((a, b) => msMaj(b) - msMaj(a))[0] : null));
     if (!proprio) return;
-    cands.filter(d => d.id !== proprio.id && !copie.parId?.has(d.id) && emp(d.descriptif) && !tousTextes.has(emp(d.descriptif)))
-      .forEach(d => ops.push([d.id, { numero: `${n} (hors Excel)`, ancienNumero: n, horsExcel: true, horsExcelLe: Date.now() }]));
+    cands.filter(d => d.id !== proprio.id && !copie.parId?.has(d.id)).forEach(d => {
+      // Même contenu que la demande de la ligne : c'est un doublon d'import → relié.
+      if (!emp(d.descriptif) || emp(d.descriptif) === emp(proprio.descriptif)) ops.push([d.id, { lieeA: proprio.id, lieeANumero: proprio.numero, doublonImport: true, relieAutoLe: Date.now() }]);
+      else if (!tousTextes.has(emp(d.descriptif))) ops.push([d.id, { numero: `${n} (hors Excel)`, ancienNumero: n, horsExcel: true, horsExcelLe: Date.now() }]);
+      // Sinon : contenu présent sur une autre ligne → traité plus bas (relié à la demande de cette ligne).
+    });
   });
   // Restes d'anciens imports : demande sans ID dans l'Excel, dont le N° n'y
   // existe plus (ex. « SG-696 » après renumérotation en « SG-0440 »), mais dont
@@ -459,11 +466,12 @@ export function horsExcel(demandesApp, copie, compteNum) {
     const parId = new Map((demandesApp || []).map(d => [d.id, d]));
     const dejaTraites = new Set(ops.map(o => o[0]));
     (demandesApp || []).filter(d => !d.lieeA && !d.supprimeeLe && !d.horsExcel && !dejaTraites.has(d.id) && !(d.creeDansApp && !d.vuDansFichier)
-      && d.numero && !/^(SN|SMM)-/.test(d.numero) && !copie.parId.has(d.id) && !copie.has(String(d.numero).trim()) && emp(d.descriptif))
+      && d.numero && !/^(SN|SMM)-/.test(d.numero) && !copie.parId.has(d.id) && emp(d.descriptif)
+      && (!copie.has(String(d.numero).trim()) || (copie.get(String(d.numero).trim()) || []).every(r => emp(r?.[6]) !== emp(d.descriptif))))
       .forEach(d => {
         const idL = parContenu.get(`${st(d.site)}|${emp(d.descriptif)}`); const g = idL && parId.get(idL);
         if (g && g.id !== d.id && !g.lieeA && !g.supprimeeLe) ops.push([d.id, { lieeA: g.id, lieeANumero: g.numero, doublonImport: true, ancienNumero: d.numero, relieAutoLe: Date.now() }]);
-        else if (!idL && !tousTextes.has(emp(d.descriptif))) ops.push([d.id, { numero: `${d.numero} (hors Excel)`, ancienNumero: d.numero, horsExcel: true, horsExcelLe: Date.now() }]);
+        else if (!idL && !tousTextes.has(emp(d.descriptif)) && !copie.has(String(d.numero).trim())) ops.push([d.id, { numero: `${d.numero} (hors Excel)`, ancienNumero: d.numero, horsExcel: true, horsExcelLe: Date.now() }]);
       });
   }
   return ops;
