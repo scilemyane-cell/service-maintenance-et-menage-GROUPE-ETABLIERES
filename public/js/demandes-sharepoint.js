@@ -435,6 +435,15 @@ async function lignesCopieParNumero(token) {
   return m;
 }
 // Fonction pure : demandes à marquer « hors Excel » ([id, champs]).
+// Deux descriptifs « presque pareils » (faute corrigée, mots inversés ou
+// complétés dans l'Excel) : la plupart des mots en commun.
+export function textesProches(a, b) {
+  const mots = (t) => new Set(sa(t).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(m => m.length > 2).map(m => m.replace(/s$/, "")));
+  const A = mots(a), B = mots(b); if (!A.size || !B.size) return false;
+  const Bl = [...B], pareil = (x, y) => x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)));
+  let c = 0; A.forEach(m => { if (B.has(m) || Bl.some(y => pareil(m, y))) c++; });
+  return c / Math.min(A.size, B.size) >= 0.75;
+}
 export function horsExcel(demandesApp, copie, compteNum) {
   const emp = (v) => sa(v).replace(/[^a-z0-9]/g, "").slice(0, 25);
   const tousTextes = new Set(); copie.forEach(rows => rows.forEach(r => { const e = emp(r?.[6]); if (e) tousTextes.add(e); }));
@@ -443,7 +452,8 @@ export function horsExcel(demandesApp, copie, compteNum) {
     const rows = copie.get(n); if (!rows || rows.length !== 1) return;
     const r = rows[0], idLigne = copie.iId >= 0 ? String(r?.[copie.iId] ?? "").trim() : "";
     const cands = (demandesApp || []).filter(d => d.numero === n && !d.lieeA && !d.supprimeeLe);
-    const memeTexte = cands.filter(d => emp(d.descriptif) === emp(r?.[6]));
+    let memeTexte = cands.filter(d => emp(d.descriptif) === emp(r?.[6]));
+    if (!memeTexte.length) memeTexte = cands.filter(d => textesProches(d.descriptif, r?.[6]));
     const msMaj = (d) => d.dateMaj?.toMillis ? d.dateMaj.toMillis() : (d.dateMaj?.seconds || 0) * 1000;
     // Plusieurs copies identiques sans propriétaire sûr : on garde celle qui a le suivi le plus récent.
     const proprio = cands.find(d => d.id === idLigne) || (memeTexte.length === 1 ? memeTexte[0] : (memeTexte.length > 1 ? [...memeTexte].sort((a, b) => msMaj(b) - msMaj(a))[0] : null));
@@ -451,7 +461,7 @@ export function horsExcel(demandesApp, copie, compteNum) {
     if (!proprio) return;
     cands.filter(d => d.id !== proprio.id && !copie.parId?.has(d.id)).forEach(d => {
       // Même contenu que la demande de la ligne : c'est un doublon d'import → relié.
-      if (!emp(d.descriptif) || emp(d.descriptif) === emp(proprio.descriptif)) ops.push([d.id, { lieeA: proprio.id, lieeANumero: proprio.numero, doublonImport: true, relieAutoLe: Date.now() }]);
+      if (!emp(d.descriptif) || emp(d.descriptif) === emp(proprio.descriptif) || (sa(d.site) === sa(proprio.site) && textesProches(d.descriptif, proprio.descriptif))) ops.push([d.id, { lieeA: proprio.id, lieeANumero: proprio.numero, doublonImport: true, relieAutoLe: Date.now() }]);
       else if (!tousTextes.has(emp(d.descriptif))) ops.push([d.id, { numero: `${n} (hors Excel)`, ancienNumero: n, horsExcel: true, horsExcelLe: Date.now() }]);
       // Sinon : contenu présent sur une autre ligne → traité plus bas (relié à la demande de cette ligne).
     });
