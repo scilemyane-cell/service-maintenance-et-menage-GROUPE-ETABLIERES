@@ -57,9 +57,9 @@ function render() {
   const actifsMemos = memos.filter(m => !m.date || joursEntre(iso(now), m.date) >= -1)
     .sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || String(a.date || "").localeCompare(String(b.date || "")) || (b.important ? 1 : 0) - (a.important ? 1 : 0));
   const urgTri = [...urgences].sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
-  const nouv = nouvelles.filter(n => !urgences.some(u => u.id === n.id)).sort((a, b) => (b.importeMs || 0) - (a.importeMs || 0)).slice(0, 8);
+  const nouv = nouvelles.filter(n => !urgences.some(u => u.id === n.id)).sort((a, b) => (b.importeMs || 0) - (a.importeMs || 0)).slice(0, 9);
   const plein = !!document.fullscreenElement;
-  conteneur.innerHTML = `${STYLE}<div class="ea ${plein ? "plein" : ""}">
+  conteneur.innerHTML = `${STYLE}<div class="ea-scene"><div class="ea ${plein ? "plein" : ""}">
     <header class="ea-tete">
       <div><div class="ea-titre">🛠️ Atelier — Service Maintenance</div><div class="ea-date">${now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div></div>
       <div class="ea-heure">${now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -73,26 +73,42 @@ function render() {
     <div class="ea-grille">
       <section class="ea-bloc ea-urg">
         <h2>🚨 Urgences en cours <span class="ea-nb ${urgTri.length ? "rouge" : "vert"}">${urgTri.length}</span></h2>
-        ${urgTri.length ? urgTri.slice(0, 7).map(u => `<div class="ea-u ${u.urgence === "Critique" ? "critique" : ""} ${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? "neuve" : ""}">
+        ${urgTri.length ? urgTri.slice(0, 5).map(u => `<div class="ea-u ${u.urgence === "Critique" ? "critique" : ""} ${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? "neuve" : ""}">
           <div class="ea-u-l1"><span class="ea-num">${esc(u.numero || "")}</span><b>${esc(u.site || "")}</b>${u.local ? `<span class="ea-loc">📍 ${esc(u.local)}</span>` : ""}<span class="ea-tag">${esc(u.urgence)}</span>${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? `<span class="ea-new">NOUVELLE</span>` : ""}</div>
           <div class="ea-u-txt">${esc(String(u.descriptif || "").slice(0, 160))}</div>
           <div class="ea-u-pied">${depuis(u.importeMs)}${u.action ? ` · 📌 ${esc(u.action.texte)}` : ""}</div>
-        </div>`).join("") + (urgTri.length > 7 ? `<div class="ea-plus">+ ${urgTri.length - 7} autre(s)</div>` : "") : `<div class="ea-vide">✅ Aucune urgence en cours</div>`}
+        </div>`).join("") + (urgTri.length > 5 ? `<div class="ea-plus">+ ${urgTri.length - 5} autre(s) urgence(s)</div>` : "") : `<div class="ea-vide">✅ Aucune urgence en cours</div>`}
       </section>
       <div class="ea-col">
         <section class="ea-bloc ea-memo">
           <h2>📌 Pense-bête</h2>
-          ${actifsMemos.length ? actifsMemos.slice(0, 8).map(m => { const q = quand(m.date); return `<div class="ea-m ${q.cls} ${m.important ? "important" : ""}"><span class="ea-m-q">${m.important ? "⭐ " : ""}${esc(q.txt)}</span><span class="ea-m-t">${esc(m.texte)}</span></div>`; }).join("") : `<div class="ea-vide petit">Rien de prévu. Ajoute un rappel avec ✏️ Pense-bête.</div>`}
+          ${actifsMemos.length ? actifsMemos.slice(0, 6).map(m => { const q = quand(m.date); return `<div class="ea-m ${q.cls} ${m.important ? "important" : ""}"><span class="ea-m-q">${m.important ? "⭐ " : ""}${esc(q.txt)}</span><span class="ea-m-t">${esc(m.texte)}</span></div>`; }).join("") : `<div class="ea-vide petit">Rien de prévu. Ajoute un rappel avec ✏️ Pense-bête.</div>`}
         </section>
         ${astreinteHTML()}
+      </div>
+      <div class="ea-col">
         <section class="ea-bloc ea-nouv">
-          <h2>🆕 Nouvelles demandes <small>7 derniers jours</small></h2>
+          <h2>🆕 Nouvelles demandes</h2><p class="ea-sous">7 derniers jours</p>
           ${nouv.length ? nouv.map(n => `<div class="ea-n"><span class="ea-num">${esc(n.numero || "")}</span><b>${esc(n.site || "")}</b>${n.local ? ` · ${esc(n.local)}` : ""}<span class="ea-n-t">${esc(String(n.descriptif || "").slice(0, 70))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune nouvelle demande.</div>`}
         </section>
       </div>
     </div>
     ${mesDemandes.length ? `<footer class="ea-pied">👷 Demandes attribuées à ${esc(user?.nom || "l'équipe")} : <b>${mesDemandes.length}</b> à traiter${mesDemandes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length ? ` · dont <b class="rouge">${mesDemandes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length} urgente(s)</b>` : ""}</footer>` : ""}
-  </div>`;
+  </div></div>`;
+  ajuster();
+}
+
+// Écran « télé » : une scène fixe 1920 × 1080 (16:9, paysage) mise à
+// l'échelle de l'écran — même rendu sur la télé, un PC ou un portable.
+function ajuster() {
+  const scene = conteneur?.querySelector(".ea-scene"), ea = scene?.firstElementChild; if (!ea) return;
+  const plein = !!document.fullscreenElement;
+  const w = plein ? window.innerWidth : conteneur.clientWidth || window.innerWidth;
+  const h = plein ? window.innerHeight : Infinity;
+  const k = Math.min(w / 1920, h / 1080);
+  ea.style.transform = `scale(${k})`;
+  scene.style.height = `${1080 * k}px`;
+  scene.style.width = `${1920 * k}px`;
 }
 
 function editionHTML() {
@@ -146,6 +162,7 @@ export function mountEcranAtelier(container, u) {
     container.addEventListener("click", surClic);
     container.addEventListener("submit", surEnvoi);
     document.addEventListener("fullscreenchange", () => conteneur && render());
+    window.addEventListener("resize", () => conteneur && ajuster());
     document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && document.fullscreenElement && navigator.wakeLock) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } } });
     container.dataset.eaEcoute = "1";
   }
@@ -169,16 +186,20 @@ export function mountEcranAtelier(container, u) {
 }
 
 const STYLE = `<style>
-  .ea{--ea-bg:#0b1220;--ea-carte:#141d30;--ea-bord:#24304a;--ea-txt:#eef2f8;--ea-dim:#9aa7bd;background:var(--ea-bg);color:var(--ea-txt);border-radius:18px;padding:22px 26px;min-height:80vh;font-size:17px}
-  .ea.plein{border-radius:0;min-height:100vh;box-sizing:border-box}
-  :fullscreen .ea, .ea.plein{font-size:clamp(17px,1.15vw,24px)}
+  .ea-scene{position:relative;overflow:hidden;margin:0 auto;border-radius:14px;background:#0b1220}
+  :fullscreen{background:#0b1220;display:flex;align-items:center;justify-content:center}
+  :fullscreen .ea-scene{border-radius:0}
+  .ea{--ea-bg:#0b1220;--ea-carte:#141d30;--ea-bord:#24304a;--ea-txt:#eef2f8;--ea-dim:#9aa7bd;position:absolute;top:0;left:0;width:1920px;height:1080px;box-sizing:border-box;transform-origin:0 0;background:var(--ea-bg);color:var(--ea-txt);padding:28px 34px;font-size:22px;display:flex;flex-direction:column;overflow:hidden}
   .ea-tete{display:flex;align-items:center;gap:20px;margin-bottom:18px}
   .ea-titre{font-size:1.6em;font-weight:800}.ea-date{color:var(--ea-dim);font-size:1.05em}.ea-date::first-letter,.ea-m-q::first-letter{text-transform:uppercase}
   .ea-heure{margin-left:auto;font-size:3.2em;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums}
   .ea-cmd{display:flex;flex-direction:column;gap:6px}
-  .ea-cmd button{background:var(--ea-carte);color:var(--ea-txt);border:1px solid var(--ea-bord);border-radius:10px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+  .ea-cmd button{background:var(--ea-carte);color:var(--ea-txt);border:1px solid var(--ea-bord);border-radius:10px;padding:6px 14px;font:inherit;font-size:16px;cursor:pointer}
   .ea-cmd button.on{border-color:#1baf7a;color:#5fe0a8}
-  .ea-grille{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;align-items:start}
+  .ea-grille{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr) minmax(0,.85fr);gap:22px;align-items:stretch}
+  .ea-grille>.ea-bloc,.ea-col>.ea-bloc{overflow:hidden}
+  .ea-sous{margin:-8px 0 10px;color:var(--ea-dim);font-size:.75em}
+  .ea-col>.ea-memo{flex:1}.ea-col>.ea-nouv{flex:1}
   .ea-col{display:flex;flex-direction:column;gap:18px}
   .ea-bloc{background:var(--ea-carte);border:1px solid var(--ea-bord);border-radius:16px;padding:16px 18px}
   .ea-bloc h2{margin:0 0 12px;font-size:1.25em;display:flex;align-items:center;gap:10px}.ea-bloc h2 small{font-size:.6em;color:var(--ea-dim);font-weight:400}
@@ -204,15 +225,15 @@ const STYLE = `<style>
   .ea-n{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--ea-bord);font-size:.95em;flex-wrap:wrap}.ea-n:last-child{border-bottom:none}
   .ea-n-t{color:var(--ea-dim);flex-basis:100%}
   .ea-pied{margin-top:18px;background:var(--ea-carte);border:1px solid var(--ea-bord);border-radius:12px;padding:10px 16px;font-size:1.05em}.ea-pied .rouge{color:#ff8a8a}
-  .ea-edit{margin-bottom:18px}
+  .ea-edit{position:absolute;top:150px;left:34px;right:34px;z-index:5;max-height:860px;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);font-size:20px}
+  .ea-edit-liste div{font-size:18px!important}
   .ea-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .ea-form input[name=texte]{flex:1;min-width:240px}
-  .ea-form input{background:#0b1220;color:var(--ea-txt);border:1px solid var(--ea-bord);border-radius:8px;padding:9px 10px;font:inherit;font-size:15px}
+  .ea-form input{background:#0b1220;color:var(--ea-txt);border:1px solid var(--ea-bord);border-radius:8px;padding:9px 10px;font:inherit;font-size:20px}
   .ea-form label{font-size:14px;display:flex;gap:6px;align-items:center}
   .ea-form button,.ea-edit-liste button{background:#1baf7a;color:#fff;border:none;border-radius:8px;padding:9px 14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
   .ea-edit-liste{margin-top:12px;display:flex;flex-direction:column;gap:6px}
   .ea-edit-liste div{display:grid;grid-template-columns:110px 1fr auto auto;gap:10px;align-items:center;font-size:14px;padding:6px 0;border-bottom:1px solid var(--ea-bord)}
   .ea-edit-liste span,.ea-edit-liste small{color:var(--ea-dim)}.ea-edit-liste button{background:none;padding:4px}
   .ea-aide{color:var(--ea-dim);font-size:13px;margin:10px 0 0}
-  @media (max-width:900px){.ea-grille{grid-template-columns:1fr}.ea-heure{font-size:2.2em}.ea-tete{flex-wrap:wrap}}
 </style>`;
