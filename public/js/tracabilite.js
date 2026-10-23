@@ -206,6 +206,9 @@ function render() {
               <small>${f.submitted ? "✓ terminée" : `dernière saisie ${ilYa(ms(f.majLe))}`}</small></button>${nbPh ? `<div class="tr-direct-ph">${[...phs].sort((a, b) => (b.le || 0) - (a.le || 0)).slice(0, 10).map(p => `<figure data-ph-grand="${f.id}|${p.cle}"><img src="${p.data}" alt="" loading="lazy"><figcaption>${p.moment ? `<b class="tr-m ${p.moment}">${p.moment === "avant" ? "Avant" : "Après"}</b> ` : ""}${esc(p.piece || "")}${p.jour ? ` · ${esc(p.jour.toLowerCase())}` : ""}<br>${p.le ? new Date(p.le).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : ""}</figcaption></figure>`).join("")}</div>` : ""}`; }).join("")}</div></div>`;
       })()}
 
+      ${isEditorUser(mountedUser) ? (() => { const av = filtered.filter(f => f.submitted && !f.validee).sort((a, b) => String(a.weekStart).localeCompare(String(b.weekStart)));
+        return av.length ? `<div class="form-card tr-averifier"><h3 style="margin:0 0 6px;font-size:15px">⏳ ${av.length} fiche${av.length > 1 ? "s" : ""} à vérifier</h3><p class="hint" style="margin:0 0 8px">Envoyées par les agents. Vérifie, corrige si besoin, puis valide : seules les fiches validées partent au dispositif MNA (SharePoint « Département »).</p>
+          ${av.map(f => `<button type="button" class="tr-direct-l" data-open="${f.id}"><b>${esc(f.agentNom)}</b><span>${esc(f.siteName)}</span><span>Semaine du ${fmtShort(new Date(f.weekStart + "T00:00:00"))}</span><span></span><small>👉 Ouvrir</small></button>`).join("")}</div>` : ""; })() : ""}
       <div class="tr-vues"><button type="button" class="${ui.vue === "fiches" ? "actif" : ""}" data-tr-vue="fiches">📋 Fiches</button><button type="button" class="${ui.vue === "stats" ? "actif" : ""}" data-tr-vue="stats">📊 Tableau de bord</button>
         ${isEditorUser(mountedUser) ? `<button type="button" class="tr-arch" id="tr-archive" title="PDF Département (sans photos) et Interne (avec photos) des semaines terminées">☁️ Archiver sur SharePoint</button>` : ""}<small id="tr-archive-etat" class="hint">${esc(archiveEtat)}</small></div>
       ${ui.vue === "stats" ? tableauDeBordHTML(filtered, state.sites) : `
@@ -222,7 +225,7 @@ function render() {
                   <td>${esc(f.siteName)}</td>
                   <td>${esc(f.agentNom)}</td>
                   <td>${done}/${total}</td>
-                  <td>${f.submitted ? `<span class="tag" style="background:var(--teal)">Terminée</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">${f.reconstituee && !done ? "À compléter" : "En cours"}</span>`} ${f.archiveSP ? `<span class="tag" style="background:#e3eefc;color:#1d4f91" title="Archivée sur SharePoint le ${new Date(f.archiveSP.le).toLocaleDateString("fr-FR")}">☁️ SharePoint</span>` : ""} ${mentionHTML(f, true)}</td>
+                  <td>${f.validee ? `<span class="tag" style="background:var(--teal)">✅ Validée</span>` : f.submitted ? `<span class="tag" style="background:#f0a020;color:#fff">⏳ À vérifier</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">${f.reconstituee && !done ? "À compléter" : "En cours"}</span>`} ${f.archiveSP ? `<span class="tag" style="background:#e3eefc;color:#1d4f91" title="Archivée sur SharePoint le ${new Date(f.archiveSP.le).toLocaleDateString("fr-FR")}">☁️ SharePoint</span>` : ""} ${mentionHTML(f, true)}</td>
                   <td style="white-space:nowrap">
                     <button class="nav-btn" data-open="${f.id}" style="padding:4px 10px;font-size:11px">Voir</button>
                     ${isEditorUser(mountedUser) ? `<button class="del-btn" data-del-fiche="${f.id}">🗑️</button>` : ""}
@@ -238,6 +241,8 @@ function render() {
         <button class="add-btn" id="tr-print">🖨️ PDF sans photos</button>
         ${(opened.photos || []).length ? `<button class="add-btn" id="tr-print-photos">📷 PDF avec photos (${opened.photos.length})</button>` : ""}
         <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
+        ${isEditorUser(mountedUser) ? `${opened.validee ? `<span class="tag" style="background:var(--teal);align-self:center">✅ Validée${opened.valideePar ? ` par ${esc(opened.valideePar)}` : ""}</span><button class="nav-btn" id="tr-devalider">↩ Annuler la validation</button>`
+          : `<button class="nav-btn" id="tr-corriger">✏️ Corriger la fiche</button><button class="add-btn" id="tr-valider" style="background:#11845b">✅ Valider et transmettre au MNA</button>`}` : ""}
         ${opened.archiveSP ? `<p class="hint" style="width:100%;margin:0">☁️ Archivée sur SharePoint le ${new Date(opened.archiveSP.le).toLocaleDateString("fr-FR")} — ExportsDonnees › Traçabilité ménage › <b>${DOSSIER_DEPT}</b> (à envoyer au Département) et <b>${DOSSIER_INTERNE}</b>${opened.archiveSP.nbPhotos ? ` (${opened.archiveSP.nbPhotos} photo(s), retirées de l'appli)` : ""}.</p>` : ""}
         ${isEditorUser(mountedUser) ? `<button class="del-btn" id="tr-del-opened" style="border:1px solid var(--red);border-radius:8px;padding:9px 16px">🗑️ Supprimer cette fiche</button>` : ""}
       </div>
@@ -264,6 +269,22 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
   document.getElementById("tr-print")?.addEventListener("click", () => imprimerFiche(false));
   document.getElementById("tr-print-photos")?.addEventListener("click", () => imprimerFiche(true));
   document.getElementById("tr-close")?.addEventListener("click", () => { ui.openId = null; render(); });
+  document.getElementById("tr-valider")?.addEventListener("click", async () => {
+    const f = state.fiches.find(x => x.id === ui.openId); if (!f) return;
+    if (!confirm(`Valider la fiche de ${f.agentNom} (${f.siteName}, semaine du ${fmtShort(new Date(f.weekStart + "T00:00:00"))}) ?\nElle sera transmise au dispositif MNA (SharePoint « Département ») à l'archivage.`)) return;
+    try { const { photos, id, ...reste } = f; await saveFiche(f.id, { ...reste, submitted: true, validee: true, valideePar: mountedUser?.nom || mountedUser?.email || "", valideeLe: Date.now() }); window.toast?.("✅ Fiche validée"); }
+    catch (err) { alert("Validation impossible : " + (err?.message || err)); }
+  });
+  document.getElementById("tr-devalider")?.addEventListener("click", async () => {
+    const f = state.fiches.find(x => x.id === ui.openId); if (!f || !confirm("Annuler la validation de cette fiche ?")) return;
+    try { const { photos, id, ...reste } = f; await saveFiche(f.id, { ...reste, validee: false, valideePar: "", valideeLe: null }); } catch (err) { alert(err?.message || err); }
+  });
+  document.getElementById("tr-corriger")?.addEventListener("click", () => {
+    const f = state.fiches.find(x => x.id === ui.openId); if (!f) return;
+    window.__ficheACorriger = { siteId: f.siteId, weekStart: f.weekStart, agentUid: f.agentUid, agentNom: f.agentNom };
+    const onglet = document.querySelector('[data-subtab="fiches"]');
+    if (onglet) onglet.click(); else alert("Ouvre l'onglet « Fiches » : la fiche de l'agent s'ouvrira pour correction.");
+  });
   document.getElementById("tr-del-opened")?.addEventListener("click", async () => {
     if (confirm("Supprimer définitivement cette fiche ? Cette action est irréversible.")) {
       await deleteFiche(ui.openId, state.fiches.find(f => f.id === ui.openId)?.agentUid);

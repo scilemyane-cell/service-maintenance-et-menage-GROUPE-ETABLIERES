@@ -65,7 +65,8 @@ export async function archiverSemainesTerminees({ interactif = false, onProgress
     const snap = await getDocs(query(collection(db, "fiches"), where("weekStart", ">=", ARCHIVE_DEBUT)));
     const fiches = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(f => !f.supprimeLe && semaineTerminee(f));
     // À archiver : jamais archivée, ou modifiée après l'archive (la version Département est alors refaite).
-    const aFaire = fiches.filter(f => !f.archiveSP || ms(f.majLe) > (f.archiveSP.le || 0) + 120000);
+    // Seules les fiches vérifiées et validées par le responsable partent au dispositif MNA.
+    const aFaire = fiches.filter(f => f.validee && (!f.archiveSP || ms(f.majLe) > (f.archiveSP.le || 0) + 120000));
     let archivees = 0, photosSupprimees = 0;
     for (const f of aFaire.slice(0, 12)) {
       onProgress(`Archivage ${archivees + 1} / ${aFaire.length} : ${f.siteName} — ${f.agentNom}`);

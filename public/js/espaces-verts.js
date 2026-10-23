@@ -29,7 +29,8 @@ let ui = { passageId: null, siteChoisi: "", date: dateKey(new Date()), ouvertsSu
 let photos = [], photosPrec = [], unsubPhotos = null, unsubPhotosPrec = null, suiviPhotos = null, suiviPrecId = null;
 let unsubs = [], saveTimer = null, statut = "", enAttente = null, renduDiffere = false;
 
-const peutModifier = (p) => p && (EDITEURS.includes(user?.role) || p.agentUid === user?.uid);
+// Une feuille validée par le responsable n'est plus modifiable par l'agent.
+const peutModifier = (p) => p && (EDITEURS.includes(user?.role) || (p.agentUid === user?.uid && !p.valide));
 // Sites MNA = ceux du groupe « MNA » dans Administration > Associations &
 // Sites (même liste que le reste de l'appli) : un site ajouté là-bas apparaît
 // ici tout seul.
@@ -226,8 +227,11 @@ function vueFeuille(p) {
           ${modif ? `<div class="ev-ph-btns">${["avant", "apres", ""].map(m => `<label class="nav-btn">📷 ${MOMENTS[m]}<input type="file" accept="image/*" capture="environment" data-ph-add="${m}" hidden multiple></label>`).join("")}</div>` : ""}
           <div class="ev-photos">${vignettes || `<span class="hint">Aucune photo.</span>`}</div>
         </div>
+        ${p.valide ? `<div class="ev-ok">✅ Feuille vérifiée et validée${p.validePar ? ` par ${esc(p.validePar)}` : ""}</div>` : p.envoye ? `<div class="hint" style="color:#b07000;font-weight:600">⏳ Envoyée au responsable — en attente de vérification</div>` : ""}
         <div class="ev-actions">
-          <button class="nav-btn ev-gros" data-act="retour">✔️ Terminer</button>
+          ${EDITEURS.includes(user?.role)
+            ? (p.valide ? `<button class="nav-btn" data-act="devalider">↩ Annuler la validation</button>` : `<button class="nav-btn ev-gros" data-act="valider" style="background:#11845b;color:#fff;border-color:#11845b">✅ Valider la feuille</button>`) + `<button class="nav-btn ev-gros" data-act="retour">← Retour</button>`
+            : (p.envoye ? `<button class="nav-btn ev-gros" data-act="retour">← Retour</button>` : `<button class="nav-btn ev-gros" data-act="envoyer">📤 Terminer et envoyer au responsable</button>`)}
           ${modif ? `<button class="nav-btn" data-act="supprimer">🗑️ Supprimer cette feuille</button>` : ""}
         </div>
       </div>
@@ -238,7 +242,10 @@ function vueFeuille(p) {
 // ---------- Rendu : suivi ----------
 function vueSuivi() {
   const annee = ui.anneeImpr;
+  const aVerifier = EDITEURS.includes(user?.role) ? passages.filter(p => p.envoye && !p.valide).sort(tri) : [];
   return `
+    ${aVerifier.length ? `<div class="form-card ev-averifier"><b>⏳ ${aVerifier.length} feuille${aVerifier.length > 1 ? "s" : ""} à vérifier</b><div class="hint">Envoyées par l'agent. Ouvre-la, corrige si besoin, puis « ✅ Valider la feuille ».</div>
+      ${aVerifier.map(p => `<div class="ev-ligne" data-ouvrir="${esc(p.id)}"><div><b>${esc(p.siteName || "")}</b> · ${esc(fmt(p.date))}<br><small class="hint">${esc(p.agentNom || "")} · ${tachesFaites(p).length} prestation(s) cochée(s)</small></div><span>👉</span></div>`).join("")}</div>` : ""}
     <div class="form-card ev-barre">
       <b>🌿 Suivi des espaces verts — sites MNA</b>
       <span class="ev-vues"><button type="button" class="${ui.suiviVue !== "detail" ? "actif" : ""}" data-ev-vue="stats">📊 Tableau de bord</button><button type="button" class="${ui.suiviVue === "detail" ? "actif" : ""}" data-ev-vue="detail">📜 Détail et impression</button></span>
@@ -350,6 +357,18 @@ async function surClic(e) {
   } else if (act === "retour") {
     await envoyer();
     ui.passageId = null; unsubPhotos?.(); unsubPhotos = null; unsubPhotosPrec?.(); unsubPhotosPrec = null; suiviPrecId = null; photos = []; photosPrec = []; render();
+  } else if (act === "envoyer" || act === "valider" || act === "devalider") {
+    const p = passageOuvert(); if (!p) return;
+    await envoyer();
+    const champs = act === "envoyer" ? { envoye: true, envoyeLe: Date.now() }
+      : act === "valider" ? { envoye: true, valide: true, validePar: user?.nom || user?.email || "", valideLe: Date.now() }
+      : { valide: false, validePar: "", valideLe: null };
+    try {
+      await majPassage(p.id, champs); Object.assign(p, champs);
+      toast(act === "envoyer" ? "📤 Feuille envoyée au responsable" : act === "valider" ? "✅ Feuille validée" : "Validation annulée", "success");
+      if (act !== "devalider") { ui.passageId = null; unsubPhotos?.(); unsubPhotos = null; unsubPhotosPrec?.(); unsubPhotosPrec = null; suiviPrecId = null; photos = []; photosPrec = []; }
+      render();
+    } catch (err) { toast("Échec : " + (err.message || err), "error"); }
   } else if (act === "supprimer") {
     const p = passageOuvert(); if (!p) return;
     if (!await confirmDialog(`Supprimer la feuille du ${fmt(p.date)} (${p.siteName}) ? Ses photos seront supprimées aussi.`, { danger: true, texteValider: "Supprimer" })) return;

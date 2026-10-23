@@ -71,6 +71,7 @@ export function mountFiches(container, user) {
   mountedUser = user;
   ui.lockDispositif = false;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
+  prendreCorrection();
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => {
     state.sites = s;
@@ -94,6 +95,7 @@ export function mountFichesForDispositif(container, user, dispositif) {
   ui.lockDispositif = true;
   ui.siteId = null;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
+  prendreCorrection();
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => {
     state.sites = s;
@@ -105,6 +107,12 @@ export function mountFichesForDispositif(container, user, dispositif) {
   unsubs.push(watchAccess((a) => { state.access = a; render(); }));
 }
 
+// « ✏️ Corriger » depuis Traçabilité : ouvre la fiche de l'agent (site, semaine) en vue semaine.
+function prendreCorrection() {
+  const c = window.__ficheACorriger; window.__ficheACorriger = null;
+  if (!c || !isEditorUser(mountedUser)) return;
+  ui.siteId = c.siteId; ui.weekStart = c.weekStart; ui.actingUid = c.agentUid; ui.actingNom = c.agentNom; ui.vue = "semaine"; ui.jour = null;
+}
 function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 function effectiveAgent() {
@@ -552,7 +560,8 @@ function renderInterne() {
         <button class="${ui.vue === "semaine" ? "actif" : ""}" data-fj-vue="semaine">📋 Toute la semaine</button>
       </div>
 
-      ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Fiche marquée comme terminée pour cette semaine</div>` : ""}
+      ${data.validee ? `<div class="stat-chip ok" style="width:fit-content">✅ Fiche vérifiée et validée${data.valideePar ? ` par ${esc(data.valideePar)}` : ""}${data.valideeLe ? ` le ${esc(new Date(data.valideeLe).toLocaleDateString("fr-FR"))}` : ""}</div>`
+        : data.submitted ? `<div class="stat-chip" style="width:fit-content;background:#fff4dc;color:#8a5a00;border:1px solid #f0c060">⏳ Fiche envoyée au responsable — en attente de vérification</div>` : ""}
       ${(() => {
         // Super admin : reprendre le remplissage de la semaine précédente (même site, même agent), puis corriger.
         if (mountedUser?.role !== "super_admin" || Object.values(data.cells || {}).some(Boolean)) return "";
@@ -622,7 +631,7 @@ function renderInterne() {
 
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="add-btn" id="fc-save">💾 Enregistrer</button>
-        <button class="nav-btn" id="fc-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "✓ Marquer la semaine comme terminée"}</button>
+        ${data.validee && !isEditorUser(mountedUser) ? "" : `<button class="nav-btn" id="fc-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "📤 Terminer et envoyer au responsable"}</button>`}
         <span id="fc-save-status" style="font-size:12px"></span>
       </div>
     </div>
@@ -800,8 +809,10 @@ function renderInterne() {
       window.toast?.(`✓ ${vides.length} fiche(s) pré-cochée(s) — à corriger avec l'agent`);
     } catch (err) { console.error(err); window.toast?.("Échec : " + (err?.message || err)); e.target.disabled = false; }
   });
-  document.getElementById("fc-submit").addEventListener("click", async () => {
+  document.getElementById("fc-submit")?.addEventListener("click", async () => {
     data.submitted = !data.submitted;
+    if (!data.submitted) { data.validee = false; data.valideePar = ""; data.valideeLe = null; } // rouverte : à revérifier
+    else data.envoyeeLe = Date.now();
     try { await sauverFiche(id, data); render(); }
     catch (e) { console.error(e); window.toast("Échec de l'enregistrement : " + e.message); }
   });

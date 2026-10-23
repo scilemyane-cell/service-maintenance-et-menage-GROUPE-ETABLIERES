@@ -16,7 +16,7 @@ const COL = "atelier-memos";
 let conteneur = null, user = null, unsubs = [], timer = null, wakeLock = null;
 let urgences = [], nouvelles = [], memos = [], people = null, absences = [], coord = {}, mesDemandes = [], toutes = [];
 // Colonne de droite « dynamique » : les panneaux défilent tout seuls.
-const PANNEAUX = ["barometre", "nouvelles", "realisees", "anciennes"], DUREE_PANNEAU = 15000;
+const PANNEAUX = ["graphique", "fiers", "realisees"], DUREE_PANNEAU = 15000;
 let panneau = 0, minuterieRotation = null;
 const sansAccent = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const estClose = (d) => /^(realis|annul)/.test(sansAccent(d.statut));
@@ -24,38 +24,60 @@ const estRealisee = (d) => sansAccent(d.statut).startsWith("realis");
 const dateFin = (d) => String(d.dateValidation || d.dateStatut || d.dateIntervention || "").slice(0, 10);
 const valide = (d) => !d.lieeA && !d.supprimeeLe && !sansAccent(d.statut).startsWith("arbitrage");
 
-// Chiffres du mois en cours et du mois dernier.
-function chiffresMois(decalage) {
-  const n = new Date(), d0 = new Date(n.getFullYear(), n.getMonth() - decalage, 1), cle = iso(d0).slice(0, 7);
-  const l = toutes.filter(valide);
-  const recues = l.filter(d => String(d.dateDemande || "").startsWith(cle));
-  const realisees = l.filter(d => estRealisee(d) && dateFin(d).startsWith(cle));
-  const delais = realisees.map(d => d.dateDemande && /^\d{4}-\d{2}-\d{2}/.test(dateFin(d)) ? joursEntre(String(d.dateDemande).slice(0, 10), dateFin(d)) : null).filter(x => x != null && x >= 0 && x < 400);
-  const urg = recues.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length;
-  return { nom: d0.toLocaleDateString("fr-FR", { month: "long" }), recues: recues.length, realisees: realisees.length, urg, delai: delais.length ? Math.round(delais.reduce((a, b) => a + b, 0) / delais.length) : null };
+// Flux mensuel, comme le graphique des Statistiques : reçues (bleu) / traitées (vert).
+const dateOk = (v) => /^\d{4}-\d{2}-\d{2}/.test(String(v || "")) ? String(v).slice(0, 10) : "";
+const dateTraitee = (d) => sansAccent(d.statut).startsWith("realis") ? (dateOk(d.dateIntervention) || dateOk(d.dateValidation) || dateOk(d.dateStatut) || dateOk(d.declareLe))
+  : sansAccent(d.statut).startsWith("annul") ? (dateOk(d.dateStatut) || dateOk(d.dateValidation)) : "";
+const MOIS_C = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+function flux(nb = 6) {
+  const n = new Date(), l = toutes.filter(valide);
+  return Array.from({ length: nb }, (_, i) => {
+    const d = new Date(n.getFullYear(), n.getMonth() - (nb - 1 - i), 1), cle = iso(d).slice(0, 7);
+    return { cle, court: MOIS_C[d.getMonth()], arr: l.filter(x => dateOk(x.dateDemande).startsWith(cle)).length, trait: l.filter(x => dateTraitee(x).startsWith(cle)).length };
+  });
 }
-function barometreHTML() {
-  const c = chiffresMois(0), p = chiffresMois(1);
-  const ouvertes = toutes.filter(d => valide(d) && !estClose(d)).length;
-  const fl = (a, b, inverse) => { if (b == null || a == null || a === b) return `<i class="eq">=</i>`; const mieux = inverse ? a < b : a > b; return `<i class="${mieux ? "up" : "down"}">${a > b ? "▲" : "▼"} ${Math.abs(a - b)}</i>`; };
-  const ligne = (lib, a, b, inverse, suffixe = "") => `<div class="ea-b-l"><span>${lib}</span><b>${a ?? "—"}${a != null ? suffixe : ""}</b><em>${b ?? "—"}${b != null ? suffixe : ""}</em>${fl(a, b, inverse)}</div>`;
-  return `<h2>📊 Baromètre du mois</h2><p class="ea-sous">${esc(c.nom)} en cours (au ${new Date().getDate()}) comparé à ${esc(p.nom)} complet</p>
-    <div class="ea-b-tete"><span></span><span>${esc(c.nom)}</span><span>${esc(p.nom)}</span><span></span></div>
-    ${ligne("Demandes reçues", c.recues, p.recues, true)}
-    ${ligne("Demandes réalisées", c.realisees, p.realisees, false)}
-    ${ligne("Dont urgentes reçues", c.urg, p.urg, true)}
-    ${ligne("Délai moyen", c.delai, p.delai, true, " j")}
-    <div class="ea-b-gros"><b>${ouvertes}</b><span>demandes encore à traiter</span></div>`;
+function graphiqueHTML() {
+  const m = flux(6), c = m[m.length - 1];
+  const W = 440, H = 400, pb = 34, pt = 34, pl = 4, pr = 4, max = Math.max(4, ...m.flatMap(x => [x.arr, x.trait]));
+  const y = (v) => H - pb - (v / max) * (H - pb - pt), bw = (W - pl - pr) / m.length, larg = Math.min(30, bw * 0.36);
+  const cols = m.map((x, i) => { const cx = pl + i * bw + bw / 2, x1 = cx - larg - 3, x2 = cx + 3, enCours = i === m.length - 1;
+    return `${enCours ? `<rect x="${pl + i * bw + 4}" y="6" width="${bw - 8}" height="${H - 10}" rx="10" fill="#1a2440"/>` : ""}
+      <rect x="${x1}" y="${y(x.arr)}" width="${larg}" height="${y(0) - y(x.arr)}" rx="5" fill="#3b7be0"/><rect x="${x2}" y="${y(x.trait)}" width="${larg}" height="${y(0) - y(x.trait)}" rx="5" fill="#1baf7a"/>
+      ${x.arr ? `<text x="${x1 + larg / 2}" y="${y(x.arr) - 8}" text-anchor="middle" fill="#9cc0ff" font-size="19" font-weight="700">${x.arr}</text>` : ""}
+      ${x.trait ? `<text x="${x2 + larg / 2}" y="${y(x.trait) - 8}" text-anchor="middle" fill="#7ff0bd" font-size="19" font-weight="700">${x.trait}</text>` : ""}
+      <text x="${cx}" y="${H - 8}" text-anchor="middle" fill="${enCours ? "#eef2f8" : "#9aa7bd"}" font-size="19" font-weight="${enCours ? 800 : 400}">${x.court}</text>`; }).join("");
+  const plus = c.trait - c.arr;
+  return `<h2>📈 Demandes reçues et traitées</h2>
+    <p class="ea-sous"><span class="ea-leg"><i style="background:#3b7be0"></i>Reçues</span><span class="ea-leg"><i style="background:#1baf7a"></i>Traitées</span></p>
+    <svg viewBox="0 0 ${W} ${H}" class="ea-svg">${cols}</svg>
+    ${plus > 0 ? `<div class="ea-bravo">💪 Ce mois-ci : <b>${c.trait}</b> traitées pour <b>${c.arr}</b> reçues — on avance plus vite qu'elles n'arrivent !</div>`
+      : c.trait ? `<div class="ea-bravo">👍 Déjà <b>${c.trait}</b> demandes traitées ce mois-ci.</div>` : ""}`;
+}
+function fiersHTML() {
+  const n = new Date(), l = toutes.filter(valide), cleM = iso(n).slice(0, 7), annee = String(n.getFullYear());
+  const traitM = l.filter(x => dateTraitee(x).startsWith(cleM));
+  const realM = traitM.filter(x => sansAccent(x.statut).startsWith("realis"));
+  const urgM = realM.filter(x => ["Urgent", "Critique"].includes(x.urgenceCorrigee || x.urgence)).length;
+  const traitAn = l.filter(x => dateTraitee(x).startsWith(annee)).length;
+  // Meilleure semaine des 12 dernières (demandes réalisées).
+  const l0 = new Date(n); l0.setDate(l0.getDate() - ((l0.getDay() + 6) % 7));
+  let record = { n: 0, du: "" };
+  for (let k = 0; k < 12; k++) { const d1 = new Date(l0); d1.setDate(d1.getDate() - 7 * k); const d2 = new Date(d1); d2.setDate(d2.getDate() + 6); const a = iso(d1), b = iso(d2);
+    const nb = l.filter(x => sansAccent(x.statut).startsWith("realis")).filter(x => { const t = dateTraitee(x); return t >= a && t <= b; }).length; if (nb > record.n) record = { n: nb, du: a }; }
+  const cartes = [
+    [`${realM.length}`, "demandes réalisées ce mois-ci", "#1baf7a"],
+    urgM ? [`${urgM}`, `urgence${urgM > 1 ? "s" : ""} réglée${urgM > 1 ? "s" : ""} ce mois-ci`, "#e04848"] : null,
+    record.n ? [`${record.n}`, `record de la semaine (semaine du ${new Date(record.du + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })})`, "#f0a020"] : null,
+    [`${traitAn}`, `demandes traitées depuis janvier ${annee}`, "#3b7be0"],
+  ].filter(Boolean);
+  return `<h2>🏆 Nos points forts</h2><p class="ea-sous">Le travail de l'équipe en chiffres</p>
+    <div class="ea-fiers">${cartes.map(([v, t, c]) => `<div class="ea-fier" style="border-left-color:${c}"><b style="color:${c}">${v}</b><span>${t}</span></div>`).join("")}</div>
+    <div class="ea-bravo">👏 Merci à toute l'équipe !</div>`;
 }
 function realiseesHTML() {
   const l = toutes.filter(d => valide(d) && estRealisee(d) && dateFin(d) && joursEntre(dateFin(d), iso(new Date())) <= 7).sort((a, b) => dateFin(b).localeCompare(dateFin(a)));
   return `<h2>✅ Réalisées cette semaine <span class="ea-nb vert">${l.length}</span></h2><p class="ea-sous">7 derniers jours — bravo l'équipe</p>
     ${l.length ? l.slice(0, 7).map(d => `<div class="ea-n"><div class="ea-n-l1"><b>${esc(d.site || "")}</b>${d.local ? `<span class="ea-n-loc">· ${esc(d.local)}</span>` : ""}<span class="ea-n-date">${new Date(dateFin(d) + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit" })}</span></div><span class="ea-n-t">${esc(String(d.descriptif || ""))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune demande réalisée ces 7 derniers jours.</div>`}`;
-}
-function anciennesHTML() {
-  const l = toutes.filter(d => valide(d) && !estClose(d) && d.dateDemande).sort((a, b) => String(a.dateDemande).localeCompare(String(b.dateDemande)));
-  return `<h2>⏳ Les plus anciennes en attente</h2><p class="ea-sous">À ne pas laisser traîner</p>
-    ${l.length ? l.slice(0, 7).map(d => `<div class="ea-n"><div class="ea-n-l1"><b>${esc(d.site || "")}</b>${d.local ? `<span class="ea-n-loc">· ${esc(d.local)}</span>` : ""}<span class="ea-n-date rouge">${joursEntre(String(d.dateDemande).slice(0, 10), iso(new Date()))} j</span></div><span class="ea-n-t">${esc(String(d.descriptif || ""))} · ${esc(d.statut || "")}</span></div>`).join("") : `<div class="ea-vide petit">Rien en retard.</div>`}`;
 }
 let dejaVues = null, sonActif = false, edition = false;
 const CHARGE_LE = Date.now();
@@ -133,7 +155,7 @@ function render() {
       </div>
       <div class="ea-col">
         <section class="ea-bloc ea-nouv ea-dyn" data-p="${PANNEAUX[panneau]}">
-          ${PANNEAUX[panneau] === "barometre" ? barometreHTML() : PANNEAUX[panneau] === "realisees" ? realiseesHTML() : PANNEAUX[panneau] === "anciennes" ? anciennesHTML() : `<h2>🆕 Nouvelles demandes</h2><p class="ea-sous">7 derniers jours</p>
+          ${PANNEAUX[panneau] === "graphique" ? graphiqueHTML() : PANNEAUX[panneau] === "fiers" ? fiersHTML() : PANNEAUX[panneau] === "realisees" ? realiseesHTML() : `<h2>🆕 Nouvelles demandes</h2><p class="ea-sous">7 derniers jours</p>
           ${nouv.length ? nouv.map(n => `<div class="ea-n"><div class="ea-n-l1">${/^SG-/.test(n.numero || "") ? `<span class="ea-num">${esc(n.numero)}</span>` : ""}<b>${esc(n.site || "")}</b>${n.local ? `<span class="ea-n-loc">· ${esc(n.local)}</span>` : ""}</div><span class="ea-n-t">${esc(String(n.descriptif || ""))}</span></div>`).join("") : `<div class="ea-vide petit">Aucune nouvelle demande.</div>`}`}
           <div class="ea-points">${PANNEAUX.map((_, i) => `<i class="${i === panneau ? "on" : ""}"></i>`).join("")}</div>
           <div class="ea-prog"><i style="animation-duration:${DUREE_PANNEAU}ms"></i></div>
@@ -285,6 +307,11 @@ const STYLE = `<style>
   .ea-n{display:flex;flex-direction:column;gap:2px;padding:7px 0;border-bottom:1px solid var(--ea-bord);font-size:.92em}.ea-n:last-child{border-bottom:none}
   .ea-n-l1{display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}.ea-n-l1 b{flex:none;max-width:75%;overflow:hidden;text-overflow:ellipsis}.ea-n-l1 .ea-num{flex:none}.ea-n-loc{color:var(--ea-dim);overflow:hidden;text-overflow:ellipsis}
   .ea-n-t{color:var(--ea-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ea-svg{width:100%;height:auto;display:block;margin-top:6px}
+  .ea-leg{display:inline-flex;align-items:center;gap:6px;margin-right:16px}.ea-leg i{width:14px;height:14px;border-radius:4px;display:inline-block}
+  .ea-bravo{margin-top:14px;background:linear-gradient(90deg,#11845b,#1baf7a);color:#fff;border-radius:12px;padding:12px 16px;font-size:1em;line-height:1.35}
+  .ea-fiers{display:flex;flex-direction:column;gap:10px}
+  .ea-fier{display:flex;align-items:center;gap:16px;background:#1a2440;border-radius:12px;padding:12px 16px;border-left:6px solid}.ea-fier b{font-size:2.3em;line-height:1;min-width:2.2em;text-align:center}.ea-fier span{font-size:1.02em;line-height:1.3}
   .ea-n-date{margin-left:auto;flex:none;font-size:.85em;color:#5fe0a8}.ea-n-date.rouge{color:#ff8a8a;font-weight:800}
   .ea-dyn{position:relative;display:flex;flex-direction:column;animation:ea-fondu .6s ease}
   @keyframes ea-fondu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
