@@ -448,10 +448,28 @@ export function horsExcel(demandesApp, copie, compteNum) {
     cands.filter(d => d.id !== proprio.id && !copie.parId?.has(d.id) && emp(d.descriptif) && !tousTextes.has(emp(d.descriptif)))
       .forEach(d => ops.push([d.id, { numero: `${n} (hors Excel)`, ancienNumero: n, horsExcel: true, horsExcelLe: Date.now() }]));
   });
+  // Restes d'anciens imports : demande sans ID dans l'Excel, dont le N° n'y
+  // existe plus (ex. « SG-696 » après renumérotation en « SG-0440 »), mais dont
+  // le contenu (site + descriptif) correspond à UNE ligne portant l'ID d'une
+  // autre demande de l'appli → c'est un doublon : il est relié à celle-ci.
+  if (copie.iId >= 0 && copie.parId?.size > 50) {
+    const st = (v) => sa(v).replace(/[^a-z0-9]/g, "");
+    const parContenu = new Map();
+    copie.forEach(rows => rows.forEach(r => { const id = String(r?.[copie.iId] ?? "").trim(), e = emp(r?.[6]); if (!id || !e) return; const k = `${st(r?.[3])}|${e}`; parContenu.set(k, parContenu.has(k) && parContenu.get(k) !== id ? null : id); }));
+    const parId = new Map((demandesApp || []).map(d => [d.id, d]));
+    const dejaTraites = new Set(ops.map(o => o[0]));
+    (demandesApp || []).filter(d => !d.lieeA && !d.supprimeeLe && !d.horsExcel && !dejaTraites.has(d.id) && !(d.creeDansApp && !d.vuDansFichier)
+      && d.numero && !/^(SN|SMM)-/.test(d.numero) && !copie.parId.has(d.id) && !copie.has(String(d.numero).trim()) && emp(d.descriptif))
+      .forEach(d => {
+        const idL = parContenu.get(`${st(d.site)}|${emp(d.descriptif)}`); const g = idL && parId.get(idL);
+        if (g && g.id !== d.id && !g.lieeA && !g.supprimeeLe) ops.push([d.id, { lieeA: g.id, lieeANumero: g.numero, doublonImport: true, ancienNumero: d.numero, relieAutoLe: Date.now() }]);
+        else if (!idL && !tousTextes.has(emp(d.descriptif))) ops.push([d.id, { numero: `${d.numero} (hors Excel)`, ancienNumero: d.numero, horsExcel: true, horsExcelLe: Date.now() }]);
+      });
+  }
   return ops;
 }
 async function marquerHorsExcel(demandesApp, copie, compteNum) {
-  const ops = horsExcel(demandesApp, copie, compteNum);
+  const ops = horsExcel(demandesApp, copie, compteNum).slice(0, 400);
   if (!ops.length) return 0;
   const batch = writeBatch(db);
   ops.forEach(([id, c]) => { batch.update(doc(db, "demandes", id), { ...c, importMajLe: serverTimestamp() }); const d = demandesApp.find(x => x.id === id); if (d) Object.assign(d, c); });
