@@ -290,9 +290,11 @@ async function lireEnvoyes() {
   return tous;
 }
 
+let envoyesItems = [];
 async function chargerGuide() {
   try {
     const items = await lireEnvoyes();
+    envoyesItems = items;
     const it = items.find(x => x.fields?.Title === TITRE_GUIDE);
     guideItemId = it?.id || null;
     guide = it ? texteSimple(it.fields[colonnesEnvoyes.corps]) : "";
@@ -420,7 +422,7 @@ function render() {
     @media (max-width:900px){.bf-grille{grid-template-columns:1fr}}
   </style><div class="bf">
     <div class="bf-hero"><div><h2>☀️ Ton briefing mails</h2><p>${n.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} — ${total ? `<b>${p.repondre.length}</b> réponse${p.repondre.length > 1 ? "s" : ""} à envoyer, <b>${p.faire.length}</b> action${p.faire.length > 1 ? "s" : ""} à faire${p.repondre.concat(p.faire).some(m => m.priorite === "Urgent") ? `, dont <b>${p.repondre.concat(p.faire).filter(m => m.priorite === "Urgent").length} urgente(s)</b>` : ""}.` : "rien d'important en attente 🎉"}</p></div>
-      <div class="bf-outils"><button data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button><button data-act="guide">📘 Mon style d'écriture</button></div></div>
+      <div class="bf-outils"><button data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button>${mails.some(m => m.statut === "Traité" && Date.now() - new Date(m.date).getTime() > 7 * 864e5) ? `<button data-act="nettoyer" title="Mettre de côté les mails reçus il y a plus de 7 jours">🧹 Ranger les plus de 7 jours</button>` : ""}<button data-act="guide">📘 Mon style d'écriture</button></div></div>
     ${progression ? `<div class="bf-prog">⏳ ${esc(progression)}</div>` : p.analyse.length ? `<div class="bf-prog">${p.analyse.length} mail(s) en attente d'analyse.</div>` : ""}
     ${blocGuide()}
     ${erreur ? `<div class="form-card ml-erreur">❌ ${esc(erreur)}</div>` : ""}
@@ -438,6 +440,13 @@ async function surClic(e) {
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (!act) return;
   if (act === "actualiser") { await rafraichir(); return; }
+  if (act === "nettoyer") {
+    const vieux = mails.filter(m => m.statut === "Traité" && Date.now() - new Date(m.date).getTime() > 7 * 864e5);
+    if (!vieux.length || !confirm(`Ranger ${vieux.length} mail(s) reçu(s) il y a plus de 7 jours ?\nIls disparaissent du briefing (rien n'est supprimé dans Outlook).`)) return;
+    progression = "Rangement…"; render();
+    let n = 0; for (const m of vieux) { try { await majMail(m.id, { Statut: "Ignoré" }); m.statut = "Ignoré"; n++; } catch (e) { console.warn(e); } }
+    progression = ""; toast(`🧹 ${n} mail(s) rangé(s)`, "success"); render(); return;
+  }
   if (act === "guide") { guideOuvert = !guideOuvert; render(); return; }
   if (act === "guide-generer") { await genererGuide(); return; }
   if (act === "guide-enregistrer") {
@@ -476,12 +485,32 @@ async function surClic(e) {
   }
 }
 
+// Lien avec Outlook : un mail auquel tu as répondu depuis Outlook (réponse
+// copiée dans la liste MailsEnvoyes par le flux) passe tout seul en « fait ».
+// Rapprochement : même objet (sans RE:/TR:), envoyé à l'expéditeur, après sa réception.
+const cleObjet = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/^(\s*(re|tr|fw|fwd|ref|rép|rep)\s*:\s*)+/i, "").replace(/[^a-z0-9]/g, "");
+async function marquerRepondusDepuisOutlook() {
+  if (!envoyesItems.length || !colonnesEnvoyes) return 0;
+  const envois = envoyesItems.filter(x => x.fields?.Title !== TITRE_GUIDE).map(x => ({
+    cle: cleObjet(x.fields?.Title), dest: String(colonnesEnvoyes.destinataire ? x.fields?.[colonnesEnvoyes.destinataire] || "" : "").toLowerCase(), le: new Date(x.createdDateTime || 0).getTime(),
+  })).filter(e => e.cle);
+  const aMarquer = mails.filter(m => ["Nouveau", "Traité"].includes(m.statut)).filter(m => {
+    const cle = cleObjet(m.objet), exp = adresse(m.expediteur).toLowerCase(), recu = new Date(m.date).getTime() || 0;
+    return cle && envois.some(e => e.cle === cle && e.le >= recu - 60000 && (!e.dest || !exp || e.dest.includes(exp)));
+  });
+  let n = 0;
+  for (const m of aMarquer.slice(0, 60)) { try { await majMail(m.id, { Statut: "Répondu" }); m.statut = "Répondu"; m.faitLe = isoJour(); n++; } catch (e) { console.warn("Répondu auto :", e); } }
+  return n;
+}
+
 async function rafraichir() {
   erreur = "";
   progression = "Lecture des mails…";
   render();
   try {
     await Promise.all([chargerMails(), chargerGuide()]);
+    const auto = await marquerRepondusDepuisOutlook().catch(() => 0);
+    if (auto) toast(`✉️ ${auto} mail(s) déjà répondu(s) depuis Outlook retiré(s)`, "success");
     progression = "";
     render();
     await traiterNouveaux();
