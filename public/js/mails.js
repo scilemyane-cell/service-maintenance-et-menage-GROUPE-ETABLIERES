@@ -544,7 +544,10 @@ async function rafraichir() {
   }
 }
 
-export async function mountMails(container) {
+export async function mountMails(container, user) {
+  // Boîte mail personnelle : Super Admin uniquement, même si l'onglet
+  // apparaissait par erreur (aperçu, droits mal réglés…).
+  if (!user || user.role !== "super_admin" || user.apercu) { container.innerHTML = `<div class="form-card">🔒 Assistant mails réservé au Super Administrateur.</div>`; return; }
   conteneur = container;
   if (!container.dataset.mlEcoute) {
     container.addEventListener("click", surClic);

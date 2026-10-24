@@ -603,7 +603,7 @@
   const ROLES_ACCES_CAS_PAR_CAS = ["technicien", "menage", "mi_temps"];
   // Direction : voit tout comme le Super Admin, en consultation seule —
   // sauf l'Administration (comptes, corbeille…) et le Suivi des tâches.
-  const TUILES_INTERDITES_DIRECTION = ["administration", "taches"];
+  const TUILES_INTERDITES_DIRECTION = ["administration", "taches", "mails"];
   // Ordre des onglets choisi par le Super Admin (glisser-déposer), appliqué à tous.
   let ordreOnglets = {};
   let ordreOngletsAbonne = false;
@@ -615,7 +615,14 @@
     const rang = (id) => { const i = ordre.indexOf(id); return i < 0 ? 1000 : i; };
     return liste.map((s, i) => ({ s, i })).sort((a, b) => (rang(a.s.id) - rang(b.s.id)) || (a.i - b.i)).map(x => x.s);
   }
+  // Onglets réservés au Super Admin (mails, connexions, tâches) : jamais
+  // visibles par un autre rôle, quelles que soient les règles ci-dessous
+  // (direction = tout en lecture, accès bonus « extraOnglets »…).
   function categorySubtabsBrut(category, user) {
+    const l = categorySubtabsBrut0(category, user);
+    return user.role === "super_admin" ? l : l.filter(s => !(s.roles.length === 1 && s.roles[0] === "super_admin"));
+  }
+  function categorySubtabsBrut0(category, user) {
     // Membre du roulement d'astreinte (quel que soit son rôle) : voit l'onglet
     // Interventions comme un technicien pour compléter ses horaires.
     if (category.id === "astreinte" && user.role !== "technicien" && !["super_admin", "admin", "n1", "direction"].includes(user.role) && personneAstreinte(user)) {
