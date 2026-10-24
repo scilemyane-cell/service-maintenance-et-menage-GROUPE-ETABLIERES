@@ -219,58 +219,47 @@ function lienOutlook(m, texte) {
   return `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(adresse(m.expediteur))}&subject=${encodeURIComponent(objet)}&body=${encodeURIComponent(texte)}`;
 }
 
-let selection = null;   // mail affiché à droite
-let filtreCat = "";     // catégorie choisie
-let recherche = "";
+// ---------- Briefing : les mails transformés en choses à faire ----------
+// Plutôt qu'une boîte mail bis : trois piles claires.
+//   ✍️ À répondre (l'IA a préparé une réponse) · 🎯 À faire (une action sans réponse)
+//   · 📰 Pour info (repliés). « ✅ Fait » retire le mail, « ⏰ Demain » le reporte.
+let repOuverts = new Set(), voirFaits = false;
 const nomExp = (s) => { const t = String(s || "").trim(); const m = t.match(/^"?([^"<]+?)"?\s*<[^>]+>/); if (m) return m[1].trim(); const a = adresse(t); return a ? a.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : t || "Expéditeur inconnu"; };
-const heure = (d) => { const x = new Date(d); if (isNaN(x)) return ""; const auj = new Date(); return x.toDateString() === auj.toDateString() ? x.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }); };
-const PRIO = { Urgent: { cls: "urgent", label: "Urgent" }, Normal: { cls: "normal", label: "Normal" }, Faible: { cls: "faible", label: "Faible" } };
+const heure = (d) => { const x = new Date(d); if (isNaN(x)) return ""; const auj = new Date(); return x.toDateString() === auj.toDateString() ? x.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : x.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }); };
+const isoJour = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function reports() { try { return JSON.parse(localStorage.getItem("ml-reports") || "{}"); } catch { return {}; } }
+function reporter(id) { const r = reports(); const d = new Date(); d.setDate(d.getDate() + 1); r[id] = isoJour(d); try { localStorage.setItem("ml-reports", JSON.stringify(r)); } catch { /* */ } }
+const estReporte = (m) => { const j = reports()[m.id]; return !!j && j > isoJour(); };
+const parPrio = (a, b) => (ORDRE_PRIO[a.priorite] ?? 1) - (ORDRE_PRIO[b.priorite] ?? 1) || new Date(b.date) - new Date(a.date);
 
-function listeFiltree() {
-  const q = recherche.trim().toLowerCase();
-  const l = mails.filter(m => filtre === "tous" ? true : filtre === "a-traiter" ? ["Nouveau", "Traité"].includes(m.statut) : ["Répondu", "Ignoré"].includes(m.statut))
-    .filter(m => !filtreCat || m.categorie === filtreCat)
-    .filter(m => !q || `${m.objet} ${m.expediteur} ${m.resume}`.toLowerCase().includes(q));
-  return l.sort((a, b) => (ORDRE_PRIO[a.priorite] ?? 1) - (ORDRE_PRIO[b.priorite] ?? 1) || new Date(b.date) - new Date(a.date));
+function piles() {
+  const actifs = mails.filter(m => m.statut === "Traité" && !estReporte(m));
+  return {
+    repondre: actifs.filter(m => m.priorite !== "Faible" && String(m.brouillon || "").trim()).sort(parPrio),
+    faire: actifs.filter(m => m.priorite !== "Faible" && !String(m.brouillon || "").trim()).sort(parPrio),
+    info: actifs.filter(m => m.priorite === "Faible").sort(parPrio),
+    reportes: mails.filter(m => m.statut === "Traité" && estReporte(m)),
+    analyse: mails.filter(m => m.statut === "Nouveau"),
+    faitsJour: mails.filter(m => ["Répondu", "Ignoré"].includes(m.statut) && m.faitLe === isoJour()),
+  };
 }
 
-function ligneListe(m) {
-  const p = PRIO[m.priorite] || PRIO.Normal;
-  return `<button type="button" class="ml-li ${selection === m.id ? "sel" : ""} ${m.statut === "Nouveau" ? "nouveau" : ""}" data-sel="${esc(m.id)}">
-    <span class="ml-pt ${p.cls}" title="${p.label}"></span>
-    <span class="ml-li-c">
-      <span class="ml-li-l1"><b>${esc(nomExp(m.expediteur))}</b><small>${esc(heure(m.date))}</small></span>
-      <span class="ml-li-obj">${esc(m.objet)}</span>
-      <span class="ml-li-res">${m.statut === "Nouveau" ? "⏳ en attente d'analyse" : esc(m.resume || texteOriginal(m.corps).slice(0, 120))}</span>
-      ${m.categorie || ["Répondu", "Ignoré"].includes(m.statut) ? `<span class="ml-li-tags">${m.categorie ? `<i>${esc(m.categorie)}</i>` : ""}${m.statut === "Répondu" ? `<i class="ok">✓ répondu</i>` : m.statut === "Ignoré" ? `<i>ignoré</i>` : ""}</span>` : ""}
-    </span></button>`;
-}
-
-function detail(m) {
-  if (!m) return `<div class="ml-vide"><div>📭</div><b>Choisis un mail dans la liste</b><span>Le résumé, la réponse proposée et le mail d'origine s'afficheront ici.</span></div>`;
-  const p = PRIO[m.priorite] || PRIO.Normal, ouvert = ouverts.has(m.id), fait = ["Répondu", "Ignoré"].includes(m.statut);
-  return `<article class="ml-detail" data-id="${esc(m.id)}">
-    <button type="button" class="ml-retour" data-act="fermer">← Liste</button>
-    <header class="ml-d-tete">
-      <div class="ml-d-badges"><span class="ml-prio-b ${p.cls}">${p.label}</span>${m.categorie ? `<span class="ml-cat">${esc(m.categorie)}</span>` : ""}${fait ? `<span class="ml-cat">${esc(m.statut)}</span>` : ""}</div>
-      <h2>${esc(m.objet)}</h2>
-      <div class="ml-d-de"><span class="ml-av">${esc(nomExp(m.expediteur).slice(0, 1).toUpperCase())}</span><div><b>${esc(nomExp(m.expediteur))}</b><small>${esc(adresse(m.expediteur) || m.expediteur)} · ${esc(fmtDate(m.date))}</small></div></div>
-    </header>
-    ${m.statut === "Nouveau" ? `<div class="ml-bloc ml-attente">⏳ Analyse par l'IA en cours ou à venir…</div>` : `
-    <section class="ml-bloc ml-afaire"><h3>🎯 Ce qu'il faut faire</h3><p>${esc(m.resume || "Pas de résumé.")}</p></section>
-    <section class="ml-bloc ml-rep"><h3>✍️ Réponse proposée <small>— modifie-la si besoin avant d'envoyer</small></h3>
-      <textarea class="ml-brouillon" data-brouillon="${esc(m.id)}" rows="9" placeholder="Pas de réponse proposée : ce mail n'en demande peut-être pas.">${esc(m.brouillonEdit ?? m.brouillon)}</textarea>
-      <div class="ml-actions">
-        <button class="ml-btn principal" data-act="outlook" ${adresse(m.expediteur) ? "" : "disabled"}>✉️ Répondre dans Outlook</button>
-        <button class="ml-btn" data-act="copier">📋 Copier</button>
-        <span class="ml-sep"></span>
-        ${fait ? "" : `<button class="ml-btn ok" data-act="repondu">✅ C'est répondu</button><button class="ml-btn" data-act="ignorer">🙈 Pas de réponse</button>`}
-        <button class="ml-btn discret" data-act="retraiter" title="Redemander à l'IA">🔄 Réanalyser</button>
-      </div>
-    </section>`}
-    <section class="ml-bloc ml-orig"><h3 data-act="ouvrir">📨 Mail d'origine <small>${ouvert ? "▲ réduire" : "▼ tout afficher"}</small></h3>
-      <div class="ml-corps ${ouvert ? "" : "ml-apercu"}">${esc(texteOriginal(m.corps).slice(0, ouvert ? 15000 : 900))}</div></section>
-  </article>`;
+function carteAction(m, type) {
+  const urgent = m.priorite === "Urgent", rep = repOuverts.has(m.id), voir = ouverts.has(m.id);
+  return `<article class="bf-c ${urgent ? "urgent" : ""}" data-id="${esc(m.id)}">
+    <div class="bf-c-tete">${urgent ? `<span class="bf-urg">Urgent</span>` : ""}${m.categorie ? `<span class="bf-cat">${esc(m.categorie)}</span>` : ""}<span class="bf-h">${esc(heure(m.date))}</span></div>
+    <p class="bf-action">${esc(m.resume || m.objet)}</p>
+    <p class="bf-de"><b>${esc(nomExp(m.expediteur))}</b> · ${esc(m.objet)}</p>
+    ${rep ? `<div class="bf-rep"><textarea class="ml-brouillon" data-brouillon="${esc(m.id)}" rows="8">${esc(m.brouillonEdit ?? m.brouillon)}</textarea>
+      <div class="bf-btns"><button class="bf-b principal" data-act="outlook" ${adresse(m.expediteur) ? "" : "disabled"}>✉️ Ouvrir dans Outlook</button><button class="bf-b" data-act="copier">📋 Copier</button><button class="bf-b" data-act="retraiter">🔄 Autre proposition</button></div></div>` : ""}
+    ${voir ? `<div class="bf-mail">${esc(texteOriginal(m.corps).slice(0, 15000))}</div>` : ""}
+    <div class="bf-btns">
+      ${type === "repondre" ? `<button class="bf-b ${rep ? "" : "principal"}" data-act="rep">${rep ? "▲ Fermer la réponse" : "✍️ Voir la réponse proposée"}</button>` : ""}
+      <button class="bf-b" data-act="ouvrir">${voir ? "▲ Masquer le mail" : "👁 Lire le mail"}</button>
+      <span class="bf-sep"></span>
+      <button class="bf-b" data-act="demain" title="Le remettre demain">⏰ Demain</button>
+      <button class="bf-b ok" data-act="${type === "repondre" ? "repondu" : "ignorer"}">✅ Fait</button>
+    </div></article>`;
 }
 
 // ---------- Guide (apprentissage depuis les mails envoyés) ----------
@@ -392,99 +381,60 @@ function blocGuide() {
 let renduDiffere = false;
 function render() {
   if (!conteneur) return;
-  // Ne pas effacer une réponse en cours de frappe (l'analyse redessine l'écran).
   const actif = document.activeElement;
   if (actif && conteneur.contains(actif) && actif.matches("textarea")) { renduDiffere = true; return; }
   renduDiffere = false;
-  const liste = listeFiltree();
-  if (selection && !mails.some(m => m.id === selection)) selection = null;
-  if (!selection && liste.length && window.innerWidth > 900) selection = liste[0].id;
-  const m = mails.find(x => x.id === selection);
-  const aTraiter = mails.filter(x => ["Nouveau", "Traité"].includes(x.statut));
-  const nbNouveaux = mails.filter(x => x.statut === "Nouveau").length;
-  const nbUrgents = aTraiter.filter(x => x.statut === "Traité" && x.priorite === "Urgent").length;
-  const nbFaits = mails.filter(x => ["Répondu", "Ignoré"].includes(x.statut)).length;
-  const cats = [...new Set(mails.filter(x => filtre === "tous" || (filtre === "a-traiter" ? ["Nouveau", "Traité"].includes(x.statut) : ["Répondu", "Ignoré"].includes(x.statut))).map(x => x.categorie).filter(Boolean))].sort();
-  const restants = progression.match(/(\d+)\/(\d+)/);
-  const focus = document.activeElement?.classList?.contains("ml-q");
-  conteneur.innerHTML = `
-    <style>
-      .ml-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
-      .ml-kpi{background:var(--panel);border:1px solid var(--border);border-left:5px solid var(--border);border-radius:14px;padding:10px 14px;display:flex;flex-direction:column;cursor:pointer;text-align:left;font:inherit;color:var(--text)}
-      .ml-kpi b{font-size:24px;line-height:1.1}.ml-kpi span{font-size:12px;color:var(--text-dim)}
-      .ml-kpi.rouge{border-left-color:#e04848}.ml-kpi.bleu{border-left-color:#3b7be0}.ml-kpi.vert{border-left-color:#1baf7a}.ml-kpi.gris{border-left-color:#9aa4b2}
-      .ml-kpi.on{box-shadow:0 0 0 2px var(--teal,#1baf7a) inset}
-      .ml-prog{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-dim);margin:-2px 0 10px}
-      .ml-prog-b{flex:1;max-width:320px;height:6px;border-radius:99px;background:var(--border);overflow:hidden}.ml-prog-b i{display:block;height:100%;background:#3b7be0;transition:width .3s}
-      .ml-barre{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-      .ml-q{flex:1;min-width:180px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit}
-      .ml-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-      .ml-chip{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:99px;padding:4px 11px;font:inherit;font-size:12px;cursor:pointer}
-      .ml-chip.on{background:var(--teal,#1baf7a);color:#fff;border-color:transparent}
-      .ml-app{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:12px;align-items:start}
-      .ml-liste{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;max-height:calc(100vh - 230px);overflow-y:auto;position:sticky;top:10px}
-      .ml-li{display:flex;gap:10px;width:100%;text-align:left;padding:11px 12px;border:none;border-bottom:1px solid var(--border);background:none;color:var(--text);font:inherit;cursor:pointer}
-      .ml-li:hover{background:var(--panel-alt)}.ml-li.sel{background:color-mix(in srgb,var(--teal,#1baf7a) 14%,var(--panel));box-shadow:inset 3px 0 0 var(--teal,#1baf7a)}
-      .ml-pt{flex:none;width:10px;height:10px;border-radius:50%;margin-top:5px;background:#f0a020}.ml-pt.urgent{background:#e04848}.ml-pt.faible{background:#b8c0cc}
-      .ml-li-c{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-      .ml-li-l1{display:flex;justify-content:space-between;gap:8px}.ml-li-l1 b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ml-li-l1 small{color:var(--text-dim);font-size:11.5px;white-space:nowrap}
-      .ml-li-obj{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .ml-li-res{font-size:12px;color:var(--text-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-      .ml-li-tags{display:flex;gap:4px;flex-wrap:wrap}.ml-li-tags i{font-style:normal;font-size:10.5px;padding:1px 7px;border-radius:99px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text-dim)}.ml-li-tags i.ok{color:#11845b;border-color:#bfe8d4}
-      .ml-detail,.ml-vide{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px}
-      .ml-vide{display:flex;flex-direction:column;align-items:center;gap:6px;padding:60px 20px;color:var(--text-dim);text-align:center}.ml-vide div{font-size:40px}
-      .ml-retour{display:none;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:8px;padding:6px 12px;font:inherit;margin-bottom:10px;cursor:pointer}
-      .ml-d-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-      .ml-prio-b{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:99px;background:#fdecc8;color:#8a5a00}.ml-prio-b.urgent{background:#fde0e0;color:#b42323}.ml-prio-b.faible{background:var(--panel-alt);color:var(--text-dim)}
-      .ml-cat{font-size:11.5px;padding:3px 10px;border-radius:99px;background:var(--panel-alt);border:1px solid var(--border)}
-      .ml-detail h2{margin:0 0 10px;font-size:20px;line-height:1.3;overflow-wrap:anywhere}
-      .ml-d-de{display:flex;gap:10px;align-items:center;margin-bottom:14px}.ml-d-de div{display:flex;flex-direction:column}.ml-d-de small{color:var(--text-dim);font-size:12px}
-      .ml-av{width:36px;height:36px;border-radius:50%;background:#3b7be0;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
-      .ml-bloc{border-radius:12px;padding:12px 14px;margin-top:10px;border:1px solid var(--border)}
-      .ml-bloc h3{margin:0 0 6px;font-size:14px}.ml-bloc h3 small{font-weight:400;color:var(--text-dim);font-size:12px}
-      .ml-afaire{background:color-mix(in srgb,#3b7be0 9%,var(--panel));border-color:color-mix(in srgb,#3b7be0 35%,var(--border))}.ml-afaire p{margin:0;font-size:14.5px;line-height:1.45}
-      .ml-attente{color:var(--text-dim)}
-      .ml-brouillon{width:100%;box-sizing:border-box;font:inherit;font-size:14px;line-height:1.5;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;resize:vertical}
-      .ml-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}.ml-sep{flex:1}
-      .ml-btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:9px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
-      .ml-btn.principal{background:#1d4f91;border-color:#1d4f91;color:#fff;padding:10px 18px}.ml-btn.ok{border-color:#1baf7a;color:#11845b}.ml-btn.discret{border-style:dashed;color:var(--text-dim)}
-      .ml-btn:disabled{opacity:.5;cursor:default}
-      .ml-orig h3{cursor:pointer}
-      .ml-corps{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px;line-height:1.5;max-height:60vh;overflow:auto}
-      .ml-apercu{max-height:none;overflow:hidden;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical}
-      .ml-guide{margin-bottom:12px}
-      .ml-erreur{white-space:pre-wrap;color:var(--red);margin-bottom:10px}
-      @media (max-width:900px){.ml-app{grid-template-columns:1fr}.ml-liste{max-height:none;position:static}.ml-app.avec-sel .ml-liste{display:none}.ml-app:not(.avec-sel) .ml-droite{display:none}.ml-retour{display:inline-block}}
-    </style>
-    <div class="ml-kpis">
-      <button class="ml-kpi rouge ${filtre === "a-traiter" ? "on" : ""}" data-filtre="a-traiter"><b>${nbUrgents}</b><span>urgent${nbUrgents > 1 ? "s" : ""} à traiter</span></button>
-      <button class="ml-kpi bleu ${filtre === "a-traiter" ? "on" : ""}" data-filtre="a-traiter"><b>${aTraiter.length}</b><span>mails à traiter</span></button>
-      <button class="ml-kpi vert ${filtre === "faits" ? "on" : ""}" data-filtre="faits"><b>${nbFaits}</b><span>répondus ou ignorés</span></button>
-      <button class="ml-kpi gris ${filtre === "tous" ? "on" : ""}" data-filtre="tous"><b>${mails.length}</b><span>tous les mails</span></button>
-    </div>
-    ${progression ? `<div class="ml-prog">⏳ ${esc(progression)}${restants ? `<span class="ml-prog-b"><i style="width:${Math.round(restants[1] / restants[2] * 100)}%"></i></span>` : ""}</div>` : nbNouveaux ? `<div class="ml-prog">${nbNouveaux} mail(s) pas encore analysé(s)</div>` : ""}
-    <div class="ml-barre">
-      <input class="ml-q" type="search" placeholder="🔎 Rechercher : expéditeur, objet, mot…" value="${esc(recherche)}">
-      <button class="ml-btn" data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button>
-      <button class="ml-btn ${guideOuvert ? "ok" : ""}" data-act="guide">📘 Guide de style${guide ? "" : " (vide)"}</button>
-    </div>
-    ${cats.length > 1 ? `<div class="ml-chips"><button class="ml-chip ${filtreCat ? "" : "on"}" data-cat="">Toutes</button>${cats.map(c => `<button class="ml-chip ${filtreCat === c ? "on" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}</div>` : ""}
+  const p = piles(), n = new Date();
+  const total = p.repondre.length + p.faire.length;
+  const pile = (titre, sous, liste, type, cls) => `<section class="bf-pile ${cls}"><h3>${titre} <span>${liste.length}</span></h3><p class="bf-sous">${sous}</p>
+    ${liste.length ? liste.map(m => carteAction(m, type)).join("") : `<div class="bf-vide">Rien ici 👍</div>`}</section>`;
+  conteneur.innerHTML = `<style>
+    .bf{max-width:1200px;margin:0 auto}
+    .bf-hero{background:linear-gradient(135deg,#0f2a52,#1d4f91);color:#fff;border-radius:18px;padding:20px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+    .bf-hero h2{margin:0;font-size:22px}.bf-hero p{margin:4px 0 0;opacity:.9;font-size:14.5px}
+    .bf-hero .bf-outils{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+    .bf-hero button{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:8px 13px;font:inherit;font-size:13px;cursor:pointer}
+    .bf-prog{font-size:13px;color:var(--text-dim);margin:-4px 0 10px}
+    .bf-grille{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+    .bf-pile h3{margin:0;font-size:17px;display:flex;align-items:center;gap:8px}.bf-pile h3 span{font-size:13px;background:var(--panel-alt);border:1px solid var(--border);border-radius:99px;padding:1px 10px}
+    .bf-sous{margin:2px 0 10px;color:var(--text-dim);font-size:12.5px}
+    .bf-c{background:var(--panel);border:1px solid var(--border);border-left:5px solid #3b7be0;border-radius:14px;padding:12px 14px;margin-bottom:10px}
+    .bf-faire .bf-c{border-left-color:#f0a020}.bf-c.urgent{border-left-color:#e04848}
+    .bf-c-tete{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+    .bf-urg{font-size:11px;font-weight:800;color:#fff;background:#e04848;border-radius:6px;padding:1px 7px}
+    .bf-cat{font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:99px;padding:1px 8px}
+    .bf-h{margin-left:auto;font-size:12px;color:var(--text-dim)}
+    .bf-action{margin:0;font-size:15.5px;font-weight:600;line-height:1.4}
+    .bf-de{margin:4px 0 0;font-size:12.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bf-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}.bf-sep{flex:1}
+    .bf-b{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:9px;padding:7px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+    .bf-b.principal{background:#1d4f91;border-color:#1d4f91;color:#fff}.bf-b.ok{border-color:#1baf7a;color:#11845b;background:#e9f8f0}
+    .bf-rep{margin-top:10px}.ml-brouillon{width:100%;box-sizing:border-box;font:inherit;font-size:14px;line-height:1.5;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+    .bf-mail{margin-top:10px;white-space:pre-wrap;font-size:13.5px;line-height:1.5;max-height:50vh;overflow:auto;background:var(--panel-alt);border-radius:10px;padding:10px 12px}
+    .bf-vide{color:var(--text-dim);padding:16px;text-align:center;border:1px dashed var(--border);border-radius:12px}
+    .bf-info{margin-top:16px}.bf-info summary{cursor:pointer;font-weight:700}
+    .bf-info-l{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}.bf-info-l span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bf-info-l small{color:var(--text-dim)}
+    .bf-pied{margin-top:16px;color:var(--text-dim);font-size:13px;display:flex;gap:14px;flex-wrap:wrap}
+    .ml-erreur{white-space:pre-wrap;color:var(--red);margin-bottom:10px}
+    @media (max-width:900px){.bf-grille{grid-template-columns:1fr}}
+  </style><div class="bf">
+    <div class="bf-hero"><div><h2>☀️ Ton briefing mails</h2><p>${n.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} — ${total ? `<b>${p.repondre.length}</b> réponse${p.repondre.length > 1 ? "s" : ""} à envoyer, <b>${p.faire.length}</b> action${p.faire.length > 1 ? "s" : ""} à faire${p.repondre.concat(p.faire).some(m => m.priorite === "Urgent") ? `, dont <b>${p.repondre.concat(p.faire).filter(m => m.priorite === "Urgent").length} urgente(s)</b>` : ""}.` : "rien d'important en attente 🎉"}</p></div>
+      <div class="bf-outils"><button data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button><button data-act="guide">📘 Mon style d'écriture</button></div></div>
+    ${progression ? `<div class="bf-prog">⏳ ${esc(progression)}</div>` : p.analyse.length ? `<div class="bf-prog">${p.analyse.length} mail(s) en attente d'analyse.</div>` : ""}
     ${blocGuide()}
     ${erreur ? `<div class="form-card ml-erreur">❌ ${esc(erreur)}</div>` : ""}
-    <div class="ml-app ${selection ? "avec-sel" : ""}">
-      <div class="ml-liste">${liste.length ? liste.map(ligneListe).join("") : `<div class="hint" style="padding:24px;text-align:center">Aucun mail ici. 🎉</div>`}</div>
-      <div class="ml-droite">${detail(m)}</div>
-    </div>`;
-  if (focus) { const q = conteneur.querySelector(".ml-q"); q?.focus(); q?.setSelectionRange(q.value.length, q.value.length); }
+    <div class="bf-grille">
+      ${pile("✍️ À répondre", "L'IA a préparé une réponse : relis-la, ajuste, envoie.", p.repondre, "repondre", "bf-repondre")}
+      ${pile("🎯 À faire", "Une action à mener, pas forcément de réponse à écrire.", p.faire, "faire", "bf-faire")}
+    </div>
+    ${p.info.length ? `<details class="form-card bf-info"><summary>📰 Pour info (${p.info.length}) — rien à faire</summary>${p.info.map(m => `<div class="bf-info-l" data-id="${esc(m.id)}"><span><b>${esc(nomExp(m.expediteur))}</b> — ${esc(m.resume || m.objet)}</span><small>${esc(heure(m.date))}</small><button class="bf-b" data-act="ignorer">✓ Vu</button></div>`).join("")}</details>` : ""}
+    <div class="bf-pied">${p.reportes.length ? `<span>⏰ ${p.reportes.length} reporté(s) à demain</span>` : ""}${p.faitsJour.length ? `<span>✅ ${p.faitsJour.length} traité(s) aujourd'hui</span>` : ""}</div>
+  </div>`;
 }
 
 async function surClic(e) {
-  const btnFiltre = e.target.closest("[data-filtre]");
-  if (btnFiltre) { filtre = btnFiltre.dataset.filtre; filtreCat = ""; selection = null; render(); return; }
-  const btnCat = e.target.closest("[data-cat]");
-  if (btnCat) { filtreCat = btnCat.dataset.cat; selection = null; render(); return; }
-  const sel = e.target.closest("[data-sel]");
-  if (sel) { selection = sel.dataset.sel; render(); if (window.innerWidth <= 900) window.scrollTo?.(0, 0); return; }
+
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (!act) return;
   if (act === "actualiser") { await rafraichir(); return; }
@@ -498,23 +448,22 @@ async function surClic(e) {
     render();
     return;
   }
-  if (act === "fermer") { selection = null; render(); return; }
-  const el = e.target.closest(".ml-detail");
+  const el = e.target.closest("[data-id]");
   const m = mails.find(x => x.id === el?.dataset.id);
   if (!m) return;
-  const texte = el.querySelector(".ml-brouillon")?.value ?? m.brouillon;
+  const texte = el.querySelector(".ml-brouillon")?.value ?? m.brouillonEdit ?? m.brouillon;
   try {
     if (act === "ouvrir") { ouverts.has(m.id) ? ouverts.delete(m.id) : ouverts.add(m.id); render(); }
+    else if (act === "rep") { repOuverts.has(m.id) ? repOuverts.delete(m.id) : repOuverts.add(m.id); render(); }
+    else if (act === "demain") { reporter(m.id); toast("⏰ Reporté à demain", "success"); render(); }
     else if (act === "outlook") { window.open(lienOutlook(m, texte), "_blank"); }
     else if (act === "copier") { await navigator.clipboard.writeText(texte); toast("Brouillon copié", "success"); }
     else if (act === "repondu" || act === "ignorer") {
       const statut = act === "repondu" ? "Répondu" : "Ignoré";
       await majMail(m.id, { Statut: statut, Brouillon: texte });
       Object.assign(m, { statut, brouillon: texte });
-      ouverts.delete(m.id);
-      const suivant = listeFiltree().find(x => x.id !== m.id);
-      selection = window.innerWidth > 900 ? suivant?.id || null : null;
-      toast(statut === "Répondu" ? "✓ Marqué répondu" : "Mail mis de côté", "success");
+      ouverts.delete(m.id); repOuverts.delete(m.id); m.faitLe = isoJour();
+      toast("✅ C'est fait", "success");
       render();
     } else if (act === "retraiter") {
       await majMail(m.id, { Statut: "Nouveau" });
