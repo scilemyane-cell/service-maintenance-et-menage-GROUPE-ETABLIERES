@@ -3873,3 +3873,4 @@ table.tr-g tr.tr-g-mois th{position:static;background:var(--panel-alt);padding:7
 table.tr-g tr.tr-g-mois th span{position:sticky;left:12px;font-size:14px;font-weight:800;color:var(--text)}
 table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .tr-cal-m{text-transform:uppercase!important}
+.tr-g-fiche.nonenv{border-left-color:#9aa3b2}.tr-g-fiche.nonenv em{background:#eceef2;color:#5a6372}.tr-g-leg i.nonenv{background:#9aa3b2}

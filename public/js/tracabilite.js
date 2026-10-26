@@ -226,7 +226,7 @@ function render() {
         const court = (n) => String(n || "").replace(/^Maison\s+MNA\s+/i, "").replace(/^Maison\s+/i, "");
         const carte = (f, site) => {
           const { done, total } = taskCompletion(f, site), pct = total ? Math.round(done / total * 100) : 0;
-          const etat = f.validee ? ["valid", "✅ Validée"] : f.submitted ? ["averif", "⏳ À vérifier"] : [done ? "cours" : "vide", f.reconstituee && !done ? "À compléter" : done ? "En cours" : "Vide"];
+          const etat = f.validee ? ["valid", "✅ Validée"] : f.submitted ? ["averif", "⏳ À vérifier"] : f.weekStart < lundi ? [done ? "nonenv" : "vide", done ? "📭 Pas envoyée" : "Vide"] : [done ? "cours" : "vide", f.reconstituee && !done ? "À compléter" : done ? "En cours" : "Vide"];
           return `<button type="button" class="tr-g-fiche ${etat[0]} ${ui.openId === f.id ? "ouverte" : ""}" data-open="${f.id}" title="${esc(f.agentNom)} — ${done}/${total}">
             <span class="tr-g-haut"><b>${esc(String(f.agentNom || "").split(/[\s@]/)[0])}</b><em>${etat[1]}</em></span>
             <span class="tr-g-barre"><i class="${pct >= 90 ? "vert" : pct >= 70 ? "orange" : "rouge"}" style="width:${pct}%"></i></span>
@@ -241,7 +241,7 @@ function render() {
               <div class="tr-cal"><div class="tr-cal-page"><span class="tr-cal-m">${mc(d)}</span><b>${d.getDate()}</b></div>
               <div class="tr-cal-txt"><b>Sem. ${nSem}</b><span>lun ${d.getDate()} ${mc(d)}<br>→ ven ${fin.getDate()} ${mc(fin)}</span>${w === lundi ? `<em>cette semaine</em>` : ""}</div></div></th>
             ${cols.map((c, i) => { const l = filtered.filter(f => f.weekStart === w && f.siteId === c.id); return `<td style="--c:${COUL_SITES[i % COUL_SITES.length]}">${l.length ? l.map(f => carte(f, state.sites.find(s => s.id === f.siteId))).join("") : `<span class="tr-g-rien">—</span>`}</td>`; }).join("")}</tr>`; }).join("")}
-        </tbody></table></div><p class="hint tr-g-leg"><i class="valid"></i> Validée <i class="averif"></i> À vérifier <i class="cours"></i> En cours · clique sur une fiche pour l'ouvrir</p>`;
+        </tbody></table></div><p class="hint tr-g-leg"><i class="valid"></i> Validée <i class="averif"></i> À vérifier <i class="cours"></i> En cours (semaine actuelle) <i class="nonenv"></i> Pas envoyée (semaine finie, l'agent n'a pas appuyé sur « Envoyer ») · clique sur une fiche pour l'ouvrir</p>`;
       })()}
       `}
 
