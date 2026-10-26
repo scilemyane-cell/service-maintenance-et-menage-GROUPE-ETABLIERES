@@ -3956,7 +3956,6 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-sous{margin:4px 0 0 10px}.fp-sous div{margin:2px 0}
 .fp-l{margin:0 0 8px 14px}.fp-l div{margin:1px 0}
 .fp-liste-tete .nav-btn{padding:6px 10px;font-size:12.5px;white-space:nowrap}
-.fp-page+.fp-page{height:auto;min-height:1122px;padding-bottom:60px}
 .fp-form .fp-g2{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 .fp-apercu-titre{display:flex;align-items:center;justify-content:space-between;gap:8px}.fp-apercu-titre .nav-btn{padding:4px 10px;font-size:12px}
 .fp-plein-ecran{position:fixed;inset:0;z-index:9999;background:rgba(20,25,35,.85);overflow:auto;padding:20px}
@@ -3969,3 +3968,4 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-pers-puces{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:8px;max-height:120px;overflow:auto}
 .fp-pers-puces button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:99px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer}
 .fp-pers-puces button:hover{border-color:var(--teal);color:var(--teal)}
+.fp-t{table-layout:fixed}.fp-t-l{margin-top:-1px!important}.fp-t+.fp-t-l{margin-top:-1px!important}

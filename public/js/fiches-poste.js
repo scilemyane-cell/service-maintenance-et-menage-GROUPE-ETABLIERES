@@ -59,8 +59,8 @@ export function ficheHTML(f) {
   const entete = `<div class="fp-entete"><img src="img/logo-rh05.png" alt="Groupe Établières">
     <div class="fp-meta"><span>Date création :</span><span><b>Code :</b> <i>RH 05 - Richesses Humaines</i></span><span><b>Type :</b> <i>Formulaire</i></span><span><b>Destinataire(s) :</b> <i>Managers</i></span></div>
     <div class="fp-meta fp-maj"><span><b>Date MAJ :</b> <i>${fr(f.dateMaj) || "05/09/2025"}</i></span><span><b>Dernière(s) modification(s) :</b> ${esc(f.derniereModif || "Changement du logo")}</span></div></div>`;
-  const pied = (n) => `<div class="fp-pied">Page <b>${n}</b> sur <b>2</b></div>`;
-  const missions = (f.missions || []).map(m => `<tr><td>${esc(m.texte)}${m.sous?.length ? `<div class="fp-sous">${m.sous.map(s => `<div>➢&nbsp; ${esc(s)}</div>`).join("")}</div>` : ""}</td><td>${m.niveau === 1 ? "X" : ""}</td><td>${m.niveau === 2 ? "X" : ""}</td></tr>`).join("");
+  const pied = (n, total) => `<div class="fp-pied">Page <b>${n}</b> sur <b>${total}</b></div>`;
+  const suite = paginer(f, entete);
   return `<div class="fp-doc">
   <section class="fp-page">${entete}
     <h1>Fiche de poste</h1><h2>${esc(f.poste || "Intitulé du poste")}</h2>
@@ -79,23 +79,61 @@ export function ficheHTML(f) {
     <p class="j ind">${esc(f.principale || "")}</p>
     <h3 class="r">MISSIONS DU POSTE &amp; DELEGATIONS</h3>
     <p class="j ind">${esc(TEXTE_MISSIONS).replace("\n", "<br>")}</p>
-    ${pied(1)}
+    ${pied(1, suite.length + 1)}
   </section>
-  <section class="fp-page">${entete}
-    <table class="fp-t"><thead><tr><th rowspan="2">MISSIONS</th><th colspan="2" class="fp-deleg">Délégation de décision<small>Sur la base de la <u>gouvernance intégrative du groupe</u> RH20</small></th></tr>
-      <tr><th class="n">Niveau 1<br>Délégation totale</th><th class="n">Niveau 2<br>Partage d'intention</th></tr></thead>
-      <tbody>${missions || `<tr><td colspan="3" style="color:#999">Aucune mission cochée</td></tr>`}</tbody></table>
-    <h3 class="v">Compétences attendues du poste</h3>
-    <p><b>Savoir-faire :</b></p><div class="fp-l">${(f.savoirFaire || []).map(t => `<div>-&nbsp;&nbsp;${esc(t)}</div>`).join("")}</div>
-    <p><b>Savoirs-être :</b></p><div class="fp-l">${(f.savoirEtre || []).map(t => `<div>-&nbsp;&nbsp;${esc(t)}</div>`).join("")}</div>
-    <h3 class="v">DELEGATION(S) DE SIGNATURE(S) autorisée(s) par le manager sur ce poste :</h3>
+  ${suite.map((html, i) => `<section class="fp-page">${entete}${html}${pied(i + 2, suite.length + 1)}</section>`).join("")}</div>`;
+}
+
+// Pages suivantes : tableau des missions + compétences + délégations, réparti
+// sur autant de pages que nécessaire (l'en-tête du tableau est répété).
+const COLS = `<colgroup><col><col style="width:78px"><col style="width:78px"></colgroup>`;
+function blocsSuite(f) {
+  const tete = `<table class="fp-t">${COLS}<thead><tr><th rowspan="2">MISSIONS</th><th colspan="2" class="fp-deleg">Délégation de décision<small>Sur la base de la <u>gouvernance intégrative du groupe</u> RH20</small></th></tr>
+      <tr><th class="n">Niveau 1<br>Délégation totale</th><th class="n">Niveau 2<br>Partage d'intention</th></tr></thead></table>`;
+  const ligne = (m) => `<table class="fp-t fp-t-l">${COLS}<tbody><tr><td>${esc(m.texte)}${m.sous?.length ? `<div class="fp-sous">${m.sous.map(x => `<div>➢&nbsp; ${esc(x)}</div>`).join("")}</div>` : ""}</td><td>${m.niveau === 1 ? "X" : ""}</td><td>${m.niveau === 2 ? "X" : ""}</td></tr></tbody></table>`;
+  const ms = f.missions || [], sf = f.savoirFaire || [], se = f.savoirEtre || [];
+  const blocs = [];
+  if (ms.length) ms.forEach((m, i) => blocs.push({ html: ligne(m), table: true, premier: i === 0 }));
+  else blocs.push({ html: `<table class="fp-t fp-t-l">${COLS}<tbody><tr><td colspan="3" style="color:#999">Aucune mission cochée</td></tr></tbody></table>`, table: true, premier: true });
+  const item = (t) => `<div class="fp-l"><div>-&nbsp;&nbsp;${esc(t)}</div></div>`;
+  blocs.push({ html: `<h3 class="v">Compétences attendues du poste</h3><p><b>Savoir-faire :</b></p>${sf[0] ? item(sf[0]) : ""}` });
+  sf.slice(1).forEach(t => blocs.push({ html: item(t) }));
+  blocs.push({ html: `<p style="margin-top:6px"><b>Savoirs-être :</b></p>${se[0] ? item(se[0]) : ""}` });
+  se.slice(1).forEach(t => blocs.push({ html: item(t) }));
+  blocs.push({ html: `<h3 class="v">DELEGATION(S) DE SIGNATURE(S) autorisée(s) par le manager sur ce poste :</h3>
     ${f.signatureNonConcerne ? "" : `<p class="j">Listez ici les documents ou types de documents pour lesquels vous autorisez la signature par délégation. A noter que la responsabilité de l'acte de signature reste néanmoins de la responsabilité finale du manager.</p>${f.signatures ? `<p>${esc(f.signatures).replace(/\n/g, "<br>")}</p>` : ""}`}
-    <p>${coche(f.signatureNonConcerne)} Poste non concerné par les délégations de signatures${f.signatureNonConcerne ? "" : " à ce jour"}</p>
-    <p class="fp-rappel">La présente fiche de poste est, au minima, réétudiée lors de chaque entretien professionnel et est transmise par le manager au collaborateur concerné ainsi qu'au service RH pour suivi.</p>
-    <p style="text-align:right">Fiche de poste établie le : ${fr(f.etablieLe)} par ${esc(f.etabliePar || "le manager")}.</p>
-    <p>Signature salarié</p>
-    ${pied(2)}
-  </section></div>`;
+    <p>${coche(f.signatureNonConcerne)} Poste non concerné par les délégations de signatures${f.signatureNonConcerne ? "" : " à ce jour"}</p>` });
+  blocs.push({ html: `<p class="fp-rappel">La présente fiche de poste est, au minima, réétudiée lors de chaque entretien professionnel et est transmise par le manager au collaborateur concerné ainsi qu'au service RH pour suivi.</p>
+    <p style="text-align:right">Fiche de poste établie le : ${fr(f.etablieLe)} par ${esc(f.etabliePar || "le manager")}.</p><p>Signature salarié</p>` });
+  return { tete, blocs };
+}
+function paginer(f, entete) {
+  const { tete, blocs } = blocsSuite(f);
+  if (typeof document === "undefined" || !document.body) return [tete + blocs.map(b => b.html).join("")];
+  // Mesure réelle, dans une page invisible aux mêmes styles.
+  const m = document.createElement("div");
+  m.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden";
+  m.innerHTML = `<div class="fp-doc"><section class="fp-page" style="height:auto;min-height:0">${entete}<div data-c></div></section></div>`;
+  document.body.appendChild(m);
+  const page = m.querySelector(".fp-page"), c = m.querySelector("[data-c]");
+  const dispo = 1122 - 28 - 60 - (c.getBoundingClientRect().top - page.getBoundingClientRect().top - 28);
+  const haut = (html) => { c.innerHTML = html; const h = c.getBoundingClientRect().height; return h; };
+  const hTete = haut(tete);
+  const pages = []; let cur = [], h = 0;
+  blocs.forEach((b, i) => {
+    const avecTete = b.table && (b.premier || !cur.length);
+    let hb = haut(b.html) + (avecTete ? hTete : 0);
+    if (cur.length && h + hb > dispo) {
+      pages.push(cur.join("")); cur = []; h = 0;
+      if (b.table) hb = haut(b.html) + hTete;
+    }
+    if (b.table && (b.premier || !cur.length)) { cur.push(tete); }
+    cur.push(b.html); h += hb;
+    if (!b.table && blocs[i - 1]?.table) h += 8;
+  });
+  if (cur.length) pages.push(cur.join(""));
+  m.remove();
+  return pages;
 }
 
 // ---------- Écran ----------
