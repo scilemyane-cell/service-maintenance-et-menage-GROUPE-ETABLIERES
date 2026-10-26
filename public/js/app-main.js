@@ -118,6 +118,7 @@
   const charger_ecran_atelier = () => import("./ecran-atelier.js");
   const mountEcranAtelier = aLaDemande(charger_ecran_atelier, "mountEcranAtelier");
   const mountPenseBete = aLaDemande(charger_ecran_atelier, "mountPenseBete");
+  const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
   const charger_espaces_verts = () => import("./espaces-verts.js");
   const mountEspacesVertsIntervention = aLaDemande(charger_espaces_verts, "mountEspacesVertsIntervention");
   const mountEspacesVertsSuivi = aLaDemande(charger_espaces_verts, "mountEspacesVertsSuivi");
@@ -291,7 +292,7 @@
             { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
             { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
           ] : []),
-          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
+          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: [...GESTION, "direction"],       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
           { id: "prestataire", label: "Accès prestataire", icon: "🔗", roles: GESTION, mount: mountAccesRemplacants },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],
@@ -434,6 +435,12 @@
         subtabs: [
           { id: "pense-bete", label: "Pense-bête", icon: "📌", roles: GESTION, mount: mountPenseBete },
           { id: "ecran", label: "Écran", icon: "📺", roles: [...GESTION, "technicien"], mount: mountEcranAtelier },
+        ],
+      },
+      {
+        id: "fiches-poste", label: "Fiches de poste", icon: "📄", desc: "Rédiger les fiches de poste (formulaire RH 05) en cochant les missions et compétences proposées, PDF et SharePoint",
+        subtabs: [
+          { id: "fiches", label: "Fiches de poste", icon: "📄", roles: GESTION, mount: mountFichesPoste },
         ],
       },
       {
@@ -642,7 +649,9 @@
     // inchangé — un utilisateur avec un accès bonus explicite voit tous
     // les sous-onglets de ce dispositif même si son rôle habituel ne les
     // couvre pas.
-    if ((user.extraOnglets || []).includes(category.id)) return category.subtabs;
+    // … sauf les onglets de gestion (accès prestataire, paramètres,
+    // traçabilité), réservés aux responsables même avec un accès bonus.
+    if ((user.extraOnglets || []).includes(category.id)) return category.subtabs.filter(s => GESTION.includes(user.role) || !["prestataire", "parametres", "tracabilite"].includes(s.id) || (s.id === "tracabilite" && user.role === "direction"));
     return category.subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {
