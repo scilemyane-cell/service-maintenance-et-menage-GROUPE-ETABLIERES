@@ -38,6 +38,9 @@ jobs:
             cat public/version.json
             sed -i "s#js/dist/app.bundle.js\"#js/dist/app.bundle.js?v=$V\"#; s#css/style.css\"#css/style.css?v=$V\"#" public/app.html
             sed -i "s#css/style.css\"#css/style.css?v=$V\"#" public/index.html
+            # Pages invités (liens envoyés par SMS) : forcer le rechargement à chaque version.
+            for g in public/*guest*.html; do sed -i "s#css/style.css\"#css/style.css?v=$V\"#" "$g"; done
+            sed -i "s#\./js/guest-fiche\.js\"#./js/guest-fiche.js?v=$V\"#" public/guest.html
           }
           construire stable-src stable
           construire test-src test
