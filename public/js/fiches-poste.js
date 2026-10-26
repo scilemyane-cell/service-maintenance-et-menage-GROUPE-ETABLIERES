@@ -10,6 +10,7 @@ import { esc } from "./astreinte-logic.js";
 import { watchUsers } from "./users-data.js";
 import { getGraphToken } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
+import { lireFicheExistante } from "./fiches-poste-import.js";
 import { MODELES, MISSIONS, SAVOIR_FAIRE, SAVOIR_ETRE, ASSOCIATIONS, RESIDENCES, MANAGERS, POSITIONNEMENT, CHAQUE_COLLABORATEUR, TEXTE_MISSIONS, ficheDepuisModele } from "./fiches-poste-modeles.js";
 
 const COL = "fiches-poste";
@@ -81,9 +82,12 @@ function render() {
     <div id="fp-liste"></div>
     <div id="fp-edit">${ui.f ? "" : `<div class="form-card fp-accueil"><h2>📄 Fiches de poste</h2>
       <p class="hint">Choisis un modèle de départ : tout est pré-coché, tu ajustes en cochant / décochant les propositions. L'aperçu reproduit le formulaire RH 05.</p>
+      <div class="fp-import"><div><b>📥 Fiches faites avant l'appli ?</b><span>Sélectionne les PDF (ou Word) du formulaire RH 05 : l'appli les lit et les range ici, modifiables.</span></div><label class="add-btn">📥 Reprendre des fiches existantes<input type="file" accept=".pdf,.docx" multiple hidden data-fp-import></label></div>
+      <p class="hint" style="margin:14px 0 0"><b>Ou crée une nouvelle fiche à partir d'un modèle :</b></p>
       <div class="fp-modeles">${MODELES.map(m => `<button type="button" data-fp-modele="${m.id}"><b>${esc(m.label)}</b><small>${m.missions.length ? `${m.missions.length} missions proposées` : "à remplir soi-même"}</small></button>`).join("")}</div></div>`}</div>
   </div>`;
   renderListe();
+  conteneur.querySelector("[data-fp-import]")?.addEventListener("change", (e) => importer([...e.target.files]));
   conteneur.querySelectorAll("[data-fp-modele]").forEach(b => b.addEventListener("click", () => { ui = { ...ui, id: null, f: ficheDepuisModele(b.dataset.fpModele), modif: true }; render(); }));
   if (ui.f) renderEditeur();
 }
@@ -93,9 +97,9 @@ function renderListe() {
   const q = ui.filtre.toLowerCase();
   const l = fiches.filter(f => !q || `${f.collaborateur} ${f.poste}`.toLowerCase().includes(q)).sort((a, b) => String(a.collaborateur).localeCompare(String(b.collaborateur), "fr"));
   el.innerHTML = `<div class="form-card fp-liste">
-    <div class="fp-liste-tete"><b>${fiches.length} fiche${fiches.length > 1 ? "s" : ""} de poste</b><button type="button" class="nav-btn" data-fp-nouvelle>➕ Nouvelle</button></div>
+    <div class="fp-liste-tete"><b>${fiches.length} fiche${fiches.length > 1 ? "s" : ""} de poste</b><button type="button" class="nav-btn" data-fp-nouvelle title="Nouvelle fiche ou reprise de fiches existantes">➕ Nouvelle</button></div>
     ${fiches.length > 4 ? `<input class="fp-cherche" placeholder="🔎 Chercher…" value="${esc(ui.filtre)}">` : ""}
-    ${l.map(f => `<button type="button" class="fp-item ${ui.id === f.id ? "actif" : ""}" data-fp-ouvrir="${f.id}"><b>${esc(f.collaborateur || "Sans nom")}</b><span>${esc(f.poste || "")}</span><small>${f.etablieLe ? `établie le ${fr(f.etablieLe)}` : ""}${f.spLe ? " · ☁️" : ""}</small></button>`).join("") || `<p class="hint">Aucune fiche enregistrée pour l'instant.</p>`}
+    ${l.map(f => `<button type="button" class="fp-item ${ui.id === f.id ? "actif" : ""}" data-fp-ouvrir="${f.id}"><b>${esc(f.collaborateur || "Sans nom")}</b><span>${esc(f.poste || "")}</span><small>${f.etablieLe ? `établie le ${fr(f.etablieLe)}` : ""}${f.spLe ? " · ☁️" : ""}${f.importee ? " · 📥 reprise" : ""}</small></button>`).join("") || `<p class="hint">Aucune fiche enregistrée pour l'instant.</p>`}
   </div>`;
   el.querySelector("[data-fp-nouvelle]")?.addEventListener("click", () => { if (ui.modif && !confirm("Abandonner les modifications en cours ?")) return; ui = { ...ui, id: null, f: null, modif: false }; render(); });
   el.querySelector(".fp-cherche")?.addEventListener("input", (e) => { ui.filtre = e.target.value; renderListe(); const i = conteneur.querySelector(".fp-cherche"); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); });
@@ -277,4 +281,21 @@ async function envoyerSP() {
     await setDoc(doc(db, COL, id), { spLe: Date.now(), spFichier: nom }, { merge: true });
     etat(`☁️ Envoyée : ExportsDonnees › Fiches de poste › ${nom}`);
   } catch (e) { etat("❌ SharePoint : " + (e.message || e)); }
+}
+
+async function importer(files) {
+  if (!files.length) return;
+  const zone = conteneur.querySelector(".fp-import span"), ok = [], ko = [];
+  for (const [i, file] of files.entries()) {
+    if (zone) zone.textContent = `⏳ Lecture ${i + 1}/${files.length} : ${file.name}…`;
+    try {
+      const f = await lireFicheExistante(file);
+      if (!f.collaborateur) throw new Error("nom du collaborateur introuvable (est-ce bien une fiche RH 05 ?)");
+      const r = await addDoc(collection(db, COL), { ...f, creeLe: serverTimestamp(), majLe: serverTimestamp(), majPar: user?.nom || user?.email || "" });
+      ok.push({ id: r.id, f });
+    } catch (e) { console.error(e); ko.push(`${file.name} : ${e.message || e}`); }
+  }
+  if (ko.length) alert(`⚠️ ${ko.length} fichier(s) non repris :\n\n${ko.join("\n")}`);
+  if (ok.length) { window.toast?.(`📥 ${ok.length} fiche(s) de poste reprise(s). Vérifie-les, tout est modifiable.`, "success"); ui = { ...ui, id: ok[0].id, f: JSON.parse(JSON.stringify(ok[0].f)), modif: false }; render(); }
+  else render();
 }
