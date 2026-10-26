@@ -10,6 +10,7 @@ import { archiverSemainesTerminees, DOSSIER_DEPT, DOSSIER_INTERNE } from "./trac
 
 let state = { fiches: [], sites: [], agents: [], photosSemaine: [], photosOuverte: [] };
 let unsubOuverte = null, ouverteSuivie = null;
+const COUL_SITES = ["#2f6fd6", "#8a4fd1", "#d9772b", "#139c8f", "#c9407a", "#5a7d1a"];
 const lundiCourant = () => { const t = new Date(); return dateKey(addDays(t, -((t.getDay() + 6) % 7))); };
 const photosDe = (f) => photosFusion(f, f.id === ouverteSuivie ? state.photosOuverte : state.photosSemaine.filter(p => p.ficheId === f.id));
 let ui = { filterDispositif: "Tous", filterSite: "Tous", filterAgent: "Tous", openId: null, vue: "fiches" };
@@ -229,9 +230,9 @@ function render() {
             <span class="tr-g-barre"><i class="${pct >= 90 ? "vert" : pct >= 70 ? "orange" : "rouge"}" style="width:${pct}%"></i></span>
             <span class="tr-g-bas"><span>${pct} % · ${done}/${total}</span>${f.archiveSP ? `<span title="Archivée sur SharePoint">☁️</span>` : ""}${(photosDe(f) || []).length ? `<span>📷 ${photosDe(f).length}</span>` : ""}</span></button>`;
         };
-        return `<div class="table-wrap tr-g-wrap"><table class="tr-g"><thead><tr><th>Semaine</th>${cols.map(c => `<th title="${esc(c.name)}">${esc(court(c.name))}</th>`).join("")}</tr></thead><tbody>
+        return `<div class="table-wrap tr-g-wrap"><table class="tr-g"><thead><tr><th>Semaine</th>${cols.map((c, i) => `<th title="${esc(c.name)}" style="--c:${COUL_SITES[i % COUL_SITES.length]}"><span class="tr-g-site">🏠 ${esc(court(c.name))}</span></th>`).join("")}</tr></thead><tbody>
           ${semaines.map(w => `<tr class="${w === lundi ? "courante" : ""}"><th><b>${fmtShort(new Date(w + "T00:00:00"))}</b><small>${w === lundi ? "cette semaine" : `→ ${fmtShort(addDays(new Date(w + "T00:00:00"), 4))}`}</small></th>
-            ${cols.map(c => { const l = filtered.filter(f => f.weekStart === w && f.siteId === c.id); return `<td>${l.length ? l.map(f => carte(f, state.sites.find(s => s.id === f.siteId))).join("") : `<span class="tr-g-rien">—</span>`}</td>`; }).join("")}</tr>`).join("")}
+            ${cols.map((c, i) => { const l = filtered.filter(f => f.weekStart === w && f.siteId === c.id); return `<td style="--c:${COUL_SITES[i % COUL_SITES.length]}">${l.length ? l.map(f => carte(f, state.sites.find(s => s.id === f.siteId))).join("") : `<span class="tr-g-rien">—</span>`}</td>`; }).join("")}</tr>`).join("")}
         </tbody></table></div><p class="hint tr-g-leg"><i class="valid"></i> Validée <i class="averif"></i> À vérifier <i class="cours"></i> En cours · clique sur une fiche pour l'ouvrir</p>`;
       })()}
       `}
