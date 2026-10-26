@@ -1099,20 +1099,27 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       // entreprise) : on demande qui l'a réellement faite.
       const attribuee = l.attribueA && l.attribueA !== uid ? (l.attribueANom || "") : "";
       const entreprise = l.attribueA === "ext" ? l.attribueANom : (/^externe/i.test(val(l, "categorieIntervenant")) ? val(l, "intervenant") : "");
-      if (champs.statut === "Réalisé" && !perms.isEditor && attribuee) {
-        const moi = await (window.confirmDialog || ((m) => Promise.resolve(confirm(m))))(`Cette demande était attribuée à ${attribuee}.\n\nC'est toi qui l'as faite ?`, { titre: "👷 Qui a fait l'intervention ?", texteValider: "Oui, c'est moi", texteAnnuler: `Non, c'est ${attribuee}` });
-        if (moi) Object.assign(champs, { intervenant: utilisateur, categorieIntervenant: "Interne SG" });
-      }
-      if (champs.statut === "Réalisé" && perms.isEditor && entreprise) {
+      const pour = entreprise || attribuee;
+      if (champs.statut === "Réalisé" && pour) {
+        // Tout le monde (techniciens, superviseurs) : petite vérif sympa.
         const sel = c.querySelector('[data-dps-champ="declarePar"]'), choix = String(br.declarePar ?? sel?.value ?? "");
-        if (!choix || choix === "Entreprise extérieure") {
-          const ent = await (window.confirmDialog || ((m) => Promise.resolve(confirm(m))))(`Cette demande était confiée à ${entreprise}.\n\nEst-ce bien ${entreprise} qui l'a traitée ?`, { titre: "🏢 Qui a fait l'intervention ?", texteValider: `Oui, ${entreprise}`, texteAnnuler: "Non, c'est moi" });
-          if (ent) { br.declarePar = "Entreprise extérieure"; champs.intervenant = champs.intervenant || entreprise; }
-          else Object.assign(champs, { declarePar: utilisateur, intervenant: utilisateur, categorieIntervenant: "Interne SG", attribueA: uid || "", attribueANom: utilisateur, attribueAvant: entreprise }), (br.declarePar = utilisateur);
+        // Superviseur qui a déjà choisi explicitement un autre technicien : pas de question.
+        const choixExplicite = perms.isEditor && choix && choix !== "Entreprise extérieure" && sa(choix) !== sa(attribuee) && sa(choix) !== sa(utilisateur);
+        if (choixExplicite) Object.assign(champs, { attribueAvant: pour, intervenant: choix });
+        else {
+          const dlg = window.confirmDialog || ((m) => Promise.resolve(confirm(m)));
+          const moi = entreprise
+            ? !(await dlg(`Tiens, cette demande était confiée à ${entreprise} !\n\nC'est eux qui s'en sont occupés ?`, { titre: "🙌 Petite vérif avant de clôturer", texteValider: `🏢 Oui, c'est ${entreprise}`, texteAnnuler: "💪 Non, c'est moi" }))
+            : await dlg(`Tiens, cette demande était pour ${attribuee} !\n\nC'est toi qui t'en es occupé ?`, { titre: "🙌 Petite vérif avant de clôturer", texteValider: "💪 Oui, c'est moi", texteAnnuler: `Non, c'est bien ${attribuee}` });
+          if (moi) {
+            Object.assign(champs, { intervenant: utilisateur, categorieIntervenant: "Interne SG", attribueAvant: pour, clotureParAutre: true });
+            if (perms.isEditor) { Object.assign(champs, { declarePar: utilisateur, attribueA: uid || "", attribueANom: utilisateur }); br.declarePar = utilisateur; }
+            window.toast?.(`Bien joué ${String(utilisateur || "").split(" ")[0]} ! C'est ton nom qui est noté sur l'intervention 👍`, "success");
+          } else if (perms.isEditor) {
+            if (entreprise) { br.declarePar = "Entreprise extérieure"; champs.intervenant = champs.intervenant || entreprise; }
+            else if (!choix) br.declarePar = attribuee;
+          }
         }
-      } else if (champs.statut === "Réalisé" && perms.isEditor && attribuee) {
-        const sel = c.querySelector('[data-dps-champ="declarePar"]'), choix = String(br.declarePar ?? sel?.value ?? "");
-        if (choix && sa(choix) !== sa(attribuee) && choix !== "Entreprise extérieure") Object.assign(champs, { attribueAvant: attribuee, intervenant: choix });
       }
       if (champs.statut === "Réalisé" && perms.isEditor) {
         // Le superviseur indique quel technicien a réalisé l'intervention.
