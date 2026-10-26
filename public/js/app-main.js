@@ -438,9 +438,9 @@
         ],
       },
       {
-        id: "fiches-poste", label: "Fiches de poste", icon: "📄", desc: "Rédiger les fiches de poste (formulaire RH 05) en cochant les missions et compétences proposées, PDF et SharePoint",
+        id: "fiches-poste", label: "Fiches de poste", icon: "📄", desc: "Rédiger les fiches de poste (formulaire RH 05, réservé au responsable) en cochant les missions et compétences proposées, PDF et SharePoint",
         subtabs: [
-          { id: "fiches", label: "Fiches de poste", icon: "📄", roles: GESTION, mount: mountFichesPoste },
+          { id: "fiches", label: "Fiches de poste", icon: "📄", roles: SUPER_ADMIN_ONLY, mount: mountFichesPoste },
         ],
       },
       {

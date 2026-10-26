@@ -242,7 +242,7 @@ service cloud.firestore {
     // L'agent gère ses propres passages et photos ; un éditeur peut tout gérer.
     // ---- Pense-bête de l'écran atelier (télé) ----
     match /fiches-poste/{docId} {
-      allow read, write: if isEditor();
+      allow read, write: if isSuperAdmin();
     }
     match /atelier-memos/{docId} {
       allow read: if isSignedIn();
