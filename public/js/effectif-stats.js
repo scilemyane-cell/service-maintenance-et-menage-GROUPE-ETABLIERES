@@ -30,27 +30,31 @@ export function feriesAnnee(y) {
 export function effectifEtClotures(data, p, demandesToutes) {
   // Techniciens = niveau 2 de l'astreinte, hors personnes sorties du roulement
   // (ex. agent espaces verts), à partir de leur date de début.
-  const techs = (data.techniciens || []).filter(t => (data.astreinteActive || {})[t] !== false);
+  const defaut = (data.techniciens || []).filter(t => (data.astreinteActive || {})[t] !== false);
+  const techs = Array.isArray(data.techniciensChoisis) && data.techniciensChoisis.length ? data.techniciensChoisis : defaut;
+  const candidats = [...new Set([...(data.techniciens || []), ...(data.n1 || []), ...techs])];
   if (!techs.length) return null;
   const feries = {}; const estFerie = (iso) => (feries[iso.slice(0, 4)] || (feries[iso.slice(0, 4)] = feriesAnnee(+iso.slice(0, 4)))).has(iso);
-  const absent = (t, iso) => (data.absences || []).some(a => a.person === t && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || ""));
+  // Nom de l'absence comparé sans accents ni majuscules (« kevin » = « Kevin »).
+  const memePers = (a, t) => { const x = norm(a), y = norm(t); return x === y || (x && y && (x.split(/\s+/)[0] === y || y.split(/\s+/)[0] === x)); };
+  const absent = (t, iso) => (data.absences || []).some(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || ""));
   const present = (t, iso) => (!data.datesDebut?.[t] || iso >= data.datesDebut[t]) && (!data.datesFin?.[t] || iso <= data.datesFin[t]) && !absent(t, iso);
   const nomCle = (x) => norm(x).split(/\s+/)[0];
   const quiA = (d) => { const n = norm(d.intervenant || d.declarePar || d.attribueANom || ""); return techs.find(t => n && (n === norm(t) || n.startsWith(nomCle(t) + " ") || n === nomCle(t) || norm(t).startsWith(n))) || null; };
-  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0 }]));
+  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0 }]));
   const mois = p.mois.map(m => {
     const [yy, mm] = m.cle.split("-").map(Number), fin = new Date(yy, mm, 0), limite = p.aujourdhui;
-    let ouvres = 0, joursTech = 0, minPres = Infinity, maxPres = 0; const joursT = {}, closT = {};
+    let ouvres = 0, joursTech = 0, minPres = Infinity, maxPres = 0; const joursT = {}, closT = {}, absT = {};
     for (let d = new Date(yy, mm - 1, 1); d <= fin; d.setDate(d.getDate() + 1)) {
       const iso = isoLocal(d); if (iso > limite) break;
       if (d.getDay() === 0 || d.getDay() === 6 || estFerie(iso)) continue;
       ouvres++; let n = 0;
-      techs.forEach(t => { if (present(t, iso)) { n++; joursT[t] = (joursT[t] || 0) + 1; } });
+      techs.forEach(t => { if (present(t, iso)) { n++; joursT[t] = (joursT[t] || 0) + 1; } else { absT[t] = (absT[t] || 0) + 1; } });
       joursTech += n; minPres = Math.min(minPres, n); maxPres = Math.max(maxPres, n);
     }
     const clos = demandesToutes.filter(d => d.statut === "Réalisé" && d._dateInterv && d._dateInterv.startsWith(m.cle) && d._dateInterv <= limite);
     clos.forEach(d => { const t = quiA(d); if (t) closT[t] = (closT[t] || 0) + 1; });
-    return { ...m, joursT, closT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
+    return { ...m, joursT, closT, absT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
       parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
   }).filter(m => m.ouvres);
   // On démarre au premier mois où des clôtures sont enregistrées (avant, pas de données : ça fausserait les moyennes).
@@ -58,13 +62,13 @@ export function effectifEtClotures(data, p, demandesToutes) {
   if (premier > 0) mois.splice(0, premier);
   if (premier < 0) mois.length = 0;
   if (!mois.length) return null;
-  mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; }));
+  mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; parTech[t].abs += m.absT[t] || 0; }));
   const tot = mois.reduce((a, m) => ({ ouvres: a.ouvres + m.ouvres, joursTech: a.joursTech + m.joursTech, clos: a.clos + m.clos }), { ouvres: 0, joursTech: 0, clos: 0 });
   const ratio = tot.joursTech ? tot.clos / tot.joursTech : null;
   // Comparaison : mois avec l'équipe au complet (≥ 90 % de présence) vs mois en effectif réduit.
   const complet = mois.filter(m => m.moyen >= techs.length * 0.9 && m.joursTech), reduit = mois.filter(m => m.moyen < techs.length * 0.9 && m.joursTech);
   const r = (l) => { const j = l.reduce((s, m) => s + m.joursTech, 0); return j ? l.reduce((s, m) => s + m.clos, 0) / j : null; };
-  return { techs, mois, tot, ratio, moyenPeriode: tot.ouvres ? tot.joursTech / tot.ouvres : 0,
+  return { techs, candidats, defaut, choixPerso: techs !== defaut, mois, tot, ratio, moyenPeriode: tot.ouvres ? tot.joursTech / tot.ouvres : 0,
     ratioComplet: r(complet), ratioReduit: r(reduit), nbComplet: complet.length, nbReduit: reduit.length,
     parTech: Object.entries(parTech).map(([t, o]) => ({ t, ...o, ratio: o.jours ? o.clos / o.jours : null })).sort((a, b) => b.clos - a.clos),
     nonAttribuees: tot.clos - Object.values(parTech).reduce((s, o) => s + o.clos, 0) };
@@ -104,7 +108,12 @@ export function effectifHTML(e) {
   const ecart = e.ratioComplet && e.ratioReduit ? Math.round((e.ratioReduit / e.ratioComplet - 1) * 100) : null;
   return `<div class="eff">
     <h3 class="eff-h">👷 Interventions clôturées et techniciens présents</h3>
-    <p class="eff-sous">Demandes d'intervention passées en « Réalisé », mises en regard du nombre de techniciens réellement présents (jours ouvrés, hors week-ends et fériés, congés / RTT / arrêts déduits). Techniciens : ${e.techs.map(esc).join(", ")}.</p>
+    <p class="eff-sous">Demandes d'intervention passées en « Réalisé », mises en regard du nombre de techniciens réellement présents (jours ouvrés, hors week-ends et fériés, congés / RTT / arrêts saisis dans Astreinte › Absences déduits).</p>
+    <details class="eff-choix"><summary>👷 Techniciens comptés : <b>${e.techs.map(esc).join(", ")}</b> — modifier</summary>
+      <p class="eff-sous" style="margin:6px 0">Coche les personnes qui font les interventions. Le choix est enregistré pour tout le monde.</p>
+      <div class="eff-choix-l">${e.candidats.map(t => `<label><input type="checkbox" data-eff-tech="${esc(t)}" ${e.techs.includes(t) ? "checked" : ""}> ${esc(t)}</label>`).join("")}</div>
+      <div class="eff-ajout"><input data-eff-ajout placeholder="Autre technicien (nom tel qu'il apparaît dans les absences)"><button type="button" class="nav-btn" data-eff-ajout-btn>Ajouter</button>${e.choixPerso ? `<button type="button" class="nav-btn" data-eff-defaut>↺ Liste par défaut</button>` : ""}</div>
+    </details>
     <div class="stat-eff-kpis">
       <div><b>${f1(e.moyenPeriode)}</b><span>technicien(s) présent(s) en moyenne / jour</span><small>sur ${e.techs.length} dans l'équipe</small></div>
       <div><b>${fmtNb(e.tot.clos)}</b><span>interventions clôturées</span><small>${fmtNb(e.tot.joursTech)} jours de présence technicien</small></div>
@@ -117,7 +126,7 @@ export function effectifHTML(e) {
       e.mois.map(m => [esc(m.label), m.ouvres, `${f1(m.moyen)} <small>(${m.min}–${m.max})</small>`, m.joursTech, m.clos, f2(m.parJourTech), f1(m.parTechPresent)]),
       ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
     <h4 class="eff-h4">Par technicien</h4>
-    ${tab(["Technicien", "Jours présents", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.clos, f2(x.ratio)]))}
+    ${tab(["Technicien", "Jours présents", "Jours d'absence", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.clos, f2(x.ratio)]))}
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
   </div>`;
 }
@@ -171,4 +180,19 @@ export function heuresPerduesHTML(r) {
     ${r.parTech.length ? `<h4 class="eff-h4">Par technicien</h4>${tab(["Technicien", "Reprises décalées", "Heures perdues"], r.parTech.map(([t, o]) => [esc(t), o.nb, fmtH(o.heures)]))}` : ""}
     ${r.tous.length ? `<details class="hp-det"><summary>Voir le détail (${r.tous.length})</summary>${tab(["Jour de reprise", "Technicien", "Fin d'intervention", "Reprise possible", "Perdu"], r.tous.map(x => [new Date(x.jour + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }), esc(x.tech), `${x.fin.toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}${x.site ? ` <small>${esc(x.site)}</small>` : ""}`, x.repos.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), fmtH(x.heures)]))}</details>` : ""}
   </div>`;
+}
+
+// Enregistre le choix des techniciens comptés (config/stats-effectif).
+export function brancherEffectif(container, apres) {
+  const enreg = async (liste) => {
+    const { db } = await import("./firebase-init.js"); const { doc, setDoc } = await import("./firestore-compte.js");
+    try { await setDoc(doc(db, "config", "stats-effectif"), { techniciens: liste, majLe: Date.now() }); apres(liste); }
+    catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
+  };
+  const cochés = () => [...container.querySelectorAll("[data-eff-tech]")].filter(c => c.checked).map(c => c.dataset.effTech);
+  container.querySelectorAll("[data-eff-tech]").forEach(c => c.addEventListener("change", () => { const l = cochés(); if (!l.length) { c.checked = true; return; } enreg(l); }));
+  const add = () => { const i = container.querySelector("[data-eff-ajout]"), v = i?.value.trim(); if (v) enreg([...cochés(), v]); };
+  container.querySelector("[data-eff-ajout-btn]")?.addEventListener("click", add);
+  container.querySelector("[data-eff-ajout]")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+  container.querySelector("[data-eff-defaut]")?.addEventListener("click", () => enreg([]));
 }

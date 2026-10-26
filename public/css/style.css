@@ -4002,3 +4002,7 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .hp-mois span{flex:1;width:70%;max-width:34px;display:flex;align-items:flex-end;background:var(--panel-alt);border-radius:5px;overflow:hidden}
 .hp-mois i{display:block;width:100%;background:#8B7CF0;border-radius:5px 5px 0 0}
 .hp-det summary{cursor:pointer;font-weight:600;font-size:13px;margin-top:10px;color:var(--teal)}
+.eff-choix{border:1px dashed var(--border);border-radius:10px;padding:8px 12px;margin-bottom:12px}
+.eff-choix summary{cursor:pointer;font-size:13px}
+.eff-choix-l{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0}.eff-choix-l label{display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer}
+.eff-ajout{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.eff-ajout input{flex:1;min-width:200px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
