@@ -27,10 +27,14 @@ export function feriesAnnee(y) {
   const plus = (n) => { const x = new Date(paques); x.setDate(x.getDate() + n); return isoLocal(x); };
   return new Set([`${y}-01-01`, plus(1), `${y}-05-01`, `${y}-05-08`, plus(39), plus(50), `${y}-07-14`, `${y}-08-15`, `${y}-11-01`, `${y}-11-11`, `${y}-12-25`]);
 }
+export const EQUIPE_DEMANDES = ["Anthony", "Tony", "Yann", "Kévin", "Ronald", "Gaël", "Lionel"];
 export function effectifEtClotures(data, p, demandesToutes) {
   // Techniciens = niveau 2 de l'astreinte, hors personnes sorties du roulement
   // (ex. agent espaces verts), à partir de leur date de début.
-  const defaut = (data.techniciens || []).filter(t => (data.astreinteActive || {})[t] !== false);
+  // Équipe qui traite les demandes (choix de Valentin) : techniciens, agent
+  // espaces verts et coordinateur. Rapprochés des noms de l'astreinte.
+  const connus = [...new Set([...(data.techniciens || []), ...(data.n1 || [])])];
+  const defaut = EQUIPE_DEMANDES.map(n => connus.find(c => norm(c) === norm(n) || norm(c).split(/\s+/)[0] === norm(n)) || n);
   const techs = Array.isArray(data.techniciensChoisis) && data.techniciensChoisis.length ? data.techniciensChoisis : defaut;
   const candidats = [...new Set([...(data.techniciens || []), ...(data.n1 || []), ...techs])];
   if (!techs.length) return null;
