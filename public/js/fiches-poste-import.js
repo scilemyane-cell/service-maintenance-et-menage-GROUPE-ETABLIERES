@@ -50,7 +50,7 @@ async function lignesDOCX(buf) {
     });
     t.remove();
   });
-  const lignes = [...d.querySelectorAll("p, li, h1, h2, h3")].map(p => ({ t: nettoie(p.textContent), niveau: 0 })).filter(l => l.t);
+  const lignes = [...d.querySelectorAll("p, li, h1, h2, h3")].filter(p => !p.closest("li") || p.tagName === "LI").map(p => ({ t: (p.tagName === "LI" ? "- " : "") + nettoie(p.textContent), niveau: 0 })).filter(l => l.t && l.t !== "- ");
   return { lignes, table };
 }
 

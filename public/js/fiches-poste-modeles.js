@@ -54,6 +54,16 @@ export const MISSIONS = [
     { id: "t-outillage", texte: "Gérer l'outillage, le véhicule et le stock de pièces.", niveau: 1 },
     { id: "t-edl", texte: "Participer aux états des lieux des logements.", niveau: 2 },
   ] },
+  { theme: "🗂️ Administratif, achats & suivi", liste: [
+    { id: "a-achats", texte: "Suivi et traitement des demandes d'achat : demande de devis, validation de devis, transmission et traitement de la facture.", niveau: 2 },
+    { id: "a-presta", texte: "Coordination avec les prestataires et fournisseurs : demande de devis, prise de rendez-vous pour intervention, validation.", niveau: 1 },
+    { id: "a-registre", texte: "Suivi du registre de sécurité : archivage des rapports, demande de devis, levée de réserve, passage de commande, prise de rendez-vous pour intervention.", niveau: 2 },
+    { id: "a-classement", texte: "Classement, numérisation et mise à jour des dossiers techniques et documentaires des sites.", niveau: 1 },
+    { id: "a-plannings", texte: "Support à l'organisation des plannings d'intervention et suivi des tableaux de bord du service.", niveau: 1 },
+    { id: "a-courant", texte: "Gestion des tâches administratives courantes du service : courriers, classement, saisie et mise à jour des tableaux de suivi.", niveau: 1 },
+    { id: "a-contrats", texte: "Suivi administratif des contrats de maintenance et des contrôles réglementaires (échéances, renouvellements).", niveau: 2 },
+    { id: "a-accueil", texte: "Accueil téléphonique du service, enregistrement des demandes d'intervention et information des demandeurs.", niveau: 1 },
+  ] },
   { theme: "📋 Organisation & encadrement", liste: [
     { id: "o-planif", texte: "Organiser, planifier, suivre le travail de maintenance", niveau: 2, sous: [
       "Elaborer le planning de l'équipe maintenance pour permettre le bon suivi d'une maintenance préventive et corrective des différents équipements, matériels et bâtiments, en gérant les priorités, la sécurité et les contraintes des sites.",
@@ -93,6 +103,9 @@ export const SAVOIR_FAIRE = [
   "Gestion des problématiques, facilitateur dans la résolution.",
   "Connaissance de la réglementation des établissements recevant du public (ERP).",
   "Gestion d'un budget et suivi de prestataires.",
+  "Maîtrise des outils bureautiques (Excel, Word, messagerie) et des logiciels de gestion de maintenance.",
+  "Capacité à rédiger et suivre des documents administratifs (bons de commande, courriers, tableaux de suivi).",
+  "Connaissance des procédures de gestion de contrats et de la relation fournisseurs.",
 ];
 export const SAVOIR_ETRE = [
   "Travailler en équipe",
@@ -127,6 +140,10 @@ export const MODELES = [
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, le technicien de maintenance assure la maintenance préventive et corrective des bâtiments, des équipements et des logements des différents sites du groupe. Il traite les demandes d'intervention, réalise les petits travaux d'aménagement, participe à l'astreinte technique et contribue à la sécurité et au confort des usagers.",
     missions: ["t-interv", "t-demandes", "t-compteurs", "t-astreinte", "t-securite", "t-travaux", "t-entreprises", "t-outillage"],
     sf: [5, 6, 7, 8, 9, 10, 14], se: [0, 1, 2, 3, 4], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
+  { id: "assistant", poste: "Assistant(e) Maintenance et Entretien", label: "Assistant(e) maintenance et entretien",
+    principale: "Sous la responsabilité du Responsable Maintenance et Entretien, l'assistant(e) maintenance et entretien assure le support administratif et organisationnel du service : suivi des demandes d'intervention, coordination avec les prestataires et fournisseurs, gestion des commandes et des factures, ainsi que le suivi administratif des dossiers réglementaires et des contrats. Son activité contribue au bon fonctionnement et à la fluidité de l'activité du service maintenance.",
+    missions: ["a-achats", "a-presta", "a-registre", "a-classement", "a-plannings", "a-courant"],
+    sf: [17, 18, 19, 10, 13, 14], se: [0, 1, 2, 3, 5], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
   { id: "coordinateur", poste: "Coordinateur maintenance", label: "Coordinateur maintenance",
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, le coordinateur maintenance organise et répartit l'activité quotidienne des techniciens, suit le traitement des demandes d'intervention et participe aux interventions techniques. Il co-organise l'astreinte et assure le lien avec les entreprises extérieures.",
     missions: ["o-coord", "t-demandes", "t-interv", "o-astreinte", "t-entreprises", "t-securite"],
