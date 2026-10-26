@@ -710,7 +710,7 @@ function renderHistoriqueHTML(historique, compteur) {
             const ecarts = historique[i + 1] ? calculerEcarts(r.valeurs, historique[i + 1].valeurs) : null;
             return `
             <tr>
-              <td>${formatDate(r.createdAt)}${r.corrige ? ` <span title="Corrigé le ${esc(new Date(r.corrige.le).toLocaleString("fr-FR"))} par ${esc(r.corrige.par || "")} — avant : ${esc(Object.values(r.corrige.avant?.valeurs || {}).join(" · "))}" style="color:#1a73e8;font-size:11px">✏️ corrigé</span>` : ""}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}</td>
+              <td>${formatDate(r.createdAt)}${r.corrige ? ` <span title="Corrigé le ${esc(new Date(r.corrige.le).toLocaleString("fr-FR"))} par ${esc(r.corrige.par || "")} — avant : ${esc(Object.values(r.corrige.avant?.valeurs || {}).join(" · "))}" style="color:#1a73e8;font-size:11px">✏️ corrigé</span>` : ""}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}${r.anomalie?.length && !r.corrige ? ` <span title="${esc(r.anomalie.join(" "))}" style="color:var(--red);font-size:11px;font-weight:700">⚠️ à vérifier</span>` : ""}</td>
               <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
               <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
@@ -1300,12 +1300,18 @@ async function envoyerToutesLesPhotos(compteur, photos) {
 // anormale par rapport à l'historique récent) et demande confirmation à
 // l'utilisateur le cas échéant. Renvoie true si l'enregistrement peut se
 // poursuivre (aucune anomalie, ou l'utilisateur a confirmé malgré tout).
+let derniereAnomalie = [];
 async function confirmerMalgreAnomalies(compteur, valeurs) {
   let historiqueRecent = [];
   try { historiqueRecent = (await listerHistoriqueCompteur(compteur.id)).slice(0, 6); } catch (e) { /* si l'historique n'est pas joignable, on ignore juste la verification statistique */ }
   const anomalies = detecterAnomalies(compteur, valeurs, historiqueRecent);
+  derniereAnomalie = anomalies;
   if (anomalies.length === 0) return true;
-  return confirm(`⚠️ Anomalie détectée sur ce relevé :\n\n${anomalies.join("\n")}\n\nEnregistrer quand même ?`);
+  // Jamais bloquant : un relevé précédent mal saisi ne doit pas empêcher
+  // d'enregistrer le bon. Le relevé est marqué « à vérifier » pour le responsable.
+  const prec = compteur.dernierReleve;
+  return window.confirmDialog(`${anomalies.join("\n\n")}${prec?.at ? `\n\nRelevé précédent : ${new Date(prec.at).toLocaleDateString("fr-FR")}${prec.releveParNom ? ` par ${prec.releveParNom}` : ""}.` : ""}\n\nSi tu es sûr de ton chiffre (le relevé précédent était peut-être faux), valide : le responsable sera prévenu et vérifiera.`,
+    { titre: "⚠️ Ce relevé ne colle pas avec le précédent", texteValider: "✓ Je suis sûr, valider", texteAnnuler: "Corriger ma saisie" });
 }
 
 // Tente d'envoyer les photos puis d'enregistrer le relevé. En cas
@@ -1318,7 +1324,7 @@ async function confirmerMalgreAnomalies(compteur, valeurs) {
 async function finaliserEnregistrementReleve(compteur, valeurs, photos, dateAntidatee, illisibles = {}) {
   try {
     const photosEnvoyees = await envoyerToutesLesPhotos(compteur, photos);
-    await enregistrerReleve(compteur, valeurs, photosEnvoyees, mountedUser, dateAntidatee, illisibles);
+    await enregistrerReleve(compteur, valeurs, photosEnvoyees, mountedUser, dateAntidatee, illisibles, derniereAnomalie);
     return { statut: "envoye" };
   } catch (e) {
     if (!estErreurReseau(e)) throw e;

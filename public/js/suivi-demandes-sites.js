@@ -780,8 +780,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
         ${perms.isEditor && !TRAITE(l.statut) ? (() => {
           // Clôture par un superviseur : qui a réellement fait l'intervention.
-          const parDefaut = val(l, "declarePar") || nomDe(techsDuSite(l.site)[0]) || "";
           const noms = [...new Set([...techs.map(t => t.nom || t.email), utilisateur].filter(Boolean))];
+          // Par défaut : la personne ou l'entreprise à qui la demande était attribuée.
+          const parDefaut = val(l, "declarePar") || (l.attribueA === "ext" ? "Entreprise extérieure" : (l.attribueANom && noms.includes(l.attribueANom) ? l.attribueANom : nomDe(techsDuSite(l.site)[0]))) || "";
           return `<label class="dps-realise-par" ${val(l, "statut") === "Réalisé" ? "" : "hidden"}>Réalisé par<select data-dps-champ="declarePar">
             <option value="">— choisir le technicien —</option>
             ${noms.map(n => `<option value="${esc(n)}" ${n === parDefaut ? "selected" : ""}>${esc(n)}${n === utilisateur ? " (moi)" : ""}</option>`).join("")}
@@ -1094,6 +1095,25 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         }
       }
       if (champs.statut === "Réalisé" && !(champs.dateIntervention || l.dateIntervention)) champs.dateIntervention = aujourdhui();
+      // Clôture d'une demande attribuée à quelqu'un d'autre (technicien ou
+      // entreprise) : on demande qui l'a réellement faite.
+      const attribuee = l.attribueA && l.attribueA !== uid ? (l.attribueANom || "") : "";
+      const entreprise = l.attribueA === "ext" ? l.attribueANom : (/^externe/i.test(val(l, "categorieIntervenant")) ? val(l, "intervenant") : "");
+      if (champs.statut === "Réalisé" && !perms.isEditor && attribuee) {
+        const moi = await (window.confirmDialog || ((m) => Promise.resolve(confirm(m))))(`Cette demande était attribuée à ${attribuee}.\n\nC'est toi qui l'as faite ?`, { titre: "👷 Qui a fait l'intervention ?", texteValider: "Oui, c'est moi", texteAnnuler: `Non, c'est ${attribuee}` });
+        if (moi) Object.assign(champs, { intervenant: utilisateur, categorieIntervenant: "Interne SG" });
+      }
+      if (champs.statut === "Réalisé" && perms.isEditor && entreprise) {
+        const sel = c.querySelector('[data-dps-champ="declarePar"]'), choix = String(br.declarePar ?? sel?.value ?? "");
+        if (!choix || choix === "Entreprise extérieure") {
+          const ent = await (window.confirmDialog || ((m) => Promise.resolve(confirm(m))))(`Cette demande était confiée à ${entreprise}.\n\nEst-ce bien ${entreprise} qui l'a traitée ?`, { titre: "🏢 Qui a fait l'intervention ?", texteValider: `Oui, ${entreprise}`, texteAnnuler: "Non, c'est moi" });
+          if (ent) { br.declarePar = "Entreprise extérieure"; champs.intervenant = champs.intervenant || entreprise; }
+          else Object.assign(champs, { declarePar: utilisateur, intervenant: utilisateur, categorieIntervenant: "Interne SG", attribueA: uid || "", attribueANom: utilisateur, attribueAvant: entreprise }), (br.declarePar = utilisateur);
+        }
+      } else if (champs.statut === "Réalisé" && perms.isEditor && attribuee) {
+        const sel = c.querySelector('[data-dps-champ="declarePar"]'), choix = String(br.declarePar ?? sel?.value ?? "");
+        if (choix && sa(choix) !== sa(attribuee) && choix !== "Entreprise extérieure") Object.assign(champs, { attribueAvant: attribuee, intervenant: choix });
+      }
       if (champs.statut === "Réalisé" && perms.isEditor) {
         // Le superviseur indique quel technicien a réalisé l'intervention.
         const sel = c.querySelector('[data-dps-champ="declarePar"]');

@@ -291,7 +291,7 @@ export async function getCompteurUnique(id) {
 // saisir un relevé à une date passée (ex. oublié la semaine dernière) —
 // réservé aux éditeurs côté interface ET côté règles Firestore, un
 // technicien ne pouvant enregistrer qu'à la date/heure du moment.
-export async function enregistrerReleve(compteur, valeurs, photos, user, dateAntidatee = null, illisibles = {}) {
+export async function enregistrerReleve(compteur, valeurs, photos, user, dateAntidatee = null, illisibles = {}, anomalie = []) {
   const at = dateAntidatee || Date.now();
   // majLeMs : un relevé ANTIDATÉ (createdAt dans le passé) doit quand même
   // arriver dans la copie locale des autres appareils (stats, schéma).
@@ -309,8 +309,9 @@ export async function enregistrerReleve(compteur, valeurs, photos, user, dateAnt
     releveParNom: user?.nom || user?.email || "Inconnu",
     createdAt: at,
     saisiHorsDate: !!dateAntidatee,
+    ...(anomalie && anomalie.length ? { anomalie } : {}), // validé malgré l'avertissement → « ⚠️ à vérifier »
   });
-  majLocale(RELEVES_CACHE, ref.id, { compteurId: compteur.id, dossierId: compteur.dossierId, dossierNom: compteur.dossierNom, type: compteur.type, nomCompteur: compteur.nom, valeurs, illisibles, photos, releveParNom: user?.nom || user?.email || "Inconnu", createdAt: at, saisiHorsDate: !!dateAntidatee, majLeMs: Date.now() });
+  majLocale(RELEVES_CACHE, ref.id, { compteurId: compteur.id, dossierId: compteur.dossierId, dossierNom: compteur.dossierNom, type: compteur.type, nomCompteur: compteur.nom, valeurs, illisibles, photos, releveParNom: user?.nom || user?.email || "Inconnu", createdAt: at, saisiHorsDate: !!dateAntidatee, ...(anomalie && anomalie.length ? { anomalie } : {}), majLeMs: Date.now() });
   majLocale("compteurs", compteur.id, { dernierReleve: { at, valeurs, photos, illisibles, releveParNom: user?.nom || user?.email || "Inconnu", majLe: Timestamp.now() } });
   await updateDoc(doc(db, COMPTEURS, compteur.id), {
     dernierReleve: {
