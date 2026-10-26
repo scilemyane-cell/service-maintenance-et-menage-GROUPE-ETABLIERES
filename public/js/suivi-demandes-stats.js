@@ -2,6 +2,22 @@
 // demandes, calculé EN DIRECT depuis les demandes Firestore (plus de photo
 // figée). Graphiques en SVG maison (aucune librairie), avec infobulles.
 import { esc } from "./astreinte-logic.js";
+import { db } from "./firebase-init.js";
+import { doc, getDoc, getDocs, collection } from "./firestore-compte.js";
+import { effectifEtClotures, effectifHTML, douzeMois } from "./effectif-stats.js";
+
+// Techniciens (config/people) et absences : lus une fois, pour l'analyse
+// « interventions clôturées / techniciens présents ».
+let effData = null, effChargement = null;
+function chargerEffectif(rerender) {
+  if (effData || effChargement) return;
+  effChargement = Promise.all([getDoc(doc(db, "config", "people")), getDocs(collection(db, "absences"))]).then(([pp, abs]) => {
+    const p = pp.exists() ? pp.data() : {};
+    const absences = []; abs.forEach(d => absences.push({ id: d.id, ...d.data() }));
+    effData = { techniciens: p.n2 || [], astreinteActive: p.astreinteActive || {}, datesDebut: p.datesDebut || {}, datesFin: p.datesFin || {}, absences };
+    rerender();
+  }).catch(e => { console.error("Effectif techniciens :", e); effData = { techniciens: [], absences: [] }; });
+}
 
 const MOIS_COURTS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const MOIS_LONGS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -438,12 +454,19 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
       </div>
     </section>`; })()}
 
+    ${(() => { if (!effData) return `<section class="dst-carte"><p class="dst-note">⏳ Chargement de l'analyse « interventions clôturées / techniciens présents »…</p></section>`;
+      const auj = new Date(), iso = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : null;
+      const dem = toutes.filter(l => !st.association || l.association === st.association).map(l => ({ ...l, _dateInterv: l.statut === "Réalisé" ? iso(dateTraitement(l)) : null }));
+      const e = effectifEtClotures(effData, { mois: douzeMois(auj), aujourdhui: iso(auj) }, dem);
+      return e ? `<section class="dst-carte">${effectifHTML(e)}</section>` : `<section class="dst-carte"><p class="dst-note">Analyse par technicien indisponible : aucun technicien (N2) dans la liste de l'astreinte.</p></section>`; })()}
+
     ${s.sansDate ? `<p class="dst-note">${fmt(s.sansDate)} demande${s.sansDate > 1 ? "s" : ""} sans date valide ne ${s.sansDate > 1 ? "sont" : "est"} pas comptée${s.sansDate > 1 ? "s" : ""} dans les périodes.</p>` : ""}
     <p class="dst-note dst-print-only">Rapport édité le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })} depuis l'application Service Maintenance &amp; Ménage.</p>
   </div>`;
 
   onToggle();
   const rerender = () => renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau, source, extrait, doublons });
+  chargerEffectif(() => { if (document.contains(container) && container.querySelector("#dst-rapport")) rerender(); });
   container.querySelectorAll("[data-dst-per]").forEach(b => b.addEventListener("click", () => { st.periode = b.dataset.dstPer; rerender(); }));
   container.querySelectorAll("[data-dst-asso]").forEach(b => b.addEventListener("click", () => { st.association = b.dataset.dstAsso; rerender(); }));
   container.querySelectorAll("[data-dst-mois]").forEach(g => g.addEventListener("click", () => { st.moisSel = g.dataset.dstMois; rerender(); }));
