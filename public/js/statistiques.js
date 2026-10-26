@@ -83,8 +83,8 @@ async function collecterDonnees() {
   // Personnes hors roulement d'astreinte (case « Astreinte » décochée,
   // ex. l'agent espaces verts) : leurs interventions sont du travail
   // programmé, pas de l'astreinte.
-  try { const snap = await getDoc(doc(db, "config", "people")); data.astreinteActive = (snap.exists() && snap.data().astreinteActive) || {}; }
-  catch (e) { console.error("Statistiques — config/people:", e); data.astreinteActive = {}; }
+  try { const snap = await getDoc(doc(db, "config", "people")); const pp = snap.exists() ? snap.data() : {}; data.astreinteActive = pp.astreinteActive || {}; data.techniciens = pp.n2 || []; data.datesDebut = pp.datesDebut || {}; data.datesFin = pp.datesFin || {}; }
+  catch (e) { console.error("Statistiques — config/people:", e); data.astreinteActive = {}; data.techniciens = []; data.datesDebut = {}; data.datesFin = {}; }
   try { const snap = await getDoc(doc(db, "config", "menage-sites")); data.sitesMenage = (snap.exists() && snap.data().sites) || []; }
   catch (e) { console.error("Statistiques — sites ménage:", e); data.sitesMenage = []; }
   resultats.forEach((r, idx) => {
@@ -206,6 +206,52 @@ const PALETTE = ["#D9B24C", "#3FB6AC", "#8B7CF0", "#E5533D", "#6FA8DC", "#B5C99A
 // ------------------------------------------------------------------
 // Calculs
 // ------------------------------------------------------------------
+// ---- Techniciens présents vs demandes clôturées ----
+// Jours fériés français (fixes + Pâques, Ascension, Pentecôte).
+function feriesAnnee(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mois = Math.floor((h + l - 7 * m + 114) / 31), jour = ((h + l - 7 * m + 114) % 31) + 1, paques = new Date(y, mois - 1, jour);
+  const plus = (n) => { const x = new Date(paques); x.setDate(x.getDate() + n); return isoLocal(x); };
+  return new Set([`${y}-01-01`, plus(1), `${y}-05-01`, `${y}-05-08`, plus(39), plus(50), `${y}-07-14`, `${y}-08-15`, `${y}-11-01`, `${y}-11-11`, `${y}-12-25`]);
+}
+function effectifEtClotures(data, p, demandesToutes) {
+  // Techniciens = niveau 2 de l'astreinte, hors personnes sorties du roulement
+  // (ex. agent espaces verts), à partir de leur date de début.
+  const techs = (data.techniciens || []).filter(t => (data.astreinteActive || {})[t] !== false);
+  if (!techs.length) return null;
+  const feries = {}; const estFerie = (iso) => (feries[iso.slice(0, 4)] || (feries[iso.slice(0, 4)] = feriesAnnee(+iso.slice(0, 4)))).has(iso);
+  const absent = (t, iso) => (data.absences || []).some(a => a.person === t && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || ""));
+  const present = (t, iso) => (!data.datesDebut?.[t] || iso >= data.datesDebut[t]) && (!data.datesFin?.[t] || iso <= data.datesFin[t]) && !absent(t, iso);
+  const nomCle = (x) => norm(x).split(/\s+/)[0];
+  const quiA = (d) => { const n = norm(d.intervenant || d.declarePar || d.attribueANom || ""); return techs.find(t => n && (n === norm(t) || n.startsWith(nomCle(t) + " ") || n === nomCle(t) || norm(t).startsWith(n))) || null; };
+  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0 }]));
+  const mois = p.mois.map(m => {
+    const [yy, mm] = m.cle.split("-").map(Number), fin = new Date(yy, mm, 0), limite = p.aujourdhui;
+    let ouvres = 0, joursTech = 0, minPres = Infinity, maxPres = 0;
+    for (let d = new Date(yy, mm - 1, 1); d <= fin; d.setDate(d.getDate() + 1)) {
+      const iso = isoLocal(d); if (iso > limite) break;
+      if (d.getDay() === 0 || d.getDay() === 6 || estFerie(iso)) continue;
+      ouvres++; let n = 0;
+      techs.forEach(t => { if (present(t, iso)) { n++; parTech[t].jours++; } });
+      joursTech += n; minPres = Math.min(minPres, n); maxPres = Math.max(maxPres, n);
+    }
+    const clos = demandesToutes.filter(d => d.statut === "Réalisé" && d._dateInterv && d._dateInterv.startsWith(m.cle) && d._dateInterv <= limite);
+    clos.forEach(d => { const t = quiA(d); if (t) parTech[t].clos++; });
+    return { ...m, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
+      parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
+  }).filter(m => m.ouvres);
+  const tot = mois.reduce((a, m) => ({ ouvres: a.ouvres + m.ouvres, joursTech: a.joursTech + m.joursTech, clos: a.clos + m.clos }), { ouvres: 0, joursTech: 0, clos: 0 });
+  const ratio = tot.joursTech ? tot.clos / tot.joursTech : null;
+  // Comparaison : mois avec l'équipe au complet (≥ 90 % de présence) vs mois en effectif réduit.
+  const complet = mois.filter(m => m.moyen >= techs.length * 0.9 && m.joursTech), reduit = mois.filter(m => m.moyen < techs.length * 0.9 && m.joursTech);
+  const r = (l) => { const j = l.reduce((s, m) => s + m.joursTech, 0); return j ? l.reduce((s, m) => s + m.clos, 0) / j : null; };
+  return { techs, mois, tot, ratio, moyenPeriode: tot.ouvres ? tot.joursTech / tot.ouvres : 0,
+    ratioComplet: r(complet), ratioReduit: r(reduit), nbComplet: complet.length, nbReduit: reduit.length,
+    parTech: Object.entries(parTech).map(([t, o]) => ({ t, ...o, ratio: o.jours ? o.clos / o.jours : null })).sort((a, b) => b.clos - a.clos),
+    nonAttribuees: tot.clos - Object.values(parTech).reduce((s, o) => s + o.clos, 0) };
+}
+
 function calculer(data, p) {
   const assocFiltre = filtres.association;
   const okAssoc = v => !assocFiltre || norm(v) === norm(assocFiltre);
@@ -276,6 +322,7 @@ function calculer(data, p) {
   });
   avecDelai.forEach(d => { const n = d.intervenant || "Non renseigné"; (parIntervenant[n] || (parIntervenant[n] = { nb: 0, delais: [] })).delais.push(d._delai); });
   const intervenantsTries = Object.entries(parIntervenant).sort((a, b) => b[1].nb - a[1].nb).slice(0, 10);
+  const effectif = effectifEtClotures(data, p, demandesToutes);
   // Stock en attente (toutes périodes confondues) — ancienneté
   const enAttente = demandesToutes.filter(d => !estTraitee(d) && d._date);
   const tranchesAge = { "< 7 j": 0, "7–30 j": 0, "30–90 j": 0, "> 90 j": 0 };
@@ -392,7 +439,7 @@ function calculer(data, p) {
     interv, intervPrev, heuresTot, heuresPrev, heuresNuit, primesDimanche: primesDimancheReelles || primesDimanche, appelsN1,
     intervParMois, heuresParMois, parType, parAssocInterv, parSiteInterv, parJourSemaine, techTries,
     dem, demPrev, demTraitees, pctTraitees, delaiMoyen, delaiMedian, delaiParUrgence, avecDelai, recuesParMois, realiseesParMois,
-    urgenceTriee, statutTrie, parAssocDem, parSiteDem, parTypeDem, intervenantsTries, enAttente, tranchesAge, attentePlus30, plusAnciennes,
+    urgenceTriee, statutTrie, parAssocDem, parSiteDem, parTypeDem, intervenantsTries, effectif, enAttente, tranchesAge, attentePlus30, plusAnciennes,
     compteurs, relevesPeriode, relevesParMois, consoParType, topConso, compteursEnRetard,
     sousSeuilMaint, sousSeuilMenage, totalEntrees, totalSorties, quotePartTriee, topProduitsTries, commandes, commandesPrev, commandesParMois, commandesParFournisseur,
     previsionnel, montantPropose, montantValide, statutsLabels, parStatutPrev, categoriePrevTriee, anneeCourante,
@@ -499,6 +546,26 @@ function render() {
         ${canvas("stat-chart-demandes-mois", 240)}
         <p class="hint" style="margin:8px 0 0">« Réalisées » = demandes passées au statut Réalisé avec une date d'intervention dans le mois. Le délai n'est calculable que si la date d'intervention est renseignée (${s.avecDelai.length} demande(s) réalisée(s) sur la période l'ont).</p>
       </div>
+
+      ${s.effectif ? (() => { const e = s.effectif, f1 = (x) => x == null ? "—" : fmtNb(x, 1), f2 = (x) => x == null ? "—" : fmtNb(x, 2);
+        const ecart = e.ratioComplet && e.ratioReduit ? Math.round((e.ratioReduit / e.ratioComplet - 1) * 100) : null;
+        return `<div class="form-card">
+        ${titre("👷 Demandes clôturées et techniciens présents", `Techniciens comptés : ${e.techs.map(esc).join(", ")} · jours ouvrés (hors week-ends et fériés), absences (congés, RTT, arrêts) déduites`)}
+        <div class="stat-eff-kpis">
+          <div><b>${f1(e.moyenPeriode)}</b><span>technicien(s) présent(s) en moyenne / jour</span><small>sur ${e.techs.length} dans l'équipe</small></div>
+          <div><b>${fmtNb(e.tot.clos)}</b><span>demandes clôturées</span><small>${fmtNb(e.tot.joursTech)} jours de présence technicien</small></div>
+          <div><b>${f2(e.ratio)}</b><span>clôtures par jour de présence</span><small>≈ ${f1(e.ratio != null ? e.ratio * 5 : null)} par technicien et par semaine</small></div>
+          <div class="${ecart != null && ecart < -10 ? "alerte" : ""}"><b>${ecart == null ? "—" : `${ecart > 0 ? "+" : ""}${ecart} %`}</b><span>effet d'une équipe réduite</span><small>${e.ratioComplet != null ? `complète : ${f2(e.ratioComplet)}/jour (${e.nbComplet} mois)` : "pas de mois au complet"}${e.ratioReduit != null ? ` · réduite : ${f2(e.ratioReduit)}/jour (${e.nbReduit} mois)` : ""}</small></div>
+        </div>
+        ${canvas("stat-chart-effectif", 250)}
+        <p class="hint" style="margin:8px 0 12px">Barres : demandes clôturées dans le mois · courbe : nombre moyen de techniciens présents par jour ouvré. Si les barres baissent quand la courbe baisse, c'est le manque d'effectif qui freine les clôtures ; si elles baissent avec l'équipe au complet, c'est une autre cause (chantiers, astreinte, grosses interventions…).</p>
+        ${tableau(["Mois", "Jours ouvrés", "Techniciens présents / jour", "Jours de présence", "Clôturées", "Par jour de présence", "Par technicien présent"],
+          e.mois.map(m => [esc(m.label), m.ouvres, `${f1(m.moyen)} <small class="hint">(${m.min}–${m.max})</small>`, m.joursTech, m.clos, f2(m.parJourTech), f1(m.parTechPresent)]),
+          ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
+        ${sousTitre("Par technicien")}
+        ${tableau(["Technicien", "Jours présents", "Demandes clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.clos, f2(x.ratio)]))}
+        ${e.nonAttribuees > 0 ? `<p class="hint" style="margin:6px 0 0">${e.nonAttribuees} demande(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
+      </div>`; })() : ""}
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="stats-2col">
         <div class="form-card">${titre("Par urgence")}${s.urgenceTriee.length ? canvas("stat-chart-demandes-urgence") : vide("Aucune demande.")}</div>
@@ -732,6 +799,14 @@ function dessinerGraphiques(s, p) {
       ],
     },
     options: { plugins: { legend: legende("top") }, scales: axes() },
+  });
+  if (s.effectif) creer("stat-chart-effectif", {
+    type: "bar",
+    data: { labels: s.effectif.mois.map(m => m.label), datasets: [
+      { type: "bar", label: "Demandes clôturées", data: s.effectif.mois.map(m => m.clos), backgroundColor: "rgba(63,182,172,.8)", borderRadius: 4, yAxisID: "y" },
+      { type: "line", label: "Techniciens présents / jour", data: s.effectif.mois.map(m => +m.moyen.toFixed(2)), borderColor: "#D9B24C", backgroundColor: "#D9B24C", tension: .3, pointRadius: 4, yAxisID: "y2" },
+    ] },
+    options: { plugins: { legend: legende("top") }, scales: { ...axes(), y2: { position: "right", beginAtZero: true, suggestedMax: s.effectif.techs.length, grid: { display: false }, ticks: { color: "#D9B24C", precision: 0 } } } },
   });
   anneau("stat-chart-demandes-urgence", s.urgenceTriee, s.urgenceTriee.map(([u]) => COULEUR_URGENCE[u] || "#888"));
   const COULEUR_STATUT = { "Réalisé": "#3FB6AC", "En cours / à traiter": "#D9B24C", "Annulé": "#E5533D" };

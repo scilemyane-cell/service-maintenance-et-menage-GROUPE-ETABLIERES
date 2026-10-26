@@ -3983,3 +3983,7 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .sy-j-txt.cr{background:var(--panel-alt);border-radius:9px;padding:8px 10px}
 .fp-app>*,.fp-cols>*,.fp-form,.fp-form .form-card{min-width:0}
 @media (max-width:600px){.fp-plein-ecran{padding:50px 6px 10px}.fp-plein-pages{zoom:calc(100vw / 830px)}}
+.stat-eff-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.stat-eff-kpis>div{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--panel-alt);display:flex;flex-direction:column;gap:2px}
+.stat-eff-kpis b{font-size:24px;color:var(--gold)}.stat-eff-kpis span{font-size:12.5px;font-weight:600}.stat-eff-kpis small{font-size:11px;color:var(--text-dim)}
+.stat-eff-kpis>div.alerte b{color:#E5533D}
