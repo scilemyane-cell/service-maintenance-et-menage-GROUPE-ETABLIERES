@@ -303,7 +303,7 @@ function brancher() {
     v.querySelector("button").onclick = () => v.remove(); v.addEventListener("click", (e) => { if (e.target === v) v.remove(); });
     document.body.appendChild(v);
   });
-  el.querySelector("[data-fp-pdf]")?.addEventListener("click", async () => { etat("⏳ Création du PDF…"); try { const blob = await pdf(ui.f); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomFichier(ui.f); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); etat("✓ PDF téléchargé"); } catch (e) { etat("❌ " + (e.message || e)); } });
+  el.querySelector("[data-fp-pdf]")?.addEventListener("click", async () => { etat("⏳ Création du PDF…"); try { const blob = await pdf(ui.f); await livrerPDF(blob, nomFichier(ui.f)); etat("✓ PDF prêt"); } catch (e) { etat("❌ " + (e.message || e)); } });
   el.querySelector("[data-fp-sp]")?.addEventListener("click", envoyerSP);
   el.querySelector("[data-fp-dup]")?.addEventListener("click", () => { ui = { ...ui, id: null, f: { ...JSON.parse(JSON.stringify(ui.f)), collaborateur: "", etablieLe: new Date().toISOString().slice(0, 10), spLe: null, spFichier: null }, modif: true }; render(); window.toast?.("Copie prête : indique le nom de la personne puis enregistre."); });
   el.querySelector("[data-fp-del]")?.addEventListener("click", async () => { if (!confirm(`Supprimer la fiche de poste de ${ui.f.collaborateur || "cette personne"} ?`)) return; await deleteDoc(doc(db, COL, ui.id)); ui = { ...ui, id: null, f: null, modif: false }; render(); });
@@ -364,4 +364,19 @@ async function importer(files) {
   if (ko.length) alert(`⚠️ ${ko.length} fichier(s) non repris :\n\n${ko.join("\n")}`);
   if (ok.length) { window.toast?.(`📥 ${ok.length} fiche(s) de poste reprise(s). Vérifie-les, tout est modifiable.`, "success"); ui = { ...ui, id: ok[0].id, f: JSON.parse(JSON.stringify(ok[0].f)), modif: false }; render(); }
   else render();
+}
+
+// Sur téléphone, le lien « download » marche mal (iPhone surtout) : on passe
+// par le partage du système (Enregistrer dans Fichiers, Mail, WhatsApp…), sinon
+// on ouvre le PDF dans un nouvel onglet.
+async function livrerPDF(blob, nom) {
+  const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+  const file = new File([blob], nom, { type: "application/pdf" });
+  if (mobile && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nom }); return; } catch (e) { if (e?.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(blob);
+  if (mobile) { const w = window.open(url, "_blank"); if (!w) location.href = url; }
+  else { const a = document.createElement("a"); a.href = url; a.download = nom; document.body.appendChild(a); a.click(); a.remove(); }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

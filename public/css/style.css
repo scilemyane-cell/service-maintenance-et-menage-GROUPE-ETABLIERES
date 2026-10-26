@@ -3877,7 +3877,7 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 
 /* ===== Fiches de poste (RH 05) ===== */
 .fp-app{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
-@media (max-width:900px){.fp-app{grid-template-columns:1fr}}
+@media (max-width:900px){.fp-app{grid-template-columns:minmax(0,1fr)}.fp-liste{position:static}}
 .fp-liste{display:flex;flex-direction:column;gap:6px;position:sticky;top:70px}
 .fp-liste-tete{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
 .fp-liste-tete .add-btn{padding:7px 12px;font-size:13px}
@@ -3891,7 +3891,7 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-modeles button:hover{transform:translateY(-2px)}.fp-modeles small{color:var(--text-dim)}
 .fp-barre{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .fp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.95fr);gap:14px;align-items:start}
-@media (max-width:820px){.fp-cols{grid-template-columns:1fr}}
+@media (max-width:820px){.fp-cols{grid-template-columns:minmax(0,1fr)}.fp-apercu-col{position:static}.fp-apercu{max-height:none}}
 .fp-form{display:flex;flex-direction:column;gap:12px}
 .fp-form .form-card h3{margin:0 0 10px;font-size:15px}
 .fp-g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -3981,3 +3981,5 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .sy-j-txt{margin-top:6px;font-size:13.5px;line-height:1.45}
 .sy-j-txt em{display:block;font-style:normal;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim);margin-bottom:1px}
 .sy-j-txt.cr{background:var(--panel-alt);border-radius:9px;padding:8px 10px}
+.fp-app>*,.fp-cols>*,.fp-form,.fp-form .form-card{min-width:0}
+@media (max-width:600px){.fp-plein-ecran{padding:50px 6px 10px}.fp-plein-pages{zoom:calc(100vw / 830px)}}
