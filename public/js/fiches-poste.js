@@ -173,11 +173,20 @@ function renderEditeur() {
       </div>
     </div>
   </div>
-  <div class="fp-apercu-col"><div class="fp-apercu-titre">👁️ Aperçu du document</div><div class="fp-apercu" id="fp-apercu">${ficheHTML(f)}</div></div>
+  <div class="fp-apercu-col"><div class="fp-apercu-titre">👁️ Aperçu du document <button type="button" class="nav-btn" data-fp-grand>🔍 Agrandir</button></div><div class="fp-apercu" id="fp-apercu">${ficheHTML(f)}</div></div>
   </div>`;
   brancher();
+  ajusterApercu();
 }
 
+// L'aperçu (pages A4 de 794 px) est réduit pour tenir en entier dans la colonne.
+let obsApercu = null;
+function ajusterApercu() {
+  const a = conteneur?.querySelector("#fp-apercu"); if (!a) return;
+  a.style.setProperty("--fpz", String(Math.min(1, Math.max(0.2, (a.clientWidth - 26) / 794))));
+  if (!obsApercu) { obsApercu = new ResizeObserver(() => ajusterApercu()); }
+  obsApercu.disconnect(); obsApercu.observe(a);
+}
 function majApercu() {
   const a = conteneur.querySelector("#fp-apercu"); if (a) a.innerHTML = ficheHTML(ui.f);
   const s = conteneur.querySelector("[data-fp-save]"); if (s) s.textContent = `💾 Enregistrer${ui.modif ? " •" : ""}`;
@@ -218,6 +227,12 @@ function brancher() {
   });
   el.querySelector("[data-fp-sig]")?.addEventListener("change", (e) => changer(f => { f.signatureNonConcerne = e.target.checked; }));
   el.querySelector("[data-fp-save]")?.addEventListener("click", enregistrer);
+  el.querySelector("[data-fp-grand]")?.addEventListener("click", () => {
+    const v = document.createElement("div"); v.className = "fp-plein-ecran";
+    v.innerHTML = `<button type="button" class="nav-btn">✕ Fermer</button><div class="fp-plein-pages">${ficheHTML(ui.f)}</div>`;
+    v.querySelector("button").onclick = () => v.remove(); v.addEventListener("click", (e) => { if (e.target === v) v.remove(); });
+    document.body.appendChild(v);
+  });
   el.querySelector("[data-fp-pdf]")?.addEventListener("click", async () => { etat("⏳ Création du PDF…"); try { const blob = await pdf(ui.f); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomFichier(ui.f); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); etat("✓ PDF téléchargé"); } catch (e) { etat("❌ " + (e.message || e)); } });
   el.querySelector("[data-fp-sp]")?.addEventListener("click", envoyerSP);
   el.querySelector("[data-fp-dup]")?.addEventListener("click", () => { ui = { ...ui, id: null, f: { ...JSON.parse(JSON.stringify(ui.f)), collaborateur: "", etablieLe: new Date().toISOString().slice(0, 10), spLe: null, spFichier: null }, modif: true }; render(); window.toast?.("Copie prête : indique le nom de la personne puis enregistre."); });

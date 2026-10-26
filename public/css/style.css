@@ -3876,7 +3876,7 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .tr-g-fiche.nonenv{border-left-color:#9aa3b2}.tr-g-fiche.nonenv em{background:#eceef2;color:#5a6372}.tr-g-leg i.nonenv{background:#9aa3b2}
 
 /* ===== Fiches de poste (RH 05) ===== */
-.fp-app{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
+.fp-app{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
 @media (max-width:900px){.fp-app{grid-template-columns:1fr}}
 .fp-liste{display:flex;flex-direction:column;gap:6px;position:sticky;top:70px}
 .fp-liste-tete{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
@@ -3890,8 +3890,8 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-modeles button{display:flex;flex-direction:column;gap:4px;text-align:left;padding:14px;border-radius:12px;border:1px solid var(--border);border-left:5px solid #8db53c;background:var(--panel);color:var(--text);font:inherit;cursor:pointer;transition:transform .12s}
 .fp-modeles button:hover{transform:translateY(-2px)}.fp-modeles small{color:var(--text-dim)}
 .fp-barre{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.fp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
-@media (max-width:1300px){.fp-cols{grid-template-columns:1fr}}
+.fp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.95fr);gap:14px;align-items:start}
+@media (max-width:820px){.fp-cols{grid-template-columns:1fr}}
 .fp-form{display:flex;flex-direction:column;gap:12px}
 .fp-form .form-card h3{margin:0 0 10px;font-size:15px}
 .fp-g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -3925,8 +3925,8 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-ajout{display:flex;gap:6px;margin-top:8px}.fp-ajout input{flex:1}
 .fp-apercu-col{position:sticky;top:70px}
 .fp-apercu-titre{font-weight:700;font-size:13px;color:var(--text-dim);margin-bottom:6px}
-.fp-apercu{max-height:calc(100vh - 150px);overflow:auto;background:#cfd4dc;border-radius:12px;padding:12px}
-.fp-apercu .fp-page{margin:0 auto 12px;box-shadow:0 2px 10px rgba(0,0,0,.2);zoom:.72}
+.fp-apercu{max-height:calc(100vh - 90px);overflow-y:auto;overflow-x:hidden;background:#cfd4dc;border-radius:12px;padding:12px}
+.fp-apercu .fp-page{margin:0 auto 12px;box-shadow:0 2px 10px rgba(0,0,0,.2);zoom:var(--fpz,.6)}
 /* Le document lui-même (aperçu + PDF) */
 .fp-doc{font-family:Calibri,"Carlito","Segoe UI",Arial,sans-serif;color:#111;font-size:12.5px;line-height:1.35}
 .fp-page{background:#fff;width:794px;height:1122px;box-sizing:border-box;padding:28px 60px 30px;position:relative;overflow:hidden}
@@ -3957,3 +3957,8 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-l{margin:0 0 8px 14px}.fp-l div{margin:1px 0}
 .fp-liste-tete .nav-btn{padding:6px 10px;font-size:12.5px;white-space:nowrap}
 .fp-page+.fp-page{height:auto;min-height:1122px;padding-bottom:60px}
+.fp-form .fp-g2{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.fp-apercu-titre{display:flex;align-items:center;justify-content:space-between;gap:8px}.fp-apercu-titre .nav-btn{padding:4px 10px;font-size:12px}
+.fp-plein-ecran{position:fixed;inset:0;z-index:9999;background:rgba(20,25,35,.85);overflow:auto;padding:20px}
+.fp-plein-ecran>button{position:fixed;top:14px;right:20px;z-index:2}
+.fp-plein-pages .fp-page{margin:0 auto 20px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
