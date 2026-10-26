@@ -3996,3 +3996,9 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .eff-tab{overflow-x:auto}.eff-tab table{width:100%;border-collapse:collapse;font-size:12.5px}
 .eff-tab th,.eff-tab td{padding:6px 7px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}.eff-tab .n{text-align:right}
 .eff-tab th{color:var(--text-dim);font-weight:600;font-size:11.5px}.eff-tab small{color:var(--text-dim)}
+.hp-mois{display:flex;gap:6px;align-items:flex-end;height:150px;margin:6px 0 10px}
+.hp-mois>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;min-width:0}
+.hp-mois b{font-size:10.5px;white-space:nowrap}.hp-mois small{font-size:10px;color:var(--text-dim);white-space:nowrap}
+.hp-mois span{flex:1;width:70%;max-width:34px;display:flex;align-items:flex-end;background:var(--panel-alt);border-radius:5px;overflow:hidden}
+.hp-mois i{display:block;width:100%;background:#8B7CF0;border-radius:5px 5px 0 0}
+.hp-det summary{cursor:pointer;font-weight:600;font-size:13px;margin-top:10px;color:var(--teal)}

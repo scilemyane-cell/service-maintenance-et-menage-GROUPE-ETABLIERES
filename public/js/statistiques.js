@@ -24,7 +24,7 @@ import { watchDemandes, watchInterventions, estEnPause } from "./firestore-data.
 import { ecoutePartagee } from "./ecoute-partagee.js";
 import { ecouteDelta } from "./cache-delta.js";
 import { watchRelevesCompteurs } from "./compteurs-data.js";
-import { effectifEtClotures, effectifHTML } from "./effectif-stats.js";
+import { effectifEtClotures, effectifHTML, heuresPerduesRepos, heuresPerduesHTML } from "./effectif-stats.js";
 import { tableauDeBordHTML } from "./tracabilite-stats.js";
 
 let mountedContainer = null;
@@ -84,7 +84,7 @@ async function collecterDonnees() {
   // Personnes hors roulement d'astreinte (case « Astreinte » décochée,
   // ex. l'agent espaces verts) : leurs interventions sont du travail
   // programmé, pas de l'astreinte.
-  try { const snap = await getDoc(doc(db, "config", "people")); const pp = snap.exists() ? snap.data() : {}; data.astreinteActive = pp.astreinteActive || {}; data.techniciens = pp.n2 || []; data.datesDebut = pp.datesDebut || {}; data.datesFin = pp.datesFin || {}; }
+  try { const snap = await getDoc(doc(db, "config", "people")); const pp = snap.exists() ? snap.data() : {}; data.astreinteActive = pp.astreinteActive || {}; data.techniciens = pp.n2 || []; data.heureReprise = pp.heureRepriseDefaut || "08:00"; data.datesDebut = pp.datesDebut || {}; data.datesFin = pp.datesFin || {}; }
   catch (e) { console.error("Statistiques — config/people:", e); data.astreinteActive = {}; data.techniciens = []; data.datesDebut = {}; data.datesFin = {}; }
   try { const snap = await getDoc(doc(db, "config", "menage-sites")); data.sitesMenage = (snap.exists() && snap.data().sites) || []; }
   catch (e) { console.error("Statistiques — sites ménage:", e); data.sitesMenage = []; }
@@ -278,6 +278,7 @@ function calculer(data, p) {
   avecDelai.forEach(d => { const n = d.intervenant || "Non renseigné"; (parIntervenant[n] || (parIntervenant[n] = { nb: 0, delais: [] })).delais.push(d._delai); });
   const intervenantsTries = Object.entries(parIntervenant).sort((a, b) => b[1].nb - a[1].nb).slice(0, 10);
   const effectif = effectifEtClotures(data, p, demandesToutes);
+  const heuresPerdues = heuresPerduesRepos({ ...data, interventions: data.interventions.filter(i => okAssoc(i.association)) }, p);
   // Stock en attente (toutes périodes confondues) — ancienneté
   const enAttente = demandesToutes.filter(d => !estTraitee(d) && d._date);
   const tranchesAge = { "< 7 j": 0, "7–30 j": 0, "30–90 j": 0, "> 90 j": 0 };
@@ -394,7 +395,7 @@ function calculer(data, p) {
     interv, intervPrev, heuresTot, heuresPrev, heuresNuit, primesDimanche: primesDimancheReelles || primesDimanche, appelsN1,
     intervParMois, heuresParMois, parType, parAssocInterv, parSiteInterv, parJourSemaine, techTries,
     dem, demPrev, demTraitees, pctTraitees, delaiMoyen, delaiMedian, delaiParUrgence, avecDelai, recuesParMois, realiseesParMois,
-    urgenceTriee, statutTrie, parAssocDem, parSiteDem, parTypeDem, intervenantsTries, effectif, enAttente, tranchesAge, attentePlus30, plusAnciennes,
+    urgenceTriee, statutTrie, parAssocDem, parSiteDem, parTypeDem, intervenantsTries, effectif, heuresPerdues, enAttente, tranchesAge, attentePlus30, plusAnciennes,
     compteurs, relevesPeriode, relevesParMois, consoParType, topConso, compteursEnRetard,
     sousSeuilMaint, sousSeuilMenage, totalEntrees, totalSorties, quotePartTriee, topProduitsTries, commandes, commandesPrev, commandesParMois, commandesParFournisseur,
     previsionnel, montantPropose, montantValide, statutsLabels, parStatutPrev, categoriePrevTriee, anneeCourante,
@@ -496,6 +497,7 @@ function render() {
       ` : ""}
 
       ${s.effectif ? `<div class="form-card">${effectifHTML(s.effectif)}</div>` : ""}
+      ${v("astreinte") && s.heuresPerdues ? `<div class="form-card">${heuresPerduesHTML(s.heuresPerdues)}</div>` : ""}
 
       ${v("suivi-demandes") ? `<!-- ============ DEMANDES ============ -->
       <div class="form-card">

@@ -121,3 +121,54 @@ export function effectifHTML(e) {
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
   </div>`;
 }
+
+// ---- Heures perdues : repos de 11 h après une intervention d'astreinte ----
+// Après un déplacement de nuit, le technicien doit avoir 11 h de repos
+// consécutives à partir de la FIN de l'intervention : s'il finit à 2 h, il ne
+// peut reprendre qu'à 13 h au lieu de 8 h → 5 h de travail « perdues » sur sa
+// journée (comptées seulement si c'est un jour travaillé pour lui).
+export function heuresPerduesRepos(data, p) {
+  const [hR, mR] = String(data.heureReprise || "08:00").split(":").map(Number);
+  const JOURNEE = 7; // plafond : une journée de travail (35 h / 5)
+  const feries = {}; const estFerie = (iso) => (feries[iso.slice(0, 4)] || (feries[iso.slice(0, 4)] = feriesAnnee(+iso.slice(0, 4)))).has(iso);
+  const absent = (t, iso) => (data.absences || []).some(a => a.person === t && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || ""));
+  const hm = (t) => { const [h, m] = String(t).split(":").map(Number); return [h || 0, m || 0]; };
+  const parCle = {};
+  (data.interventions || []).forEach(i => {
+    if (i.supprimeLe || i.sansDeplacement || !i.date || !i.heureDebut || !i.heureFin || !i.technicien) return;
+    const [hD, mD] = hm(i.heureDebut), [hF, mF] = hm(i.heureFin);
+    const debut = new Date(i.date + "T00:00:00"); debut.setHours(hD, mD, 0, 0);
+    let fin = new Date(i.date + "T00:00:00"); fin.setHours(hF, mF, 0, 0); if (fin <= debut) fin.setDate(fin.getDate() + 1);
+    const repos = new Date(fin.getTime() + 11 * 3600e3);
+    const reprise = new Date(fin); reprise.setHours(hR, mR, 0, 0); if (fin >= reprise) reprise.setDate(reprise.getDate() + 1);
+    if (repos <= reprise) return;
+    const iso = isoLocal(reprise);
+    if (reprise.getDay() === 0 || reprise.getDay() === 6 || estFerie(iso) || absent(i.technicien, iso)) return;
+    const cle = `${i.technicien}|${iso}`, h = Math.min(JOURNEE, (repos - reprise) / 3600e3);
+    // Plusieurs sorties la même nuit : seule la plus tardive compte.
+    if (!parCle[cle] || parCle[cle].heures < h) parCle[cle] = { tech: i.technicien, jour: iso, heures: h, fin, repos, site: i.site || "", numero: i.numero || "" };
+  });
+  const tous = Object.values(parCle).filter(x => x.jour >= (p.mois[0]?.cle || "") + "-01" && x.jour <= p.aujourdhui).sort((a, b) => b.jour.localeCompare(a.jour));
+  const mois = p.mois.map(m => { const l = tous.filter(x => x.jour.startsWith(m.cle)); return { ...m, heures: l.reduce((t, x) => t + x.heures, 0), nb: l.length }; });
+  const parTech = {}; tous.forEach(x => { const o = parTech[x.tech] || (parTech[x.tech] = { heures: 0, nb: 0 }); o.heures += x.heures; o.nb++; });
+  return { reprise: `${String(hR).padStart(2, "0")}h${String(mR).padStart(2, "0")}`, tous, mois, total: tous.reduce((t, x) => t + x.heures, 0),
+    parTech: Object.entries(parTech).sort((a, b) => b[1].heures - a[1].heures) };
+}
+
+const fmtH = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; };
+export function heuresPerduesHTML(r) {
+  if (!r) return "";
+  const maxH = Math.max(1, ...r.mois.map(m => m.heures));
+  return `<div class="eff">
+    <h3 class="eff-h">🛌 Heures perdues — repos de 11 h après l'astreinte</h3>
+    <p class="eff-sous">Après un déplacement d'astreinte, le technicien doit avoir 11 h de repos à partir de la fin de l'intervention avant de reprendre. Quand ce repos dépasse l'heure de prise de poste (${esc(r.reprise)}) d'un jour travaillé, les heures entre ${esc(r.reprise)} et la fin du repos sont perdues pour le service (plafonnées à une journée de 7 h).</p>
+    <div class="stat-eff-kpis">
+      <div class="${r.total ? "alerte" : ""}"><b>${fmtH(r.total)}</b><span>heures perdues sur la période</span><small>≈ ${fmtNb(r.total / 7, 1)} journée(s) de technicien</small></div>
+      <div><b>${r.tous.length}</b><span>reprise(s) décalée(s)</span><small>${r.tous.length ? `${fmtH(r.total / r.tous.length)} perdues en moyenne` : "aucune sur la période"}</small></div>
+      <div><b>${fmtH(r.mois[r.mois.length - 1]?.heures || 0)}</b><span>ce mois-ci</span><small>${r.mois[r.mois.length - 1]?.nb || 0} reprise(s) décalée(s)</small></div>
+    </div>
+    <div class="hp-mois">${r.mois.map(m => `<div title="${esc(m.label)} : ${fmtH(m.heures)} (${m.nb} reprise(s) décalée(s))"><b>${m.heures ? fmtH(m.heures).replace(" h 00", " h") : ""}</b><span><i style="height:${m.heures / maxH * 100}%"></i></span><small>${esc(m.label)}</small></div>`).join("")}</div>
+    ${r.parTech.length ? `<h4 class="eff-h4">Par technicien</h4>${tab(["Technicien", "Reprises décalées", "Heures perdues"], r.parTech.map(([t, o]) => [esc(t), o.nb, fmtH(o.heures)]))}` : ""}
+    ${r.tous.length ? `<details class="hp-det"><summary>Voir le détail (${r.tous.length})</summary>${tab(["Jour de reprise", "Technicien", "Fin d'intervention", "Reprise possible", "Perdu"], r.tous.map(x => [new Date(x.jour + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" }), esc(x.tech), `${x.fin.toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}${x.site ? ` <small>${esc(x.site)}</small>` : ""}`, x.repos.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), fmtH(x.heures)]))}</details>` : ""}
+  </div>`;
+}
