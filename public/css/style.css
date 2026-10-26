@@ -3859,3 +3859,17 @@ table.tr-g thead th[style]{padding:10px 8px;background:var(--panel-alt)}
 table.tr-g td[style]{border-left:1px solid var(--border);background:color-mix(in srgb,var(--c) 5%,transparent);vertical-align:middle}
 table.tr-g td[style] .tr-g-fiche{border-top:3px solid var(--c)}
 table.tr-g thead th:first-child{vertical-align:middle}
+
+.tr-cal{display:flex;gap:10px;align-items:center}
+.tr-cal-page{width:52px;flex:none;border-radius:9px;overflow:hidden;background:var(--panel);border:1px solid var(--border);box-shadow:0 2px 6px rgba(0,0,0,.08);text-align:center}
+.tr-cal-m{display:block;background:#e0533d;color:#fff;font-size:11px;font-weight:800;text-transform:uppercase;padding:2px 0;letter-spacing:.5px}
+.tr-cal-page b{display:block;font-size:22px;font-weight:800;padding:3px 0 4px;color:var(--text)}
+.tr-cal-txt{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--text-dim);font-weight:500;line-height:1.3}
+.tr-cal-txt b{font-size:13.5px;color:var(--text)}
+.tr-cal-txt em{font-style:normal;font-weight:800;color:#fff;background:#1baf7a;border-radius:99px;padding:1px 8px;font-size:10.5px;align-self:flex-start;margin-top:2px}
+table.tr-g tbody th{min-width:150px}
+table.tr-g tr.courante .tr-cal-page{border-color:#1baf7a;box-shadow:0 0 0 2px #1baf7a}
+table.tr-g tr.tr-g-mois th{position:static;background:var(--panel-alt);padding:7px 12px;text-align:left}
+table.tr-g tr.tr-g-mois th span{position:sticky;left:12px;font-size:14px;font-weight:800;color:var(--text)}
+table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
+.tr-cal-m{text-transform:uppercase!important}
