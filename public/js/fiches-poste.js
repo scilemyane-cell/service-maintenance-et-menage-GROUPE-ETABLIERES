@@ -21,13 +21,36 @@ const fr = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR"
 const coche = (v) => v ? "☒" : "☐";
 const nomFichier = (f) => `RH05 - Fiche de poste - ${f.poste || "Poste"} - ${f.collaborateur || "Sans nom"}.pdf`.replace(/[\\/:*?"<>|]+/g, "-");
 
+// « gaël mathé » → « Gaël MATHÉ » (format des fiches RH).
+export function formatNom(n) {
+  const m = String(n || "").trim().split(/\s+/).filter(Boolean); if (!m.length) return "";
+  const cap = (w) => w.split("-").map(x => x.charAt(0).toLocaleUpperCase("fr") + x.slice(1).toLocaleLowerCase("fr")).join("-");
+  return m.length === 1 ? cap(m[0]) : `${cap(m[0])} ${m.slice(1).join(" ").toLocaleUpperCase("fr")}`;
+}
+function majPuces() {
+  const z = conteneur?.querySelector("#fp-pers-puces"); if (!z || !ui.f) return;
+  const q = String(ui.f.collaborateur || "").toLowerCase().trim();
+  const deja = new Set(fiches.map(f => String(f.collaborateur || "").toLowerCase()));
+  const tous = [...new Set([...personnes, ...fiches.map(f => formatNom(f.collaborateur)).filter(Boolean)])];
+  const l = tous.filter(n => !q || n.toLowerCase().includes(q)).filter(n => n.toLowerCase() !== q);
+  z.innerHTML = l.length ? `<span class="hint">👥 Choisir :</span>${l.slice(0, 40).map(n => `<button type="button" data-fp-pers="${esc(n)}" title="${deja.has(n.toLowerCase()) ? "a déjà une fiche" : ""}">${esc(n)}${deja.has(n.toLowerCase()) ? " 📄" : ""}</button>`).join("")}` : "";
+  z.querySelectorAll("[data-fp-pers]").forEach(b => b.addEventListener("click", () => {
+    ui.f.collaborateur = b.dataset.fpPers; ui.modif = true;
+    const i = conteneur.querySelector('[data-fp="collaborateur"]'); if (i) i.value = ui.f.collaborateur;
+    majApercu(); majPuces();
+  }));
+}
+
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
 export function mountFichesPoste(container, u) {
   cleanup(); conteneur = container; user = u;
   unsubs.push(onSnapshot(collection(db, COL), (s) => { fiches = s.docs.map(d => ({ id: d.id, ...d.data() })); if (!ui.f) render(); else renderListe(); },
     (e) => { conteneur.innerHTML = `<div class="form-card"><p>⚠️ Accès refusé à la collection « fiches-poste ». Publie la règle Firestore indiquée par Claude.</p><p class="hint">${esc(e.message)}</p></div>`; }));
-  unsubs.push(watchUsers((l) => { personnes = (l || []).map(p => p.nom || p.displayName || p.name || "").filter(Boolean).sort(); }));
+  unsubs.push(watchUsers((l) => {
+    personnes = [...new Set((l || []).filter(p => !p.desactive && !p.disabled).map(p => formatNom(p.nom || p.displayName || p.name || "")).filter(n => n && !n.includes("@")))].sort((a, b) => a.localeCompare(b, "fr"));
+    majPuces();
+  }));
   render();
 }
 
@@ -134,9 +157,10 @@ function renderEditeur() {
   <div class="fp-form">
     <div class="form-card"><h3>👤 Collaborateur & poste</h3>
       <div class="fp-g2">
-        <label>Prénom NOM<input data-fp="collaborateur" list="fp-pers" value="${esc(f.collaborateur)}" placeholder="ex. Marie NICOLAIZEAU"><datalist id="fp-pers">${personnes.map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>
+        <label>Prénom NOM<input data-fp="collaborateur" autocomplete="off" value="${esc(f.collaborateur)}" placeholder="ex. Marie NICOLAIZEAU"></label>
         <label>Intitulé du poste<input data-fp="poste" list="fp-postes" value="${esc(f.poste)}"><datalist id="fp-postes">${[...new Set(MODELES.map(m => m.poste).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>
       </div>
+      <div class="fp-pers-puces" id="fp-pers-puces"></div>
       <p class="hint" style="margin:8px 0 4px">Repartir d'un modèle (remplace missions et compétences) :</p>
       <div class="fp-puces">${MODELES.filter(m => m.id !== "vierge").map(m => `<button type="button" class="${f.modele === m.id ? "on" : ""}" data-fp-remodele="${m.id}">${esc(m.label)}</button>`).join("")}</div>
     </div>
@@ -181,6 +205,7 @@ function renderEditeur() {
   </div>`;
   brancher();
   ajusterApercu();
+  majPuces();
 }
 
 // L'aperçu (pages A4 de 794 px) est réduit pour tenir en entier dans la colonne.
@@ -200,6 +225,9 @@ function changer(fn, rerendre = true) { fn(ui.f); ui.modif = true; if (rerendre)
 function brancher() {
   const el = conteneur.querySelector("#fp-edit");
   el.querySelectorAll("[data-fp]").forEach(i => i.addEventListener("input", () => changer(f => { f[i.dataset.fp] = i.value; }, false)));
+  const ic = el.querySelector('[data-fp="collaborateur"]');
+  ic?.addEventListener("input", majPuces);
+  ic?.addEventListener("blur", () => { const v = formatNom(ic.value); if (v !== ic.value) { ic.value = v; changer(f => { f.collaborateur = v; }, false); } setTimeout(majPuces, 150); });
   el.querySelectorAll("[data-fp-oui]").forEach(b => b.addEventListener("click", () => changer(f => { f[b.dataset.fpOui] = b.dataset.v === "1"; if (b.dataset.fpOui === "management") f.signatureNonConcerne = !f.management; })));
   el.querySelectorAll("[data-fp-remodele]").forEach(b => b.addEventListener("click", () => {
     if (!confirm("Remplacer la mission principale, les missions et les compétences par celles de ce modèle ?\n(Le nom, le périmètre et les dates sont gardés.)")) return;

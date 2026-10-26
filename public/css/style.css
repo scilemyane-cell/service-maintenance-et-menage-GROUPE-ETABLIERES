@@ -3966,3 +3966,6 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-import div{display:flex;flex-direction:column;gap:3px;flex:1;min-width:220px}.fp-import span{font-size:12.5px;color:var(--text-dim)}
 .fp-import label{cursor:pointer;background:#2f6fd6}
 .fp-item small.imp{color:#2f6fd6}
+.fp-pers-puces{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:8px;max-height:120px;overflow:auto}
+.fp-pers-puces button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:99px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer}
+.fp-pers-puces button:hover{border-color:var(--teal);color:var(--teal)}
