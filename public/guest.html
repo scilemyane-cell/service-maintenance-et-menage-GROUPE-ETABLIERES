@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Accès remplaçant — Établières</title>
+<title>Fiches ménage — Établières</title>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,7 +19,7 @@
   import { auth } from "./js/firebase-init.js";
   import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { getInvitation } from "./js/invitations-data.js";
-  import { mountGuestFiche } from "./js/guest-fiche.js";
+  import { mountGuestFiche, sitesInvitation } from "./js/guest-fiche.js";
 
   const params = new URLSearchParams(location.search);
   const token = params.get("invite");
@@ -46,14 +46,19 @@
       }
       const invitation = await getInvitation(token);
       if (!invitation) { showError("Ce lien n'existe pas ou plus."); return; }
-      if (!invitation.active) { showError("Cet accès a été désactivé. Contacte ton responsable."); return; }
+      if (!invitation.active) { showError("Cet accès a été coupé. Contacte le Groupe Établières."); return; }
+      const d = new Date(), auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const fr = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+      if (invitation.debut && auj < invitation.debut) { showError(`Cet accès sera ouvert à partir du ${fr(invitation.debut)}.`); return; }
+      if (invitation.fin && auj > invitation.fin) { showError(`Cet accès a expiré le ${fr(invitation.fin)}. Contacte le Groupe Établières si tu as encore des fiches à remplir.`); return; }
+      const noms = sitesInvitation(invitation).map(s => s.name).join(" · ");
       app.innerHTML = `
         <header class="topbar">
           <div class="topbar-title">
-            <span class="topbar-eyebrow">Groupe Établières · Accès remplaçant</span>
-            <h1>${invitation.siteName}</h1>
+            <span class="topbar-eyebrow">Groupe Établières · Fiches de traçabilité ménage</span>
+            <h1>${noms}</h1>
           </div>
-          <div class="topbar-user"><span><b>${invitation.label}</b></span></div>
+          <div class="topbar-user"><span>${invitation.fin ? `Accès jusqu'au <b>${fr(invitation.fin)}</b>` : ""}</span></div>
         </header>
         <main class="content" id="content"></main>
       `;

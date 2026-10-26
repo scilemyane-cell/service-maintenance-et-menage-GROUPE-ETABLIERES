@@ -18,10 +18,11 @@ export function watchInvitations(callback) {
   }, (err) => { console.error("watchInvitations:", err); callback([]); });
 }
 
-export async function createInvitation({ siteId, siteName, weeks, label, createdBy }) {
+// Accès prestataire / remplaçant : un ou plusieurs sites, valable du … au …
+export async function createInvitation({ sites, debut, fin, weeks, label, telephone = "", createdBy }) {
   const token = randomToken();
   await setDoc(doc(db, "invitations", token), {
-    siteId, siteName, weeks, label,
+    sites, siteId: sites[0]?.id || "", siteName: sites.map(s => s.name).join(", "), weeks, debut, fin, label, telephone,
     active: true, createdBy, createdAt: new Date().toISOString(),
   });
   return token;

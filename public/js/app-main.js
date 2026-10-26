@@ -292,6 +292,7 @@
             { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
           ] : []),
           { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: MENAGE_ROLES,       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
+          { id: "prestataire", label: "Accès prestataire", icon: "🔗", roles: GESTION, mount: mountAccesRemplacants },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],
       }));
@@ -322,7 +323,7 @@
         subtabs: [
           { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ADMIN_ONLY, mount: mountUtilisateurs },
           { id: "connexions",   label: "Connexions",         icon: "🟢", roles: SUPER_ADMIN_ONLY, mount: mountConnexions },
-          { id: "remplacants",  label: "Accès remplaçants",  icon: "🔗", roles: ADMIN_ONLY, mount: mountAccesRemplacants },
+          { id: "remplacants",  label: "Accès prestataires",  icon: "🔗", roles: ADMIN_ONLY, mount: mountAccesRemplacants },
           { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ADMIN_ONLY, mount: mountAssociationsSites },
           { id: "corbeille", label: "Corbeille", icon: "🗑️", roles: ADMIN_ONLY, mount: mountCorbeille },
           { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },

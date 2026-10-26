@@ -480,7 +480,7 @@ function renderAssociations(container) {
 // ADMINISTRATION GLOBALE — Accès remplaçants (QR code)
 // =================================================================
 let invState = { sites: [], invitations: [] };
-let invForm = { siteId: "", label: "", weekStart: "", nbWeeks: 1 };
+let invForm = { sites: [], label: "", telephone: "", debut: "", fin: "" };
 
 function weekStartOf(date) {
   const offset = (date.getDay() + 6) % 7;
@@ -494,75 +494,93 @@ export function mountAccesRemplacants(container, user) {
   unsubs.push(watchInvitations((i) => { invState.invitations = i; renderInvites(container, user); }));
 }
 
+const frJ = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "";
+function etatInvitation(inv) {
+  const auj = dateKey(new Date());
+  if (!inv.active) return ["⛔ Coupé", "var(--panel-alt)", "var(--text-dim)"];
+  if (inv.debut && auj < inv.debut) return ["⏳ À venir", "#e3eefc", "#1d4f91"];
+  if (inv.fin && auj > inv.fin) return ["⌛ Expiré", "var(--panel-alt)", "var(--text-dim)"];
+  return ["✅ Actif", "var(--teal)", "#fff"];
+}
+const sitesInv = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.sites : [{ id: inv.siteId, name: inv.siteName }]);
+function texteSms(inv) {
+  return `Bonjour, voici votre accès aux fiches de traçabilité ménage du Groupe Établières (${sitesInv(inv).map(s => s.name).join(", ")})${inv.debut ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""} : ${guestLink(inv.id)}\nÀ la première ouverture, indiquez vos nom, prénom et société. Merci de ne pas transmettre ce lien.`;
+}
+
 function renderInvites(container, user) {
   if (!document.contains(container)) { cleanup(); return; }
-  if (!invForm.siteId && invState.sites[0]) invForm.siteId = invState.sites[0].id;
-  if (!invForm.weekStart) invForm.weekStart = dateKey(weekStartOf(new Date()));
-
+  const auj = new Date();
+  if (!invForm.debut) invForm.debut = dateKey(auj);
+  if (!invForm.fin) invForm.fin = dateKey(addDays(auj, 13));
+  const parDisp = {}; invState.sites.forEach(s => { const d = s.dispositif || "Dispositif MNA"; (parDisp[d] ||= []).push(s); });
+  const actifs = invState.invitations.filter(i => etatInvitation(i)[0].includes("Actif") || etatInvitation(i)[0].includes("venir"));
+  const anciens = invState.invitations.filter(i => !actifs.includes(i));
+  const ligne = (inv) => { const [lib, bg, fg] = etatInvitation(inv); return `<tr>
+      <td><b>${esc(inv.label || "—")}</b>${inv.telephone ? `<br><small>📱 ${esc(inv.telephone)}</small>` : ""}</td>
+      <td>${sitesInv(inv).map(s => esc(s.name)).join("<br>")}</td>
+      <td>${inv.debut ? `${frJ(inv.debut)} → ${frJ(inv.fin)}` : `${(inv.weeks || []).length} sem.`}</td>
+      <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
+      <td style="white-space:nowrap">
+        ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
+        <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
+        <button class="nav-btn" data-toggle="${inv.id}" data-active="${inv.active}" style="padding:4px 10px;font-size:11px">${inv.active ? "⛔ Couper" : "Réactiver"}</button>
+        <button class="del-btn" data-del-inv="${inv.id}">🗑️</button>
+      </td></tr>`; };
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Génère un lien + QR code donnant un accès limité (sans compte ni mot de passe) pour remplir les fiches d'un site sur une ou plusieurs semaines précises — utile pour un remplaçant externe.</p>
-
       <div class="form-card">
+        <h3 style="margin:0 0 4px">🔗 Accès prestataire / remplaçant</h3>
+        <p class="hint" style="margin:0 0 12px">Un lien personnel, envoyé par SMS, valable seulement entre deux dates et pour les sites cochés. À la première ouverture, la personne indique ses nom, prénom et société ; son téléphone la reconnaît ensuite et garde ses fiches en cours. Ses fiches t'arrivent « à vérifier » dans Traçabilité.</p>
         <div class="form-grid">
-          <label>Site<select id="pi-site">${invState.sites.map(s => `<option value="${s.id}" ${s.id === invForm.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join("")}</select></label>
-          <label>Nom / société du remplaçant<input id="pi-label" value="${esc(invForm.label)}" placeholder="ex. Société Progrès"></label>
-          <label>Semaine de début<input type="date" id="pi-week" value="${esc(invForm.weekStart)}"></label>
-          <label>Nombre de semaines<input type="number" min="1" max="12" id="pi-nb" value="${invForm.nbWeeks}"></label>
+          <label>Société / personne<input id="pi-label" value="${esc(invForm.label)}" placeholder="ex. Société Net Pro"></label>
+          <label>Téléphone (pour le SMS)<input id="pi-tel" type="tel" value="${esc(invForm.telephone)}" placeholder="06 12 34 56 78"></label>
+          <label>Du<input type="date" id="pi-debut" value="${esc(invForm.debut)}"></label>
+          <label>Au (inclus)<input type="date" id="pi-fin" value="${esc(invForm.fin)}"></label>
         </div>
-        <button class="add-btn" id="pi-generate">🔗 Générer l'accès</button>
+        <div style="margin:12px 0 4px;font-size:12px;color:var(--text-dim)">Sites concernés</div>
+        <div class="pi-sites">${Object.entries(parDisp).map(([d, l]) => `<div><b style="font-size:12px;color:var(--text-dim)">${esc(d)}</b><div class="pi-sites-l">${l.map(s => `<label class="pi-site"><input type="checkbox" data-pi-site="${s.id}" ${invForm.sites.includes(s.id) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")}</div></div>`).join("")}</div>
+        <button class="add-btn" id="pi-generate" style="margin-top:12px">🔗 Créer l'accès</button>
       </div>
-
-      <div id="pi-result"></div>
-
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Remplaçant</th><th>Site</th><th>Semaines</th><th>État</th><th></th></tr></thead>
-          <tbody>
-            ${invState.invitations.length === 0 ? `<tr><td colspan="5" class="empty-row">Aucun accès généré.</td></tr>` :
-              invState.invitations.map(inv => `
-                <tr>
-                  <td>${esc(inv.label)}</td>
-                  <td>${esc(inv.siteName)}</td>
-                  <td>${inv.weeks.length} sem. (${fmtShort(new Date(inv.weeks[0]))} → ${fmtShort(new Date(inv.weeks[inv.weeks.length - 1]))})</td>
-                  <td>${inv.active ? `<span class="tag" style="background:var(--teal)">Actif</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">Désactivé</span>`}</td>
-                  <td style="white-space:nowrap">
-                    <button class="nav-btn" data-copy="${inv.id}" style="padding:4px 10px;font-size:11px">Copier le lien</button>
-                    <button class="nav-btn" data-toggle="${inv.id}" data-active="${inv.active}" style="padding:4px 10px;font-size:11px">${inv.active ? "Désactiver" : "Réactiver"}</button>
-                    <button class="del-btn" data-del-inv="${inv.id}">🗑️</button>
-                  </td>
-                </tr>
-              `).join("")}
-          </tbody>
-        </table>
-      </div>
+      ${(() => { const inv = invState.invitations.find(i => i.id === invState.dernier); if (!inv) return "";
+        const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
+        return `<div class="form-card" style="border:2px solid var(--teal)"><b>✅ Accès créé pour ${esc(inv.label)}</b><p class="hint" style="margin:4px 0 10px">Envoie-le maintenant :</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
+          <p class="hint" style="margin:8px 0 0">Sur ordinateur, le bouton SMS ouvre l'application de messages si elle est reliée à ton téléphone ; sinon copie le message et colle-le dans un SMS.</p></div>`; })()}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Prestataire</th><th>Sites</th><th>Période</th><th>État</th><th></th></tr></thead>
+        <tbody>${actifs.length ? actifs.map(ligne).join("") : `<tr><td colspan="5" class="empty-row">Aucun accès en cours.</td></tr>`}</tbody>
+      </table></div>
+      ${anciens.length ? `<details class="form-card"><summary>Accès expirés ou coupés (${anciens.length})</summary><div class="table-wrap"><table><tbody>${anciens.map(ligne).join("")}</tbody></table></div></details>` : ""}
     </div>
-  `;
+    <style>.pi-sites{display:flex;flex-direction:column;gap:8px}.pi-sites-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.pi-site{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:99px;padding:5px 12px;font-size:13px;cursor:pointer;background:var(--panel-alt)}</style>`;
 
-  document.getElementById("pi-site").addEventListener("change", (e) => { invForm.siteId = e.target.value; });
   document.getElementById("pi-label").addEventListener("input", (e) => { invForm.label = e.target.value; });
-  document.getElementById("pi-week").addEventListener("input", (e) => { invForm.weekStart = e.target.value; });
-  document.getElementById("pi-nb").addEventListener("input", (e) => { invForm.nbWeeks = parseInt(e.target.value, 10) || 1; });
-
+  document.getElementById("pi-tel").addEventListener("input", (e) => { invForm.telephone = e.target.value; });
+  document.getElementById("pi-debut").addEventListener("input", (e) => { invForm.debut = e.target.value; });
+  document.getElementById("pi-fin").addEventListener("input", (e) => { invForm.fin = e.target.value; });
+  container.querySelectorAll("[data-pi-site]").forEach(cb => cb.addEventListener("change", () => {
+    invForm.sites = cb.checked ? [...new Set([...invForm.sites, cb.dataset.piSite])] : invForm.sites.filter(x => x !== cb.dataset.piSite);
+  }));
   document.getElementById("pi-generate").addEventListener("click", async () => {
-    if (!invForm.label.trim()) { window.toast("Indique un nom ou une société pour ce remplaçant."); return; }
-    if (!isPlausibleDate(invForm.weekStart)) { window.toast("La date saisie semble incorrecte (année incomplète) — vérifie et retape-la entièrement."); return; }
-    const site = invState.sites.find(s => s.id === invForm.siteId);
-    const weeks = [];
-    let cur = new Date(invForm.weekStart);
-    for (let i = 0; i < invForm.nbWeeks; i++) { weeks.push(dateKey(cur)); cur = addDays(cur, 7); }
-    const token = await createInvitation({
-      siteId: site.id, siteName: site.name, weeks, label: invForm.label, createdBy: user.uid,
-    });
-    showResult(token);
+    if (!invForm.label.trim()) { window.toast("Indique la société ou le nom du prestataire."); return; }
+    if (!invForm.sites.length) { window.toast("Coche au moins un site."); return; }
+    if (!isPlausibleDate(invForm.debut) || !isPlausibleDate(invForm.fin) || invForm.fin < invForm.debut) { window.toast("Vérifie les dates (la fin doit être après le début)."); return; }
+    const sites = invForm.sites.map(id => invState.sites.find(s => s.id === id)).filter(Boolean).map(s => ({ id: s.id, name: s.name }));
+    const weeks = []; let cur = weekStartOf(new Date(invForm.debut + "T00:00:00"));
+    while (dateKey(cur) <= invForm.fin && weeks.length < 26) { weeks.push(dateKey(cur)); cur = addDays(cur, 7); }
+    const token = await createInvitation({ sites, debut: invForm.debut, fin: invForm.fin, weeks, label: invForm.label.trim(), telephone: invForm.telephone.trim(), createdBy: user.uid });
+    invForm = { sites: [], label: "", telephone: "", debut: "", fin: "" };
+    invState.dernier = token; renderInvites(container, user);
   });
-
-  container.querySelectorAll("[data-copy]").forEach(btn => btn.addEventListener("click", () => copyLink(btn.dataset.copy, btn)));
+  container.querySelectorAll("[data-copy-sms]").forEach(btn => btn.addEventListener("click", () => {
+    const inv = invState.invitations.find(i => i.id === btn.dataset.copySms); if (!inv) return;
+    navigator.clipboard.writeText(texteSms(inv)).then(() => { const o = btn.textContent; btn.textContent = "Copié !"; setTimeout(() => { btn.textContent = o; }, 1500); });
+  }));
   container.querySelectorAll("[data-toggle]").forEach(btn => {
     btn.addEventListener("click", async () => { await setInvitationActive(btn.dataset.toggle, btn.dataset.active !== "true"); });
   });
   container.querySelectorAll("[data-del-inv]").forEach(btn => {
-    btn.addEventListener("click", async () => { if (confirm("Supprimer définitivement cet accès ?")) await deleteInvitation(btn.dataset.delInv); });
+    btn.addEventListener("click", async () => { if (confirm("Supprimer définitivement cet accès ? (les fiches déjà remplies sont conservées)")) await deleteInvitation(btn.dataset.delInv); });
   });
 }
 

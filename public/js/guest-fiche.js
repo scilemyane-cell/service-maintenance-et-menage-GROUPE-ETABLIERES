@@ -1,128 +1,143 @@
+// guest-fiche.js — Fiches de traçabilité ménage remplies par un prestataire
+// ou un remplaçant externe, via un lien personnel (guest.html?invite=…).
+//  • Le lien est limité dans le temps (du … au …) et à un ou plusieurs sites.
+//  • À la première ouverture, la personne indique prénom, nom et société ;
+//    le téléphone s'en souvient (même appareil = mêmes fiches en cours).
+//  • La fiche se remplit jour par jour ; « Terminer et envoyer » la transmet
+//    au responsable, qui la vérifie et la valide avant l'envoi au MNA.
 import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
 
-const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
+const JOURS = ["LUN", "MAR", "MER", "JEU", "VEN"];
+const NOMS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "Vendredi" };
 
 let state = { sites: [], fiches: [] };
-let ui = { weekStart: null };
-let unsubs = [];
-let mountedContainer = null;
-let mountedUser = null;
-let mountedInvitation = null;
-let saveTimer = null;
+let ui = { weekStart: null, siteId: null, jour: null };
+let unsubs = [], conteneur = null, user = null, invitation = null, saveTimer = null, identite = null;
+
+const cleIdentite = () => `presta-${invitation.id}`;
+function lireIdentite() { try { return JSON.parse(localStorage.getItem(cleIdentite()) || "null"); } catch { return null; } }
+function ecrireIdentite(v) { try { localStorage.setItem(cleIdentite(), JSON.stringify(v)); } catch { /* */ } }
+const nomAgent = () => identite ? `${identite.prenom} ${identite.nom}${identite.societe ? ` (${identite.societe})` : ""}` : (invitation.label || "Prestataire");
+export const sitesInvitation = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.sites : [{ id: inv.siteId, name: inv.siteName }]).filter(s => s && s.id);
+
+const STYLE_GF = `<style>
+      .gf{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+      .gf-qui{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)}
+      .gf-qui button{background:none;border:none;color:var(--text-dim);text-decoration:underline;cursor:pointer;font:inherit;font-size:12px}
+      .gf-sel{display:flex;gap:8px;flex-wrap:wrap}.gf-sel select{flex:1;min-width:160px;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
+      .gf-jours{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+      .gf-jours button{padding:9px 4px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center}
+      .gf-jours button small{font-weight:500;color:var(--text-dim);font-size:11px}.gf-jours button.on{background:#1baf7a;color:#fff;border-color:#1baf7a}.gf-jours button.on small{color:#eafff4}
+      .gf-piece h3{margin:0 0 8px;font-size:15px}
+      .gf-t{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)}.gf-t:first-of-type{border-top:none}
+      .gf-t input[type=checkbox]{width:26px;height:26px;accent-color:#1baf7a;flex:none}
+      .gf-t label{flex:1;font-size:14.5px}.gf-t.fait label{text-decoration:line-through;color:var(--text-dim)}
+      .gf-t .gf-obs{width:100%;margin-top:4px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;font-size:12.5px}
+      .gf-id form{display:flex;flex-direction:column;gap:10px}.gf-id label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}.gf-id input{padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;font-size:15px;width:100%;box-sizing:border-box}
+      .gf-bas{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.gf-bas .add-btn{padding:12px 16px}
+      .gf-ok{background:#e9f8f0;color:#11845b;border:1px solid #bfe8d4;border-radius:10px;padding:10px 12px;font-weight:600}
+      .gf-att{background:#fff4dc;color:#8a5a00;border:1px solid #f0c060;border-radius:10px;padding:10px 12px;font-weight:600}
+    </style>`;
 
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
-export function mountGuestFiche(container, user, invitation) {
+export function mountGuestFiche(container, u, inv) {
   cleanup();
-  mountedContainer = container;
-  mountedUser = user;
-  mountedInvitation = invitation;
-  ui.weekStart = invitation.weeks[0];
+  conteneur = container; user = u; invitation = inv; identite = lireIdentite();
+  const auj = dateKey(new Date());
+  // Semaine affichée : celle d'aujourd'hui si elle fait partie de l'accès.
+  const lundi = dateKey(addDays(new Date(), -((new Date().getDay() + 6) % 7)));
+  ui.weekStart = inv.weeks.includes(lundi) ? lundi : inv.weeks[0];
+  ui.siteId = sitesInvitation(inv)[0]?.id;
+  const j = JOURS[(new Date().getDay() + 6) % 7];
+  ui.jour = ui.weekStart === lundi && j ? j : "LUN";
+  void auj;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
   unsubs.push(watchFiches((f) => { state.fiches = f; render(); }));
 }
 
 function currentFiche() {
-  const site = state.sites.find(s => s.id === mountedInvitation.siteId);
-  const id = ficheId(mountedInvitation.siteId, ui.weekStart, mountedUser.uid);
+  const site = state.sites.find(s => s.id === ui.siteId);
+  const id = ficheId(ui.siteId, ui.weekStart, user.uid);
   const existing = state.fiches.find(f => f.id === id);
-  if (existing) return { id, data: existing, site };
-  return {
-    id,
-    site,
-    data: {
-      siteId: mountedInvitation.siteId, siteName: mountedInvitation.siteName,
-      weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart), 4)),
-      agentUid: mountedUser.uid, agentNom: mountedInvitation.label + " (remplaçant)",
-      cells: {}, obs: {}, chambres: [], observationsGenerales: "",
-      submitted: false,
-    },
-  };
+  if (existing) return { id, data: { cells: {}, obs: {}, chambres: [], ...existing }, site };
+  return { id, site, data: {
+    siteId: ui.siteId, siteName: site?.name || "", weekStart: ui.weekStart, weekEnd: dateKey(addDays(new Date(ui.weekStart + "T00:00:00"), 4)),
+    agentUid: user.uid, agentNom: nomAgent(), prestataire: true, invitation: invitation.id, societe: identite?.societe || "",
+    cells: {}, obs: {}, chambres: [], observationsGenerales: "", submitted: false,
+  } };
+}
+function sauver(id, data, delai = 500) {
+  clearTimeout(saveTimer);
+  data.agentNom = nomAgent(); data.prestataire = true; data.invitation = invitation.id; data.societe = identite?.societe || "";
+  const etat = conteneur.querySelector("#gf-etat"); if (etat) etat.textContent = "⏳ Enregistrement…";
+  saveTimer = setTimeout(async () => {
+    try { await saveFiche(id, data); const e = conteneur.querySelector("#gf-etat"); if (e) e.textContent = "✓ Enregistré"; }
+    catch (err) { const e = conteneur.querySelector("#gf-etat"); if (e) e.textContent = "❌ Pas enregistré (réseau ?)"; console.error(err); }
+  }, delai);
 }
 
-function scheduleSave(id, data) {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { saveFiche(id, data); }, 500);
+function formulaireIdentite() {
+  conteneur.innerHTML = `${STYLE_GF}<div class="gf"><div class="form-card gf-id">
+    <h2>👋 Bienvenue</h2>
+    <p class="hint">Avant de commencer, indique qui tu es. Ce téléphone s'en souviendra pour les prochaines fois.</p>
+    <form id="gf-id-form">
+      <label>Prénom<input name="prenom" required autocomplete="given-name"></label>
+      <label>Nom<input name="nom" required autocomplete="family-name"></label>
+      <label>Société<input name="societe" required autocomplete="organization" value="${esc(invitation.label || "")}"></label>
+      <button class="add-btn">Commencer ✓</button>
+    </form></div></div>`;
+  conteneur.querySelector("#gf-id-form").addEventListener("submit", (e) => {
+    e.preventDefault(); const f = new FormData(e.target);
+    identite = { prenom: String(f.get("prenom")).trim(), nom: String(f.get("nom")).trim(), societe: String(f.get("societe")).trim() };
+    ecrireIdentite(identite); render();
+  });
 }
 
 function render() {
-  if (!mountedContainer) return;
-  if (!document.contains(mountedContainer)) { cleanup(); return; }
+  if (!conteneur) return;
+  if (!document.contains(conteneur)) { cleanup(); return; }
+  if (!identite) { formulaireIdentite(); return; }
+  const a = document.activeElement; if (a && conteneur.contains(a) && a.matches("input:not([type=checkbox]), textarea")) return;
   const { id, data, site } = currentFiche();
-  if (!site) { mountedContainer.innerHTML = `<div class="hint">Site introuvable.</div>`; return; }
-  const weekStartDate = new Date(ui.weekStart);
-  const weekEndDate = addDays(weekStartDate, 4);
-
-  mountedContainer.innerHTML = `
-    <div class="stack">
-      ${mountedInvitation.weeks.length > 1 ? `
-      <div class="form-card">
-        <label style="font-size:11px;color:var(--text-dim)">Semaine à remplir</label>
-        <select id="gf-week" style="margin-top:6px;background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px">
-          ${mountedInvitation.weeks.map(w => `<option value="${w}" ${w === ui.weekStart ? 'selected' : ''}>${fmtShort(new Date(w))} → ${fmtShort(addDays(new Date(w), 4))}</option>`).join("")}
-        </select>
-      </div>` : `<p class="hint">Semaine du ${fmtShort(weekStartDate)} au ${fmtShort(weekEndDate)}</p>`}
-
-      ${data.submitted ? `<div class="stat-chip ok" style="width:fit-content">✓ Fiche marquée comme terminée pour cette semaine</div>` : ""}
-
-      ${site.rooms.map((room, ri) => `
-        <div class="form-card">
-          <h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">${esc(room.name)}</h3>
-          <div class="table-wrap" style="border:none">
-            <table>
-              <thead><tr>
-                <th style="min-width:220px">Tâche</th>
-                ${room.days.map(d => `<th style="text-align:center">${DAY_LABELS[d]}</th>`).join("")}
-                <th>Observation</th>
-              </tr></thead>
-              <tbody>
-                ${room.tasks.map((task, ti) => `
-                  <tr>
-                    <td>${esc(task.label)}${task.freq ? ` <span style="color:var(--text-dim);font-size:11px">(${esc(task.freq)})</span>` : ""}</td>
-                    ${room.days.map(d => {
-                      const key = `${ri}-${ti}-${d}`;
-                      const checked = !!data.cells[key];
-                      return `<td style="text-align:center"><input type="checkbox" data-cell="${key}" ${checked ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--gold)"></td>`;
-                    }).join("")}
-                    <td><input data-obs="${ri}-${ti}" value="${esc(data.obs[`${ri}-${ti}`] || "")}" style="min-width:140px" placeholder="—"></td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `).join("")}
-
-      <div class="form-card">
-        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:6px">Observations générales</label>
-        <textarea id="gf-obs-generales" rows="3" style="width:100%;background:var(--panel-alt);border:1px solid var(--border);border-radius:7px;padding:9px 10px;color:var(--text);font-size:13px;font-family:inherit">${esc(data.observationsGenerales)}</textarea>
+  const sites = sitesInvitation(invitation);
+  if (!site) { conteneur.innerHTML = `<div class="hint">Chargement du site…</div>`; return; }
+  const verrou = !!data.validee;
+  const pieces = (site.rooms || []).map((room, ri) => ({ room, ri })).filter(x => x.room.days.includes(ui.jour));
+  const compteJour = (j) => { let t = 0, f = 0; (site.rooms || []).forEach((r, ri) => { if (!r.days.includes(j)) return; r.tasks.forEach((_, ti) => { t++; if (data.cells[`${ri}-${ti}-${j}`]) f++; }); }); return { t, f }; };
+  const dJour = addDays(new Date(ui.weekStart + "T00:00:00"), JOURS.indexOf(ui.jour));
+  conteneur.innerHTML = `${STYLE_GF}
+    <div class="gf">
+      <div class="gf-qui"><span>👤 ${esc(nomAgent())}</span><button id="gf-pas-moi">Ce n'est pas moi</button></div>
+      <div class="gf-sel">
+        ${sites.length > 1 ? `<select id="gf-site">${sites.map(s => `<option value="${esc(s.id)}" ${s.id === ui.siteId ? "selected" : ""}>🏠 ${esc(s.name)}</option>`).join("")}</select>` : `<b>🏠 ${esc(site.name)}</b>`}
+        ${invitation.weeks.length > 1 ? `<select id="gf-week">${invitation.weeks.map(w => `<option value="${w}" ${w === ui.weekStart ? "selected" : ""}>Semaine du ${fmtShort(new Date(w + "T00:00:00"))}</option>`).join("")}</select>` : ""}
       </div>
+      ${verrou ? `<div class="gf-ok">✅ Fiche vérifiée et validée par le responsable. Merci !</div>` : data.submitted ? `<div class="gf-att">📤 Fiche envoyée au responsable. Tu peux encore la rouvrir pour corriger.</div>` : ""}
+      <div class="gf-jours">${JOURS.map(j => { const c = compteJour(j); return `<button data-jour="${j}" class="${j === ui.jour ? "on" : ""}">${NOMS[j].slice(0, 3)}<small>${c.t ? `${c.f}/${c.t}` : "—"}</small></button>`; }).join("")}</div>
+      <p class="hint" style="margin:0">${NOMS[ui.jour]} ${dJour.getDate()}/${String(dJour.getMonth() + 1).padStart(2, "0")} · <span id="gf-etat"></span></p>
+      ${pieces.length ? pieces.map(({ room, ri }) => `<div class="form-card gf-piece"><h3>${esc(room.name)}</h3>
+        ${room.tasks.map((task, ti) => { const k = `${ri}-${ti}-${ui.jour}`, fait = !!data.cells[k], ko = `${ri}-${ti}`; return `<div class="gf-t ${fait ? "fait" : ""}"><input type="checkbox" id="c${k}" data-cell="${k}" ${fait ? "checked" : ""} ${verrou ? "disabled" : ""}><div style="flex:1"><label for="c${k}">${esc(task.label)}${task.freq ? ` <small>(${esc(task.freq)})</small>` : ""}</label>${data.obs[ko] || !verrou ? `<input class="gf-obs" data-obs="${ko}" value="${esc(data.obs[ko] || "")}" placeholder="Remarque (facultatif)" ${verrou ? "disabled" : ""}>` : ""}</div></div>`; }).join("")}</div>`).join("")
+        : `<div class="form-card hint">☕ Rien de prévu ce jour-là sur ce site.</div>`}
+      <div class="form-card"><label class="hint">Observations générales de la semaine</label>
+        <textarea id="gf-obs-generales" rows="3" style="width:100%;box-sizing:border-box;background:var(--panel-alt);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font:inherit" ${verrou ? "disabled" : ""}>${esc(data.observationsGenerales || "")}</textarea></div>
+      ${verrou ? "" : `<div class="gf-bas"><button class="add-btn" id="gf-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "📤 Terminer et envoyer au responsable"}</button></div>`}
+    </div>`;
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="add-btn" id="gf-save">💾 Enregistrer</button>
-        <button class="nav-btn" id="gf-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "✓ Marquer la semaine comme terminée"}</button>
-      </div>
-    </div>
-  `;
-
-  document.getElementById("gf-week")?.addEventListener("change", (e) => { ui.weekStart = e.target.value; render(); });
-
-  mountedContainer.querySelectorAll("[data-cell]").forEach(cb => {
-    cb.addEventListener("change", () => { data.cells[cb.dataset.cell] = cb.checked; scheduleSave(id, data); });
-  });
-  mountedContainer.querySelectorAll("[data-obs]").forEach(inp => {
-    inp.addEventListener("input", () => { data.obs[inp.dataset.obs] = inp.value; scheduleSave(id, data); });
-  });
-  document.getElementById("gf-obs-generales").addEventListener("input", (e) => {
-    data.observationsGenerales = e.target.value; scheduleSave(id, data);
-  });
-  document.getElementById("gf-save").addEventListener("click", () => { saveFiche(id, data); });
-  document.getElementById("gf-submit").addEventListener("click", () => {
+  conteneur.querySelector("#gf-pas-moi")?.addEventListener("click", () => { if (confirm("Changer de personne sur ce téléphone ?")) { try { localStorage.removeItem(cleIdentite()); } catch { /* */ } identite = null; render(); } });
+  conteneur.querySelector("#gf-site")?.addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });
+  conteneur.querySelector("#gf-week")?.addEventListener("change", (e) => { ui.weekStart = e.target.value; render(); });
+  conteneur.querySelectorAll("[data-jour]").forEach(b => b.addEventListener("click", () => { ui.jour = b.dataset.jour; render(); }));
+  conteneur.querySelectorAll("[data-cell]").forEach(cb => cb.addEventListener("change", () => { data.cells[cb.dataset.cell] = cb.checked; cb.closest(".gf-t")?.classList.toggle("fait", cb.checked); sauver(id, data, 300); }));
+  conteneur.querySelectorAll("[data-obs]").forEach(inp => inp.addEventListener("input", () => { data.obs[inp.dataset.obs] = inp.value; sauver(id, data, 800); }));
+  conteneur.querySelector("#gf-obs-generales")?.addEventListener("input", (e) => { data.observationsGenerales = e.target.value; sauver(id, data, 800); });
+  conteneur.querySelector("#gf-submit")?.addEventListener("click", () => {
     data.submitted = !data.submitted;
-    saveFiche(id, data);
-    render();
+    if (data.submitted) data.envoyeeLe = Date.now(); else { data.validee = false; }
+    clearTimeout(saveTimer); saveFiche(id, data).then(render).catch(err => alert("Envoi impossible : " + (err?.message || err)));
   });
+  void dateKey;
 }
