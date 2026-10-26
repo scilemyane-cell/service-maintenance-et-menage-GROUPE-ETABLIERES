@@ -3969,3 +3969,15 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .fp-pers-puces button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:99px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer}
 .fp-pers-puces button:hover{border-color:var(--teal);color:var(--teal)}
 .fp-t{table-layout:fixed}.fp-t-l{margin-top:-1px!important}.fp-t+.fp-t-l{margin-top:-1px!important}
+.sy-journal h3 small{font-weight:500;color:var(--text-dim)}
+.sy-j-cherche{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;margin:4px 0 10px}
+.sy-j-carte{border:1px solid var(--border);border-left:5px solid #2a78d6;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--panel)}
+.sy-j-carte.tel{border-left-color:#1baf7a}
+.sy-j-tete{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sy-j-tag,.sy-j-num{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--panel-alt);color:var(--text-dim)}
+.sy-j-carte.tel .sy-j-tag{background:rgba(27,175,122,.14);color:#11845b}.sy-j-carte.dep .sy-j-tag{background:rgba(42,120,214,.14);color:#1d5fae}
+.sy-j-quoi{margin-top:5px;font-size:14px}.sy-j-quoi small{color:var(--text-dim)}
+.sy-j-qui{font-size:12.5px;color:var(--text-dim);margin-top:2px}
+.sy-j-txt{margin-top:6px;font-size:13.5px;line-height:1.45}
+.sy-j-txt em{display:block;font-style:normal;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim);margin-bottom:1px}
+.sy-j-txt.cr{background:var(--panel-alt);border-radius:9px;padding:8px 10px}

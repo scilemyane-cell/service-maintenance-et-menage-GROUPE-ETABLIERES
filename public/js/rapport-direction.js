@@ -61,6 +61,10 @@ function pointsAttention(s, ctx) {
 }
 
 const STYLE = `<style>
+.journal .jr{border:1px solid #d5dbe5;border-left:4px solid #2a78d6;border-radius:6px;padding:7px 10px;margin:0 0 7px;break-inside:avoid;background:#fff}
+.journal .jr.tel{border-left-color:#1baf7a}
+.jr-t{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.jr-t span{font-size:10px;color:#555;background:#eef1f6;border-radius:99px;padding:1px 7px}
+.jr-l{color:#333;margin:2px 0 3px}.jr-x{margin-top:2px}.jr-x em{font-style:normal;font-weight:700;color:#1b2a41}.jr-x.cr{background:#f6f8fb;border-radius:4px;padding:4px 6px;margin-top:4px}
 @page{size:A4 portrait;margin:12mm 12mm 14mm}
 *{box-sizing:border-box}
 body{font:11.5px/1.45 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#1a1a1a;margin:0;background:#e9ecf1}
@@ -319,6 +323,17 @@ export function ouvrirRapportAstreinte(c) {
     <div><h3>Délais</h3>${table(["Indicateur", "Valeur"], [["Délai moyen appel → départ", c.delaiMoy != null ? `${c.delaiMoy} min` : "—"], ["Appels la nuit (21h – 6h)", `${c.nuitCount} (${pct(c.nuitCount, c.avecHeure)} %)`], ["Appels le week-end", `${c.weCount} (${pct(c.weCount, c.appels)} %)`], ["Déplacements sans horaires", c.aCompleter]])}</div>
   </div>
 </section>
+${c.journal?.length ? `<section class="journal">
+  <h2><span>3</span> Interventions réalisées et comptes rendus</h2>
+  <p class="note">${c.journal.length} intervention${c.journal.length > 1 ? "s" : ""} sur la période, dans l'ordre chronologique.</p>
+  ${c.journal.map((j) => `<div class="jr ${j.tel ? "tel" : "dep"}">
+    <div class="jr-t"><b>${new Date(j.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })}${j.heure ? ` · ${esc(j.heure)}` : ""}</b><span>${j.tel ? "☎️ Réglé par téléphone" : "🚗 Déplacement"}</span>${j.numero ? `<span>N° ${esc(j.numero)}</span>` : ""}</div>
+    <div class="jr-l"><b>${esc(j.site || "—")}</b>${j.type ? ` · ${esc(j.type)}` : ""}${j.suite ? ` · suite de ${esc(j.suite)}` : ""}${j.n1 ? ` · N1 : ${esc(j.n1)}` : ""}${j.tech ? ` · Technicien : ${esc(j.tech)}` : ""}${j.horaires ? ` · ${esc(j.horaires)}` : ""}</div>
+    ${j.motif ? `<div class="jr-x"><em>Motif :</em> ${esc(j.motif).replace(/\n/g, "<br>")}</div>` : ""}
+    ${j.decision ? `<div class="jr-x"><em>Décision N1 :</em> ${esc(j.decision).replace(/\n/g, "<br>")}</div>` : ""}
+    <div class="jr-x cr"><em>Compte rendu :</em> ${j.cr ? esc(j.cr).replace(/\n/g, "<br>") : "<i>non renseigné</i>"}</div>
+  </div>`).join("")}
+</section>` : ""}
 <footer><span>Groupe Établières — Service Maintenance · Rapport édité le ${aujourdhui}${c.auteur ? ` par ${esc(c.auteur)}` : ""}</span><span>Source : application Service Maintenance et Ménage</span></footer>
 </div></body></html>`;
   afficher(html, c.fenetre, `rapport-astreinte-${c.debut}-${c.fin}.html`);

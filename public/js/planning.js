@@ -3655,6 +3655,25 @@ function renderSynthese(container) {
     minTel > 0 && `Temps passé au téléphone par le N1 : <b>${Math.floor(minTel / 60)} h ${String(Math.round(minTel % 60)).padStart(2, "0")}</b>.`,
     aCompleter && `⚠️ ${aCompleter} déplacement${aCompleter > 1 ? "s" : ""} sans horaires : chiffres d'heures incomplets.`,
   ].filter(Boolean);
+  // Journal des interventions réalisées avec leur compte rendu (pour la direction).
+  const journal = [...f].sort((a, b) => (b.date + (b.heureAppel || b.heureDebut || "")).localeCompare(a.date + (a.heureAppel || a.heureDebut || ""))).map(i => ({
+    id: i.id, date: i.date, heure: i.heureAppel || i.heureDebut || "", numero: i.numero || "", site: nomPropre(i.site || ""), type: i.type || "",
+    n1: i.n1Contacte || "", tech: i.sansDeplacement ? "" : (i.technicien || ""), tel: !!i.sansDeplacement, suite: i.appelOrigineNumero || (i.appelOrigineId ? "appel précédent" : ""),
+    horaires: !i.sansDeplacement && i.heureDebut ? `${i.heureDebut}${i.heureFin ? " – " + i.heureFin : ""}` : "", heures: parseFloat(i.heures) || 0,
+    motif: i.motifAppelN1 || i.description || "", decision: i.decisionN1 || "", cr: i.compteRendu || "",
+  }));
+  const q = (ui.synthJournalQ || "").toLowerCase();
+  const journalF = journal.filter(j => !q || [j.numero, j.site, j.type, j.n1, j.tech, j.motif, j.decision, j.cr].join(" ").toLowerCase().includes(q));
+  const nJ = ui.synthJournalTout ? journalF.length : 15;
+  const carteJ = (j) => `<div class="sy-j-carte ${j.tel ? "tel" : "dep"}">
+      <div class="sy-j-tete"><b>${new Date(j.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })}${j.heure ? ` · ${esc(j.heure)}` : ""}</b>
+        <span class="sy-j-tag">${j.tel ? "☎️ Réglé par téléphone" : "🚗 Déplacement"}</span>${j.numero ? `<span class="sy-j-num">N° ${esc(j.numero)}</span>` : ""}</div>
+      <div class="sy-j-quoi">🏠 <b>${esc(j.site || "—")}</b>${j.type ? ` · ${esc(j.type)}` : ""}${j.suite ? ` <small>↳ suite de ${esc(j.suite)}</small>` : ""}</div>
+      <div class="sy-j-qui">${j.n1 ? `📞 N1 : ${esc(j.n1)}` : ""}${j.tech ? ` · 👷 ${esc(j.tech)}` : ""}${j.horaires ? ` · 🕐 ${esc(j.horaires)}${j.heures ? ` (${fmtDureeH(j.heures)})` : ""}` : ""}</div>
+      ${j.motif ? `<div class="sy-j-txt"><em>Motif</em>${esc(j.motif).replace(/\n/g, "<br>")}</div>` : ""}
+      ${j.decision ? `<div class="sy-j-txt"><em>Décision N1</em>${esc(j.decision).replace(/\n/g, "<br>")}</div>` : ""}
+      <div class="sy-j-txt cr"><em>📝 Compte rendu</em>${j.cr ? esc(j.cr).replace(/\n/g, "<br>") : `<span class="hint">Pas encore de compte rendu.</span>`}</div>
+    </div>`;
   const sel = (id, liste, val) => `<select id="${id}">${liste.map(x => `<option value="${esc(x)}" ${val === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
 
   container.innerHTML = `
@@ -3722,8 +3741,17 @@ function renderSynthese(container) {
         </tbody></table>
       </div>
     </div>
+
+    <div class="sy-carte sy-journal">
+      <h3>📋 Interventions réalisées et comptes rendus <small>(${journal.length} sur la période${journal.filter(j => !j.cr).length ? ` · ${journal.filter(j => !j.cr).length} sans compte rendu` : ""})</small></h3>
+      <input id="sy-jq" class="sy-j-cherche" placeholder="🔎 Chercher (site, technicien, panne, mot du compte rendu…)" value="${esc(ui.synthJournalQ || "")}">
+      ${journalF.length ? journalF.slice(0, nJ).map(carteJ).join("") : `<p class="hint">Aucune intervention ${q ? "pour cette recherche" : "sur cette période"}.</p>`}
+      ${journalF.length > nJ ? `<button class="nav-btn" id="sy-jtout">Afficher les ${journalF.length - nJ} autres ▾</button>` : ""}
+    </div>
   </div>`;
 
+  document.getElementById("sy-jtout")?.addEventListener("click", () => { ui.synthJournalTout = true; renderAll(); });
+  document.getElementById("sy-jq")?.addEventListener("input", (e) => { ui.synthJournalQ = e.target.value; clearTimeout(ui._syjq); ui._syjq = setTimeout(() => { renderAll(); const i = document.getElementById("sy-jq"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 350); });
   container.querySelectorAll("[data-recap-prime]").forEach(b => b.addEventListener("click", () => ouvrirRecapPrime()));
   document.getElementById("sy-rapport")?.addEventListener("click", async () => {
     const fenetre = window.open("", "_blank");
@@ -3739,7 +3767,7 @@ function renderSynthese(container) {
     ouvrirRapportAstreinte({ fenetre, logo, debut, fin, filtres: filtresTxt,
       periodeLibelle: libellePeriode,
       auteur: mountedUser?.nom || "", appels: appels.length, parTel: parTel.length, deplacements: deplacements.length, hSite, hNuit, primes, minTel, delaiMoy, nbDelais: delais.length,
-      insights, evo, parHeure, parJour, parN1, parSite, parType, parTech, nuitCount, weCount, avecHeure, aCompleter, repartition });
+      insights, evo, parHeure, parJour, parN1, parSite, parType, parTech, nuitCount, weCount, avecHeure, aCompleter, repartition, journal: [...journal].reverse() });
   });
   container.querySelectorAll("[data-sy-mode]").forEach(b => b.addEventListener("click", () => { ui.synthMode = b.dataset.syMode; renderAll(); }));
   container.querySelectorAll("[data-sy-pas]").forEach(b => b.addEventListener("click", () => {
