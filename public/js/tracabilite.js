@@ -208,36 +208,36 @@ function render() {
 
       ${isEditorUser(mountedUser) ? (() => { const av = filtered.filter(f => f.submitted && !f.validee).sort((a, b) => String(a.weekStart).localeCompare(String(b.weekStart)));
         return av.length ? `<div class="form-card tr-averifier"><h3 style="margin:0 0 6px;font-size:15px">⏳ ${av.length} fiche${av.length > 1 ? "s" : ""} à vérifier</h3><p class="hint" style="margin:0 0 8px">Envoyées par les agents. Vérifie, corrige si besoin, puis valide : seules les fiches validées partent au dispositif MNA (SharePoint « Département »).</p>
-          ${av.map(f => `<button type="button" class="tr-direct-l" data-open="${f.id}"><b>${esc(f.agentNom)}</b><span>${esc(f.siteName)}</span><span>Semaine du ${fmtShort(new Date(f.weekStart + "T00:00:00"))}</span><span></span><small>👉 Ouvrir</small></button>`).join("")}</div>` : ""; })() : ""}
+          <div class="tr-av-grille">${av.map(f => { const site = state.sites.find(x => x.id === f.siteId), { done, total } = taskCompletion(f, site), pct = total ? Math.round(done / total * 100) : 0; return `<button type="button" class="tr-av" data-open="${f.id}">
+            <b>🏠 ${esc(f.siteName)}</b><span>${esc(f.agentNom)} · semaine du ${fmtShort(new Date(f.weekStart + "T00:00:00"))}</span>
+            <span class="tr-g-barre"><i class="${pct >= 90 ? "vert" : pct >= 70 ? "orange" : "rouge"}" style="width:${pct}%"></i></span><small>${done}/${total} tâches · ${pct} %</small><em>👉 Vérifier</em></button>`; }).join("")}</div></div>` : ""; })() : ""}
       <div class="tr-vues"><button type="button" class="${ui.vue === "fiches" ? "actif" : ""}" data-tr-vue="fiches">📋 Fiches</button><button type="button" class="${ui.vue === "stats" ? "actif" : ""}" data-tr-vue="stats">📊 Tableau de bord</button>
         ${isEditorUser(mountedUser) ? `<button type="button" class="tr-arch" id="tr-archive" title="PDF Département (sans photos) et Interne (avec photos) des semaines terminées">☁️ Archiver sur SharePoint</button>` : ""}<small id="tr-archive-etat" class="hint">${esc(archiveEtat)}</small></div>
       ${ui.vue === "stats" ? tableauDeBordHTML(filtered, state.sites) : `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Semaine</th><th>Site</th><th>Agent</th><th>Avancement</th><th>État</th><th></th></tr></thead>
-          <tbody>
-            ${filtered.length === 0 ? `<tr><td colspan="6" class="empty-row">Aucune fiche pour l'instant.</td></tr>` :
-              filtered.map(f => {
-                const site = state.sites.find(s => s.id === f.siteId);
-                const { done, total } = taskCompletion(f, site);
-                return `<tr>
-                  <td>${fmtShort(new Date(f.weekStart))} → ${fmtShort(new Date(f.weekEnd))}</td>
-                  <td>${esc(f.siteName)}</td>
-                  <td>${esc(f.agentNom)}</td>
-                  <td>${done}/${total}</td>
-                  <td>${f.validee ? `<span class="tag" style="background:var(--teal)">✅ Validée</span>` : f.submitted ? `<span class="tag" style="background:#f0a020;color:#fff">⏳ À vérifier</span>` : `<span class="tag" style="background:var(--panel-alt);color:var(--text-dim)">${f.reconstituee && !done ? "À compléter" : "En cours"}</span>`} ${f.archiveSP ? `<span class="tag" style="background:#e3eefc;color:#1d4f91" title="Archivée sur SharePoint le ${new Date(f.archiveSP.le).toLocaleDateString("fr-FR")}">☁️ SharePoint</span>` : ""} ${mentionHTML(f, true)}</td>
-                  <td style="white-space:nowrap">
-                    <button class="nav-btn" data-open="${f.id}" style="padding:4px 10px;font-size:11px">Voir</button>
-                    ${isEditorUser(mountedUser) ? `<button class="del-btn" data-del-fiche="${f.id}">🗑️</button>` : ""}
-                  </td>
-                </tr>`;
-              }).join("")}
-          </tbody>
-        </table>
-      </div>`}
+      ${(() => {
+        if (!filtered.length) return `<div class="form-card hint">Aucune fiche pour l'instant.</div>`;
+        // Grille : une ligne par semaine, une colonne par site.
+        const ids = [...new Set(filtered.map(f => f.siteId))];
+        const cols = ids.map(id => state.sites.find(s => s.id === id) || { id, name: filtered.find(f => f.siteId === id)?.siteName || "?" }).sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
+        const semaines = [...new Set(filtered.map(f => f.weekStart))].sort().reverse(), lundi = lundiCourant();
+        const court = (n) => String(n || "").replace(/^Maison\s+MNA\s+/i, "").replace(/^Maison\s+/i, "");
+        const carte = (f, site) => {
+          const { done, total } = taskCompletion(f, site), pct = total ? Math.round(done / total * 100) : 0;
+          const etat = f.validee ? ["valid", "✅ Validée"] : f.submitted ? ["averif", "⏳ À vérifier"] : [done ? "cours" : "vide", f.reconstituee && !done ? "À compléter" : done ? "En cours" : "Vide"];
+          return `<button type="button" class="tr-g-fiche ${etat[0]} ${ui.openId === f.id ? "ouverte" : ""}" data-open="${f.id}" title="${esc(f.agentNom)} — ${done}/${total}">
+            <span class="tr-g-haut"><b>${esc(String(f.agentNom || "").split(/[\s@]/)[0])}</b><em>${etat[1]}</em></span>
+            <span class="tr-g-barre"><i class="${pct >= 90 ? "vert" : pct >= 70 ? "orange" : "rouge"}" style="width:${pct}%"></i></span>
+            <span class="tr-g-bas"><span>${pct} % · ${done}/${total}</span>${f.archiveSP ? `<span title="Archivée sur SharePoint">☁️</span>` : ""}${(photosDe(f) || []).length ? `<span>📷 ${photosDe(f).length}</span>` : ""}</span></button>`;
+        };
+        return `<div class="table-wrap tr-g-wrap"><table class="tr-g"><thead><tr><th>Semaine</th>${cols.map(c => `<th title="${esc(c.name)}">${esc(court(c.name))}</th>`).join("")}</tr></thead><tbody>
+          ${semaines.map(w => `<tr class="${w === lundi ? "courante" : ""}"><th><b>${fmtShort(new Date(w + "T00:00:00"))}</b><small>${w === lundi ? "cette semaine" : `→ ${fmtShort(addDays(new Date(w + "T00:00:00"), 4))}`}</small></th>
+            ${cols.map(c => { const l = filtered.filter(f => f.weekStart === w && f.siteId === c.id); return `<td>${l.length ? l.map(f => carte(f, state.sites.find(s => s.id === f.siteId))).join("") : `<span class="tr-g-rien">—</span>`}</td>`; }).join("")}</tr>`).join("")}
+        </tbody></table></div><p class="hint tr-g-leg"><i class="valid"></i> Validée <i class="averif"></i> À vérifier <i class="cours"></i> En cours · clique sur une fiche pour l'ouvrir</p>`;
+      })()}
+      `}
 
       ${opened && ui.vue === "fiches" ? `
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div id="tr-apercu" style="display:flex;gap:10px;flex-wrap:wrap;scroll-margin-top:70px">
         <button class="add-btn" id="tr-print">🖨️ PDF sans photos</button>
         ${(opened.photos || []).length ? `<button class="add-btn" id="tr-print-photos">📷 PDF avec photos (${opened.photos.length})</button>` : ""}
         <button class="nav-btn" id="tr-close">✕ Fermer l'aperçu</button>
@@ -262,7 +262,7 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
   mountedContainer.querySelectorAll("[data-tr-vue]").forEach(b => b.addEventListener("click", () => { ui.vue = b.dataset.trVue; render(); }));
   document.getElementById("tr-archive")?.addEventListener("click", () => lancerArchive(true));
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
-    btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); });
+    btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); setTimeout(() => document.getElementById("tr-apercu")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); });
   });
   document.getElementById("tr-reconst")?.addEventListener("click", ouvrirReconstitution);
   document.getElementById("tr-qr")?.addEventListener("click", ouvrirQrLecture);
