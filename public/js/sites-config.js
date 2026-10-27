@@ -7,6 +7,7 @@
 // ============================================================
 
 const DAYS = ["LUN", "MAR", "MER", "JEU", "VEN"];
+const LMV = ["LUN", "MER", "VEN"]; // La Moutonnerie et Studio : lundi, mercredi, vendredi
 
 function room(name, days, tasks) {
   return { name, days, tasks: tasks.map(t => (typeof t === "string" ? { label: t } : t)) };
@@ -205,7 +206,7 @@ export const SITES = [
     name: "Maison MNA La Moutonnerie",
     dispositif: "Dispositif MNA",
     rooms: [
-      room("Cuisine", DAYS, [
+      room("Cuisine", LMV, [
         "Nettoyer plan de travail, évier, sol, placards (aspirateur et lavage)",
         { label: "Électroménager : four, frigo, lave-linge, congélateur", freq: "2X/semaine" },
         { label: "Four", freq: "1X/semaine" },
@@ -217,23 +218,23 @@ export const SITES = [
         { label: "VMC", freq: "1X/3 mois" },
         "Poignées & interrupteurs",
       ]),
-      room("Salon", DAYS, [
+      room("Salon", LMV, [
         "Sols : aspirateur & lavage", "Poussières mobiliers",
         "Nettoyage vitres, poignées & interrupteurs", "Vider les poubelles", "Plinthes & VMC",
       ]),
-      room("WC", DAYS, [
+      room("WC", LMV, [
         "WC : nettoyage & détartrage, poubelle",
         "Sol : aspirateur et lavage",
         "Poignées & interrupteurs",
       ]),
-      room("Salle de bain", DAYS, [
+      room("Salle de bain", LMV, [
         "Douche / baignoire et lavabo : désinfection",
         "Sol : aspirateur et lavage",
         { label: "VMC & murs", freq: "2X/mois" },
         { label: "Plinthes", freq: "1X/mois" },
         "Poignées & interrupteurs",
       ]),
-      room("Couloir", DAYS, [
+      room("Couloir", LMV, [
         "Aspirateur & lavage sol",
         "Nettoyage poignées et interrupteurs",
         { label: "Plinthes", freq: "1X/mois" },
@@ -246,7 +247,7 @@ export const SITES = [
     name: "Studio MNA",
     dispositif: "Dispositif MNA",
     rooms: [
-      room("Cuisine / salon", DAYS, [
+      room("Cuisine / salon", LMV, [
         "Nettoyer plan de travail, évier, sol, placards (aspirateur et lavage)",
         { label: "Électroménager : four, frigo, micro-ondes", freq: "2X/semaine" },
         "Vider les poubelles",
@@ -255,12 +256,12 @@ export const SITES = [
         "Nettoyage vitres, poignées & interrupteurs",
         { label: "Plinthes & VMC", freq: "1X/mois" },
       ]),
-      room("WC", DAYS, [
+      room("WC", LMV, [
         "WC : nettoyage & détartrage, poubelle",
         "Sol : aspirateur et lavage",
         "Poignées & interrupteurs",
       ]),
-      room("Salle d'eau", DAYS, [
+      room("Salle d'eau", LMV, [
         "Douche et lavabo : désinfection",
         "Sol : aspirateur et lavage",
         { label: "VMC & murs", freq: "2X/mois" },

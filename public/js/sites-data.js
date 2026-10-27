@@ -14,9 +14,17 @@ export function watchSites(callback) {
       // et absent de la base est ajouté automatiquement, sans jamais toucher
       // aux sites déjà présents (même modifiés depuis l'interface).
       const missing = DEFAULT_SITES.filter(d => !existing.some(e => e.id === d.id));
-      if (missing.length > 0 && !syncing) {
+      // Correction ponctuelle (une seule fois) : La Moutonnerie et Studio MNA
+      // passent au lundi / mercredi / vendredi.
+      let corrige = false;
+      const sites = existing.map(e => {
+        if (!["moutonnerie", "studio-mna"].includes(e.id) || e.correctionJours === "lmv") return e;
+        corrige = true;
+        return { ...e, correctionJours: "lmv", rooms: (e.rooms || []).map(r => ({ ...r, days: ["LUN", "MER", "VEN"] })) };
+      });
+      if ((missing.length > 0 || corrige) && !syncing) {
         syncing = true;
-        setDoc(REF(), { sites: [...existing, ...missing] }).finally(() => { syncing = false; });
+        setDoc(REF(), { sites: [...sites, ...missing] }).finally(() => { syncing = false; });
       }
     } else {
       callback(DEFAULT_SITES);
