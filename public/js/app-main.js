@@ -120,9 +120,25 @@
   const mountPenseBete = aLaDemande(charger_ecran_atelier, "mountPenseBete");
   const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
   // SSIAP360 : appli de formation SSIAP / SST, affichée dans l'appli (même connexion).
-  const mountSsiap360 = (c) => {
-    c.innerHTML = `<div class="ssiap-barre"><span>🧯 <b>SSIAP360</b> — formations SSIAP et SST</span><a class="nav-btn" href="ssiap360/index.html" target="_blank" rel="noopener">↗ Ouvrir en plein écran</a></div>
-      <iframe class="ssiap-cadre" src="ssiap360/index.html" title="SSIAP360" allow="fullscreen; clipboard-write"></iframe>`;
+  const mountSsiap360 = (c, u) => {
+    window.__smmRole = u?.role || null;
+    const admin = u?.role === "super_admin";
+    c.innerHTML = `<div class="ssiap-barre"><span>🧯 <b>SSIAP360</b> — formations SSIAP et SST</span><span class="ssiap-etat" id="ssiap-etat"></span>
+      <span>${admin ? `<button type="button" class="nav-btn" id="ssiap-adm">⚙️ Espace administrateur</button> ` : ""}<a class="nav-btn" href="ssiap360/index.html" target="_blank" rel="noopener">↗ Plein écran</a></span></div>
+      <iframe class="ssiap-cadre" id="ssiap-cadre" src="ssiap360/index.html" title="SSIAP360" allow="fullscreen; clipboard-write"></iframe>`;
+    const fr = c.querySelector("#ssiap-cadre"), etat = c.querySelector("#ssiap-etat");
+    c.querySelector("#ssiap-adm")?.addEventListener("click", () => fr.contentWindow?.__ssiapAdmin?.ouvrir());
+    // Diagnostic : base accessible (règles publiées) et droits administrateur.
+    const verifier = async () => {
+      try {
+        const { db } = await import("./firebase-init.js"); const { doc, setDoc } = await import("./firestore-compte.js");
+        await setDoc(doc(db, "ssiap360-diag", u?.uid || "x"), { le: Date.now(), role: u?.role || "" });
+        const e = fr.contentWindow?.__ssiapAdmin?.etat?.();
+        etat.innerHTML = e ? (e.admin ? "✅ Administrateur" : admin ? "⏳ Droits en cours de chargement…" : "") : "";
+        if (admin && e && !e.admin) setTimeout(verifier, 2500);
+      } catch (err) { etat.innerHTML = `<b style="color:#E5533D">⚠️ Base SSIAP360 bloquée : publie les règles Firestore (bloc « ssiap360 »).</b>`; console.error(err); }
+    };
+    fr.addEventListener("load", () => setTimeout(verifier, 1500));
   };
   const charger_espaces_verts = () => import("./espaces-verts.js");
   const mountEspacesVertsIntervention = aLaDemande(charger_espaces_verts, "mountEspacesVertsIntervention");

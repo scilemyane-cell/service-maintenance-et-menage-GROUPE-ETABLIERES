@@ -17,7 +17,11 @@
       import("../js/firebase-init.js"), import(G + "firebase-firestore.js"), import(G + "firebase-auth.js"),
     ]);
     var user = await new Promise(function (ok) { var u = fa.onAuthStateChanged(auth, function (x) { u(); ok(x); }); });
-    if (!user) user = (await fa.signInAnonymously(auth)).user;
+    if (!user) {
+      // Dans la tuile SMM, la session SMM peut mettre un instant à être relue : on attend avant de passer en invité.
+      try { if (window.parent !== window && window.parent.__smmRole) user = await new Promise(function (ok) { var t = setTimeout(function () { ok(null); }, 4000); var u = fa.onAuthStateChanged(auth, function (x) { if (x) { clearTimeout(t); u(); ok(x); } }); }); } catch (e) {}
+      if (!user) user = (await fa.signInAnonymously(auth)).user;
+    }
     void app;
     return { auth: auth, fdb: fdb, fs: fs, user: user };
   })();
@@ -134,8 +138,10 @@
             if (env.user.isAnonymous) return Promise.resolve(false);
             return env.fs.getDoc(env.fs.doc(env.fdb, "users", env.user.uid)).then(function (s) {
               var r = s.exists() ? s.data().role : null;
+              // Rôle connu de l'appli SMM parente (même session), en secours.
+              try { if (!r && window.parent && window.parent !== window && window.parent.__smmRole) r = window.parent.__smmRole; } catch (e) {}
               // Super administrateur SMM : administrateur SSIAP360 d'office.
-              if (r === "super_admin") window.SSIAP360_SMM_ADMIN = true;
+              if (r === "super_admin") { window.SSIAP360_SMM_ADMIN = true; setTimeout(function () { window.__ssiapAdmin && window.__ssiapAdmin.rafraichir(); }, 300); setTimeout(function () { window.__ssiapAdmin && window.__ssiapAdmin.rafraichir(); }, 2500); }
               return r === "super_admin" || r === "admin" || r === "n1";
             }).catch(function () { return false; });
           },

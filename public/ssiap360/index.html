@@ -19842,6 +19842,12 @@ ${frCtx()}`;
                 /* Appli SMM : le super administrateur SMM est administrateur SSIAP360 d'office (sans mot de passe). */
                 return (ADM.on || window.SSIAP360_SMM_ADMIN === true) && PL.canEdit
             }
+            /* Appli SMM : accès direct à l'espace administrateur depuis la tuile. */
+            window.__ssiapAdmin = {
+                rafraichir: () => { try { admRender(); acctRender(); if (VIEW === 'gest') renderGest(); } catch (e) {} },
+                ouvrir: () => { try { if (isAdmin()) goHome('gest'); else admOpen(); } catch (e) {} },
+                etat: () => ({ admin: isAdmin(), canEdit: !!PL.canEdit, db: !!PL.db, licence: LIC.ok })
+            };
             function admSet(v) {
                 ADM.on = v;
                 try {
