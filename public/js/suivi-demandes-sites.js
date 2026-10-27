@@ -814,7 +814,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         const nMeme = candidats.filter(memeLog).length;
         const mails = Array.isArray(l.mailsEnvoyes) ? l.mailsEnvoyes : [];
         return `${mails.length ? `<div class="dps-mails">${mails.slice(-3).map(m => `<span>📧 Mail à <b>${esc(m.a)}</b> le ${fr(m.le)}${m.par ? ` par ${esc(m.par)}` : ""}</span>`).join("")}</div>` : ""}
-        ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button>${perms.isEditor ? `<button type="button" class="dps-mail-btn dps-suppr-btn" data-suppr-dem="${esc(l.id)}" title="Supprimer cette demande (erreur) — restaurable depuis l'onglet « 🗑 Supprimées »">🗑 Supprimer</button>` : ""}</div>` : ""}
+        ${perms.peutTraiter ? `<div class="dps-mail-ligne"><button type="button" class="dps-mail-btn" data-mail="${esc(l.id)}">✉️ Envoyer par mail</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}">🎫 Ticket prestataire</button><button type="button" class="dps-mail-btn dps-ticket-btn" data-ticket="${esc(l.id)}" data-pour="collegue" title="Ticket simplifié pour demander des précisions à un collègue">❓ Demander des précisions</button>${perms.isEditor ? `<button type="button" class="dps-mail-btn dps-suppr-btn" data-suppr-dem="${esc(l.id)}" title="Supprimer cette demande (erreur) — restaurable depuis l'onglet « 🗑 Supprimées »">🗑 Supprimer</button>` : ""}</div>` : ""}
         ${perms.peutTraiter && candidats.length ? `<details class="dps-lier" data-lier-box="${esc(l.id)}" ${st.lierOuvert.has(l.id) ? "open" : ""}><summary>🔗 Relier une autre demande à celle-ci (doublon)${nMeme ? ` <small>${nMeme} du même logement</small>` : ""}</summary>
           <input type="search" class="dps-cand-q" data-lier-q="${esc(l.id)}" placeholder="🔎 N°, logement, mot du descriptif…" value="${esc(st.lierQ[l.id] || "")}">
           <div class="dps-cands">${nMeme ? `<div class="dps-cand-titre">📍 Même logement${l.local ? ` (${esc(l.local)})` : ""}</div>${candidats.filter(memeLog).map(ligneCand).join("")}` : ""}
@@ -927,7 +927,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const fenetre = preparerFenetre();
     const { ouvrirTicketPrestataire } = await import("./demandes-ticket.js");
     const fiche = (fav.fiches || []).find(f => memeSite(l.site, f.nom));
-    ouvrirTicketPrestataire({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "", fenetre });
+    ouvrirTicketPrestataire({ ligne: l, adresse: fiche?.adresse || "", utilisateur, email: (utilisateurs || []).find(u => u.uid === uid)?.email || "", fenetre, pour: b.dataset.pour || "entreprise" });
   }));
   if (container.querySelector("[data-ticket-copie]")) prechargerCaptureTicket();
   container.querySelectorAll("[data-ticket-copie]").forEach(b => b.addEventListener("click", () => {

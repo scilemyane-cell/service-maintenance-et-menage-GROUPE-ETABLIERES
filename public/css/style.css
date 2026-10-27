@@ -4006,3 +4006,6 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .eff-choix summary{cursor:pointer;font-size:13px}
 .eff-choix-l{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0}.eff-choix-l label{display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer}
 .eff-ajout{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.eff-ajout input{flex:1;min-width:200px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
+.tkm-pour{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;font-size:13px}
+.tkm-pour button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:99px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.tkm-pour button.on{background:#1a4fb4;border-color:#1a4fb4;color:#fff}

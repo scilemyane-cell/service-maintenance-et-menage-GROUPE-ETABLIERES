@@ -91,21 +91,37 @@ export function copierTicketImage(params) { return copierImage(imageTicket(param
 // à coller le ticket sous le texte.
 export function ouvrirTicketMail(params, { email: dest = "", contact = "" } = {}) {
   const l = params.ligne, moi = params.utilisateur || "";
-  const image = imageTicket(params); image.catch(() => {});
+  let pour = "entreprise", image = imageTicket({ ...params, pour }); image.catch(() => {});
   const fond = document.createElement("div"); fond.className = "ndm-fond";
-  const message = `Bonjour${contact ? ` ${contact}` : ""},\n\nPourriez-vous intervenir pour la demande ci-dessous (${l.n} — ${l.site}${l.local ? `, ${l.local}` : ""}) ?\nMerci de me confirmer votre date de passage.\n\nCordialement,\n${moi}`;
+  const lieu = `${l.n} — ${l.site}${l.local ? `, ${l.local}` : ""}`;
+  const TEXTES = {
+    entreprise: { objet: `Demande d'intervention ${l.n} — ${l.site}`, ph: "adresse du prestataire (facultatif)",
+      msg: `Bonjour${contact ? ` ${contact}` : ""},\n\nPourriez-vous intervenir pour la demande ci-dessous (${lieu}) ?\nMerci de me confirmer votre date de passage.\n\nCordialement,\n${moi}` },
+    collegue: { objet: `Précisions sur la demande ${l.n} — ${l.site}`, ph: "adresse du collègue",
+      msg: `Bonjour,\n\nJ'ai besoin de quelques précisions sur la demande ci-dessous (${lieu}) avant de la traiter. Peux-tu me répondre sur les points indiqués ?\n\nMerci,\n${moi}` },
+  };
   fond.innerHTML = `<div class="ndm tkm">
     <div class="ndm-tete"><h3>📋 Ticket ${esc(l.n)} pour un mail</h3><button type="button" class="ndm-x" data-fermer>✕</button></div>
-    <label>À<input id="tkm-a" type="email" value="${esc(dest)}" placeholder="adresse du prestataire (facultatif)"></label>
-    <label>Objet<input id="tkm-objet" value="${esc(`Demande d'intervention ${l.n} — ${l.site}`)}"></label>
-    <label>Message<textarea id="tkm-msg" rows="7">${esc(message)}</textarea></label>
+    <div class="tkm-pour"><span>Pour :</span><button type="button" class="on" data-pour="entreprise">🏢 Une entreprise (intervention)</button><button type="button" data-pour="collegue">👷 Un collègue (demander des précisions)</button></div>
+    <label>À<input id="tkm-a" type="email" value="${esc(dest)}" placeholder="${TEXTES.entreprise.ph}"></label>
+    <label>Objet<input id="tkm-objet" value="${esc(TEXTES.entreprise.objet)}"></label>
+    <label>Message<textarea id="tkm-msg" rows="7">${esc(TEXTES.entreprise.msg)}</textarea></label>
     <p class="tkm-aide">1. Clique sur <b>« ✉️ Copier et ouvrir le mail »</b> — 2. Dans le mail, sous ton texte, <b>colle le ticket</b> (Ctrl+V, ou appui long › Coller).</p>
     <div class="tkm-etat" aria-live="polite">⏳ Préparation du ticket…</div>
     <div class="ndm-btns"><button type="button" class="dps-annuler" id="tkm-seul">📋 Copier le ticket seulement</button><button type="button" class="dps-enregistrer" id="tkm-go">✉️ Copier et ouvrir le mail</button></div>
   </div>`;
   document.body.append(fond);
   const etat = fond.querySelector(".tkm-etat");
-  image.then(() => { if (etat.textContent.startsWith("⏳ Prép")) etat.textContent = "✓ Ticket prêt."; }, (e) => { etat.textContent = "❌ " + (e?.message || e); });
+  const suivre = (img) => img.then(() => { if (img === image && etat.textContent.startsWith("⏳ Prép")) etat.textContent = "✓ Ticket prêt."; }, (e) => { if (img === image) etat.textContent = "❌ " + (e?.message || e); });
+  suivre(image);
+  fond.querySelectorAll("[data-pour]").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.pour === pour) return;
+    pour = b.dataset.pour; fond.querySelectorAll("[data-pour]").forEach(x => x.classList.toggle("on", x === b));
+    const t = TEXTES[pour]; fond.querySelector("#tkm-objet").value = t.objet; fond.querySelector("#tkm-msg").value = t.msg;
+    const a = fond.querySelector("#tkm-a"); a.placeholder = t.ph; if (pour === "collegue" && a.value === dest) a.value = "";
+    if (pour === "entreprise" && !a.value) a.value = dest;
+    etat.textContent = "⏳ Préparation du ticket…"; image = imageTicket({ ...params, pour }); image.catch(() => {}); suivre(image);
+  }));
   const fermer = () => fond.remove();
   fond.querySelectorAll("[data-fermer]").forEach(b => b.addEventListener("click", fermer));
   fond.addEventListener("click", (e) => { if (e.target === fond) fermer(); });
@@ -126,7 +142,8 @@ export function ouvrirTicketMail(params, { email: dest = "", contact = "" } = {}
   }));
 }
 
-async function construireTicket({ ligne: l, adresse = "", utilisateur = "", email = "" }) {
+async function construireTicket({ ligne: l, adresse = "", utilisateur = "", email = "", pour = "entreprise" }) {
+  const col = pour === "collegue";
   const urg = l.urgence && l.urgence !== "Non renseignée" ? l.urgence : "";
   const travaux = l.commentaireTech || "Diagnostic et remise en état.";
   const aujourd = new Date().toLocaleDateString("fr-FR");
@@ -135,7 +152,7 @@ async function construireTicket({ ligne: l, adresse = "", utilisateur = "", emai
   const ligneInfo = (lib, val) => `<tr><th>${lib}</th><td>${val}</td></tr>`;
 
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Demande d'intervention ${esc(l.n)} — ${esc(l.site)}</title>
+<title>${col ? "Demande de précisions" : "Demande d'intervention"} ${esc(l.n)} — ${esc(l.site)}</title>
 <style>
 @page{size:A4 portrait;margin:12mm}
 *{box-sizing:border-box}
@@ -184,7 +201,7 @@ footer{margin-top:18px;font-size:10.5px;color:#777;text-align:center}
 <div class="page">
 <header>
   <img src="${logo}" alt="Groupe Établières">
-  <div class="ref"><h1>DEMANDE D'INTERVENTION</h1><div class="num">${esc(l.n)}</div><small>Émise le ${aujourd}</small><br>
+  <div class="ref"><h1>${col ? "DEMANDE DE PRÉCISIONS" : "DEMANDE D'INTERVENTION"}</h1><div class="num">${esc(l.n)}</div><small>Émise le ${aujourd}</small><br>
   ${urg ? `<span class="urg ${esc(urg)}">${urg === "Critique" ? "⚠ " : ""}${esc(urg.toUpperCase())}</span>` : ""}</div>
 </header>
 
@@ -194,7 +211,7 @@ footer{margin-top:18px;font-size:10.5px;color:#777;text-align:center}
   ${ligneInfo("Adresse", ed(esc(adresse), "", "Adresse à compléter"))}
   ${ligneInfo("Logement / local", `<b>${esc(l.local || "—")}</b>`)}
   ${l.logementOccupe ? ligneInfo("Logement occupé", esc(l.logementOccupe)) : ""}
-  ${ligneInfo("Accès / contact sur place", ed("À convenir avec nous avant le passage"))}
+  ${col ? "" : ligneInfo("Accès / contact sur place", ed("À convenir avec nous avant le passage"))}
 </table>
 
 <h2>Objet de la demande</h2>
@@ -204,7 +221,10 @@ footer{margin-top:18px;font-size:10.5px;color:#777;text-align:center}
 </table>
 <div class="bloc" style="margin-top:6px">${esc(l.descr || "")}</div>
 
-<h2>Travaux demandés</h2>
+${col ? `<h2>Informations à compléter</h2>
+${ed("• Peux-tu me décrire plus précisément le problème ?<br>• Peux-tu m'envoyer une photo si possible ?<br>• Quand peut-on accéder au logement / au local ?", "bloc")}
+
+` : `<h2>Travaux demandés</h2>
 ${ed(esc(travaux), "bloc")}
 
 <h2>Délai souhaité</h2>
@@ -218,12 +238,13 @@ ${ed(esc(DELAIS[urg] || "Dans les meilleurs délais"))}
   <li>nous adresser un compte rendu d'intervention après votre passage.</li>
 </ul>
 
-<h2>Votre contact — Groupe Établières</h2>
+`}<h2>${col ? "Ton contact" : "Votre contact — Groupe Établières"}</h2>
 <div class="contact"><div><b>${esc(nomPropre(utilisateur)) || "Service Maintenance"}</b><br>Service Maintenance et Ménage</div>
 <div>${ed(esc(email), "", "e-mail")}<br>${ed("", "", "Téléphone")}</div></div>
 
-<h2>Intervention réalisée</h2>
-<div class="signature"><div>Date, intervenant et travaux effectués :</div><div>Visa Groupe Établières :</div></div>
+${col ? `<h2>Ta réponse</h2>
+<div class="signature" style="grid-template-columns:1fr"><div style="min-height:110px">Précisions :</div></div>` : `<h2>Intervention réalisée</h2>
+<div class="signature"><div>Date, intervenant et travaux effectués :</div><div>Visa Groupe Établières :</div></div>`}
 
 <footer>Groupe Établières — Service Maintenance · Réf. ${esc(l.n)}</footer>
 </div>
