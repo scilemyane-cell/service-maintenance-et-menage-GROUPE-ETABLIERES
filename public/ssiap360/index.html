@@ -19839,7 +19839,8 @@ ${frCtx()}`;
                 return 'f' + (h >>> 0).toString(16)
             }
             function isAdmin() {
-                return ADM.on && PL.canEdit
+                /* Appli SMM : le super administrateur SMM est administrateur SSIAP360 d'office (sans mot de passe). */
+                return (ADM.on || window.SSIAP360_SMM_ADMIN === true) && PL.canEdit
             }
             function admSet(v) {
                 ADM.on = v;
@@ -21374,10 +21375,12 @@ ${frCtx()}`;
                 gestion: 'Gestion des formateurs et candidats',
                 salle: 'Pilotage de la salle'
             };
+            /* Appli SMM : licence interne Groupe Établières (usage interne, tous modules). */
+            const LIC_INTERNE = window.SSIAP360_LICENCE_INTERNE || null;
             const LIC = {
-                ok: false,
-                data: null,
-                reason: 'absente',
+                ok: !!LIC_INTERNE,
+                data: LIC_INTERNE,
+                reason: LIC_INTERNE ? '' : 'absente',
                 key: ''
             };
             const b64uDec = s => {
@@ -21437,7 +21440,9 @@ ${frCtx()}`;
                 }
             }
             async function licLoad(key, save) {
-                const r = await licVerify(key);
+                let r = await licVerify(key);
+                if (!r.ok && LIC_INTERNE)
+                    r = { ok: true, data: LIC_INTERNE };
                 LIC.ok = r.ok;
                 LIC.data = r.data || null;
                 LIC.reason = r.ok ? '' : r.reason;

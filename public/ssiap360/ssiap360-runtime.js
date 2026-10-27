@@ -9,6 +9,8 @@
      anonymement) utilisent l'appli normalement. */
 (function () {
   if (window.claude && window.claude.use) return;
+  // Hébergé dans l'appli SMM : licence interne Groupe Établières, tous modules.
+  window.SSIAP360_LICENCE_INTERNE = { v: 1, c: "Groupe Établières (usage interne)", id: "SMM-INTERNE", exp: "2099-12-31", m: null, n: 0 };
   var V = "10.14.1", G = "https://www.gstatic.com/firebasejs/" + V + "/";
   var pret = (async function () {
     var [{ app, auth, db: fdb }, fs, fa] = await Promise.all([
@@ -131,7 +133,10 @@
           canEdit: function () {
             if (env.user.isAnonymous) return Promise.resolve(false);
             return env.fs.getDoc(env.fs.doc(env.fdb, "users", env.user.uid)).then(function (s) {
-              var r = s.exists() ? s.data().role : null; return r === "super_admin" || r === "admin" || r === "n1";
+              var r = s.exists() ? s.data().role : null;
+              // Super administrateur SMM : administrateur SSIAP360 d'office.
+              if (r === "super_admin") window.SSIAP360_SMM_ADMIN = true;
+              return r === "super_admin" || r === "admin" || r === "n1";
             }).catch(function () { return false; });
           },
           id: function () { return Promise.resolve(env.user.uid); },
