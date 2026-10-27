@@ -4009,3 +4009,6 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .tkm-pour{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;font-size:13px}
 .tkm-pour button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:99px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
 .tkm-pour button.on{background:#1a4fb4;border-color:#1a4fb4;color:#fff}
+.ssiap-barre{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.ssiap-barre .nav-btn{text-decoration:none}
+.ssiap-cadre{width:100%;height:calc(100vh - 190px);min-height:520px;border:1px solid var(--border);border-radius:14px;background:#fff}

@@ -119,6 +119,11 @@
   const mountEcranAtelier = aLaDemande(charger_ecran_atelier, "mountEcranAtelier");
   const mountPenseBete = aLaDemande(charger_ecran_atelier, "mountPenseBete");
   const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
+  // SSIAP360 : appli de formation SSIAP / SST, affichée dans l'appli (même connexion).
+  const mountSsiap360 = (c) => {
+    c.innerHTML = `<div class="ssiap-barre"><span>🧯 <b>SSIAP360</b> — formations SSIAP et SST</span><a class="nav-btn" href="ssiap360/index.html" target="_blank" rel="noopener">↗ Ouvrir en plein écran</a></div>
+      <iframe class="ssiap-cadre" src="ssiap360/index.html" title="SSIAP360" allow="fullscreen; clipboard-write"></iframe>`;
+  };
   const charger_espaces_verts = () => import("./espaces-verts.js");
   const mountEspacesVertsIntervention = aLaDemande(charger_espaces_verts, "mountEspacesVertsIntervention");
   const mountEspacesVertsSuivi = aLaDemande(charger_espaces_verts, "mountEspacesVertsSuivi");
@@ -438,6 +443,12 @@
         ],
       },
       {
+        id: "ssiap360", label: "SSIAP360", icon: "🧯", desc: "Formations SSIAP et SST aux Établières : modules, simulateur, salle de formation, planning",
+        subtabs: [
+          { id: "app", label: "SSIAP360", icon: "🧯", roles: ALL, mount: mountSsiap360 },
+        ],
+      },
+      {
         id: "fiches-poste", label: "Fiches de poste", icon: "📄", desc: "Rédiger les fiches de poste (formulaire RH 05, réservé au responsable) en cochant les missions et compétences proposées, PDF et SharePoint",
         subtabs: [
           { id: "fiches", label: "Fiches de poste", icon: "📄", roles: SUPER_ADMIN_ONLY, mount: mountFichesPoste },
@@ -453,8 +464,11 @@
   }
 
   function allCategories(user) {
-    const [statistiques, astreinte, administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, ecranAtelier, mails] = staticCategories();
-    return [statistiques, astreinte, ...dispositifCategories(user), administration, sites, compteurs, masterlock, cles, previsionnel, taches, planningIndividuel, monPlanning, suiviDemandes, logements, stockMenage, stock, stockDeporte, espacesVerts, ecranAtelier, mails];
+    // Les dispositifs ménage s'insèrent après « Astreinte » ; toutes les
+    // autres tuiles suivent dans l'ordre de staticCategories() (une tuile
+    // ajoutée là-bas apparaît donc automatiquement).
+    const [statistiques, astreinte, ...autres] = staticCategories();
+    return [statistiques, astreinte, ...dispositifCategories(user), ...autres];
   }
 
   watchAuth((user) => {

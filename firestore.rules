@@ -241,6 +241,14 @@ service cloud.firestore {
     // ---- Espaces verts : un passage par document, photos à part (≈ 80 Ko) ----
     // L'agent gère ses propres passages et photos ; un éditeur peut tout gérer.
     // ---- Pense-bête de l'écran atelier (télé) ----
+    // SSIAP360 (appli de formation intégrée) : collections « ssiap360-… »,
+    // ouvertes à toute personne connectée (y compris stagiaire anonyme).
+    match /{coll}/{docId} {
+      allow read, write: if isSignedIn() && coll.matches('ssiap360-.*');
+    }
+    match /{coll}/{docId}/{reste=**} {
+      allow read, write: if isSignedIn() && coll.matches('ssiap360-.*');
+    }
     match /fiches-poste/{docId} {
       allow read, write: if isSuperAdmin();
     }
