@@ -224,7 +224,8 @@ function render() {
         // Ordre des colonnes = ordre des sites (réglable avec ◀ ▶) ; couleur fixe par site.
         const rang = (id) => { const i = state.sites.findIndex(x => x.id === id); return i < 0 ? 999 : i; };
         const cols = ids.map(id => state.sites.find(s => s.id === id) || { id, name: filtered.find(f => f.siteId === id)?.siteName || "?" }).sort((a, b) => rang(a.id) - rang(b.id));
-        const coul = (id) => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COUL_SITES[h % COUL_SITES.length]; };
+        const COUL_FIXES = { aga: "#2f6fd6", dr: "#8a4fd1", svdp: "#d9772b", moutonnerie: "#139c8f", "la-ferme": "#5a7d1a" };
+        const coul = (id) => { if (COUL_FIXES[id]) return COUL_FIXES[id]; let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COUL_SITES[h % COUL_SITES.length]; };
         const peutOrdonner = isEditorUser(mountedUser) && cols.length > 1;
         const lundi = lundiCourant(), connues = [...new Set([...filtered.map(f => f.weekStart), lundi])].sort();
         // Toutes les semaines à la suite (même sans fiche), comme un calendrier.

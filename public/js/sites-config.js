@@ -268,11 +268,11 @@ export const SITES = [
     name: "Maison MNA La Ferme",
     dispositif: "Dispositif MNA",
     rooms: [
-      room("Bureau", ["MAR"], [
+      room("Bureau", LMV, [
         "Plinthes", "Poignées & interrupteurs", "Sols : aspirateur & lavage",
         "Surfaces : dépoussiérage", "Nettoyage vitres", "Vider les poubelles",
       ]),
-      room("Cuisine", DAYS, [
+      room("Cuisine", LMV, [
         "Nettoyer plan de travail, évier, sol, placards (aspirateur et lavage)",
         { label: "Électroménager : four, frigo, lave-linge, congélateur", freq: "2X/semaine" },
         { label: "Four", freq: "1X/semaine" },
@@ -284,27 +284,27 @@ export const SITES = [
         { label: "VMC", freq: "1X/3 mois" },
         "Poignées & interrupteurs",
       ]),
-      room("Salon", DAYS, [
+      room("Salon", LMV, [
         "Sols : aspirateur & lavage", "Poussières mobiliers",
         "Nettoyage vitres, poignées & interrupteurs", "Vider les poubelles", "Plinthes & VMC",
       ]),
-      room("Salle d'eau", DAYS, [
+      room("Salle d'eau", LMV, [
         "Douche et lavabo : désinfection",
         "Sol : aspirateur et lavage",
         { label: "VMC & murs", freq: "2X/mois" },
         { label: "Plinthes", freq: "1X/mois" },
         "Poignées & interrupteurs",
       ]),
-      room("WC", DAYS, [
+      room("WC", LMV, [
         "WC : nettoyage & détartrage, poubelle",
         "Sol : aspirateur et lavage",
         "Poignées & interrupteurs",
       ]),
-      room("Étage — salon", DAYS, [
+      room("Étage — salon", LMV, [
         "Sols : aspirateur & lavage", "Poussières mobiliers",
         "Nettoyage vitres, poignées & interrupteurs", "Vider les poubelles", "Plinthes & VMC",
       ]),
-      room("Étage — cuisine", DAYS, [
+      room("Étage — cuisine", LMV, [
         "Nettoyer plan de travail, évier, sol, placards (aspirateur et lavage)",
         { label: "Électroménager : four, frigo, lave-linge, congélateur", freq: "2X/semaine" },
         { label: "Four", freq: "1X/semaine" },
@@ -316,12 +316,12 @@ export const SITES = [
         { label: "VMC", freq: "1X/3 mois" },
         "Poignées & interrupteurs",
       ]),
-      room("Étage — WC", DAYS, [
+      room("Étage — WC", LMV, [
         "WC : nettoyage & détartrage, poubelle",
         "Sol : aspirateur et lavage",
         "Poignées & interrupteurs",
       ]),
-      room("Étage — salle d'eau", DAYS, [
+      room("Étage — salle d'eau", LMV, [
         "Douche et lavabo : désinfection",
         "Sol : aspirateur et lavage",
         { label: "VMC & murs", freq: "2X/mois" },
