@@ -4013,3 +4013,12 @@ table.tr-g tbody th,table.tr-g tbody th *{text-transform:none;letter-spacing:0}
 .ssiap-barre .nav-btn{text-decoration:none}
 .ssiap-cadre{width:100%;height:calc(100vh - 190px);min-height:520px;border:1px solid var(--border);border-radius:14px;background:#fff}
 .ssiap-etat{font-size:12.5px;font-weight:700;flex:1;text-align:center}
+/* Traçabilité : grille élargie à toute la largeur de l'écran */
+.tr-g-wrap{width:min(1700px,calc(100vw - 32px));margin-left:calc(50% - min(850px,(100vw - 32px) / 2))}
+table.tr-g thead th[style]{min-width:150px}
+.tr-g-site{display:flex!important;align-items:center;justify-content:center;gap:6px}
+.tr-g-site>span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-g-fl{border:0;background:rgba(255,255,255,.25);color:#fff;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:11px;flex:none}
+.tr-g-fl:hover{background:rgba(255,255,255,.45)}
+.tr-g-wrap+.tr-g-leg{width:min(1700px,calc(100vw - 32px));margin-left:calc(50% - min(850px,(100vw - 32px) / 2))}
+table.tr-g{table-layout:fixed;min-width:0}

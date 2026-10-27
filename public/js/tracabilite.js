@@ -1,5 +1,5 @@
 import { fmtShort, esc, dateKey, addDays } from "./astreinte-logic.js";
-import { watchSites } from "./sites-data.js";
+import { watchSites, saveSites } from "./sites-data.js";
 import { watchFiches, deleteFiche, saveFiche, ficheId } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
 import { mentionHTML, taskCompletion, ficheHTML, imprimerFiche } from "./tracabilite-rendu.js";
@@ -221,7 +221,11 @@ function render() {
         // Colonnes : tous les sites du dispositif (même sans fiche encore), + ceux qui ont des fiches.
         const sitesVisibles = (lockedDispositif ? state.sites.filter(x => siteDispositif(x) === lockedDispositif) : sitesForFilter).filter(x => ui.filterSite === "Tous" || x.name === ui.filterSite);
         const ids = [...new Set([...sitesVisibles.map(x => x.id), ...filtered.map(f => f.siteId)])];
-        const cols = ids.map(id => state.sites.find(s => s.id === id) || { id, name: filtered.find(f => f.siteId === id)?.siteName || "?" }).sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
+        // Ordre des colonnes = ordre des sites (réglable avec ◀ ▶) ; couleur fixe par site.
+        const rang = (id) => { const i = state.sites.findIndex(x => x.id === id); return i < 0 ? 999 : i; };
+        const cols = ids.map(id => state.sites.find(s => s.id === id) || { id, name: filtered.find(f => f.siteId === id)?.siteName || "?" }).sort((a, b) => rang(a.id) - rang(b.id));
+        const coul = (id) => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COUL_SITES[h % COUL_SITES.length]; };
+        const peutOrdonner = isEditorUser(mountedUser) && cols.length > 1;
         const lundi = lundiCourant(), connues = [...new Set([...filtered.map(f => f.weekStart), lundi])].sort();
         // Toutes les semaines à la suite (même sans fiche), comme un calendrier.
         const semaines = []; for (let d = new Date((connues[connues.length - 1] > lundi ? connues[connues.length - 1] : lundi) + "T00:00:00"); dateKey(d) >= connues[0] && semaines.length < 200; d = addDays(d, -7)) semaines.push(dateKey(d));
@@ -234,7 +238,7 @@ function render() {
             <span class="tr-g-barre"><i class="${pct >= 90 ? "vert" : pct >= 70 ? "orange" : "rouge"}" style="width:${pct}%"></i></span>
             <span class="tr-g-bas"><span>${pct} % · ${done}/${total}</span>${f.archiveSP ? `<span title="Archivée sur SharePoint">☁️</span>` : ""}${(photosDe(f) || []).length ? `<span>📷 ${photosDe(f).length}</span>` : ""}</span></button>`;
         };
-        return `<div class="table-wrap tr-g-wrap"><table class="tr-g"><thead><tr><th>Semaine</th>${cols.map((c, i) => `<th title="${esc(c.name)}" style="--c:${COUL_SITES[i % COUL_SITES.length]}"><span class="tr-g-site">🏠 ${esc(court(c.name))}</span></th>`).join("")}</tr></thead><tbody>
+        return `<div class="table-wrap tr-g-wrap"><table class="tr-g" style="min-width:${170 + cols.length * 160}px"><colgroup><col style="width:170px">${cols.map(() => "<col>").join("")}</colgroup><thead><tr><th>Semaine</th>${cols.map((c, i) => `<th title="${esc(c.name)}" style="--c:${coul(c.id)}"><span class="tr-g-site">${peutOrdonner && i > 0 ? `<button type="button" class="tr-g-fl" data-ordre="${esc(c.id)}" data-sens="-1" title="Déplacer à gauche">◀</button>` : ""}<span>🏠 ${esc(court(c.name))}</span>${peutOrdonner && i < cols.length - 1 ? `<button type="button" class="tr-g-fl" data-ordre="${esc(c.id)}" data-sens="1" title="Déplacer à droite">▶</button>` : ""}</span></th>`).join("")}</tr></thead><tbody>
           ${semaines.map((w, wi) => { const d = new Date(w + "T00:00:00"), fin = addDays(d, 4), mois = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
             const prev = wi ? new Date(semaines[wi - 1] + "T00:00:00").toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) : "";
             const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 3)), j1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 4)), nSem = 1 + Math.round(((t - j1) / 864e5 - 3 + ((j1.getUTCDay() + 6) % 7)) / 7);
@@ -242,7 +246,7 @@ function render() {
             return `${mois !== prev ? `<tr class="tr-g-mois"><th colspan="${cols.length + 1}"><span>📅 ${mois.charAt(0).toUpperCase() + mois.slice(1)}</span></th></tr>` : ""}<tr class="${w === lundi ? "courante" : ""}"><th>
               <div class="tr-cal"><div class="tr-cal-page"><span class="tr-cal-m">${mc(d)}</span><b>${d.getDate()}</b></div>
               <div class="tr-cal-txt"><b>Sem. ${nSem}</b><span>lun ${d.getDate()} ${mc(d)}<br>→ ven ${fin.getDate()} ${mc(fin)}</span>${w === lundi ? `<em>cette semaine</em>` : ""}</div></div></th>
-            ${cols.map((c, i) => { const l = filtered.filter(f => f.weekStart === w && f.siteId === c.id); return `<td style="--c:${COUL_SITES[i % COUL_SITES.length]}">${l.length ? l.map(f => carte(f, state.sites.find(s => s.id === f.siteId))).join("") : `<span class="tr-g-rien">—</span>`}</td>`; }).join("")}</tr>`; }).join("")}
+            ${cols.map((c) => { const l = filtered.filter(f => f.weekStart === w && f.siteId === c.id); return `<td style="--c:${coul(c.id)}">${l.length ? l.map(f => carte(f, state.sites.find(s => s.id === f.siteId))).join("") : `<span class="tr-g-rien">—</span>`}</td>`; }).join("")}</tr>`; }).join("")}
         </tbody></table></div><p class="hint tr-g-leg"><i class="valid"></i> Validée <i class="averif"></i> À vérifier <i class="cours"></i> En cours (semaine actuelle) <i class="nonenv"></i> Pas envoyée (semaine finie, l'agent n'a pas appuyé sur « Envoyer ») · clique sur une fiche pour l'ouvrir</p>`;
       })()}
       `}
@@ -271,6 +275,17 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
     v.onclick = () => v.remove(); document.body.appendChild(v);
   }));
   mountedContainer.querySelectorAll("[data-tr-vue]").forEach(b => b.addEventListener("click", () => { ui.vue = b.dataset.trVue; render(); }));
+  // Réordonner les sites (colonnes) : l'ordre est enregistré pour tout le monde.
+  mountedContainer.querySelectorAll("[data-ordre]").forEach(b => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const id = b.dataset.ordre, sens = +b.dataset.sens;
+    const memes = state.sites.filter(x => siteDispositif(x) === siteDispositif(state.sites.find(y => y.id === id)));
+    const j = memes.findIndex(x => x.id === id), voisin = memes[j + sens]; if (!voisin) return;
+    const liste = [...state.sites], a = liste.findIndex(x => x.id === id), c = liste.findIndex(x => x.id === voisin.id);
+    [liste[a], liste[c]] = [liste[c], liste[a]];
+    state.sites = liste; render();
+    try { await saveSites(liste); } catch (err) { alert("Ordre non enregistré : " + (err?.message || err)); }
+  }));
   document.getElementById("tr-archive")?.addEventListener("click", () => lancerArchive(true));
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => { ui.openId = btn.dataset.open; render(); setTimeout(() => document.getElementById("tr-apercu")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); });
