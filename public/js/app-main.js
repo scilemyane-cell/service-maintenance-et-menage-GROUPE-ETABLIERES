@@ -118,6 +118,7 @@
   const charger_ecran_atelier = () => import("./ecran-atelier.js");
   const mountEcranAtelier = aLaDemande(charger_ecran_atelier, "mountEcranAtelier");
   const mountPenseBete = aLaDemande(charger_ecran_atelier, "mountPenseBete");
+  const mountStatsMenage = aLaDemande(() => import("./stats-menage.js"), "mountStatsMenage");
   const mountPlanningMenage = aLaDemande(() => import("./planning-menage.js"), "mountPlanningMenage");
   const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
   // SSIAP360 : appli de formation SSIAP / SST, affichée dans l'appli (même connexion).
@@ -317,6 +318,7 @@
           { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: [...GESTION, "direction"],       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
           { id: "prestataire", label: "Accès prestataire", icon: "🔗", roles: GESTION, mount: mountAccesRemplacants },
           { id: "planning",    label: "Planning",    icon: "📅", roles: MENAGE_ROLES, mount: (c, u) => mountPlanningMenage(c, u, d) },
+          { id: "stats-menage", label: "Statistiques", icon: "📊", roles: [...GESTION, "direction"], mount: (c, u) => mountStatsMenage(c, u, d) },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
         ],
       }));
@@ -683,7 +685,7 @@
     // couvre pas.
     // … sauf les onglets de gestion (accès prestataire, paramètres,
     // traçabilité), réservés aux responsables même avec un accès bonus.
-    if ((user.extraOnglets || []).includes(category.id)) return category.subtabs.filter(s => GESTION.includes(user.role) || !["prestataire", "parametres", "tracabilite"].includes(s.id) || (s.id === "tracabilite" && user.role === "direction"));
+    if ((user.extraOnglets || []).includes(category.id)) return category.subtabs.filter(s => GESTION.includes(user.role) || !["prestataire", "parametres", "tracabilite", "stats-menage"].includes(s.id) || (["tracabilite", "stats-menage"].includes(s.id) && user.role === "direction"));
     return category.subtabs.filter(s => s.roles.includes(user.role));
   }
   function visibleCategoriesFor(user) {

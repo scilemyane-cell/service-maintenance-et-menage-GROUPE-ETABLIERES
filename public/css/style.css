@@ -4046,3 +4046,7 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .pm-barre{height:8px;border-radius:99px;background:var(--panel-alt);overflow:hidden}.pm-barre i{display:block;height:100%;border-radius:99px}
 .pm-site small{color:var(--text-dim);width:36px;text-align:right}
 @media print{.pm-btns,#pm-add{display:none}}
+.sm-filtres{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.sm-filtres select{padding:7px 9px;border-radius:9px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit}
+.sm-det summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--teal);margin-top:10px}
+.sm-trous{display:flex;flex-direction:column;gap:4px;font-size:13px;margin-top:6px}
