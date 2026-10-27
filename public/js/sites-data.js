@@ -22,6 +22,15 @@ export function watchSites(callback) {
         corrige = true;
         return { ...e, correctionJours: "lmv", rooms: (e.rooms || []).map(r => ({ ...r, days: ["LUN", "MER", "VEN"] })) };
       });
+      // Fusion ponctuelle : le Studio fait partie de La Moutonnerie (un seul site).
+      const studio = sites.find(x => x.id === "studio-mna"), mout = sites.find(x => x.id === "moutonnerie");
+      if (studio && mout) {
+        corrige = true;
+        const ren = { "Cuisine / salon": "Studio — cuisine / salon", "WC": "Studio — WC", "Salle d'eau": "Studio — salle d'eau" };
+        const piecesStudio = (studio.rooms || []).map(r => ({ ...r, name: ren[r.name] || ("Studio — " + r.name) })).filter(r => !(mout.rooms || []).some(x => x.name === r.name));
+        sites.splice(sites.indexOf(mout), 1, { ...mout, rooms: [...(mout.rooms || []), ...piecesStudio] });
+        sites.splice(sites.findIndex(x => x.id === "studio-mna"), 1);
+      }
       if ((missing.length > 0 || corrige) && !syncing) {
         syncing = true;
         setDoc(REF(), { sites: [...sites, ...missing] }).finally(() => { syncing = false; });

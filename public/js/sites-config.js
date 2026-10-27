@@ -239,15 +239,7 @@ export const SITES = [
         "Nettoyage poignées et interrupteurs",
         { label: "Plinthes", freq: "1X/mois" },
       ]),
-    ],
-    literie: true,
-  },
-  {
-    id: "studio-mna",
-    name: "Studio MNA",
-    dispositif: "Dispositif MNA",
-    rooms: [
-      room("Cuisine / salon", LMV, [
+      room("Studio — cuisine / salon", LMV, [
         "Nettoyer plan de travail, évier, sol, placards (aspirateur et lavage)",
         { label: "Électroménager : four, frigo, micro-ondes", freq: "2X/semaine" },
         "Vider les poubelles",
@@ -256,12 +248,12 @@ export const SITES = [
         "Nettoyage vitres, poignées & interrupteurs",
         { label: "Plinthes & VMC", freq: "1X/mois" },
       ]),
-      room("WC", LMV, [
+      room("Studio — WC", LMV, [
         "WC : nettoyage & détartrage, poubelle",
         "Sol : aspirateur et lavage",
         "Poignées & interrupteurs",
       ]),
-      room("Salle d'eau", LMV, [
+      room("Studio — salle d'eau", LMV, [
         "Douche et lavabo : désinfection",
         "Sol : aspirateur et lavage",
         { label: "VMC & murs", freq: "2X/mois" },
