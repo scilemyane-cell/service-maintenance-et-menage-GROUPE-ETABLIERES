@@ -216,11 +216,13 @@ function render() {
         ${isEditorUser(mountedUser) ? `<button type="button" class="tr-arch" id="tr-archive" title="PDF Département (sans photos) et Interne (avec photos) des semaines terminées">☁️ Archiver sur SharePoint</button>` : ""}<small id="tr-archive-etat" class="hint">${esc(archiveEtat)}</small></div>
       ${ui.vue === "stats" ? tableauDeBordHTML(filtered, state.sites) : `
       ${(() => {
-        if (!filtered.length) return `<div class="form-card hint">Aucune fiche pour l'instant.</div>`;
+        if (!filtered.length && !state.sites.length) return `<div class="form-card hint">Aucune fiche pour l'instant.</div>`;
         // Grille : une ligne par semaine, une colonne par site.
-        const ids = [...new Set(filtered.map(f => f.siteId))];
+        // Colonnes : tous les sites du dispositif (même sans fiche encore), + ceux qui ont des fiches.
+        const sitesVisibles = (lockedDispositif ? state.sites.filter(x => siteDispositif(x) === lockedDispositif) : sitesForFilter).filter(x => ui.filterSite === "Tous" || x.name === ui.filterSite);
+        const ids = [...new Set([...sitesVisibles.map(x => x.id), ...filtered.map(f => f.siteId)])];
         const cols = ids.map(id => state.sites.find(s => s.id === id) || { id, name: filtered.find(f => f.siteId === id)?.siteName || "?" }).sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
-        const lundi = lundiCourant(), connues = [...new Set(filtered.map(f => f.weekStart))].sort();
+        const lundi = lundiCourant(), connues = [...new Set([...filtered.map(f => f.weekStart), lundi])].sort();
         // Toutes les semaines à la suite (même sans fiche), comme un calendrier.
         const semaines = []; for (let d = new Date((connues[connues.length - 1] > lundi ? connues[connues.length - 1] : lundi) + "T00:00:00"); dateKey(d) >= connues[0] && semaines.length < 200; d = addDays(d, -7)) semaines.push(dateKey(d));
         const court = (n) => String(n || "").replace(/^Maison\s+MNA\s+/i, "").replace(/^Maison\s+/i, "");
