@@ -23,7 +23,7 @@ import {
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, fenetreReleve, motRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
   trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve, modifierReleve,
-  creerSectionDossierPourCompteur, libelleIndex,
+  creerSectionDossierPourCompteur, libelleIndex, codeIndex,
   listerTousLesReleves, consommationMensuelleAgregee, consommationRecente,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
@@ -684,8 +684,8 @@ function formatEcarts(compteur, ecarts) {
   if (cles.length > 1) {
     return cles.map(k => {
       const e = ecarts[k];
-      if (e === null || e === undefined || isNaN(e)) return `${k}\u00A0?`;
-      return `${k}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
+      if (e === null || e === undefined || isNaN(e)) return `${codeIndex(compteur, k)}\u00A0?`;
+      return `${codeIndex(compteur, k)}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
     }).join(" · ");
   }
   const e = ecarts.valeur;
@@ -711,7 +711,7 @@ function renderHistoriqueHTML(historique, compteur) {
             return `
             <tr>
               <td>${formatDate(r.createdAt)}${r.corrige ? ` <span title="Corrigé le ${esc(new Date(r.corrige.le).toLocaleString("fr-FR"))} par ${esc(r.corrige.par || "")} — avant : ${esc(Object.values(r.corrige.avant?.valeurs || {}).join(" · "))}" style="color:#1a73e8;font-size:11px">✏️ corrigé</span>` : ""}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}${r.anomalie?.length && !r.corrige ? ` <span title="${esc(r.anomalie.join(" "))}" style="color:var(--red);font-size:11px;font-weight:700">⚠️ à vérifier</span>` : ""}</td>
-              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
+              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${codeIndex(compteur, k)}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
               <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
               <td style="white-space:nowrap">
@@ -753,7 +753,7 @@ async function chargerEtAfficherHistorique(compteurId) {
     const fond = document.createElement("div"); fond.className = "cd-fond"; fond.style.zIndex = "1400";
     fond.innerHTML = `<div class="cd-fenetre" style="max-width:440px"><div class="cd-fenetre-tete"><div><b>✏️ Corriger le relevé</b><small>${esc(compteur.nom || "")} — ${esc(compteur.dossierNom || "")}</small></div><button class="cd-x" data-x>✕</button></div>
       <div class="stack" style="gap:10px">
-        ${cles.map(k => `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">${cles.length > 1 ? esc(k) : `Valeur (${esc(uniteValeur(compteur))})`}<input type="text" inputmode="decimal" data-v="${esc(k)}" value="${esc(r.valeurs?.[k] ?? "")}" style="padding:10px;border-radius:10px;font-size:16px"></label>`).join("")}
+        ${cles.map(k => `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">${cles.length > 1 ? `${esc(codeIndex(compteur, k))} (${esc(k)})` : `Valeur (${esc(uniteValeur(compteur))})`}<input type="text" inputmode="decimal" data-v="${esc(k)}" value="${esc(r.valeurs?.[k] ?? "")}" style="padding:10px;border-radius:10px;font-size:16px"></label>`).join("")}
         <div style="font-weight:700;font-size:13px">Date du relevé${choixDateHTML("corr-date", isoLocal(d))}</div>
         <p class="hint" style="margin:0">L'ancienne valeur reste notée (mention « ✏️ corrigé »).</p>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>✓ Enregistrer la correction</button></div>
@@ -829,7 +829,7 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const parCle = clesConso.map(cle => consommationMensuelle(historique, cle, 12));
   const labels = parCle[0].map(m => m.label);
   const datasets = clesConso.map((cle, i) => ({
-    label: cle === "valeur" ? `Consommation (${uniteValeur(compteur)})` : `${cle} (kWh)`,
+    label: cle === "valeur" ? `Consommation (${uniteValeur(compteur)})` : `${codeIndex(compteur, cle)} · ${cle} (kWh)`,
     data: parCle[i].map(m => m.valeur),
     backgroundColor: couleurs[i % couleurs.length].fill,
     borderColor: couleurs[i % couleurs.length].bord,
@@ -939,6 +939,7 @@ function renderAddForm(site) {
           <label>Nombre d'index de ce compteur
             <select id="cpt-new-nbindex">
               <option value="4" ${nbIndex === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
+              <option value="4j" ${nbIndex === "4j" ? "selected" : ""}>4 — tarif jaune (120/121/122/123 = HPH/HCH/HPE/HCE)</option>
               <option value="1" ${nbIndex === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
               <option value="custom" ${nbIndex === "custom" ? "selected" : ""}>Personnalisé — numéros différents affichés sur ce compteur</option>
             </select>
@@ -1044,7 +1045,8 @@ function renderEditForm(c) {
         <div class="form-grid" style="margin-top:10px">
           <label>Nombre d'index de ce compteur
             <select id="cpt-edit-nbindex">
-              <option value="4" ${(c.nbIndex || 4) === 4 ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
+              <option value="4" ${(c.nbIndex || 4) === 4 && c.conventionIndex !== "jaune" ? "selected" : ""}>4 — multi-tarif (120/121/122/123 = HPSH/HCSH/HPSB/HCSB)</option>
+              <option value="4j" ${(c.nbIndex || 4) === 4 && c.conventionIndex === "jaune" ? "selected" : ""}>4 — tarif jaune (120/121/122/123 = HPH/HCH/HPE/HCE)</option>
               <option value="1" ${(c.nbIndex || 4) === 1 ? "selected" : ""}>1 — compteur de base (un seul index)</option>
               <option value="custom" ${c.nbIndex === "custom" ? "selected" : ""}>Personnalisé — numéros différents affichés sur ce compteur</option>
             </select>
@@ -1073,6 +1075,7 @@ function attachEditFormListeners() {
   });
   document.getElementById("cpt-edit-nbindex")?.addEventListener("change", (e) => {
     c.nbIndex = e.target.value === "custom" ? "custom" : parseInt(e.target.value, 10);
+    c.conventionIndex = e.target.value === "4j" ? "jaune" : "";
     if (c.nbIndex === "custom" && (!c.indexPersonnalises || c.indexPersonnalises.length === 0)) c.indexPersonnalises = [{ cle: "", label: "" }];
     render();
   });
@@ -1095,6 +1098,7 @@ function attachEditFormListeners() {
     if (c.type === "elec") {
       const nbIndexVal = document.getElementById("cpt-edit-nbindex")?.value;
       patch.nbIndex = nbIndexVal === "custom" ? "custom" : (parseInt(nbIndexVal, 10) || 4);
+      patch.conventionIndex = nbIndexVal === "4j" ? "jaune" : "";
       if (patch.nbIndex === "custom") {
         patch.indexPersonnalises = (c.indexPersonnalises || []).map(l => ({ cle: (l.cle || "").trim(), label: (l.label || "").trim() })).filter(l => l.cle);
         if (patch.indexPersonnalises.length === 0) { statusEl.innerHTML = `<span style="color:var(--red)">Indique au moins un numéro d'index.</span>`; return; }
@@ -1135,7 +1139,7 @@ function attachAddFormListeners() {
     render();
   });
   document.getElementById("cpt-new-nbindex")?.addEventListener("change", (e) => {
-    ui.addingNbIndex = e.target.value === "custom" ? "custom" : parseInt(e.target.value, 10);
+    ui.addingNbIndex = e.target.value === "custom" ? "custom" : e.target.value === "4j" ? "4j" : parseInt(e.target.value, 10);
     if (ui.addingNbIndex === "custom" && !ui.addingIndexPersonnalises) ui.addingIndexPersonnalises = [{ cle: "", label: "" }];
     render();
   });
@@ -1172,6 +1176,7 @@ function attachAddFormListeners() {
     if (type === "elec") {
       const nbIndexVal = document.getElementById("cpt-new-nbindex")?.value;
       compteur.nbIndex = nbIndexVal === "custom" ? "custom" : (parseInt(nbIndexVal, 10) || 4);
+      compteur.conventionIndex = nbIndexVal === "4j" ? "jaune" : "";
       if (compteur.nbIndex === "custom") {
         compteur.indexPersonnalises = (ui.addingIndexPersonnalises || []).map(l => ({ cle: (l.cle || "").trim(), label: (l.label || "").trim() })).filter(l => l.cle);
         if (compteur.indexPersonnalises.length === 0) { statusEl.innerHTML = `<span style="color:var(--red)">Indique au moins un numéro d'index.</span>`; return; }

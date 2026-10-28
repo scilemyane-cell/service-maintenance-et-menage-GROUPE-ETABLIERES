@@ -32,6 +32,14 @@ export const INDEX_LABELS = {
   "120": "HPSH — Heures Pleines Saison Haute", "121": "HCSH — Heures Creuses Saison Haute",
   "122": "HPSB — Heures Pleines Saison Basse", "123": "HCSB — Heures Creuses Saison Basse",
 };
+// Tarif Jaune / compteur à 4 index « été / hiver » (Linky C4…) : mêmes codes
+// 120/121/122/123 à l'écran, mais périodes HPH / HCH / HPE / HCE.
+export const INDEX_LABELS_JAUNE = {
+  "120": "HPH — Heures Pleines Hiver", "121": "HCH — Heures Creuses Hiver",
+  "122": "HPE — Heures Pleines Été", "123": "HCE — Heures Creuses Été",
+};
+// Nom court d'un index (ex. « HPH ») pour les tableaux et graphiques.
+export function codeIndex(compteur, cle) { const l = libelleIndex(compteur, cle); return l ? l.split(" — ")[0] : cle; }
 export const MOIS_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Clés d'index à relever (et donc à photographier) selon le compteur —
@@ -59,6 +67,7 @@ export function libelleIndex(compteur, cle) {
     const trouve = (compteur.indexPersonnalises || []).find(i => i.cle === cle);
     return trouve?.label || "";
   }
+  if (compteur.conventionIndex === "jaune") return INDEX_LABELS_JAUNE[cle] || "";
   return INDEX_LABELS[cle] || "";
 }
 
