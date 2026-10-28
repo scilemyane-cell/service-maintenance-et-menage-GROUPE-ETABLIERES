@@ -62,7 +62,10 @@ export function effectifEtClotures(data, p, demandesToutes) {
       parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
   }).filter(m => m.ouvres);
   // On démarre au premier mois où des clôtures sont enregistrées (avant, pas de données : ça fausserait les moyennes).
-  const premier = mois.findIndex(m => m.clos > 0);
+  // Démarrage au premier mois « réellement suivi » : au moins 15 % du meilleur mois
+  // (les quelques clôtures isolées d'avant la mise en service faussent les moyennes).
+  const maxClos = Math.max(0, ...mois.map(m => m.clos));
+  const premier = mois.findIndex(m => m.clos > 0 && m.clos >= maxClos * 0.15);
   if (premier > 0) mois.splice(0, premier);
   if (premier < 0) mois.length = 0;
   if (!mois.length) return null;
@@ -70,7 +73,8 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const tot = mois.reduce((a, m) => ({ ouvres: a.ouvres + m.ouvres, joursTech: a.joursTech + m.joursTech, clos: a.clos + m.clos }), { ouvres: 0, joursTech: 0, clos: 0 });
   const ratio = tot.joursTech ? tot.clos / tot.joursTech : null;
   // Comparaison : mois avec l'équipe au complet (≥ 90 % de présence) vs mois en effectif réduit.
-  const complet = mois.filter(m => m.moyen >= techs.length * 0.9 && m.joursTech), reduit = mois.filter(m => m.moyen < techs.length * 0.9 && m.joursTech);
+  const pleine = Math.max(0, ...mois.map(m => m.moyen)); // effectif habituel = meilleur mois
+  const complet = mois.filter(m => m.joursTech && m.moyen >= pleine * 0.9), reduit = mois.filter(m => m.joursTech && m.moyen < pleine * 0.9);
   const r = (l) => { const j = l.reduce((s, m) => s + m.joursTech, 0); return j ? l.reduce((s, m) => s + m.clos, 0) / j : null; };
   return { techs, candidats, defaut, choixPerso: techs !== defaut, mois, tot, ratio, moyenPeriode: tot.ouvres ? tot.joursTech / tot.ouvres : 0,
     ratioComplet: r(complet), ratioReduit: r(reduit), nbComplet: complet.length, nbReduit: reduit.length,
