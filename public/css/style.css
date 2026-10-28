@@ -4094,3 +4094,4 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .dex-form input, .dex-form select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border, #ccc); background: var(--bg, transparent); color: inherit; font: inherit; }
 .fiche-opt { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 14px; cursor: pointer; }
 .fiche-opt input { margin-top: 3px; }
+.clo-doublon { margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: #fff0f0; color: #a3121f; font-size: 13px; }

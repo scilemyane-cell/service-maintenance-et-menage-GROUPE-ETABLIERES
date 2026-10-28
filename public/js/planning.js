@@ -271,6 +271,24 @@ export function mountMonPlanningTab(container, user) { startListeners(container,
 const normNomPlanning = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 // Personne du planning reliée au compte : lien explicite (Coordonnées /
 // Utilisateurs), sinon rapprochement par le nom.
+// Une même personne peut être écrite de deux façons sur les interventions
+// (« Ronald » dans le planning, « ronald chevalier » depuis son compte) :
+// on ramène chaque nom à la personne du planning (nom complet, sinon prénom
+// s'il n'y a qu'une seule personne avec ce prénom).
+function intervenantCanonique(nom) {
+  if (!nom) return nom;
+  const toutes = [...new Set([...(state.people.n1 || []), ...(state.people.n2 || []), ...Object.keys(state.coordonnees || {})])];
+  if (toutes.includes(nom)) return nom;
+  const n = normNomPlanning(nom);
+  const exact = toutes.find(p => normNomPlanning(p) === n); if (exact) return exact;
+  const prenom = n.split(/\s+/)[0];
+  const parPrenom = toutes.filter(p => normNomPlanning(p).split(/\s+/)[0] === prenom);
+  if (parPrenom.length === 1) return parPrenom[0];
+  // Plusieurs fiches pour ce prénom (« Ronald » et « Ronald Chevalier ») : la plus courte est celle du planning.
+  const plan = parPrenom.filter(p => (state.people.n1 || []).includes(p) || (state.people.n2 || []).includes(p));
+  return plan.length === 1 ? plan[0] : nom;
+}
+const estIntervenant = (i, nom) => intervenantCanonique(i.technicien) === nom;
 function personneDuCompte(user) {
   const toutes = [...new Set([...state.people.n1, ...state.people.n2])];
   const lie = Object.entries(state.coordonnees || {}).find(([, c]) => c && c.uid && c.uid === user.uid);
@@ -684,7 +702,7 @@ function calculerLignesNoteFrais(nom, mois, touteLHistoire = false) {
   const c = state.coordonnees[nom] || {};
   const kmAllerRetour = c.kmDomicileService || 0;
   const interventionsRetenues = state.interventions
-    .filter(i => i.technicien === nom && i.date && !i.fraisRembourse && !i.vehiculeService && !c.vehiculeService && (touteLHistoire || i.date.startsWith(mois)))
+    .filter(i => estIntervenant(i, nom) && i.date && !i.fraisRembourse && !i.vehiculeService && !c.vehiculeService && (touteLHistoire || i.date.startsWith(mois)))
     .sort((a, b) => a.date.localeCompare(b.date));
   const parJour = new Map();
   interventionsRetenues.forEach(i => {
@@ -1477,7 +1495,7 @@ function renderPlanningIndividuel(container, perms) {
 
   const debutAnneeScolaire = `${year}-09-01`, finAnneeScolaire = `${year + 1}-08-31`;
   const interventionsParDate = {};
-  state.interventions.filter(i => i.technicien === person && i.date >= debutAnneeScolaire && i.date <= finAnneeScolaire).forEach(i => {
+  state.interventions.filter(i => estIntervenant(i, person) && i.date >= debutAnneeScolaire && i.date <= finAnneeScolaire).forEach(i => {
     if (!interventionsParDate[i.date]) interventionsParDate[i.date] = [];
     interventionsParDate[i.date].push(i);
   });
@@ -2158,7 +2176,7 @@ function attacherImportPrttListeners(container) {
 // =================================================================
 function interventionsReleve(person, start, end) {
   return state.interventions
-    .filter(i => person === "Tous" || i.technicien === person)
+    .filter(i => person === "Tous" || estIntervenant(i, person))
     .filter(i => i.date >= start && i.date <= end && !i.supprimeLe)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
@@ -2575,7 +2593,7 @@ function clotureMoisHTML(mois) {
   const nomMois = new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const duMois = state.interventions.filter(i => i.date >= start && i.date <= end && !i.supprimeLe);
   const parTech = new Map();
-  duMois.filter(i => i.technicien).forEach(i => { if (!parTech.has(i.technicien)) parTech.set(i.technicien, []); parTech.get(i.technicien).push(i); });
+  duMois.filter(i => i.technicien).forEach(i => { const t = intervenantCanonique(i.technicien); if (!parTech.has(t)) parTech.set(t, []); parTech.get(t).push(i); });
   const sansTech = duMois.filter(i => !i.technicien).length;
   const s = (l, k) => l.reduce((t, i) => t + (parseFloat(i[k]) || 0), 0);
   const cartes = [...parTech.entries()].sort((x, y) => x[0].localeCompare(y[0], "fr")).map(([t, l]) => {
@@ -2583,7 +2601,7 @@ function clotureMoisHTML(mois) {
     // Forfait jours : payé une fois par an, en août (relevé annuel sept. → août).
     const forfait = !!c.forfaitJours, aout = m === 8;
     const an = forfait && aout ? bornesAnForfait(mois) : null;
-    const att = an ? state.interventions.filter(i => i.technicien === t && !i.supprimeLe && !i.transmis && i.date >= an.start && i.date <= an.end).length : forfait ? 0 : l.filter(i => !i.transmis).length;
+    const att = an ? state.interventions.filter(i => estIntervenant(i, t) && !i.supprimeLe && !i.transmis && i.date >= an.start && i.date <= an.end).length : forfait ? 0 : l.filter(i => !i.transmis).length;
     const jours = calculerLignesNoteFrais(t, mois);
     const km = jours.reduce((x, j) => x + (parseFloat(j.km) || 0), 0);
     const kmFait = !jours.length;
@@ -2591,10 +2609,12 @@ function clotureMoisHTML(mois) {
     const kmManque = !kmFait && !c.kmDomicileService;
     const fini = !att && kmFait;
     const primes = s(l, "primeDimanche");
+    const vus = new Set(), doublons = l.filter(i => { const k = `${i.date}|${i.heureDebut || ""}|${i.heureFin || ""}|${normNomPlanning(i.site || "")}`; if (vus.has(k)) return true; vus.add(k); return false; }).length;
     return { fini, html: `<div class="clo-carte ${fini ? "fini" : ""}">
       <div class="clo-tete"><span class="clo-av">${esc(initialesNom(t))}</span>
         <div class="clo-id"><b>${esc(t)}</b><small>${l.length} intervention${l.length > 1 ? "s" : ""} · ${fmtDureeH(s(l, "heures"))}${s(l, "heuresNuit") ? ` · dont nuit ${fmtDureeH(s(l, "heuresNuit"))}` : ""}${primes ? ` · primes ${primes} €` : ""}</small></div>
         ${fini ? `<span class="clo-badge ok">✓ Terminé</span>` : ""}</div>
+      ${doublons ? `<p class="clo-doublon">⚠ ${doublons} intervention${doublons > 1 ? "s semblent saisies" : " semble saisie"} en double (même jour, mêmes horaires, même site) — vérifie dans « Interventions réalisées » et mets le doublon à la corbeille.</p>` : ""}
       <div class="clo-etapes">
         <button class="clo-etape ${att ? "" : "ok"}" data-clo-releve="${esc(t)}" ${an ? `data-clo-an="1"` : ""}><span class="clo-num">${att ? "1" : "✓"}</span>
           <span class="clo-txt"><b>Relevé d'heures${an ? " annuel" : ""}</b><small>${an ? (att ? `Forfait jours · ${att} intervention${att > 1 ? "s" : ""} de sept. à août à valider` : "Forfait jours · année validée") : forfait ? "Forfait jours · payé en août" : att ? `${att} intervention${att > 1 ? "s" : ""} à valider` : "Validé"}</small></span><span class="clo-go">${att ? "Vérifier ›" : "Revoir ›"}</span></button>
@@ -2645,7 +2665,7 @@ function calculerRecapAstreinte(person, start, end) {
   }
   const dans = (i) => i.date && i.date >= start && i.date <= end && !i.supprimeLe;
   state.interventions.filter(i => dans(i) && i.n1Contacte === person && !i.appelOrigineId).forEach(i => { ligne(i.date.slice(0, 7)).appels++; });
-  const miennes = state.interventions.filter(i => dans(i) && i.technicien === person && !i.sansDeplacement);
+  const miennes = state.interventions.filter(i => dans(i) && estIntervenant(i, person) && !i.sansDeplacement);
   miennes.forEach(i => { const l = ligne(i.date.slice(0, 7)); l.depl++; l.heures += parseFloat(i.heures) || 0; l.nuit += parseFloat(i.heuresNuit) || 0; l.primes += parseFloat(i.primeDimanche) || 0; });
   const lignes = [...moisMap.values()].sort((a, b) => a.cle.localeCompare(b.cle));
   const tot = lignes.reduce((t, l) => { ["n1", "n2", "we", "ferie", "appels", "depl", "heures", "nuit", "primes"].forEach(k => t[k] += l[k]); l.semaines.forEach(x => t.semaines.add(x)); return t; },
@@ -2762,7 +2782,7 @@ function ouvrirKmCloture(nom, mois) {
   let lignes = calculerLignesNoteFrais(nom, mois);
   const { ov, actions, fermer } = overlayCloture(`Remboursement km — ${nom} — ${nomMois}`, `<div class="clo-km"></div>`);
   const zone = ov.querySelector(".clo-km");
-  const dejaFait = () => state.interventions.some(i => i.technicien === nom && i.date?.startsWith(mois) && i.fraisRembourse);
+  const dejaFait = () => state.interventions.some(i => estIntervenant(i, nom) && i.date?.startsWith(mois) && i.fraisRembourse);
   const rendre = () => {
     const c = state.coordonnees[nom] || {};
     const inc = lignes.filter(l => l.incluse);
