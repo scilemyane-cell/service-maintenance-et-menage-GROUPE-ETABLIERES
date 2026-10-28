@@ -2841,28 +2841,30 @@ function ouvrirKmCloture(nom, mois) {
     zone.querySelector("[data-j-hist]")?.addEventListener("change", (e) => { historique = e.target.checked; lignes = calculerLignesNoteFrais(nom, mois, historique); rendre(); });
     actions.querySelector("[data-ov-print]")?.addEventListener("click", () => imprimerNoteDeFrais(nom, mois, lignes.filter(l => l.incluse)));
     actions.querySelector("[data-ov-vehic]")?.addEventListener("click", async (e) => {
+      const bouton = e.currentTarget;
       const ids = lignes.filter(l => l.incluse).flatMap(l => l.interventionIds || []);
       if (!ids.length) return;
       if (!(await window.confirmDialog(`${nom} a utilisé un véhicule de l'entreprise : aucun remboursement km pour ces ${lignes.filter(l => l.incluse).length} jour(s) ?\n(Décoche d'abord les jours où il a pris son véhicule personnel.)`, { texteValider: "Oui, pas de remboursement" }))) return;
-      e.currentTarget.disabled = true;
+      bouton.disabled = true;
       try {
         await Promise.all(ids.map(id => updateIntervention(id, { vehiculeService: true })));
         state.interventions.forEach(i => { if (ids.includes(i.id)) i.vehiculeService = true; });
         window.toast?.("🚐 Noté : véhicule de l'entreprise, rien à rembourser", "success");
         fermer();
-      } catch (err) { window.toast?.("Échec : " + (err.message || err), "error"); e.currentTarget.disabled = false; }
+      } catch (err) { window.toast?.("Échec : " + (err.message || err), "error"); bouton.disabled = false; }
     });
     actions.querySelector("[data-ov-fait]")?.addEventListener("click", async (e) => {
+      const bouton = e.currentTarget;
       const retenues = lignes.filter(l => l.incluse), ids = retenues.flatMap(l => l.interventionIds || []);
       if (!ids.length) return;
       if (!(await window.confirmDialog(`As-tu bien imprimé et transmis la note de frais ? Les ${retenues.length} jour(s) seront marqués « remboursement demandé » et ne réapparaîtront plus.`, { texteValider: "Oui, c'est fait" }))) return;
-      e.currentTarget.disabled = true;
+      bouton.disabled = true;
       try {
         await Promise.all(ids.map(id => updateIntervention(id, { fraisRembourse: true })));
         state.interventions.forEach(i => { if (ids.includes(i.id)) i.fraisRembourse = true; });
         window.toast?.(`✓ Remboursement demandé (${retenues.length} jour(s))`, "success");
         fermer();
-      } catch (err) { window.toast?.("Échec : " + (err.message || err), "error"); e.currentTarget.disabled = false; }
+      } catch (err) { window.toast?.("Échec : " + (err.message || err), "error"); bouton.disabled = false; }
     });
   };
   rendre();
