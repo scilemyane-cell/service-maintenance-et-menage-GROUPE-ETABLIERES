@@ -53,16 +53,18 @@ function incontournables(f) {
   return m ? m.missions.map(id => MISSIONS.flatMap(t => t.liste).find(x => x.id === id)?.texte).filter(Boolean) : [];
 }
 // Idem pour les savoir-faire / savoirs-être (nom = "savoirFaire" | "savoirEtre").
+// Techniciens de maintenance (dont « / espaces verts ») : mêmes savoir-faire et savoirs-être incontournables.
+const cleListe = (poste) => { const k = clePoste(poste); return k.startsWith("technicien de maintenance") ? "technicien de maintenance" : k; };
 function incontListe(f, nom) {
-  const k = clePoste(f.poste); if (!k) return [];
+  const k = cleListe(f.poste); if (!k) return [];
   if (Array.isArray(incontListes[nom][k])) return incontListes[nom][k];
-  const m = MODELES.find(x => x.id === f.modele && clePoste(x.poste) === k) || MODELES.find(x => clePoste(x.poste) === k);
+  const m = MODELES.find(x => clePoste(x.poste) === k);
   const ref = nom === "savoirFaire" ? SAVOIR_FAIRE : SAVOIR_ETRE;
   return m ? (nom === "savoirFaire" ? m.sf : m.se).map(i => ref[i]).filter(Boolean) : [];
 }
 const manquantesListe = (f, nom) => incontListe(f, nom).filter(t => !(f[nom] || []).includes(t));
 async function basculerEtoileListe(f, nom, texte) {
-  const k = clePoste(f.poste); if (!k) { window.toast?.("Indique d'abord l'intitulé du poste.", "error"); return; }
+  const k = cleListe(f.poste); if (!k) { window.toast?.("Indique d'abord l'intitulé du poste.", "error"); return; }
   const l = incontListe(f, nom), nv = l.includes(texte) ? l.filter(t => t !== texte) : [...l, texte];
   incontListes = { ...incontListes, [nom]: { ...incontListes[nom], [k]: nv } };
   try { await setDoc(doc(db, COL, "_incontournables"), { [nom]: incontListes[nom] }, { merge: true }); } catch (e) { alert("Étoile non enregistrée : " + (e?.message || e)); }

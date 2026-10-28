@@ -154,7 +154,7 @@ export const MODELES = [
   { id: "espaces-verts", poste: "Technicien de maintenance / espaces verts", label: "Technicien de maintenance / espaces verts",
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, le technicien de maintenance / espaces verts assure l'entretien des espaces extérieurs des différents sites du groupe (tonte, désherbage, taille, ramassage des feuilles, arrosage) afin de garantir des abords propres, accueillants et sécurisés. Il organise ses passages selon la saison et les priorités et en assure la traçabilité. Il réalise également des petits travaux de maintenance sur les bâtiments et les équipements.",
     missions: ["ev-global", "ev-haies", "ev-materiel", "ev-tracab", "ev-planif", "m-anomalies", "t-travaux"],
-    sf: [4, 2, 10, 13, 14], se: [0, 1, 2, 3], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
+    sf: [5, 6, 7, 8, 9, 10, 14], se: [0, 1, 2, 3, 4], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
   { id: "technicien", poste: "Technicien de maintenance", label: "Technicien de maintenance",
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, le technicien de maintenance assure la maintenance préventive et corrective des bâtiments, des équipements et des logements des différents sites du groupe. Il traite les demandes d'intervention, réalise les petits travaux d'aménagement, participe à l'astreinte technique et contribue à la sécurité et au confort des usagers.",
     missions: ["t-interv", "t-demandes", "t-compteurs", "t-astreinte", "t-securite", "t-travaux", "t-entreprises", "t-outillage"],
