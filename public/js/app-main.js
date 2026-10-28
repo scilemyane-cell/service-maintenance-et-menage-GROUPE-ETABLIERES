@@ -121,6 +121,7 @@
   const mountStatsMenage = aLaDemande(() => import("./stats-menage.js"), "mountStatsMenage");
   const mountPlanningMenage = aLaDemande(() => import("./planning-menage.js"), "mountPlanningMenage");
   const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
+  const mountContratsRH = aLaDemande(() => import("./contrats-rh.js"), "mountContratsRH");
   // SSIAP360 : appli de formation SSIAP / SST, affichée dans l'appli (même connexion).
   const mountSsiap360 = (c, u) => {
     window.__smmRole = u?.role || null;
@@ -469,9 +470,10 @@
         ],
       },
       {
-        id: "fiches-poste", label: "Fiches de poste", icon: "📄", desc: "Rédiger les fiches de poste (formulaire RH 05, réservé au responsable) en cochant les missions et compétences proposées, PDF et SharePoint",
+        id: "fiches-poste", label: "RH", icon: "👥", desc: "Fiches de poste (RH05) et demandes de contrat (RH01) : modèles, calculs automatiques, PDF et SharePoint — réservé au responsable",
         subtabs: [
           { id: "fiches", label: "Fiches de poste", icon: "📄", roles: SUPER_ADMIN_ONLY, mount: mountFichesPoste },
+          { id: "contrats", label: "Demandes de contrat", icon: "📝", roles: SUPER_ADMIN_ONLY, mount: mountContratsRH },
         ],
       },
       {

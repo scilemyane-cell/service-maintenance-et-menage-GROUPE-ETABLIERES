@@ -275,6 +275,9 @@ service cloud.firestore {
     match /fiches-poste/{docId} {
       allow read, write: if isSuperAdmin();
     }
+    match /contrats-rh/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
     match /atelier-memos/{docId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isEditor() || (isSignedIn() && myRole() == 'technicien');

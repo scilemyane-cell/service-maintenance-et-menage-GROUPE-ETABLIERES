@@ -4104,3 +4104,98 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .tel-type { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: #e6eef7; color: #1f4f7a; text-transform: uppercase; letter-spacing: .03em; }
 .tel-type.tel-perso { background: #f3e9fb; color: #6b2fa0; }
 .tel-type.tel-fixe { background: #eaf5ec; color: #1e6b35; }
+
+/* ---- RH01 Demande de contrat (aperçu + PDF) ---- */
+.rh-page{padding:20px 23px 26px!important;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:9.6px;line-height:1.2}
+.rh-page *{text-transform:none;letter-spacing:0}
+.rh-page .r{color:#e00000}
+.rh-tete{display:grid;grid-template-columns:150px 1fr 300px;align-items:start;gap:6px}
+.rh-tete img{width:120px;height:auto;margin-top:6px}
+.rh-titre{text-align:center;font-size:12px;margin-top:22px}
+.rh-maj{text-align:right;font-size:8.5px;margin-bottom:6px}.rh-maj span{margin-left:30px}
+.rh-dem-l{display:flex;gap:8px;align-items:center;background:#e2efda;padding:2px 6px}.rh-dem-l b{color:#70ad47;font-size:12.5px;white-space:nowrap}.rh-dem-l span{flex:1;text-align:center;color:#70ad47;font-weight:700;font-size:12.5px}
+.rh-avant{background:#e2efda;color:#888;font-style:italic;font-size:8.5px;padding:2px 6px;margin-top:3px;min-height:12px}
+.rh-consigne{text-align:center;font-family:Calibri,Carlito,Arial,sans-serif;font-size:11px;margin:12px 0 8px}
+.rh-pieces{text-align:center;font-size:9px;margin:0 0 10px;color:#2f5597}.rh-pieces b{color:#2f5597}.rh-pieces .r b{color:#e00000}
+.rh-t{width:100%;border-collapse:separate;border-spacing:0 2px;table-layout:fixed}
+.rh-page table{font-size:9.2px}
+.rh-page tbody tr:hover td{background:transparent}
+.rh-t td{padding:1px 3px;height:14px;font-size:9.2px;vertical-align:middle;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border:0;color:#111}
+.rh-cadre{border:2px solid #111;border-spacing:0 3px}
+.rh-page .rh-t td.rl{text-align:right;color:#2f5597;white-space:normal}
+.rh-page .rh-t td.rv{background:#e2efda}
+.rh-page .rh-t .c{text-align:center}.rh-t .b{font-weight:700}.rh-t .gros{font-size:11.5px}
+.rh-page .rh-t .petit{font-size:8.5px;white-space:normal;color:#2f5597}.rh-t .tpetit{font-size:7.5px;white-space:normal}
+.rh-nom{font-size:12px;font-weight:700}
+.rh-page .rh-t tr.rh-sep td{border-top:2px solid #111;padding-top:5px}
+.rh-page .rh-t td.rh-sec{color:#70ad47;font-weight:700;font-size:12px;white-space:nowrap}
+.rh-page .rh-t td.rh-box{border:1px solid #111;background:#fff}
+.rh-page .rh-t td.rh-rouge-p{color:#e00000;font-size:7.5px;white-space:normal;text-align:center}
+.rh-page .rh-t td.rh-jaune{background:#fff2cc;font-size:8.5px;white-space:normal;color:#2f5597}
+.rh-page .rh-t td.rh-orange{background:#ffd966;color:#e00000;font-size:8.5px;white-space:normal;border:1px solid #c00000}
+.rh-page .rh-t td.rh-jaune2{background:#fff2cc;color:#e00000;font-size:9px}
+.rh-page .rh-t tr.rh-essai td{height:22px}
+.rh-page .rh-t td.rh-vert{color:#70ad47}.rh-page .rh-t td.rh-vertf{color:#1e7b1e;text-align:center}
+.rh-page .rh-t td.rh-bleu,.rh-page .rh-bleu{color:#2f5597}
+.rh-page .rh-t td.rh-pts{color:#2f5597}.rh-page .rh-t td.rh-pts.b{font-weight:700}
+.rh-page .rh-t td.rh-smic{color:#666;font-size:8.5px;text-align:center}
+.rh-page .rh-t td.rh-point{color:#e00000;font-size:10px;text-align:center}
+.rh-page .rh-t td.rh-nao{color:#666;font-size:8.5px;font-weight:700;text-align:center}
+.rh-page .rh-t td.rh-gris{color:#888}
+.rh-page .rh-t td.rh-min{background:#ffff00;color:#e00000}
+.rh-page .rh-t td.rh-total{border:2px solid #111;background:#fff}
+.rh-page .rh-t td.rh-sel{color:#888;font-style:italic;font-weight:700}
+.rh-page .rh-t td.r-al{text-align:right}
+.rh-sign{border-spacing:0;margin-top:3px}
+.rh-sign td{border:2px solid #111;height:auto;vertical-align:top;white-space:normal;padding:3px 4px}
+.rh-sign td.rh-sg-d{border-left:0}
+.rh-sign tr + tr td{border-top:0}
+.rh-sign tr:not(:last-child) td{border-bottom:0}
+.rh-sg-l{display:grid;grid-template-columns:1fr 130px;gap:6px;align-items:center;margin:2px 0}
+.rh-sg-l .rl{text-align:right;color:#2f5597}
+.rh-sg-l .rv{background:#e2efda;min-height:14px;padding:1px 4px}
+.rh-u{color:#2f5597;text-decoration:underline;font-size:11px}
+.rh-valid{background:#ddebf7;min-height:16px;padding:2px 4px;color:#2f5597}
+.rh-prec b{font-size:10px}.rh-prec-v{min-height:30px;margin-top:3px;padding:3px 4px;background:#e2efda;white-space:normal}
+.rh-bleu-bg{background:#ddebf7}
+.rh-pied{position:absolute;bottom:18px;left:0;right:0;text-align:center;font-family:Calibri,Carlito,Arial,sans-serif;font-size:10px}
+.rh-planning{font-size:10.5px}
+.rh-pl-tete{display:flex;gap:16px;align-items:center}.rh-pl-tete img{width:110px}.rh-pl-tete h2{font-size:13px;margin:0;color:#2f5597}
+.rh-planning h3{color:#70ad47;font-size:11px;margin:12px 0 4px}
+.rh-pl-rouge{color:#e00000;font-weight:700;text-align:center;margin:10px 0}
+.rh-pl-i{font-style:italic;color:#555}
+.rh-pl-sem{margin:10px 0 3px;color:#2f5597}
+.rh-pl{width:100%;border-collapse:collapse;font-size:10px}
+.rh-pl th,.rh-pl td{border:1px solid #888;padding:3px 5px;text-align:center}
+.rh-pl th{background:#e2efda;color:#2f5597;font-weight:700}
+.rh-pl td:first-child{text-align:left;font-weight:700}
+.rh-pl tr.tot td{font-weight:700;text-align:right;background:#f2f2f2}.rh-pl tr.tot td:last-child{text-align:center}
+.rh-pl-hc td:first-child{font-weight:400;text-align:left}.rh-pl-hc{margin:6px 0}
+/* Saisie */
+.rh-ligne{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:13.5px}
+.rh-ligne>span:first-child{flex:1;min-width:180px}
+.rh-oui{display:inline-flex;gap:4px}
+.rh-2{display:flex;gap:6px}.rh-2>*:first-child{flex:1;min-width:0}.rh-2>input:last-child{width:80px;flex:none}
+.rh-ana{margin-bottom:5px}
+.rh-crit{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.rh-calc{margin-top:8px;padding:8px 11px;border-radius:10px;background:rgba(47,111,214,.08);border:1px solid rgba(47,111,214,.25);font-size:13px;line-height:1.5}
+.rh-calc:empty{display:none}
+.rh-remu{display:flex;flex-direction:column;gap:3px}.rh-remu>b{font-size:16px}.rh-remu em{font-style:normal;color:#d0453b;font-weight:700}
+.rh-planning-saisie{margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)}.rh-planning-saisie h4{margin:0 0 4px}
+.rh-pl-saisie{display:grid;grid-template-columns:44px repeat(4,minmax(0,1fr));gap:4px;align-items:center;font-size:11.5px}
+.rh-pl-saisie>span{color:var(--text-dim);text-align:center}.rh-pl-saisie input{padding:5px 4px;text-align:center;min-width:0}
+.rh-controles ul{margin:4px 0 0;padding-left:18px;font-size:13px}.rh-controles li{margin:3px 0;color:#c56a00}
+.rh-pdf .rh-page{height:1110px!important}
+.rh-page .rh-t td.rh-site{font-size:7.6px;padding:1px 2px}
+.rh-page .rh-t td.rh-min{font-size:8.4px;padding:1px 2px}
+.rh-page .rh-cadre{border-spacing:0 1.5px}
+.rh-page .rh-t td{height:12.5px;line-height:1.12}
+.rh-page .rh-t tr.rh-essai td{height:19px}
+.rh-page .rh-consigne{margin:6px 0 5px}
+.rh-page .rh-pieces{margin:0 0 6px}
+.rh-page .rh-titre{margin-top:16px}
+.rh-page .rh-tete img{width:105px;margin-top:2px}
+.rh-page .rh-prec-v{min-height:22px}
+.rh-page .rh-sg-l{margin:1px 0}
+.fp-form select{padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;width:100%}
+.rh-crit label{display:flex;flex-direction:column;gap:4px}
