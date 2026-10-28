@@ -364,9 +364,13 @@ function renderEditeur() {
         <label style="grid-column:1/-1">Commentaire${inp("commentaire", c.commentaire, 'placeholder="ex. Diminution temps de travail à 5h/semaine à la demande du salarié"')}</label>
         ${/remplacement/i.test(c.motif || "") ? `<label>Si remplacement${sel("remplacement", REMPLACEMENTS, c.remplacement)}</label><label>Précisez (personne remplacée…)${inp("precisez", c.precisez)}</label>` : ""}
       </div>
-      <label class="fp-plein">Fonction occupée<input data-c="fonction" list="rh-metiers" value="${esc(c.fonction)}" placeholder="Choisis dans la liste des métiers"><datalist id="rh-metiers">${METIERS.map(m => `<option value="${esc(m[0])}">Cat. ${m[1]} · ${m[2]}</option>`).join("")}</datalist></label>
+      <label class="fp-plein">Fonction occupée<select data-rh-fonction>
+        <option value="">— Choisis la fonction —</option>
+        ${[1, 2, 3].map(k => `<optgroup label="Catégorie ${k}${k === 1 ? " · ouvriers / employés" : k === 2 ? " · techniciens / agents de maîtrise" : " · cadres"}">${METIERS.filter(m => m[1] === k).map(m => `<option value="${esc(m[0])}" ${!c.fonctionAutre && c.fonction === m[0] ? "selected" : ""}>${esc(m[0])}</option>`).join("")}</optgroup>`).join("")}
+        <option value="__autre" ${c.fonctionAutre || (c.fonction && !r.m) ? "selected" : ""}>Autre (métier non répertorié)…</option></select></label>
+      ${c.fonctionAutre || (c.fonction && !r.m) ? `<label class="fp-plein">Intitulé de la fonction${inp("fonction", c.fonction)}</label>` : ""}
       <div class="rh-calc" data-rh-calc="essai"></div>
-      ${c.fonction && !r.m ? `<div class="fp-g2"><label>Catégorie (métier non répertorié)${sel("categorie", ["1", "2", "3"], c.categorie)}</label><label>Statut${sel("statut", ["O/E", "T/AM", "CADRE"], c.statut)}</label></div>` : ""}
+      ${(c.fonctionAutre || c.fonction) && !r.m ? `<div class="fp-g2"><label>Catégorie (métier non répertorié)${sel("categorie", ["1", "2", "3"], c.categorie)}</label><label>Statut${sel("statut", ["O/E", "T/AM", "CADRE"], c.statut)}</label></div>` : ""}
       <p class="hint" style="margin:10px 0 4px">Codes analytiques (${esc(c.association || "")}) et clé de répartition</p>
       ${[0, 1, 2, 3].map(i => `<div class="rh-2 rh-ana"><input data-c="analytiques.${i}.code" list="rh-codes" value="${esc(c.analytiques?.[i]?.code)}" placeholder="Code ${i + 1}"><input data-c="analytiques.${i}.pct" value="${esc(c.analytiques?.[i]?.pct)}" inputmode="decimal" placeholder="%"></div>`).join("")}
       <datalist id="rh-codes">${codes.map(x => `<option value="${esc(x)}">`).join("")}</datalist>
@@ -390,6 +394,7 @@ function renderEditeur() {
         <label>Bonification indiciaire (pts)${inp("bonification", c.bonification, 'inputmode="decimal"')}</label>
       </div>
       <p class="hint" style="margin:10px 0 4px">Critères classants (accord NAO 2026, annexe 2) — choisis le degré, les points de la catégorie ${r.cat || "?"} s'affichent</p>
+      ${r.cat ? "" : `<div class="fp-alerte">⚠️ Choisis d'abord la <b>fonction occupée</b> (section 1 · Type de contrat) : la catégorie en dépend, puis les degrés apparaissent ici.</div>`}
       <div class="rh-crit">${CRITERES.map(([k, l]) => {
         if (k === "formation") { const q = QUALIFS.filter(x => !r.cat || x[1] === r.cat); return `<label>${l}<select data-c="qualification"><option value="">— aucune / saisie libre</option>${q.map(x => `<option value="${esc(x[0])}" ${c.qualification === x[0] ? "selected" : ""}>${esc(x[0])} · ${x[2]} pts</option>`).join("")}</select>${c.qualification ? "" : `<input data-c="criteres.formation" value="${esc(c.criteres?.formation ?? "")}" inputmode="decimal" placeholder="points">`}</label>`; }
         const t = DEGRES[k]?.[r.cat];
@@ -483,6 +488,10 @@ function brancher() {
     setP(c, b.dataset.cSet, b.dataset.v);
     if (b.dataset.cSet === "typeContrat") { if (b.dataset.v === "CDI") { c.motif = "Néant (si CDI)"; c.dateFin = ""; } else if (/néant/i.test(c.motif || "")) c.motif = ""; }
   })));
+  el.querySelector("[data-rh-fonction]")?.addEventListener("change", (e) => changer(c => {
+    if (e.target.value === "__autre") { c.fonctionAutre = true; if (metier(c.fonction)) c.fonction = ""; }
+    else { c.fonctionAutre = false; c.fonction = e.target.value; c.categorie = ""; c.statut = ""; }
+  }));
   el.querySelector("[data-rh-hebdo]")?.addEventListener("click", () => { const h = prompt("Heures par semaine (ex. 5 ou 17,5) :"); const v = parseFloat(String(h || "").replace(",", ".")); if (v > 0) changer(c => { c.heures = String(Math.round(v / 35 * (bareme.heuresAnnuelles || 1565) * 100) / 100); }); });
   el.querySelector("[data-rh-regul]")?.addEventListener("change", (e) => changer(c => { c.regulAuto = e.target.checked; if (!e.target.checked && !c.autrePtsLibelle) c.autrePtsLibelle = "Régul minimum conventionnel"; }));
   el.querySelector("[data-rh-rot]")?.addEventListener("change", (e) => changer(c => { c.planning = c.planning || {}; c.planning.rotation = e.target.checked; }));
