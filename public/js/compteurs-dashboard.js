@@ -73,6 +73,12 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
     });
     return ok ? total : null;
   };
+  // Part des jours d'une période situés en saison de chauffe (15/10 → 15/04).
+  const partChauffe = (du, au) => {
+    let n = 0, t = 0;
+    for (let x = new Date(du); x < new Date(au); x.setDate(x.getDate() + 1)) { t++; const m = x.getMonth() + 1, d = x.getDate(); if (m >= 11 || m <= 3 || (m === 10 && d >= 15) || (m === 4 && d <= 15)) n++; }
+    return t ? n / t : 0;
+  };
   // ---------- Veille fuites d'eau ----------
   // Débit moyen (m³/jour) entre chaque paire de relevés ; le dernier intervalle
   // est comparé à la référence : « conso normale » saisie, sinon médiane des
@@ -88,14 +94,29 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
     const enf = enfantsDe(c);
     if (enf.length) debits.forEach(d => { const sous = enf.reduce((t, x) => t + (conso(x, d.du, d.au) || 0), 0); d.v = Math.max(0, d.v - sous / d.j); d.net = true; });
     const dernier = debits[debits.length - 1] || null;
-    const precedents = debits.slice(0, -1).map(d => d.v).sort((a, b) => a - b);
-    const med = precedents.length ? precedents[Math.floor(precedents.length / 2)] : null;
-    const seuil = Number.isFinite(parseFloat(c.consoNormaleJour)) ? parseFloat(c.consoNormaleJour) : null;
-    const ref = seuil ?? med;
+    const num = (v) => Number.isFinite(parseFloat(v)) ? parseFloat(v) : null;
+    const mediane = (l) => { const t = l.map(d => d.v).sort((a, b) => a - b); return t.length ? t[Math.floor(t.length / 2)] : null; };
+    const age = c.dernierReleve?.at ? Math.round((Date.now() - c.dernierReleve.at) / JOUR) : null;
+    if (type === "eau") {
+      const med = mediane(debits.slice(0, -1)), seuil = num(c.consoNormaleJour), ref = seuil ?? med;
+      const ratio = dernier && ref ? dernier.v / ref : null;
+      const etat = !dernier ? "attente" : ratio === null ? "construction" : ratio > 1.8 ? "fuite" : ratio > 1.3 ? "surveiller" : "ok";
+      return { c, debits, dernier, ref, refManuelle: seuil !== null, ratio, etat, age };
+    }
+    // Électricité, gaz, chauffage : la mise en route du chauffage (saison de
+    // chauffe, 15 octobre → 15 avril) fait monter la consommation. On compare
+    // donc chaque période à la référence de SA saison : « hors chauffe » ou
+    // « chauffe » (au prorata des jours si la période est à cheval).
+    debits.forEach(d => { d.pc = partChauffe(d.du, d.au); });
+    const prec = debits.slice(0, -1);
+    const sE = num(c.consoNormaleJour), sH = num(c.consoNormaleHiverJour);
+    const refE = sE ?? mediane(prec.filter(d => d.pc <= 0.2)), refH = sH ?? mediane(prec.filter(d => d.pc >= 0.8));
+    const pc = dernier ? dernier.pc : 0;
+    const ref = !dernier ? (refE ?? refH) : pc <= 0.2 ? refE : pc >= 0.8 ? refH : (refE != null && refH != null ? refE * (1 - pc) + refH * pc : null);
     const ratio = dernier && ref ? dernier.v / ref : null;
     const etat = !dernier ? "attente" : ratio === null ? "construction" : ratio > 1.8 ? "fuite" : ratio > 1.3 ? "surveiller" : "ok";
-    const age = c.dernierReleve?.at ? Math.round((Date.now() - c.dernierReleve.at) / JOUR) : null;
-    return { c, debits, dernier, ref, refManuelle: seuil !== null, ratio, etat, age };
+    const saison = pc >= 0.8 ? "chauffe" : pc <= 0.2 ? "hors" : "mixte";
+    return { c, debits, dernier, ref, refManuelle: saison === "chauffe" ? sH !== null : saison === "hors" ? sE !== null : (sE !== null && sH !== null), ratio, etat, age, saison, pc, refE, refH, sE, sH };
   }).sort((a, b) => ({ fuite: 0, surveiller: 1, ok: 2, construction: 3, attente: 4 }[a.etat] - { fuite: 0, surveiller: 1, ok: 2, construction: 3, attente: 4 }[b.etat]) || (b.ratio || 0) - (a.ratio || 0));
 
   // Sous-compteurs (Schéma des compteurs) : un compteur général compte sa
@@ -272,7 +293,7 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
           return `<div class="vf-histo" title="Débit moyen entre deux relevés (8 derniers)">${d.map((z, i) => `<i style="height:${Math.max(6, z.v / m * 100)}%" class="${i === d.length - 1 ? "der" : ""}" title="${new Date(z.du).toLocaleDateString("fr-FR")} → ${new Date(z.au).toLocaleDateString("fr-FR")} : ${fmt(z.v, 2)} ${U}/j"></i>`).join("")}${x.ref ? `<b style="bottom:${x.ref / m * 100}%"></b>` : ""}</div>`; };
         return `<section class="vf vf-e-${TV}" style="--vfe:${EV.couleur}">
           <div class="vf-tete"><div><span class="vf-sur">Surveillance en continu</span><h2>${EV.icone} ${T.titre}</h2>
-            <p>Chaque ${T.qui} compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale. Au-delà de +30 % : à surveiller ; au-delà de +80 % : ${T.fuite.toLowerCase()}.</p></div>
+            <p>Chaque ${T.qui} compare son <b>débit moyen depuis le relevé précédent</b> à sa consommation normale${TV === "eau" ? "" : " <b>de la même saison</b> (chauffe du 15 octobre au 15 avril, ou hors chauffe)"}. Au-delà de +30 % : à surveiller ; au-delà de +80 % : ${T.fuite.toLowerCase()}.</p></div>
             <div class="vf-resume"><span class="f">${nb("fuite")}<small>${TV === "eau" ? `fuite${nb("fuite") > 1 ? "s" : ""} probable${nb("fuite") > 1 ? "s" : ""}` : `dérive${nb("fuite") > 1 ? "s" : ""} forte${nb("fuite") > 1 ? "s" : ""}`}</small></span><span class="s">${nb("surveiller")}<small>à surveiller</small></span><span class="o">${nb("ok")}<small>normal</small></span>${nb("construction") + nb("attente") ? `<span class="c">${nb("construction") + nb("attente")}<small>référence à définir</small></span>` : ""}</div></div>
           ${parAssoGroupe(V, x => siteParId.get(x.c.dossierId)).map((G, gi, T) => `${gi === 0 || T[gi - 1].assoc !== G.assoc ? `<div class="vf-asso">🏢 ${esc(G.assoc)}</div>` : ""}${G.groupe ? `<div class="vf-groupe">${esc(G.groupe)}</div>` : ""}
           <div class="vf-grille">${[...G.items].sort((a, b) => (a.c.ordre ?? 1e9) - (b.c.ordre ?? 1e9) || V.indexOf(a) - V.indexOf(b)).map(x => `
@@ -281,13 +302,16 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
               <div class="vf-c-corps">${jauge(x)}
                 <div class="vf-c-info">
                   ${x.ratio !== null ? `<div class="vf-ratio">${x.ratio >= 1 ? "+" : ""}${fmt((x.ratio - 1) * 100)} %<small>vs normal</small></div>` : ""}
-                  <div>Normal : <b>${x.ref ? `${fmt2(x.ref)} ${U}/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
+                  ${x.saison ? `<div class="vf-saison ${x.saison}">${x.saison === "chauffe" ? "🔥 Saison de chauffe" : x.saison === "mixte" ? `🔥 Début / fin de chauffe (${Math.round(x.pc * 100)} % des jours)` : "☀️ Hors chauffe"}</div>` : ""}
+                  <div>Normal${x.saison === "chauffe" ? " (chauffe)" : x.saison === "hors" ? " (hors chauffe)" : ""} : <b>${x.ref ? `${fmt2(x.ref)} ${U}/j` : "—"}</b>${x.ref ? `<small>${x.refManuelle ? " (saisi)" : " (calculé)"}</small>` : ""}</div>
+                  ${x.saison && x.etat === "construction" ? `<div class="vf-mute">${x.refH == null ? "Pas encore de référence « chauffe » : la 1ʳᵉ saison de chauffe sert de base." : "Référence « hors chauffe » manquante."}</div>` : ""}
+                  ${x.saison && (x.refE != null || x.refH != null) ? `<div class="vf-mute">Hors chauffe : ${x.refE != null ? fmt2(x.refE) : "—"} · Chauffe : ${x.refH != null ? fmt2(x.refH) : "—"} ${U}/j</div>` : ""}
                   ${x.dernier ? `<div class="vf-mute">du ${new Date(x.dernier.du).toLocaleDateString("fr-FR")} au ${new Date(x.dernier.au).toLocaleDateString("fr-FR")}</div>` : `<div class="vf-mute">Il faut 2 relevés pour mesurer un débit.</div>`}
                   ${x.age !== null && x.age > 10 ? `<div class="vf-mute">⏱ dernier relevé il y a ${x.age} j — un relevé intermédiaire affinerait la mesure</div>` : ""}
                 </div></div>
               ${barres(x)}
-              ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}" data-vf-u="${U}">✓ ${fmt2(x.dernier.v)} ${U}/jour, c'est normal pour ce site</button>` : ""}
-              <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-u="${U}" data-vf-val="${x.ref ?? ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
+              ${x.etat === "construction" ? `<button type="button" class="vf-normal" data-vf-fixe="${x.c.id}" data-vf-v="${Math.round(x.dernier.v * 100) / 100}" data-vf-u="${U}" data-vf-s="${x.saison && x.pc >= 0.5 ? "chauffe" : "hors"}">✓ ${fmt2(x.dernier.v)} ${U}/jour, c'est normal pour ce site</button>` : ""}
+              <div class="vf-actions"><button type="button" data-vf-ref="${x.c.id}" data-vf-u="${U}" data-vf-val="${x.saison ? ((x.pc >= 0.5 ? x.sH : x.sE) ?? "") : (x.ref ?? "")}" data-vf-s="${x.saison ? (x.pc >= 0.5 ? "chauffe" : "hors") : ""}">${x.refManuelle ? "✏️ Modifier la conso normale" : "⚙️ Définir la conso normale"}</button><button type="button" data-pe-site="${x.c.dossierId}">Voir le site →</button></div>
             </div>`).join("")}</div>`).join("")}
         </section>`;
       })()}
@@ -404,14 +428,17 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
   container.querySelectorAll("[data-pe-site]").forEach(el => el.addEventListener("click", () => onOuvrirSite(el.dataset.peSite)));
   container.querySelectorAll("[data-vf-fixe]").forEach(b => b.addEventListener("click", async () => {
     const n = parseFloat(b.dataset.vfV); b.disabled = true;
-    try { await modifierCompteur(b.dataset.vfFixe, { consoNormaleJour: n }); const c = tousCompteurs.find(x => x.id === b.dataset.vfFixe); if (c) c.consoNormaleJour = n; rerendre(); }
+    const champ = b.dataset.vfS === "chauffe" ? "consoNormaleHiverJour" : "consoNormaleJour";
+    try { await modifierCompteur(b.dataset.vfFixe, { [champ]: n }); const c = tousCompteurs.find(x => x.id === b.dataset.vfFixe); if (c) c[champ] = n; rerendre(); }
     catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); b.disabled = false; }
   }));
   container.querySelectorAll("[data-vf-ref]").forEach(b => b.addEventListener("click", async () => {
-    const v = prompt(`Consommation NORMALE de ce compteur, en ${b.dataset.vfU || "m³"} par jour (ex. 1,5).`+"\nLaisse vide pour revenir au calcul automatique.", b.dataset.vfVal ? String(Math.round(parseFloat(b.dataset.vfVal) * 100) / 100).replace(".", ",") : "");
+    const saison = b.dataset.vfS, champ = saison === "chauffe" ? "consoNormaleHiverJour" : "consoNormaleJour";
+    const quoi = saison === "chauffe" ? " EN SAISON DE CHAUFFE (15 oct. → 15 avril)" : saison === "hors" ? " HORS CHAUFFE (16 avril → 14 oct.)" : "";
+    const v = prompt(`Consommation NORMALE de ce compteur${quoi}, en ${b.dataset.vfU || "m³"} par jour (ex. 1,5).`+"\nLaisse vide pour revenir au calcul automatique.", b.dataset.vfVal ? String(Math.round(parseFloat(b.dataset.vfVal) * 100) / 100).replace(".", ",") : "");
     if (v === null) return;
     const n = parseFloat(v.replace(",", "."));
-    try { await modifierCompteur(b.dataset.vfRef, { consoNormaleJour: v.trim() === "" ? null : (Number.isFinite(n) && n > 0 ? n : null) }); const c = tousCompteurs.find(x => x.id === b.dataset.vfRef); if (c) c.consoNormaleJour = v.trim() === "" ? null : n; rerendre(); }
+    try { await modifierCompteur(b.dataset.vfRef, { [champ]: v.trim() === "" ? null : (Number.isFinite(n) && n > 0 ? n : null) }); const c = tousCompteurs.find(x => x.id === b.dataset.vfRef); if (c) c[champ] = v.trim() === "" ? null : n; rerendre(); }
     catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
   }));
   container.querySelectorAll("[data-pe-relever]").forEach(b => b.addEventListener("click", () => onRelever(b.dataset.peRelever)));

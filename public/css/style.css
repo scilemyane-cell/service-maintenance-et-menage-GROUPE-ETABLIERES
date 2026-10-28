@@ -4062,3 +4062,4 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .fp-c-l .fp-star{margin-top:5px}.fp-c-l .fp-c{flex:1}
 .fp-c-l.inc{box-shadow:inset 3px 0 0 #e0a526}.fp-c-l.manque{background:rgba(229,83,61,.08)}
 .bf-synchro{font-size:12px;color:var(--text-dim);align-self:center;margin-left:auto}
+.vf-saison{font-size:12px;font-weight:700;margin-bottom:2px}.vf-saison.chauffe,.vf-saison.mixte{color:#e0533d}.vf-saison.hors{color:#d9a400}
