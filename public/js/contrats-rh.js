@@ -393,14 +393,8 @@ function renderEditeur() {
         <label>Ajustement de reclassification (pts)${inp("ajustement", c.ajustement, 'inputmode="decimal"')}</label>
         <label>Bonification indiciaire (pts)${inp("bonification", c.bonification, 'inputmode="decimal"')}</label>
       </div>
-      <p class="hint" style="margin:10px 0 4px">Critères classants (accord NAO 2026, annexe 2) — choisis le degré, les points de la catégorie ${r.cat || "?"} s'affichent</p>
-      ${r.cat ? "" : `<div class="fp-alerte">⚠️ Choisis d'abord la <b>fonction occupée</b> (section 1 · Type de contrat) : la catégorie en dépend, puis les degrés apparaissent ici.</div>`}
-      <div class="rh-crit">${CRITERES.map(([k, l]) => {
-        if (k === "formation") { const q = QUALIFS.filter(x => !r.cat || x[1] === r.cat); return `<label>${l}<select data-c="qualification"><option value="">— aucune / saisie libre</option>${q.map(x => `<option value="${esc(x[0])}" ${c.qualification === x[0] ? "selected" : ""}>${esc(x[0])} · ${x[2]} pts</option>`).join("")}</select>${c.qualification ? "" : `<input data-c="criteres.formation" value="${esc(c.criteres?.formation ?? "")}" inputmode="decimal" placeholder="points">`}</label>`; }
-        const t = DEGRES[k]?.[r.cat];
-        if (r.cat && t === null) return `<label>${l}<small class="hint">sans objet en catégorie 1</small></label>`;
-        return `<label>${l}<select data-c="degres.${k}"><option value="">— ${t ? "aucun / saisie libre" : "choisis la fonction"}</option>${t ? t.map((p, i) => `<option value="${i + 1}" ${+c.degres?.[k] === i + 1 ? "selected" : ""}>Degré ${i + 1} · ${p} pts</option>`).join("") : ""}</select>${+c.degres?.[k] ? "" : `<input data-c="criteres.${k}" value="${esc(c.criteres?.[k] ?? "")}" inputmode="decimal" placeholder="points">`}</label>`;
-      }).join("")}</div>
+      <p class="hint" style="margin:10px 0 4px">Critères classants / degrés fonctions (points)</p>
+      <div class="rh-crit">${CRITERES.map(([k, l, liste]) => { const v = String(c.criteres?.[k] ?? ""), libre = (v !== "" && !liste.map(String).includes(v)) || c._libre?.[k]; return `<label>${l}<select data-rh-crit="${k}"><option value="">—</option>${liste.map(p => `<option value="${p}" ${!libre && v === String(p) ? "selected" : ""}>${p} pts</option>`).join("")}<option value="__autre" ${libre ? "selected" : ""}>Autre valeur…</option></select>${libre ? `<input data-c="criteres.${k}" value="${esc(v)}" inputmode="decimal" placeholder="points">` : ""}</label>`; }).join("")}</div>
       <div class="rh-ligne"><label class="fp-c ${c.regulAuto !== false ? "on" : ""}"><input type="checkbox" data-rh-regul ${c.regulAuto !== false ? "checked" : ""}><span>Compléter automatiquement jusqu'au minimum conventionnel (${nb(bareme.minimumPoints, 0)} pts)</span></label></div>
       ${c.regulAuto === false ? `<div class="fp-g2"><label>Autre élément de rémunération (pts)${inp("autrePts", c.autrePts, 'inputmode="decimal"')}</label><label>Libellé${inp("autrePtsLibelle", c.autrePtsLibelle)}</label></div>` : ""}
       <p class="hint" style="margin:10px 0 4px">Autres éléments de rémunération (€ / mois)</p>
@@ -492,6 +486,11 @@ function brancher() {
     if (e.target.value === "__autre") { c.fonctionAutre = true; if (metier(c.fonction)) c.fonction = ""; }
     else { c.fonctionAutre = false; c.fonction = e.target.value; c.categorie = ""; c.statut = ""; }
   }));
+  el.querySelectorAll("[data-rh-crit]").forEach(sl => sl.addEventListener("change", () => changer(c => {
+    const k = sl.dataset.rhCrit; c.criteres = c.criteres || {}; c._libre = c._libre || {};
+    if (c.degres) delete c.degres[k]; if (k === "formation") c.qualification = "";
+    if (sl.value === "__autre") { c._libre[k] = true; c.criteres[k] = ""; } else { c._libre[k] = false; c.criteres[k] = sl.value; }
+  })));
   el.querySelector("[data-rh-hebdo]")?.addEventListener("click", () => { const h = prompt("Heures par semaine (ex. 5 ou 17,5) :"); const v = parseFloat(String(h || "").replace(",", ".")); if (v > 0) changer(c => { c.heures = String(Math.round(v / 35 * (bareme.heuresAnnuelles || 1565) * 100) / 100); }); });
   el.querySelector("[data-rh-regul]")?.addEventListener("change", (e) => changer(c => { c.regulAuto = e.target.checked; if (!e.target.checked && !c.autrePtsLibelle) c.autrePtsLibelle = "Régul minimum conventionnel"; }));
   el.querySelector("[data-rh-rot]")?.addEventListener("change", (e) => changer(c => { c.planning = c.planning || {}; c.planning.rotation = e.target.checked; }));
