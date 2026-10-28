@@ -4067,3 +4067,28 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .cpt-fenetre.ouverte,.cpt-fenetre.ouverte *{color:#1a1205!important;opacity:1!important}
 .cpt-fenetre.ouverte{background:#ffb22e!important;font-weight:600;font-size:14px;padding:8px 14px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .cpt-fenetre.ouverte b{font-weight:800}
+
+/* ---- Demandes de prestataires extérieurs (lien sans compte) ---- */
+#dps-externes:empty { display: none; }
+.dex-bloc { margin: 0 0 14px; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent, #2b7bb9) 45%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--accent, #2b7bb9) 7%, var(--panel, transparent)); }
+.dex-cartes { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.dex-carte { background: var(--panel, #fff); border: 1px solid var(--border, #ddd); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.dex-tete { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.dex-urg { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: color-mix(in srgb, currentColor 12%, transparent); }
+.dex-urg.Urgent, .dex-urg.Critique { color: #d93025; }
+.dex-txt { margin: 0; white-space: normal; }
+.dex-photos { display: flex; gap: 6px; }
+.dex-photos img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; }
+.dex-carte small { opacity: .8; }
+.dex-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.dex-gestion { margin: 0 0 14px; padding: 10px 14px; border: 1px dashed var(--border, #ccc); border-radius: 12px; }
+.dex-gestion summary { cursor: pointer; font-weight: 600; }
+.dex-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 8px 0; }
+.dex-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; flex: 1 1 180px; }
+.dex-liens { display: flex; flex-direction: column; gap: 8px; }
+.dex-lien { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border: 1px solid var(--border, #ddd); border-radius: 10px; }
+.dex-lien.coupe { opacity: .55; }
+.dex-lien small { display: block; opacity: .8; }
+.dex-lien code { display: block; font-size: 11px; word-break: break-all; opacity: .75; }
+.dex-l-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.dex-form input, .dex-form select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border, #ccc); background: var(--bg, transparent); color: inherit; font: inherit; }

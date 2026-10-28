@@ -131,6 +131,29 @@ service cloud.firestore {
     // commentaire, ou s'assigner comme intervenant sur une demande déjà
     // existante — jamais modifier le site, la description ou l'urgence
     // d'origine (qui viennent du fichier source).
+    // ---- Demandes d'intervention de prestataires extérieurs (sans compte) ----
+    // Un lien « liens-demande/{token} » est créé par un responsable ; le
+    // prestataire (connecté anonymement) envoie sa demande, qui attend la
+    // validation d'un responsable avant de devenir une vraie demande SMM.
+    match /liens-demande/{token} {
+      allow read: if isSignedIn();
+      allow write: if isEditor();
+    }
+    match /demandes-externes/{docId} {
+      allow read: if isEditor() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.statut == 'nouvelle'
+        && request.resource.data.lien is string
+        && exists(/databases/$(database)/documents/liens-demande/$(request.resource.data.lien))
+        && get(/databases/$(database)/documents/liens-demande/$(request.resource.data.lien)).data.actif == true
+        && request.resource.data.site == get(/databases/$(database)/documents/liens-demande/$(request.resource.data.lien)).data.site
+        && request.resource.data.descriptif is string && request.resource.data.descriptif.size() > 0 && request.resource.data.descriptif.size() < 4000
+        && request.resource.data.nom is string && request.resource.data.nom.size() > 0 && request.resource.data.nom.size() < 80
+        && request.resource.data.prenom is string && request.resource.data.prenom.size() > 0 && request.resource.data.prenom.size() < 80;
+      allow update, delete: if isEditor();
+    }
+
     match /demandes/{docId} {
       allow read: if isSignedIn();
       allow create: if isEditor()

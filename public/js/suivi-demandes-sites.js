@@ -632,6 +632,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <p>${estTech && !st.toutVoir ? "Seulement les demandes qui te sont attribuées (ou de tes sites)." : "Choisis un site pour voir et traiter ses demandes."}</p>${perms.peutTraiter ? `<button type="button" class="dps-nouvelle" data-nouvelle-demande>➕ Nouvelle demande</button>` : ""}</div>
         <div class="dps-hero-chiffres"><div><b>${totOuv}</b><span>à traiter</span></div><div class="urg"><b>${totUrg}</b><span>urgentes</span></div><div><b>${affiches.length}</b><span>sites</span></div></div>
       </section>
+      ${perms.isEditor ? `<div id="dps-externes"></div>` : ""}
       ${perms.isEditor ? (() => { const av = lignes.filter(l => EN_ATTENTE_VALID(l.statut) && !l.lieeA).sort((a, b) => (a.dateIntervention || "").localeCompare(b.dateIntervention || "")); return av.length ? `
       <section class="dps-valid-bloc">
         <div class="dps-valid-tete"><h3>⏳ ${av.length} demande${av.length > 1 ? "s" : ""} à valider</h3><p>Déclarées réalisées par les techniciens — vérifie et valide.</p></div>
@@ -698,6 +699,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     container.querySelector("#dps-tech")?.addEventListener("change", (e) => { st.tech = e.target.value; rerender(); });
     container.querySelector("#dps-traitees")?.addEventListener("change", (e) => { st.voirTraitees = e.target.checked; rerender(); });
     container.querySelector("#dps-toutvoir")?.addEventListener("change", (e) => { st.toutVoir = e.target.checked; rerender(); });
+    if (perms.isEditor) { const hx = container.querySelector("#dps-externes"); if (hx) import("./demandes-externes.js").then(m => m.monterDemandesExternes(hx, { lignes: toutesLignes, utilisateur })).catch(() => {}); }
     brancherAttrib();
     container.querySelectorAll("[data-dps-fav]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); basculerFavori(b.dataset.dpsFav); }));
     container.querySelectorAll("[data-ouvrir-dem]").forEach(b => b.addEventListener("click", () => { st.site = b.dataset.ouvrirSite; st.q = ""; st.vuAvant = null; st.focusId = b.dataset.ouvrirDem; rerender(); container.scrollIntoView({ block: "start" }); }));

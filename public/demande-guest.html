@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demande d'intervention — Groupe Établières</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg:#f4f1ea; --carte:#fff; --txt:#1d2433; --doux:#5b6475; --ligne:#dcd6c8; --accent:#1f5f8b; --ok:#1e7a46; --urg:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141821; --carte:#1d2330; --txt:#eef1f6; --doux:#a6afc0; --ligne:#323a4b; --accent:#6db3e8; --ok:#5cc98a; --urg:#ff8a80; } }
+  * { box-sizing: border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:20px 16px 48px; }
+  header small { color:var(--accent); font-weight:700; letter-spacing:.06em; text-transform:uppercase; font-size:12px; }
+  h1 { margin:4px 0 4px; font-size:24px; }
+  .sous { color:var(--doux); margin:0 0 18px; }
+  .carte { background:var(--carte); border:1px solid var(--ligne); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-weight:600; font-size:14px; margin:0 0 12px; }
+  input, select, textarea { display:block; width:100%; margin-top:5px; padding:11px 12px; border:1px solid var(--ligne); border-radius:10px; background:var(--bg); color:var(--txt); font:inherit; }
+  textarea { min-height:110px; resize:vertical; }
+  .deux { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .urg { display:flex; gap:8px; margin-top:6px; }
+  .urg label { flex:1; margin:0; border:1px solid var(--ligne); border-radius:10px; padding:10px; text-align:center; cursor:pointer; font-weight:600; }
+  .urg input { display:none; }
+  .urg label:has(input:checked) { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,transparent); }
+  .urg label.u:has(input:checked) { border-color:var(--urg); background:color-mix(in srgb,var(--urg) 14%,transparent); color:var(--urg); }
+  .photos { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .photos img { width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--ligne); }
+  .photos button { width:84px; height:84px; border:1px dashed var(--doux); border-radius:8px; background:none; color:var(--doux); font:inherit; font-size:13px; cursor:pointer; }
+  .btn { width:100%; padding:14px; border:0; border-radius:12px; background:var(--accent); color:#fff; font:inherit; font-weight:700; font-size:17px; cursor:pointer; }
+  .btn:disabled { opacity:.6; }
+  .lien { background:none; border:0; color:var(--accent); font:inherit; text-decoration:underline; cursor:pointer; padding:0; }
+  .ok { text-align:center; }
+  .ok .gros { font-size:44px; }
+  .hist h2 { font-size:16px; margin:0 0 8px; }
+  .hist div { border-top:1px solid var(--ligne); padding:8px 0; font-size:14px; }
+  .hist div:first-of-type { border-top:0; }
+  .hist b { font-size:13px; }
+  .st { float:right; font-size:12px; font-weight:700; border-radius:20px; padding:2px 9px; }
+  .st.nouvelle { background:color-mix(in srgb,var(--accent) 16%,transparent); color:var(--accent); }
+  .st.creee { background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
+  .st.refusee { background:color-mix(in srgb,var(--urg) 14%,transparent); color:var(--urg); }
+  .err { color:var(--urg); font-weight:600; }
+  .petit { color:var(--doux); font-size:13px; }
+</style>
+</head>
+<body>
+<main id="app"><p class="petit">Chargement…</p></main>
+<script type="module">
+  import { auth, db } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { doc, getDoc, getDocs, addDoc, collection, query, where, serverTimestamp } from "./js/firestore-compte.js";
+
+  const token = new URLSearchParams(location.search).get("l");
+  const app = document.getElementById("app");
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const lire = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };
+  const ecrire = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const TYPES = ["Plomberie / fuite", "Électricité / éclairage", "Chauffage / ventilation", "Froid (chambre froide, frigo…)", "Équipement de cuisine", "Serrurerie / porte", "Menuiserie / mobilier", "Nuisibles", "Autre"];
+  let lien = null, photos = [];
+
+  const erreur = (m) => { app.innerHTML = `<header><small>Groupe Établières · Maintenance</small><h1>Lien indisponible</h1></header><div class="carte"><p>${m}</p></div>`; };
+
+  if (!token) erreur("Ce lien est incomplet. Demandez un nouveau lien au service maintenance.");
+  else onAuthStateChanged(auth, async (user) => {
+    if (!user) { try { await signInAnonymously(auth); } catch { erreur("Connexion impossible. Vérifiez votre connexion internet et réessayez."); } return; }
+    try { const s = await getDoc(doc(db, "liens-demande", token)); lien = s.exists() ? s.data() : null; }
+    catch { erreur("Connexion impossible. Réessayez dans un instant."); return; }
+    if (!lien) { erreur("Ce lien n'existe pas ou plus."); return; }
+    if (lien.actif === false) { erreur("Ce lien a été désactivé. Contactez le service maintenance du Groupe Établières."); return; }
+    formulaire();
+  });
+
+  function identite() {
+    const id = lire("smm-dem-identite") || {};
+    return `<div class="carte">
+      <div class="deux"><label>Prénom *<input name="prenom" required autocomplete="given-name" value="${esc(id.prenom)}"></label>
+      <label>Nom *<input name="nom" required autocomplete="family-name" value="${esc(id.nom)}"></label></div>
+      <div class="deux"><label>Société<input name="societe" autocomplete="organization" value="${esc(id.societe ?? lien.label ?? "")}"></label>
+      <label>Téléphone<input name="telephone" type="tel" autocomplete="tel" value="${esc(id.telephone)}"></label></div>
+    </div>`;
+  }
+
+  function formulaire() {
+    photos = [];
+    app.innerHTML = `
+      <header><small>Groupe Établières · Maintenance</small><h1>Demande d'intervention</h1>
+      <p class="sous">🏠 <b>${esc(lien.site)}</b> — décrivez le problème, le service maintenance est prévenu immédiatement.</p></header>
+      <form id="f" autocomplete="on">
+        ${identite()}
+        <div class="carte">
+          <label>Où ? (pièce, équipement)<input name="local" placeholder="ex. cuisine, plonge, chambre froide n°2…"></label>
+          <label>Type de problème<select name="type"><option value="">— Choisir —</option>${TYPES.map(t => `<option>${t}</option>`).join("")}</select></label>
+          <label>Décrivez le problème *<textarea name="descriptif" required placeholder="Ce qui ne fonctionne pas, depuis quand, ce que vous avez constaté…"></textarea></label>
+          <div style="font-weight:600;font-size:14px">Urgence</div>
+          <div class="urg"><label><input type="radio" name="urgence" value="Normal" checked>Normal</label><label class="u"><input type="radio" name="urgence" value="Urgent">⚠️ Urgent</label></div>
+          <p class="petit">Urgent = sécurité, fuite importante, panne qui bloque le service des repas.</p>
+          <div style="font-weight:600;font-size:14px;margin-top:10px">Photos (facultatif, 2 max)</div>
+          <div class="photos" id="photos"></div>
+          <input type="file" id="fichier" accept="image/*" hidden>
+        </div>
+        <p class="err" id="err"></p>
+        <button class="btn" id="envoyer">Envoyer la demande</button>
+      </form>
+      <div id="hist"></div>`;
+    dessinerPhotos(); historique();
+    const fic = document.getElementById("fichier");
+    fic.addEventListener("change", async () => { const f = fic.files[0]; fic.value = ""; if (!f) return; try { photos.push(await compresser(f)); dessinerPhotos(); } catch { document.getElementById("err").textContent = "Photo illisible, essayez-en une autre."; } });
+    document.getElementById("f").addEventListener("submit", envoyer);
+  }
+
+  function dessinerPhotos() {
+    const z = document.getElementById("photos");
+    z.innerHTML = photos.map((p, i) => `<img src="${p}" alt="" data-i="${i}" title="Toucher pour retirer">`).join("") + (photos.length < 2 ? `<button type="button" id="ajphoto">📷<br>Ajouter</button>` : "");
+    z.querySelector("#ajphoto")?.addEventListener("click", () => document.getElementById("fichier").click());
+    z.querySelectorAll("img").forEach(im => im.addEventListener("click", () => { if (confirm("Retirer cette photo ?")) { photos.splice(+im.dataset.i, 1); dessinerPhotos(); } }));
+  }
+
+  function compresser(fichier) {
+    return new Promise((ok, ko) => {
+      const img = new Image(), url = URL.createObjectURL(fichier);
+      img.onload = () => {
+        const max = 1100, r = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        let q = 0.7, d = c.toDataURL("image/jpeg", q);
+        while (d.length > 280000 && q > 0.3) { q -= 0.1; d = c.toDataURL("image/jpeg", q); }
+        ok(d);
+      };
+      img.onerror = ko; img.src = url;
+    });
+  }
+
+  async function envoyer(e) {
+    e.preventDefault();
+    const f = new FormData(e.target), v = Object.fromEntries(f.entries());
+    const err = document.getElementById("err"), b = document.getElementById("envoyer");
+    if (!v.prenom.trim() || !v.nom.trim() || !v.descriptif.trim()) { err.textContent = "Merci de remplir prénom, nom et description."; return; }
+    ecrire("smm-dem-identite", { prenom: v.prenom.trim(), nom: v.nom.trim(), societe: v.societe.trim(), telephone: v.telephone.trim() });
+    b.disabled = true; b.textContent = "Envoi…"; err.textContent = "";
+    try {
+      await addDoc(collection(db, "demandes-externes"), {
+        lien: token, site: lien.site, association: lien.association || "Autres", uid: auth.currentUser.uid,
+        prenom: v.prenom.trim(), nom: v.nom.trim(), societe: v.societe.trim(), telephone: v.telephone.trim(),
+        local: v.local.trim(), type: v.type, urgence: v.urgence, descriptif: v.descriptif.trim().slice(0, 3900), photos,
+        statut: "nouvelle", creeLe: serverTimestamp(),
+      });
+      app.innerHTML = `<header><small>Groupe Établières · Maintenance</small><h1>Demande envoyée</h1></header>
+        <div class="carte ok"><div class="gros">✅</div><p><b>Merci ${esc(v.prenom.trim())} !</b><br>Votre demande pour <b>${esc(lien.site)}</b> a bien été transmise au service maintenance.${v.urgence === "Urgent" ? "<br><br>⚠️ Si la situation est dangereuse, appelez aussi directement le service maintenance." : ""}</p>
+        <p><button class="lien" id="autre">➕ Faire une autre demande</button></p></div><div id="hist"></div>`;
+      document.getElementById("autre").addEventListener("click", formulaire);
+      historique();
+    } catch (x) { console.error(x); err.textContent = "L'envoi a échoué. Vérifiez votre connexion et réessayez."; b.disabled = false; b.textContent = "Envoyer la demande"; }
+  }
+
+  async function historique() {
+    const z = document.getElementById("hist"); if (!z) return;
+    try {
+      const s = await getDocs(query(collection(db, "demandes-externes"), where("uid", "==", auth.currentUser.uid)));
+      const l = s.docs.map(d => d.data()).filter(d => d.lien === token).sort((a, b) => (b.creeLe?.seconds || 9e12) - (a.creeLe?.seconds || 9e12)).slice(0, 10);
+      if (!l.length) return;
+      const lib = { nouvelle: "Reçue", creee: "Prise en charge", refusee: "Non retenue" };
+      z.innerHTML = `<div class="carte hist"><h2>Vos dernières demandes</h2>${l.map(d => `<div><span class="st ${esc(d.statut)}">${lib[d.statut] || esc(d.statut)}${d.numero ? ` · ${esc(d.numero)}` : ""}</span><b>${d.creeLe?.seconds ? new Date(d.creeLe.seconds * 1000).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "à l'instant"}</b>${d.local ? ` · ${esc(d.local)}` : ""}<br>${esc(d.descriptif.slice(0, 120))}${d.statut === "refusee" && d.motif ? `<br><span class="petit">Motif : ${esc(d.motif)}</span>` : ""}</div>`).join("")}</div>`;
+    } catch {}
+  }
+</script>
+</body>
+</html>

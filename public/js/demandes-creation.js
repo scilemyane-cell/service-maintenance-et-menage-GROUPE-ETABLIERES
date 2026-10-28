@@ -10,7 +10,7 @@ import { esc } from "./astreinte-logic.js";
 const URGENCES = ["Normal", "Urgent", "À planifier", "Critique"];
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
 
-async function creerDemande(champs) {
+export async function creerDemande(champs) {
   const refCompteur = doc(db, "config", "compteur-demandes-app");
   const refNouvelle = doc(collection(db, "demandes"));
   return runTransaction(db, async (tx) => {
