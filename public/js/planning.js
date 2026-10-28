@@ -596,6 +596,8 @@ function renderFicheTechnicien(nom, roles, c) {
           </label>
           <label>Site principal (informatif)<input data-fiche-siteprincipal="${esc(nom)}" value="${esc(c.sitePrincipal || '')}" placeholder="ex. Service technique"></label>
         </div>
+        <label class="fiche-opt"><input type="checkbox" data-fiche-forfait="${esc(nom)}" ${c.forfaitJours ? "checked" : ""}> <span><b>Forfait jours</b> — interventions d'astreinte payées une fois par an, en août (pas de relevé à valider chaque mois)</span></label>
+        <label class="fiche-opt"><input type="checkbox" data-fiche-vehicule="${esc(nom)}" ${c.vehiculeService ? "checked" : ""}> <span><b>Véhicule de l'entreprise</b> — se déplace avec un véhicule de service : pas de remboursement km</span></label>
       </div>
 
       <div class="fiche-tech-section">
@@ -650,6 +652,14 @@ function attacherFicheTechnicienListeners() {
     const nom = inp.dataset.ficheSiteprincipal;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), sitePrincipal: inp.value.trim() });
   }));
+  mountedContainer.querySelectorAll("[data-fiche-forfait]").forEach(cb => cb.addEventListener("change", async () => {
+    const nom = cb.dataset.ficheForfait;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), forfaitJours: cb.checked });
+  }));
+  mountedContainer.querySelectorAll("[data-fiche-vehicule]").forEach(cb => cb.addEventListener("change", async () => {
+    const nom = cb.dataset.ficheVehicule;
+    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), vehiculeService: cb.checked });
+  }));
   mountedContainer.querySelectorAll("[data-fiche-km-service]").forEach(inp => inp.addEventListener("change", async () => {
     const nom = inp.dataset.ficheKmService;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), kmDomicileService: parseFloat(inp.value) || 0 });
@@ -674,7 +684,7 @@ function calculerLignesNoteFrais(nom, mois, touteLHistoire = false) {
   const c = state.coordonnees[nom] || {};
   const kmAllerRetour = c.kmDomicileService || 0;
   const interventionsRetenues = state.interventions
-    .filter(i => i.technicien === nom && i.date && !i.fraisRembourse && (touteLHistoire || i.date.startsWith(mois)))
+    .filter(i => i.technicien === nom && i.date && !i.fraisRembourse && !i.vehiculeService && !c.vehiculeService && (touteLHistoire || i.date.startsWith(mois)))
     .sort((a, b) => a.date.localeCompare(b.date));
   const parJour = new Map();
   interventionsRetenues.forEach(i => {
@@ -2569,11 +2579,15 @@ function clotureMoisHTML(mois) {
   const sansTech = duMois.filter(i => !i.technicien).length;
   const s = (l, k) => l.reduce((t, i) => t + (parseFloat(i[k]) || 0), 0);
   const cartes = [...parTech.entries()].sort((x, y) => x[0].localeCompare(y[0], "fr")).map(([t, l]) => {
-    const att = l.filter(i => !i.transmis).length;
     const c = state.coordonnees[t] || {};
+    // Forfait jours : payé une fois par an, en août (relevé annuel sept. → août).
+    const forfait = !!c.forfaitJours, aout = m === 8;
+    const an = forfait && aout ? bornesAnForfait(mois) : null;
+    const att = an ? state.interventions.filter(i => i.technicien === t && !i.supprimeLe && !i.transmis && i.date >= an.start && i.date <= an.end).length : forfait ? 0 : l.filter(i => !i.transmis).length;
     const jours = calculerLignesNoteFrais(t, mois);
     const km = jours.reduce((x, j) => x + (parseFloat(j.km) || 0), 0);
     const kmFait = !jours.length;
+    const vehic = !!c.vehiculeService || (l.length && l.every(i => i.vehiculeService));
     const kmManque = !kmFait && !c.kmDomicileService;
     const fini = !att && kmFait;
     const primes = s(l, "primeDimanche");
@@ -2582,10 +2596,10 @@ function clotureMoisHTML(mois) {
         <div class="clo-id"><b>${esc(t)}</b><small>${l.length} intervention${l.length > 1 ? "s" : ""} · ${fmtDureeH(s(l, "heures"))}${s(l, "heuresNuit") ? ` · dont nuit ${fmtDureeH(s(l, "heuresNuit"))}` : ""}${primes ? ` · primes ${primes} €` : ""}</small></div>
         ${fini ? `<span class="clo-badge ok">✓ Terminé</span>` : ""}</div>
       <div class="clo-etapes">
-        <button class="clo-etape ${att ? "" : "ok"}" data-clo-releve="${esc(t)}"><span class="clo-num">${att ? "1" : "✓"}</span>
-          <span class="clo-txt"><b>Relevé d'heures</b><small>${att ? `${att} intervention${att > 1 ? "s" : ""} à valider` : "Validé"}</small></span><span class="clo-go">${att ? "Vérifier ›" : "Revoir ›"}</span></button>
+        <button class="clo-etape ${att ? "" : "ok"}" data-clo-releve="${esc(t)}" ${an ? `data-clo-an="1"` : ""}><span class="clo-num">${att ? "1" : "✓"}</span>
+          <span class="clo-txt"><b>Relevé d'heures${an ? " annuel" : ""}</b><small>${an ? (att ? `Forfait jours · ${att} intervention${att > 1 ? "s" : ""} de sept. à août à valider` : "Forfait jours · année validée") : forfait ? "Forfait jours · payé en août" : att ? `${att} intervention${att > 1 ? "s" : ""} à valider` : "Validé"}</small></span><span class="clo-go">${att ? "Vérifier ›" : "Revoir ›"}</span></button>
         <button class="clo-etape ${kmFait ? "ok" : kmManque ? "alerte" : ""}" data-clo-km="${esc(t)}"><span class="clo-num">${kmFait ? "✓" : "2"}</span>
-          <span class="clo-txt"><b>Remboursement km</b><small>${kmFait ? "Demandé" : kmManque ? "⚠ Km domicile à renseigner" : `${jours.length} jour${jours.length > 1 ? "s" : ""} · ${km.toFixed(0)} km · ≈ ${eurosFr(km * TARIF_KM)}`}</small></span><span class="clo-go">${kmFait ? "Revoir ›" : "Préparer ›"}</span></button>
+          <span class="clo-txt"><b>Remboursement km</b><small>${kmFait ? (vehic ? "🚐 Véhicule de l'entreprise · rien à rembourser" : "Demandé") : kmManque ? "⚠ Km domicile à renseigner" : `${jours.length} jour${jours.length > 1 ? "s" : ""} · ${km.toFixed(0)} km · ≈ ${eurosFr(km * TARIF_KM)}`}</small></span><span class="clo-go">${kmFait ? "Revoir ›" : "Préparer ›"}</span></button>
       </div></div>` };
   });
   const nbFini = cartes.filter(c => c.fini).length;
@@ -2717,9 +2731,15 @@ function overlayCloture(titre, contenu) {
   return { ov, fermer, actions: ov.querySelector(".clo-ov-actions") };
 }
 
-function ouvrirReleveCloture(person, mois) {
-  const { start, end } = bornesMois(mois);
-  const nomMois = new Date(start).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+// Forfait jours : année de paiement = 1er septembre (an-1) → 31 août.
+function bornesAnForfait(mois) {
+  const [a, m] = mois.split("-").map(Number);
+  const fin = m >= 9 ? a + 1 : a;
+  return { start: `${fin - 1}-09-01`, end: `${fin}-08-31` };
+}
+function ouvrirReleveCloture(person, mois, periode = null) {
+  const { start, end } = periode || bornesMois(mois);
+  const nomMois = periode ? `du ${new Date(start).toLocaleDateString("fr-FR")} au ${new Date(end).toLocaleDateString("fr-FR")}` : new Date(start).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const { ov, actions } = overlayCloture(`Relevé d'heures — ${person === "Tous" ? "tous les intervenants" : person} — ${nomMois}`, `<div class="clo-doc">${ficheReleveHTML(person, start, end)}</div>`);
   const maj = () => {
     const att = interventionsReleve(person, start, end).filter(i => !i.transmis).length;
@@ -2747,7 +2767,11 @@ function ouvrirKmCloture(nom, mois) {
     const c = state.coordonnees[nom] || {};
     const inc = lignes.filter(l => l.incluse);
     const km = inc.reduce((x, l) => x + (parseFloat(l.km) || 0), 0);
-    if (!c.kmDomicileService) {
+    if (c.vehiculeService) {
+      zone.innerHTML = `<div class="clo-km-vide">🚐 ${esc(nom)} se déplace avec un véhicule de l'entreprise : pas de remboursement km.<br><small>Pour changer : fiche de l'intervenant › Statut administratif.</small></div>`;
+      actions.innerHTML = ""; return;
+    }
+    if (!c.kmDomicileService && lignes.length) {
       zone.innerHTML = `<div class="clo-km-manque"><p>⚠ Il manque le trajet de <b>${esc(nom)}</b> : km aller-retour domicile ↔ ${esc(SERVICE_TECHNIQUE_NOM)}.</p>
         <label>Km aller-retour <input type="number" min="0" step="0.1" data-km-dom placeholder="ex. 24"></label> <button class="add-btn" data-km-dom-ok>Enregistrer</button></div>`;
       actions.innerHTML = "";
@@ -2775,7 +2799,7 @@ function ouvrirKmCloture(nom, mois) {
           <input class="clo-j-frais" data-j-frais="${i}" value="${esc(l.fraisAnnexes)}" placeholder="Frais annexes (péage, repas…)" ${l.incluse ? "" : "disabled"}>
         </div>`; }).join("")}</div>`;
     zone.insertAdjacentHTML("beforeend", `<label class="clo-km-hist"><input type="checkbox" data-j-hist ${historique ? "checked" : ""}> Ajouter les jours des mois précédents pas encore remboursés</label>`);
-    actions.innerHTML = lignes.length ? `<button class="add-btn" data-ov-print ${inc.length ? "" : "disabled"}>🖨️ Imprimer la note de frais</button>
+    actions.innerHTML = lignes.length ? `<button class="nav-btn" data-ov-vehic title="Aucun remboursement : les jours affichés disparaissent de la note de frais">🚐 Véhicule de l'entreprise</button><button class="add-btn" data-ov-print ${inc.length ? "" : "disabled"}>🖨️ Imprimer la note de frais</button>
       <button class="add-btn clo-vert" data-ov-fait ${inc.length ? "" : "disabled"} title="Une fois la note transmise : ces jours ne réapparaîtront plus">✓ Remboursement demandé</button>` : "";
     zone.querySelectorAll("[data-j-inc]").forEach(cb => cb.addEventListener("change", () => { lignes[+cb.dataset.jInc].incluse = cb.checked; rendre(); }));
     // Km : mis à jour en direct (sans redessiner, pour ne pas perdre la saisie).
@@ -2796,6 +2820,18 @@ function ouvrirKmCloture(nom, mois) {
     zone.querySelectorAll("[data-j-frais]").forEach(inp => inp.addEventListener("input", () => { lignes[+inp.dataset.jFrais].fraisAnnexes = inp.value; }));
     zone.querySelector("[data-j-hist]")?.addEventListener("change", (e) => { historique = e.target.checked; lignes = calculerLignesNoteFrais(nom, mois, historique); rendre(); });
     actions.querySelector("[data-ov-print]")?.addEventListener("click", () => imprimerNoteDeFrais(nom, mois, lignes.filter(l => l.incluse)));
+    actions.querySelector("[data-ov-vehic]")?.addEventListener("click", async (e) => {
+      const ids = lignes.filter(l => l.incluse).flatMap(l => l.interventionIds || []);
+      if (!ids.length) return;
+      if (!(await window.confirmDialog(`${nom} a utilisé un véhicule de l'entreprise : aucun remboursement km pour ces ${lignes.filter(l => l.incluse).length} jour(s) ?\n(Décoche d'abord les jours où il a pris son véhicule personnel.)`, { texteValider: "Oui, pas de remboursement" }))) return;
+      e.currentTarget.disabled = true;
+      try {
+        await Promise.all(ids.map(id => updateIntervention(id, { vehiculeService: true })));
+        state.interventions.forEach(i => { if (ids.includes(i.id)) i.vehiculeService = true; });
+        window.toast?.("🚐 Noté : véhicule de l'entreprise, rien à rembourser", "success");
+        fermer();
+      } catch (err) { window.toast?.("Échec : " + (err.message || err), "error"); e.currentTarget.disabled = false; }
+    });
     actions.querySelector("[data-ov-fait]")?.addEventListener("click", async (e) => {
       const retenues = lignes.filter(l => l.incluse), ids = retenues.flatMap(l => l.interventionIds || []);
       if (!ids.length) return;
@@ -3548,7 +3584,7 @@ function renderInterventions(container, perms) {
       const [a, m] = ui.cloture.split("-").map(Number); const d = new Date(a, m - 1 + Number(b.dataset.cloMois), 1);
       ui.cloture = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; renderAll();
     }));
-    mountedContainer.querySelectorAll("[data-clo-releve]").forEach(b => b.addEventListener("click", () => ouvrirReleveCloture(b.dataset.cloReleve, ui.cloture)));
+    mountedContainer.querySelectorAll("[data-clo-releve]").forEach(b => b.addEventListener("click", () => ouvrirReleveCloture(b.dataset.cloReleve, ui.cloture, b.dataset.cloAn ? bornesAnForfait(ui.cloture) : null)));
     mountedContainer.querySelectorAll("[data-recap-prime]").forEach(b => b.addEventListener("click", () => ouvrirRecapPrime(b.dataset.recapPrime)));
     mountedContainer.querySelectorAll("[data-clo-km]").forEach(b => b.addEventListener("click", () => ouvrirKmCloture(b.dataset.cloKm, ui.cloture)));
     if (ui.defilerCloture) { ui.defilerCloture = false; setTimeout(() => document.getElementById("iv-cloture")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }
