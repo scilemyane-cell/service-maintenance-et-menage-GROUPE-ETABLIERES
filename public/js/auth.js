@@ -63,6 +63,10 @@ function oublierProfil() {
 export function watchAuth(callback) {
   onAuthStateChanged(auth, async (user) => {
     if (!user) { oublierProfil(); callback(null); return; }
+    // Session « invité » (lien prestataire, SSIAP360 ouvert sans compte) restée
+    // dans ce navigateur : ce n'est pas un compte de l'appli → on la ferme et
+    // on affiche l'écran de connexion normal.
+    if (user.isAnonymous) { oublierProfil(); signOut(auth).catch(() => {}); callback(null); return; }
     const memo = lireProfilMemo(user.uid);
     if (memo && memo.role) {
       callback({ uid: user.uid, email: user.email, ...memo });

@@ -20,7 +20,15 @@
     if (!user) {
       // Dans la tuile SMM, la session SMM peut mettre un instant à être relue : on attend avant de passer en invité.
       try { if (window.parent !== window && window.parent.__smmRole) user = await new Promise(function (ok) { var t = setTimeout(function () { ok(null); }, 4000); var u = fa.onAuthStateChanged(auth, function (x) { if (x) { clearTimeout(t); u(); ok(x); } }); }); } catch (e) {}
-      if (!user) user = (await fa.signInAnonymously(auth)).user;
+      if (!user) {
+        // Stagiaire sans compte : connexion invité sur une instance Firebase À PART,
+        // pour ne jamais remplacer la session de l'appli SMM dans ce navigateur.
+        var fapp = await import(G + "firebase-app.js"), cfg = (await import("../js/firebase-config.js")).firebaseConfig;
+        var invite = fapp.getApps().find(function (a) { return a.name === "ssiap360-invite"; }) || fapp.initializeApp(cfg, "ssiap360-invite");
+        var authInv = fa.getAuth(invite);
+        user = authInv.currentUser || (await fa.signInAnonymously(authInv)).user;
+        return { auth: authInv, fdb: fs.getFirestore(invite), fs: fs, user: user };
+      }
     }
     void app;
     return { auth: auth, fdb: fdb, fs: fs, user: user };
