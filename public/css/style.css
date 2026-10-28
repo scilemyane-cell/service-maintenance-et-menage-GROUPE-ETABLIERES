@@ -4095,3 +4095,12 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .fiche-opt { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 14px; cursor: pointer; }
 .fiche-opt input { margin-top: 3px; }
 .clo-doublon { margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: #fff0f0; color: #a3121f; font-size: 13px; }
+.tel-liste { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.tel-titre { font-size: 13px; font-weight: 600; }
+.tel-ligne { display: flex; gap: 6px; align-items: center; }
+.tel-ligne select { flex: 0 0 90px; }
+.tel-ligne input { flex: 1; min-width: 0; }
+.tel-liste > [data-tel-ajout] { align-self: flex-start; }
+.tel-type { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: #e6eef7; color: #1f4f7a; text-transform: uppercase; letter-spacing: .03em; }
+.tel-type.tel-perso { background: #f3e9fb; color: #6b2fa0; }
+.tel-type.tel-fixe { background: #eaf5ec; color: #1e6b35; }

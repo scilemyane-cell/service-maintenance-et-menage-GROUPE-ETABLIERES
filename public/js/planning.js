@@ -289,6 +289,17 @@ function intervenantCanonique(nom) {
   return plan.length === 1 ? plan[0] : nom;
 }
 const estIntervenant = (i, nom) => intervenantCanonique(i.technicien) === nom;
+// Numéros de téléphone d'une personne : liste typée (pro / perso / fixe),
+// reprise des anciens champs « telephone » / « telephone2 » si besoin.
+const TYPES_TEL = { pro: "Pro", perso: "Perso", fixe: "Fixe" };
+function telsDe(c) {
+  if (Array.isArray(c?.telephones)) return c.telephones.filter(t => t && t.numero);
+  return [c?.telephone, c?.telephone2].filter(Boolean).map(v => {
+    const m = String(v).trim().match(/^(pro|perso|fixe)\b[\s:.-]*/i);
+    return { type: m ? m[1].toLowerCase() : "pro", numero: m ? String(v).trim().slice(m[0].length) : String(v).trim() };
+  });
+}
+const telHref = (n) => String(n).replace(/[^\d+]/g, "");
 function personneDuCompte(user) {
   const toutes = [...new Set([...state.people.n1, ...state.people.n2])];
   const lie = Object.entries(state.coordonnees || {}).find(([, c]) => c && c.uid && c.uid === user.uid);
@@ -520,7 +531,7 @@ function renderCoordonnees(container, perms) {
                   </div>
                 </div>
                 <div class="tech-card-quick-contact">
-                  <div class="fiche-tech-contact-item">📞 ${c.telephone ? `<a href="tel:${esc(c.telephone)}" onclick="event.stopPropagation()">${esc(c.telephone)}</a>` : `<span class="hint">non renseigné</span>`}</div>
+                  ${telsDe(c).length ? telsDe(c).map(t => `<div class="fiche-tech-contact-item">📞 <span class="tel-type tel-${esc(t.type)}">${esc(TYPES_TEL[t.type] || t.type)}</span> <a href="tel:${esc(telHref(t.numero))}" onclick="event.stopPropagation()">${esc(t.numero)}</a></div>`).join("") : `<div class="fiche-tech-contact-item">📞 <span class="hint">non renseigné</span></div>`}
                   <div class="fiche-tech-contact-item">✉️ ${c.email ? `<a href="mailto:${esc(c.email)}" onclick="event.stopPropagation()">${esc(c.email)}</a>` : `<span class="hint">non renseigné</span>`}</div>
                 </div>
               </div>`;
@@ -582,8 +593,13 @@ function renderFicheTechnicien(nom, roles, c) {
       <div class="fiche-tech-section">
         <p class="fiche-tech-eyebrow">Coordonnées</p>
         <div class="form-grid">
-          <label>Téléphone<input type="tel" data-coord-tel="${esc(nom)}" value="${esc(c.telephone || '')}" placeholder="06 12 34 56 78"></label>
-          <label>Téléphone secondaire<input type="tel" data-fiche-tel2="${esc(nom)}" value="${esc(c.telephone2 || '')}" placeholder="06 12 34 56 78"></label>
+          <div class="tel-liste" data-tels="${esc(nom)}"><span class="tel-titre">Téléphones</span>
+            ${(telsDe(c).length ? telsDe(c) : [{ type: "pro", numero: "" }]).map((t, i) => `<div class="tel-ligne" data-tel-i="${i}">
+              <select data-tel-type>${Object.entries(TYPES_TEL).map(([k, v]) => `<option value="${k}" ${t.type === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+              <input type="tel" data-tel-num value="${esc(t.numero)}" placeholder="06 12 34 56 78">
+              <button type="button" class="nav-btn" data-tel-suppr title="Retirer ce numéro">✕</button></div>`).join("")}
+            <button type="button" class="nav-btn" data-tel-ajout>➕ Ajouter un numéro</button>
+          </div>
           <label>Email<input type="email" data-coord-email="${esc(nom)}" value="${esc(c.email || '')}" placeholder="email@etablieres.fr"></label>
         </div>
       </div>
@@ -632,10 +648,24 @@ function renderFicheTechnicien(nom, roles, c) {
 }
 
 function attacherFicheTechnicienListeners() {
-  mountedContainer.querySelectorAll("[data-coord-tel]").forEach(inp => inp.addEventListener("change", async () => {
-    const nom = inp.dataset.coordTel;
-    await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), telephone: inp.value.trim() });
-  }));
+  mountedContainer.querySelectorAll("[data-tels]").forEach(zone => {
+    const nom = zone.dataset.tels;
+    const lire = () => [...zone.querySelectorAll(".tel-ligne")].map(l => ({ type: l.querySelector("[data-tel-type]").value, numero: l.querySelector("[data-tel-num]").value.trim() }));
+    const enregistrer = async (liste) => {
+      const tels = liste.filter(t => t.numero);
+      const c = { ...(state.coordonnees[nom] || {}), telephones: tels, telephone: tels[0]?.numero || "", telephone2: tels[1]?.numero || "" };
+      state.coordonnees[nom] = c;
+      await saveCoordonnee(nom, c);
+    };
+    zone.addEventListener("change", (e) => { if (e.target.matches("[data-tel-type],[data-tel-num]")) enregistrer(lire()); });
+    zone.querySelectorAll("[data-tel-suppr]").forEach(b => b.addEventListener("click", async () => { const i = +b.closest(".tel-ligne").dataset.telI; const l = lire(); l.splice(i, 1); await enregistrer(l); renderAll(); }));
+    zone.querySelector("[data-tel-ajout]").addEventListener("click", () => {
+      const l = zone.querySelectorAll(".tel-ligne"), modele = l[l.length - 1], nv = modele.cloneNode(true);
+      nv.dataset.telI = l.length; nv.querySelector("[data-tel-num]").value = ""; nv.querySelector("[data-tel-type]").value = "perso";
+      nv.querySelector("[data-tel-suppr]").addEventListener("click", () => { nv.remove(); enregistrer(lire()); });
+      modele.after(nv); nv.querySelector("[data-tel-num]").focus();
+    });
+  });
   mountedContainer.querySelectorAll("[data-coord-email]").forEach(inp => inp.addEventListener("change", async () => {
     const nom = inp.dataset.coordEmail;
     await saveCoordonnee(nom, { ...(state.coordonnees[nom] || {}), email: inp.value.trim() });
