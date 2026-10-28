@@ -14,7 +14,7 @@ import { lireFicheExistante } from "./fiches-poste-import.js";
 import { MODELES, MISSIONS, SAVOIR_FAIRE, SAVOIR_ETRE, ASSOCIATIONS, RESIDENCES, MANAGERS, POSITIONNEMENT, CHAQUE_COLLABORATEUR, TEXTE_MISSIONS, ficheDepuisModele } from "./fiches-poste-modeles.js";
 
 const COL = "fiches-poste";
-let conteneur = null, user = null, unsubs = [], fiches = [], personnes = [], incont = {};
+let conteneur = null, user = null, unsubs = [], fiches = [], personnes = [], incont = {}, incontListes = { savoirFaire: {}, savoirEtre: {} };
 let ui = { id: null, f: null, modif: false, filtre: "" };
 
 const fr = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR") : "";
@@ -52,6 +52,22 @@ function incontournables(f) {
   const m = MODELES.find(x => x.id === f.modele && clePoste(x.poste) === k) || MODELES.find(x => clePoste(x.poste) === k);
   return m ? m.missions.map(id => MISSIONS.flatMap(t => t.liste).find(x => x.id === id)?.texte).filter(Boolean) : [];
 }
+// Idem pour les savoir-faire / savoirs-être (nom = "savoirFaire" | "savoirEtre").
+function incontListe(f, nom) {
+  const k = clePoste(f.poste); if (!k) return [];
+  if (Array.isArray(incontListes[nom][k])) return incontListes[nom][k];
+  const m = MODELES.find(x => x.id === f.modele && clePoste(x.poste) === k) || MODELES.find(x => clePoste(x.poste) === k);
+  const ref = nom === "savoirFaire" ? SAVOIR_FAIRE : SAVOIR_ETRE;
+  return m ? (nom === "savoirFaire" ? m.sf : m.se).map(i => ref[i]).filter(Boolean) : [];
+}
+const manquantesListe = (f, nom) => incontListe(f, nom).filter(t => !(f[nom] || []).includes(t));
+async function basculerEtoileListe(f, nom, texte) {
+  const k = clePoste(f.poste); if (!k) { window.toast?.("Indique d'abord l'intitulé du poste.", "error"); return; }
+  const l = incontListe(f, nom), nv = l.includes(texte) ? l.filter(t => t !== texte) : [...l, texte];
+  incontListes = { ...incontListes, [nom]: { ...incontListes[nom], [k]: nv } };
+  try { await setDoc(doc(db, COL, "_incontournables"), { [nom]: incontListes[nom] }, { merge: true }); } catch (e) { alert("Étoile non enregistrée : " + (e?.message || e)); }
+}
+const totalManquantes = (f) => manquantes(f).length + manquantesListe(f, "savoirFaire").length + manquantesListe(f, "savoirEtre").length;
 const manquantes = (f) => incontournables(f).filter(t => !(f.missions || []).some(m => m.texte === t));
 async function basculerEtoile(f, texte) {
   const k = clePoste(f.poste); if (!k) { window.toast?.("Indique d'abord l'intitulé du poste.", "error"); return; }
@@ -64,7 +80,7 @@ function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
 export function mountFichesPoste(container, u) {
   cleanup(); conteneur = container; user = u;
-  unsubs.push(onSnapshot(collection(db, COL), (s) => { const tous = s.docs.map(d => ({ id: d.id, ...d.data() })); incont = (tous.find(x => x.id === "_incontournables") || {}).postes || {}; fiches = tous.filter(x => !x.id.startsWith("_")); if (!ui.f) render(); else renderListe(); },
+  unsubs.push(onSnapshot(collection(db, COL), (s) => { const tous = s.docs.map(d => ({ id: d.id, ...d.data() })); const ic = tous.find(x => x.id === "_incontournables") || {}; incont = ic.postes || {}; incontListes = { savoirFaire: ic.savoirFaire || {}, savoirEtre: ic.savoirEtre || {} }; fiches = tous.filter(x => !x.id.startsWith("_")); if (!ui.f) render(); else renderListe(); },
     (e) => { conteneur.innerHTML = `<div class="form-card"><p>⚠️ Accès refusé à la collection « fiches-poste ». Publie la règle Firestore indiquée par Claude.</p><p class="hint">${esc(e.message)}</p></div>`; }));
   unsubs.push(watchUsers((l) => {
     personnes = [...new Set((l || []).filter(p => !p.desactive && !p.disabled).map(p => formatNom(p.nom || p.displayName || p.name || "")).filter(n => n && !n.includes("@")))].sort((a, b) => a.localeCompare(b, "fr"));
@@ -179,7 +195,7 @@ function renderListe() {
   el.innerHTML = `<div class="form-card fp-liste">
     <div class="fp-liste-tete"><b>${fiches.length} fiche${fiches.length > 1 ? "s" : ""} de poste</b><button type="button" class="nav-btn" data-fp-nouvelle title="Nouvelle fiche ou reprise de fiches existantes">➕ Nouvelle</button></div>
     ${fiches.length > 4 ? `<input class="fp-cherche" placeholder="🔎 Chercher…" value="${esc(ui.filtre)}">` : ""}
-    ${l.map(f => `<button type="button" class="fp-item ${ui.id === f.id ? "actif" : ""}" data-fp-ouvrir="${f.id}"><b>${esc(f.collaborateur || "Sans nom")}</b><span>${esc(f.poste || "")}</span><small>${f.etablieLe ? `établie le ${fr(f.etablieLe)}` : ""}${f.spLe ? " · ☁️" : ""}${f.importee ? " · 📥 reprise" : ""}</small>${manquantes(f).length ? `<em class="fp-item-alerte">⚠️ ${manquantes(f).length} incontournable${manquantes(f).length > 1 ? "s" : ""} manquante${manquantes(f).length > 1 ? "s" : ""}</em>` : ""}</button>`).join("") || `<p class="hint">Aucune fiche enregistrée pour l'instant.</p>`}
+    ${l.map(f => `<button type="button" class="fp-item ${ui.id === f.id ? "actif" : ""}" data-fp-ouvrir="${f.id}"><b>${esc(f.collaborateur || "Sans nom")}</b><span>${esc(f.poste || "")}</span><small>${f.etablieLe ? `établie le ${fr(f.etablieLe)}` : ""}${f.spLe ? " · ☁️" : ""}${f.importee ? " · 📥 reprise" : ""}</small>${totalManquantes(f) ? `<em class="fp-item-alerte">⚠️ ${totalManquantes(f)} incontournable${totalManquantes(f) > 1 ? "s" : ""} manquant${totalManquantes(f) > 1 ? "s" : ""}</em>` : ""}</button>`).join("") || `<p class="hint">Aucune fiche enregistrée pour l'instant.</p>`}
   </div>`;
   el.querySelector("[data-fp-nouvelle]")?.addEventListener("click", () => { if (ui.modif && !confirm("Abandonner les modifications en cours ?")) return; ui = { ...ui, id: null, f: null, modif: false }; render(); });
   el.querySelector(".fp-cherche")?.addEventListener("input", (e) => { ui.filtre = e.target.value; renderListe(); const i = conteneur.querySelector(".fp-cherche"); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); });
@@ -190,9 +206,11 @@ function renderListe() {
   }));
 }
 
-function caseListe(nom, toutes, cochees) {
-  const autres = cochees.filter(t => !toutes.includes(t));
-  return `<div class="fp-coches">${[...toutes, ...autres].map((t, i) => `<label class="fp-c ${cochees.includes(t) ? "on" : ""}"><input type="checkbox" data-fp-liste="${nom}" data-i="${i}" ${cochees.includes(t) ? "checked" : ""}><span>${esc(t)}</span></label>`).join("")}</div>
+function caseListe(nom, toutes, cochees, f) {
+  const inc = incontListe(f, nom), manq = manquantesListe(f, nom);
+  const autres = [...new Set([...cochees, ...inc])].filter(t => !toutes.includes(t));
+  return `${manq.length ? `<div class="fp-alerte">⚠️ <b>${manq.length} incontournable${manq.length > 1 ? "s" : ""} non coché${manq.length > 1 ? "s" : ""}</b> pour ce poste<ul>${manq.map(t => `<li>★ ${esc(t)}</li>`).join("")}</ul><button type="button" class="nav-btn" data-fp-inc-liste="${nom}">✓ Les ajouter</button></div>` : inc.length ? `<div class="fp-ok">★ Les ${inc.length} incontournables du poste sont présents.</div>` : ""}
+  <div class="fp-coches">${[...toutes, ...autres].map((t, i) => { const star = inc.includes(t), on = cochees.includes(t); return `<div class="fp-c-l ${star ? "inc" : ""} ${star && !on ? "manque" : ""}"><button type="button" class="fp-star ${star ? "on" : ""}" data-fp-star-liste="${nom}" data-t="${esc(t)}" title="${star ? "Incontournable pour ce poste (cliquer pour retirer)" : "Marquer comme incontournable pour ce poste"}">${star ? "★" : "☆"}</button><label class="fp-c ${on ? "on" : ""}"><input type="checkbox" data-fp-liste="${nom}" data-i="${i}" ${on ? "checked" : ""}><span>${esc(t)}</span></label></div>`; }).join("")}</div>
     <div class="fp-ajout"><input data-fp-ajout-in="${nom}" placeholder="➕ Ajouter une autre proposition…"><button type="button" class="nav-btn" data-fp-ajout="${nom}">Ajouter</button></div>`;
 }
 
@@ -251,8 +269,8 @@ function renderEditeur() {
       ${persoMissions.length ? `<div class="fp-theme-perso"><b>✍️ Missions ajoutées</b>${persoMissions.map(m => `<div class="fp-mis on ${inc.includes(m.texte) ? "inc" : ""}"><button type="button" class="fp-star ${inc.includes(m.texte) ? "on" : ""}" data-fp-star="${esc(m.texte)}" title="Incontournable pour ce poste">${inc.includes(m.texte) ? "★" : "☆"}</button><label><span>${esc(m.texte)}</span></label><span class="fp-niv"><button type="button" class="${m.niveau === 1 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="1">N1</button><button type="button" class="${m.niveau === 2 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="2">N2</button><button type="button" data-fp-mis-del="${esc(m.texte)}">✕</button></span></div>`).join("")}</div>` : ""}
       <div class="fp-ajout"><input id="fp-mis-in" placeholder="➕ Ajouter une mission propre à ce poste…"><button type="button" class="nav-btn" id="fp-mis-add">Ajouter</button></div>
     </div>
-    <div class="form-card"><h3>🛠️ Savoir-faire</h3>${caseListe("savoirFaire", SAVOIR_FAIRE, f.savoirFaire || [])}</div>
-    <div class="form-card"><h3>🤝 Savoirs-être</h3>${caseListe("savoirEtre", SAVOIR_ETRE, f.savoirEtre || [])}</div>
+    <div class="form-card"><h3>🛠️ Savoir-faire</h3>${caseListe("savoirFaire", SAVOIR_FAIRE, f.savoirFaire || [], f)}</div>
+    <div class="form-card"><h3>🤝 Savoirs-être</h3>${caseListe("savoirEtre", SAVOIR_ETRE, f.savoirEtre || [], f)}</div>
     <div class="form-card"><h3>✍️ Délégations de signature & validation</h3>
       <label class="fp-c ${f.signatureNonConcerne ? "on" : ""}"><input type="checkbox" data-fp-sig ${f.signatureNonConcerne ? "checked" : ""}><span>Poste non concerné par les délégations de signatures</span></label>
       ${f.signatureNonConcerne ? "" : `<label class="fp-plein">Documents autorisés à la signature par délégation<textarea data-fp="signatures" rows="3" placeholder="ex. bons de commande jusqu'à 1 500 € HT, bons d'intervention, PV de réception…">${esc(f.signatures)}</textarea></label>`}
@@ -304,6 +322,8 @@ function brancher() {
     else f.missions = f.missions.filter(x => x.texte !== m.texte);
   })));
   el.querySelectorAll("[data-fp-niv]").forEach(b => b.addEventListener("click", () => changer(f => { const m = f.missions.find(x => x.texte === b.dataset.fpNiv); if (m) m.niveau = +b.dataset.v; })));
+  el.querySelectorAll("[data-fp-star-liste]").forEach(b => b.addEventListener("click", async () => { await basculerEtoileListe(ui.f, b.dataset.fpStarListe, b.dataset.t); const y = window.scrollY; renderEditeur(); window.scrollTo(0, y); renderListe(); }));
+  el.querySelectorAll("[data-fp-inc-liste]").forEach(b => b.addEventListener("click", () => changer(f => { const nom = b.dataset.fpIncListe; f[nom] = [...(f[nom] || []), ...manquantesListe(f, nom)]; })));
   el.querySelectorAll("[data-fp-star]").forEach(b => b.addEventListener("click", async () => { await basculerEtoile(ui.f, b.dataset.fpStar); const y = window.scrollY; renderEditeur(); window.scrollTo(0, y); renderListe(); }));
   el.querySelector("#fp-inc-tout")?.addEventListener("click", () => changer(f => {
     manquantes(f).forEach(t => { const m = MISSIONS.flatMap(x => x.liste).find(x => x.texte === t); (f.missions = f.missions || []).push({ texte: t, niveau: m?.niveau || 1, sous: m?.sous ? [...m.sous] : [] }); });
@@ -314,7 +334,7 @@ function brancher() {
   el.querySelector("#fp-mis-in")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ajMis(); } });
   el.querySelectorAll("[data-fp-liste]").forEach(cb => cb.addEventListener("change", () => changer(f => {
     const nom = cb.dataset.fpListe, ref = nom === "savoirFaire" ? SAVOIR_FAIRE : SAVOIR_ETRE, cur = f[nom] || [];
-    const tous = [...ref, ...cur.filter(t => !ref.includes(t))], t = tous[+cb.dataset.i];
+    const tous = [...ref, ...[...new Set([...cur, ...incontListe(f, nom)])].filter(t => !ref.includes(t))], t = tous[+cb.dataset.i];
     f[nom] = cb.checked ? [...cur, t] : cur.filter(x => x !== t);
   })));
   el.querySelectorAll("[data-fp-ajout]").forEach(b => {
