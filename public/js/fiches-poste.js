@@ -14,7 +14,7 @@ import { lireFicheExistante } from "./fiches-poste-import.js";
 import { MODELES, MISSIONS, SAVOIR_FAIRE, SAVOIR_ETRE, ASSOCIATIONS, RESIDENCES, MANAGERS, POSITIONNEMENT, CHAQUE_COLLABORATEUR, TEXTE_MISSIONS, ficheDepuisModele } from "./fiches-poste-modeles.js";
 
 const COL = "fiches-poste";
-let conteneur = null, user = null, unsubs = [], fiches = [], personnes = [];
+let conteneur = null, user = null, unsubs = [], fiches = [], personnes = [], incont = {};
 let ui = { id: null, f: null, modif: false, filtre: "" };
 
 const fr = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR") : "";
@@ -41,11 +41,30 @@ function majPuces() {
   }));
 }
 
+// ---------- Missions incontournables (★) par intitulé de poste ----------
+// Choisies une fois pour chaque poste (ex. « Technicien de maintenance ») :
+// une étoile les signale dans l'éditeur et l'appli prévient si une fiche de
+// ce poste ne les a pas → toutes les fiches d'un même poste restent homogènes.
+const clePoste = (p) => String(p || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\(e\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+function incontournables(f) {
+  const k = clePoste(f.poste); if (!k) return [];
+  if (Array.isArray(incont[k])) return incont[k];
+  const m = MODELES.find(x => x.id === f.modele && clePoste(x.poste) === k) || MODELES.find(x => clePoste(x.poste) === k);
+  return m ? m.missions.map(id => MISSIONS.flatMap(t => t.liste).find(x => x.id === id)?.texte).filter(Boolean) : [];
+}
+const manquantes = (f) => incontournables(f).filter(t => !(f.missions || []).some(m => m.texte === t));
+async function basculerEtoile(f, texte) {
+  const k = clePoste(f.poste); if (!k) { window.toast?.("Indique d'abord l'intitulé du poste.", "error"); return; }
+  const l = incontournables(f), nv = l.includes(texte) ? l.filter(t => t !== texte) : [...l, texte];
+  incont = { ...incont, [k]: nv };
+  try { await setDoc(doc(db, COL, "_incontournables"), { postes: incont }, { merge: true }); } catch (e) { alert("Étoile non enregistrée : " + (e?.message || e)); }
+}
+
 function cleanup() { unsubs.forEach(u => u()); unsubs = []; }
 
 export function mountFichesPoste(container, u) {
   cleanup(); conteneur = container; user = u;
-  unsubs.push(onSnapshot(collection(db, COL), (s) => { fiches = s.docs.map(d => ({ id: d.id, ...d.data() })); if (!ui.f) render(); else renderListe(); },
+  unsubs.push(onSnapshot(collection(db, COL), (s) => { const tous = s.docs.map(d => ({ id: d.id, ...d.data() })); incont = (tous.find(x => x.id === "_incontournables") || {}).postes || {}; fiches = tous.filter(x => !x.id.startsWith("_")); if (!ui.f) render(); else renderListe(); },
     (e) => { conteneur.innerHTML = `<div class="form-card"><p>⚠️ Accès refusé à la collection « fiches-poste ». Publie la règle Firestore indiquée par Claude.</p><p class="hint">${esc(e.message)}</p></div>`; }));
   unsubs.push(watchUsers((l) => {
     personnes = [...new Set((l || []).filter(p => !p.desactive && !p.disabled).map(p => formatNom(p.nom || p.displayName || p.name || "")).filter(n => n && !n.includes("@")))].sort((a, b) => a.localeCompare(b, "fr"));
@@ -160,7 +179,7 @@ function renderListe() {
   el.innerHTML = `<div class="form-card fp-liste">
     <div class="fp-liste-tete"><b>${fiches.length} fiche${fiches.length > 1 ? "s" : ""} de poste</b><button type="button" class="nav-btn" data-fp-nouvelle title="Nouvelle fiche ou reprise de fiches existantes">➕ Nouvelle</button></div>
     ${fiches.length > 4 ? `<input class="fp-cherche" placeholder="🔎 Chercher…" value="${esc(ui.filtre)}">` : ""}
-    ${l.map(f => `<button type="button" class="fp-item ${ui.id === f.id ? "actif" : ""}" data-fp-ouvrir="${f.id}"><b>${esc(f.collaborateur || "Sans nom")}</b><span>${esc(f.poste || "")}</span><small>${f.etablieLe ? `établie le ${fr(f.etablieLe)}` : ""}${f.spLe ? " · ☁️" : ""}${f.importee ? " · 📥 reprise" : ""}</small></button>`).join("") || `<p class="hint">Aucune fiche enregistrée pour l'instant.</p>`}
+    ${l.map(f => `<button type="button" class="fp-item ${ui.id === f.id ? "actif" : ""}" data-fp-ouvrir="${f.id}"><b>${esc(f.collaborateur || "Sans nom")}</b><span>${esc(f.poste || "")}</span><small>${f.etablieLe ? `établie le ${fr(f.etablieLe)}` : ""}${f.spLe ? " · ☁️" : ""}${f.importee ? " · 📥 reprise" : ""}</small>${manquantes(f).length ? `<em class="fp-item-alerte">⚠️ ${manquantes(f).length} incontournable${manquantes(f).length > 1 ? "s" : ""} manquante${manquantes(f).length > 1 ? "s" : ""}</em>` : ""}</button>`).join("") || `<p class="hint">Aucune fiche enregistrée pour l'instant.</p>`}
   </div>`;
   el.querySelector("[data-fp-nouvelle]")?.addEventListener("click", () => { if (ui.modif && !confirm("Abandonner les modifications en cours ?")) return; ui = { ...ui, id: null, f: null, modif: false }; render(); });
   el.querySelector(".fp-cherche")?.addEventListener("input", (e) => { ui.filtre = e.target.value; renderListe(); const i = conteneur.querySelector(".fp-cherche"); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); });
@@ -182,6 +201,7 @@ function renderEditeur() {
   const choisies = new Set((f.missions || []).map(m => m.texte));
   const biblio = MISSIONS.map(t => ({ ...t, liste: t.liste }));
   const persoMissions = (f.missions || []).filter(m => !MISSIONS.some(t => t.liste.some(x => x.texte === m.texte)));
+  const inc = incontournables(f), manq = manquantes(f);
   const principales = [...new Set(MODELES.map(m => m.principale).filter(Boolean))];
   el.innerHTML = `
   <div class="fp-barre">
@@ -220,12 +240,15 @@ function renderEditeur() {
     </div>
     <div class="form-card"><h3>✅ Missions du poste & délégations <small class="hint">${(f.missions || []).length} cochée(s)</small></h3>
       <p class="hint" style="margin:0 0 8px">Coche les missions concernées. <b>N1</b> = délégation totale · <b>N2</b> = partage d'intention.</p>
-      ${biblio.map(t => { const n = t.liste.filter(m => choisies.has(m.texte)).length; return `<details class="fp-theme" ${n ? "open" : ""}><summary>${t.theme} <small>${n ? `${n} cochée${n > 1 ? "s" : ""}` : ""}</small></summary>
-        ${t.liste.map(m => { const sel = (f.missions || []).find(x => x.texte === m.texte); return `<div class="fp-mis ${sel ? "on" : ""}">
+      <p class="hint" style="margin:0 0 8px">★ = mission <b>incontournable</b> pour le poste « ${esc(f.poste || "…")} » : clique sur ☆ / ★ pour choisir. Le choix vaut pour toutes les fiches de ce poste.</p>
+      ${manq.length ? `<div class="fp-alerte">⚠️ <b>${manq.length} mission${manq.length > 1 ? "s" : ""} incontournable${manq.length > 1 ? "s" : ""} non cochée${manq.length > 1 ? "s" : ""}</b> pour ce poste :<ul>${manq.map(t => `<li>★ ${esc(t)}</li>`).join("")}</ul><button type="button" class="nav-btn" id="fp-inc-tout">✓ Les ajouter</button></div>` : inc.length ? `<div class="fp-ok">★ Les ${inc.length} missions incontournables du poste sont présentes.</div>` : ""}
+      ${biblio.map(t => { const n = t.liste.filter(m => choisies.has(m.texte)).length; return `<details class="fp-theme" ${n || t.liste.some(m => inc.includes(m.texte)) ? "open" : ""}><summary>${t.theme} <small>${n ? `${n} cochée${n > 1 ? "s" : ""}` : ""}</small></summary>
+        ${t.liste.map(m => { const sel = (f.missions || []).find(x => x.texte === m.texte), star = inc.includes(m.texte); return `<div class="fp-mis ${sel ? "on" : ""} ${star ? "inc" : ""} ${star && !sel ? "manque" : ""}">
+          <button type="button" class="fp-star ${star ? "on" : ""}" data-fp-star="${esc(m.texte)}" title="${star ? "Mission incontournable pour ce poste (cliquer pour retirer)" : "Marquer comme incontournable pour ce poste"}">${star ? "★" : "☆"}</button>
           <label><input type="checkbox" data-fp-mission="${esc(m.id)}" ${sel ? "checked" : ""}><span>${esc(m.texte)}${m.sous ? `<small>${m.sous.length} sous-missions</small>` : ""}</span></label>
           ${sel ? `<span class="fp-niv"><button type="button" class="${sel.niveau === 1 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="1">N1</button><button type="button" class="${sel.niveau === 2 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="2">N2</button></span>` : ""}
         </div>`; }).join("")}</details>`; }).join("")}
-      ${persoMissions.length ? `<div class="fp-theme-perso"><b>✍️ Missions ajoutées</b>${persoMissions.map(m => `<div class="fp-mis on"><label><span>${esc(m.texte)}</span></label><span class="fp-niv"><button type="button" class="${m.niveau === 1 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="1">N1</button><button type="button" class="${m.niveau === 2 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="2">N2</button><button type="button" data-fp-mis-del="${esc(m.texte)}">✕</button></span></div>`).join("")}</div>` : ""}
+      ${persoMissions.length ? `<div class="fp-theme-perso"><b>✍️ Missions ajoutées</b>${persoMissions.map(m => `<div class="fp-mis on ${inc.includes(m.texte) ? "inc" : ""}"><button type="button" class="fp-star ${inc.includes(m.texte) ? "on" : ""}" data-fp-star="${esc(m.texte)}" title="Incontournable pour ce poste">${inc.includes(m.texte) ? "★" : "☆"}</button><label><span>${esc(m.texte)}</span></label><span class="fp-niv"><button type="button" class="${m.niveau === 1 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="1">N1</button><button type="button" class="${m.niveau === 2 ? "on" : ""}" data-fp-niv="${esc(m.texte)}" data-v="2">N2</button><button type="button" data-fp-mis-del="${esc(m.texte)}">✕</button></span></div>`).join("")}</div>` : ""}
       <div class="fp-ajout"><input id="fp-mis-in" placeholder="➕ Ajouter une mission propre à ce poste…"><button type="button" class="nav-btn" id="fp-mis-add">Ajouter</button></div>
     </div>
     <div class="form-card"><h3>🛠️ Savoir-faire</h3>${caseListe("savoirFaire", SAVOIR_FAIRE, f.savoirFaire || [])}</div>
@@ -281,6 +304,10 @@ function brancher() {
     else f.missions = f.missions.filter(x => x.texte !== m.texte);
   })));
   el.querySelectorAll("[data-fp-niv]").forEach(b => b.addEventListener("click", () => changer(f => { const m = f.missions.find(x => x.texte === b.dataset.fpNiv); if (m) m.niveau = +b.dataset.v; })));
+  el.querySelectorAll("[data-fp-star]").forEach(b => b.addEventListener("click", async () => { await basculerEtoile(ui.f, b.dataset.fpStar); const y = window.scrollY; renderEditeur(); window.scrollTo(0, y); renderListe(); }));
+  el.querySelector("#fp-inc-tout")?.addEventListener("click", () => changer(f => {
+    manquantes(f).forEach(t => { const m = MISSIONS.flatMap(x => x.liste).find(x => x.texte === t); (f.missions = f.missions || []).push({ texte: t, niveau: m?.niveau || 1, sous: m?.sous ? [...m.sous] : [] }); });
+  }));
   el.querySelectorAll("[data-fp-mis-del]").forEach(b => b.addEventListener("click", () => changer(f => { f.missions = f.missions.filter(x => x.texte !== b.dataset.fpMisDel); })));
   const ajMis = () => { const i = el.querySelector("#fp-mis-in"), t = i.value.trim(); if (t) changer(f => { (f.missions = f.missions || []).push({ texte: t, niveau: 1, sous: [] }); }); };
   el.querySelector("#fp-mis-add")?.addEventListener("click", ajMis);
@@ -333,7 +360,7 @@ async function pdf(f) {
   try {
     return await html2pdf().set({ margin: 0, filename: nomFichier(f), image: { type: "jpeg", quality: 0.95 },
       html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: [] } }).from(cache.firstElementChild).outputPdf("blob");
+      pagebreak: { mode: ["css"], before: ".fp-page + .fp-page" } }).from(cache.firstElementChild).outputPdf("blob");
   } finally { cache.remove(); }
 }
 
