@@ -23,7 +23,7 @@ import {
   qrPayloadForCompteur, nouveauCompteur, INDEX_ELEC, INDEX_LABELS, clesIndex,
   estEnRetard, fenetreReleve, motRetard, prochaineEcheanceLabel, MOIS_LABELS, calculerEcarts, detecterAnomalies,
   trouverSectionPourType, consommationMensuelle, uniteValeur, supprimerReleve, modifierReleve,
-  creerSectionDossierPourCompteur, libelleIndex, codeIndex,
+  creerSectionDossierPourCompteur, libelleIndex,
   listerTousLesReleves, consommationMensuelleAgregee, consommationRecente,
 } from "./compteurs-data.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrl, DOSSIERS_ROOT_FOLDER, getFolderWebUrl } from "./sharepoint-storage.js";
@@ -684,8 +684,8 @@ function formatEcarts(compteur, ecarts) {
   if (cles.length > 1) {
     return cles.map(k => {
       const e = ecarts[k];
-      if (e === null || e === undefined || isNaN(e)) return `${codeIndex(compteur, k)}\u00A0?`;
-      return `${codeIndex(compteur, k)}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
+      if (e === null || e === undefined || isNaN(e)) return `${k}\u00A0?`;
+      return `${k}\u00A0<span style="color:${e < 0 ? 'var(--red)' : 'var(--gold)'}">${e >= 0 ? "+" : ""}${e.toFixed(2)}</span>`;
     }).join(" · ");
   }
   const e = ecarts.valeur;
@@ -711,7 +711,7 @@ function renderHistoriqueHTML(historique, compteur) {
             return `
             <tr>
               <td>${formatDate(r.createdAt)}${r.corrige ? ` <span title="Corrigé le ${esc(new Date(r.corrige.le).toLocaleString("fr-FR"))} par ${esc(r.corrige.par || "")} — avant : ${esc(Object.values(r.corrige.avant?.valeurs || {}).join(" · "))}" style="color:#1a73e8;font-size:11px">✏️ corrigé</span>` : ""}${r.saisiHorsDate ? ` <span title="Saisi rétroactivement, à une date antérieure" style="color:var(--gold);font-size:11px">🕓 antidaté</span>` : ""}${r.anomalie?.length && !r.corrige ? ` <span title="${esc(r.anomalie.join(" "))}" style="color:var(--red);font-size:11px;font-weight:700">⚠️ à vérifier</span>` : ""}</td>
-              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${codeIndex(compteur, k)}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
+              <td>${clesIndex(compteur).length > 1 ? clesIndex(compteur).map(k => `${k}\u00A0${r.illisibles?.[k] ? "🌫️ illisible" : (r.valeurs?.[k] ?? "?")}`).join(" · ") : (r.illisibles?.valeur ? "🌫️ illisible" : `${r.valeurs?.valeur ?? "?"} ${uniteValeur(compteur)}`)}</td>
               <td>${formatEcarts(compteur, ecarts)}</td>
               <td>${esc(r.releveParNom || "")}</td>
               <td style="white-space:nowrap">
@@ -753,7 +753,7 @@ async function chargerEtAfficherHistorique(compteurId) {
     const fond = document.createElement("div"); fond.className = "cd-fond"; fond.style.zIndex = "1400";
     fond.innerHTML = `<div class="cd-fenetre" style="max-width:440px"><div class="cd-fenetre-tete"><div><b>✏️ Corriger le relevé</b><small>${esc(compteur.nom || "")} — ${esc(compteur.dossierNom || "")}</small></div><button class="cd-x" data-x>✕</button></div>
       <div class="stack" style="gap:10px">
-        ${cles.map(k => `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">${cles.length > 1 ? `${esc(codeIndex(compteur, k))} (${esc(k)})` : `Valeur (${esc(uniteValeur(compteur))})`}<input type="text" inputmode="decimal" data-v="${esc(k)}" value="${esc(r.valeurs?.[k] ?? "")}" style="padding:10px;border-radius:10px;font-size:16px"></label>`).join("")}
+        ${cles.map(k => `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">${cles.length > 1 ? esc(k) : `Valeur (${esc(uniteValeur(compteur))})`}<input type="text" inputmode="decimal" data-v="${esc(k)}" value="${esc(r.valeurs?.[k] ?? "")}" style="padding:10px;border-radius:10px;font-size:16px"></label>`).join("")}
         <div style="font-weight:700;font-size:13px">Date du relevé${choixDateHTML("corr-date", isoLocal(d))}</div>
         <p class="hint" style="margin:0">L'ancienne valeur reste notée (mention « ✏️ corrigé »).</p>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>✓ Enregistrer la correction</button></div>
@@ -829,7 +829,7 @@ function dessinerGraphiqueHistorique(holder, historique, compteur) {
   const parCle = clesConso.map(cle => consommationMensuelle(historique, cle, 12));
   const labels = parCle[0].map(m => m.label);
   const datasets = clesConso.map((cle, i) => ({
-    label: cle === "valeur" ? `Consommation (${uniteValeur(compteur)})` : `${codeIndex(compteur, cle)} · ${cle} (kWh)`,
+    label: cle === "valeur" ? `Consommation (${uniteValeur(compteur)})` : `${cle} (kWh)`,
     data: parCle[i].map(m => m.valeur),
     backgroundColor: couleurs[i % couleurs.length].fill,
     borderColor: couleurs[i % couleurs.length].bord,
