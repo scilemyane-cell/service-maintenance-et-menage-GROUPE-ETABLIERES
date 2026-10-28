@@ -18,6 +18,8 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 const LISTE = `${GRAPH}/sites/etablieresfr.sharepoint.com:/sites/appsmm:/lists/MailsEntrants`;
 const LISTE_ENVOYES = `${GRAPH}/sites/etablieresfr.sharepoint.com:/sites/appsmm:/lists/MailsEnvoyes`;
 const TITRE_GUIDE = "__GUIDE__";
+const TITRE_BOITE = "__BOITE__";
+let boite = null; // { ids:Set, min, le, nb } — mails encore dans la boîte Outlook
 const ORDRE_PRIO = { Urgent: 0, Normal: 1, Faible: 2 };
 
 let conteneur = null;
@@ -93,10 +95,22 @@ async function chargerMails() {
     tous.push(...(data.value || []));
     url = data["@odata.nextLink"] || null;
   }
-  mails = tous.map(it => {
+  // Élément spécial « __BOITE__ » : photo de la boîte de réception écrite par
+  // le flux « Synchro boîte » (identifiants des mails encore présents).
+  const boiteItem = tous.find(it => it.fields?.Title === TITRE_BOITE);
+  boite = null;
+  if (boiteItem) {
+    const brut = String(champ(boiteItem.fields, "Corps") || "").trim(), le = new Date(boiteItem.lastModifiedDateTime || champ(boiteItem.fields, "DateReception") || 0).getTime();
+    let ids = [], min = null;
+    try { const j = JSON.parse(brut); (Array.isArray(j) ? j : []).forEach(x => { if (typeof x === "string") ids.push(x); else if (x && x.i) { ids.push(x.i); if (x.d && (!min || x.d < min)) min = x.d; } }); }
+    catch { ids = brut.split(/[;\s,]+/).filter(Boolean); }
+    boite = { ids: new Set(ids), min, le, nb: ids.length };
+  }
+  mails = tous.filter(it => it.fields?.Title !== TITRE_BOITE).map(it => {
     const f = it.fields || {};
     return {
       id: it.id,
+      idMessage: champ(f, "IdMessage"),
       objet: f.Title || "(sans objet)",
       expediteur: champ(f, "Expediteur"),
       date: it.createdDateTime || champ(f, "DateReception"),
@@ -422,7 +436,7 @@ function render() {
     @media (max-width:900px){.bf-grille{grid-template-columns:1fr}}
   </style><div class="bf">
     <div class="bf-hero"><div><h2>☀️ Ton briefing mails</h2><p>${n.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} — ${total ? `<b>${p.repondre.length}</b> réponse${p.repondre.length > 1 ? "s" : ""} à envoyer, <b>${p.faire.length}</b> action${p.faire.length > 1 ? "s" : ""} à faire${p.repondre.concat(p.faire).some(m => m.priorite === "Urgent") ? `, dont <b>${p.repondre.concat(p.faire).filter(m => m.priorite === "Urgent").length} urgente(s)</b>` : ""}.` : "rien d'important en attente 🎉"}</p></div>
-      <div class="bf-outils"><button data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button>${mails.some(m => m.statut === "Traité" && Date.now() - new Date(m.date).getTime() > 7 * 864e5) ? `<button data-act="nettoyer" title="Mettre de côté les mails reçus il y a plus de 7 jours">🧹 Ranger les plus de 7 jours</button>` : ""}<button data-act="guide">📘 Mon style d'écriture</button></div></div>
+      <div class="bf-outils"><button data-act="actualiser" ${enCours ? "disabled" : ""}>🔄 Actualiser</button>${mails.some(m => m.statut === "Traité" && Date.now() - new Date(m.date).getTime() > 7 * 864e5) ? `<button data-act="nettoyer" title="Mettre de côté les mails reçus il y a plus de 7 jours">🧹 Ranger les plus de 7 jours</button>` : ""}<button data-act="guide">📘 Mon style d'écriture</button><span class="bf-synchro" title="Les mails supprimés ou rangés dans Outlook disparaissent d'ici grâce au flux « Synchro boîte »">${!boite ? "🔌 Synchro boîte Outlook non configurée" : Date.now() - boite.le > 6 * 3600e3 ? `⚠️ Synchro boîte arrêtée (dernière il y a ${Math.round((Date.now() - boite.le) / 3600e3)} h)` : `🔁 Boîte Outlook synchronisée il y a ${Math.max(1, Math.round((Date.now() - boite.le) / 60000))} min`}</span></div></div>
     ${progression ? `<div class="bf-prog">⏳ ${esc(progression)}</div>` : p.analyse.length ? `<div class="bf-prog">${p.analyse.length} mail(s) en attente d'analyse.</div>` : ""}
     ${blocGuide()}
     ${erreur ? `<div class="form-card ml-erreur">❌ ${esc(erreur)}</div>` : ""}
@@ -503,6 +517,17 @@ async function marquerRepondusDepuisOutlook() {
   return n;
 }
 
+// Mails supprimés / rangés directement dans Outlook : s'ils ne sont plus dans
+// la boîte de réception (photo « __BOITE__ » récente), ils passent en « fait ».
+async function retirerSupprimesDansOutlook() {
+  if (!boite || !boite.nb || Date.now() - boite.le > 6 * 3600e3) return 0;
+  const aRetirer = mails.filter(m => ["Nouveau", "Traité"].includes(m.statut) && m.idMessage && !boite.ids.has(m.idMessage)
+    && (!boite.min || new Date(m.date).getTime() >= new Date(boite.min).getTime()) && new Date(m.date).getTime() < boite.le - 5 * 60000);
+  let n = 0;
+  for (const m of aRetirer.slice(0, 80)) { try { await majMail(m.id, { Statut: "Ignoré" }); m.statut = "Ignoré"; m.faitLe = isoJour(); n++; } catch (e) { console.warn("Retrait auto :", e); } }
+  return n;
+}
+
 async function rafraichir() {
   erreur = "";
   progression = "Lecture des mails…";
@@ -511,6 +536,8 @@ async function rafraichir() {
     await Promise.all([chargerMails(), chargerGuide()]);
     const auto = await marquerRepondusDepuisOutlook().catch(() => 0);
     if (auto) toast(`✉️ ${auto} mail(s) déjà répondu(s) depuis Outlook retiré(s)`, "success");
+    const sup = await retirerSupprimesDansOutlook().catch(() => 0);
+    if (sup) toast(`🗑️ ${sup} mail(s) supprimé(s) ou rangé(s) dans Outlook retiré(s)`, "success");
     progression = "";
     render();
     await traiterNouveaux();
