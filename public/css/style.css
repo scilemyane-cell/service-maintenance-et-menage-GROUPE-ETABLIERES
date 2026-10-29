@@ -4337,3 +4337,74 @@ body.interface-nouvelle .gh-interface-choix button{color:#dbe4f0}
 .interface-nouvelle .gh-reorg-aide{color:#dbe4f0}
 body.accueil-gmao.interface-nouvelle .gh-pied{opacity:.25;filter:none}
 body.accueil-gmao.interface-nouvelle .gh-pied-texte{color:#8ea2bd}
+
+/* ================================================================
+   Interface « Premium » (version de test) : nuit profonde, verre
+   dépoli, filets fins, accents champagne, typographie à empattements.
+   ================================================================ */
+body.accueil-gmao.interface-premium,body.accueil-gmao.interface-premium #app{
+  background:
+    radial-gradient(900px 520px at 18% -8%,rgba(217,183,122,.13),transparent 60%),
+    radial-gradient(1100px 700px at 100% 110%,rgba(56,98,160,.22),transparent 60%),
+    radial-gradient(1400px 900px at 50% 50%,#0c1424 0%,#060a12 100%)!important;background-attachment:fixed!important;color:#e9edf3}
+body.accueil-gmao.interface-premium::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+body.interface-premium #app{position:relative;z-index:1}
+.interface-premium{--or:#d9b77a;--or-clair:#f0dcb0;--verre:rgba(255,255,255,.035);--filet:rgba(255,255,255,.09)}
+/* En-tête */
+.interface-premium .gh-salut{color:#f4efe6}
+.interface-premium .gh-salut b{font-family:"Fraunces",Georgia,serif;font-weight:500;font-size:34px;letter-spacing:-.01em}
+.interface-premium .gh-salut-main{display:none}
+.interface-premium .gh-salut small{font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--or);margin-top:6px}
+.interface-premium .topbar-gmao .gh-date,.interface-premium .gh-user-btn{background:var(--verre)!important;border:1px solid var(--filet)!important;color:#e9edf3!important;box-shadow:none!important;backdrop-filter:blur(10px)}
+.interface-premium .topbar-gmao svg [stroke="#34445c"],.interface-premium .topbar-gmao svg [stroke="#fff"]{stroke:#cfd6e2}
+.interface-premium .topbar-gmao .gh-ico-horloge,.interface-premium .topbar-gmao .gh-ico-cal{stroke:#cfd6e2}
+.interface-premium .topbar-gmao svg line,.interface-premium .topbar-gmao svg circle,.interface-premium .topbar-gmao svg rect,.interface-premium .topbar-gmao svg path{stroke:#cfd6e2}
+.interface-premium .topbar-gmao svg circle[r="1.8"]{fill:#cfd6e2}
+.interface-premium .gh-user-btn svg *{stroke:#cfd6e2!important}
+.interface-premium .gh-horloge{font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.interface-premium .gh-compte{background:transparent!important;border:1px solid var(--filet)!important;color:#e9edf3!important}
+.interface-premium .gh-compte.urg{border-color:rgba(229,83,61,.6)!important;color:#ff9b8a!important;animation:none}
+body.interface-premium .gh-interface-choix{background:var(--verre);border-color:var(--filet);color:#8e98a8}
+body.interface-premium .gh-interface-choix button{color:#cfd6e2}
+body.interface-premium .gh-interface-choix button.on{background:linear-gradient(135deg,var(--or-clair),var(--or));color:#1a1408}
+/* Tuiles : verre dépoli, filet fin, pastille ronde champagne, icônes monochromes */
+.interface-premium .gh-tuiles.style-moderne{gap:14px}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02))!important;
+  border:1px solid var(--filet)!important;border-top:1px solid rgba(255,255,255,.16)!important;border-radius:18px!important;color:#e9edf3;
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 18px 40px rgba(0,0,0,.35)!important;backdrop-filter:blur(12px);min-height:156px!important;padding:18px!important;transition:transform .25s ease,border-color .25s,box-shadow .25s}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile::after{display:block!important;content:"";position:absolute;inset:auto 18px 0 18px;height:1px;background:linear-gradient(90deg,transparent,var(--or),transparent);opacity:0;transition:opacity .25s}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile:hover{transform:translateY(-4px);border-color:rgba(217,183,122,.45)!important;box-shadow:0 0 0 1px rgba(217,183,122,.18),0 24px 50px rgba(0,0,0,.5)!important;outline:none}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile:hover::after{opacity:.9}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile-icone{width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 30% 25%,rgba(240,220,176,.22),rgba(217,183,122,.06))!important;
+  box-shadow:inset 0 0 0 1px rgba(217,183,122,.45)!important;font-size:22px}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile-icone>*,.interface-premium .gh-tuiles.style-moderne .gh-tuile-icone{filter:grayscale(1) sepia(.55) saturate(1.4) brightness(1.15)}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile-label{color:#f4efe6!important;font-size:15px;font-weight:600;letter-spacing:.01em}
+.interface-premium .gh-tuiles.style-moderne .gh-tuile-desc{color:#8e98a8!important;font-size:12px;font-weight:400}
+.interface-premium .gh-tuiles .gh-badge{background:linear-gradient(135deg,var(--or-clair),var(--or));color:#1a1408;font-weight:800;box-shadow:none}
+.interface-premium .gh-tuiles .gh-badge-orange{background:rgba(229,83,61,.9);color:#fff}
+.interface-premium .gh-tuile-construction{outline:1px dashed rgba(217,183,122,.6)!important}
+/* Cartes : verre sombre, contenu clair sur sombre */
+.interface-premium .gh-rouge{background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025))!important;border:1px solid var(--filet)!important;border-top-color:rgba(255,255,255,.16)!important;box-shadow:0 18px 40px rgba(0,0,0,.35)!important;backdrop-filter:blur(12px);color:#e9edf3}
+.interface-premium .gh-rouge>h3,.interface-premium .gh-notifs h3{color:#f4efe6!important;font-family:"Fraunces",Georgia,serif;font-weight:500;font-size:20px!important}
+.interface-premium .gh-notifs h3::before{background:var(--or);box-shadow:0 0 12px rgba(217,183,122,.8)}
+.interface-premium .gh-panneau-clair,.interface-premium .gh-notifs-corps{background:rgba(0,0,0,.18)!important;box-shadow:inset 0 0 0 1px var(--filet)!important;color:#e9edf3}
+.interface-premium .gh-astreinte{border-bottom-color:var(--filet)}
+.interface-premium .gh-astreinte-titre,.interface-premium .gh-astreinte-ligne span:nth-child(2){color:var(--or)!important}
+.interface-premium .gh-astreinte-ligne,.interface-premium .gh-notifs-corps b,.interface-premium .gh-notifs-corps p{color:#e9edf3}
+.interface-premium .gh-notif{background:rgba(255,255,255,.04)!important;color:#dfe5ee!important;border-left-width:2px!important}
+.interface-premium .gh-notif:hover{background:rgba(255,255,255,.08)!important}
+.interface-premium .gh-compteurs b{color:var(--or-clair)!important;font-family:"Fraunces",Georgia,serif;font-weight:500;font-size:30px!important}
+.interface-premium .gh-compteurs span{color:#aab4c3}
+.interface-premium .gh-favoris h3{color:#f4efe6;border-bottom-color:var(--filet)!important;font-family:"Fraunces",Georgia,serif;font-weight:500}
+.interface-premium .gh-favori{border-bottom-color:var(--filet)}
+.interface-premium .gh-favori button:first-child{color:#f0dcb0!important}
+.interface-premium .gh-favori-ajout select,.interface-premium .gh-filtres select{background:rgba(255,255,255,.06)!important;color:#e9edf3!important;border:1px solid var(--filet)!important}
+.interface-premium .gh-favori-ajout select option,.interface-premium .gh-filtres select option{color:#1b2330}
+.interface-premium .gh-filtres,.interface-premium .gh-filtres *,.interface-premium .gh-carte-statut,.interface-premium .gh-vide{color:#aab4c3!important}
+.interface-premium .gh-favori-ajout .add-btn,.interface-premium .gh-favori-ajout button{background:linear-gradient(135deg,var(--or-clair),var(--or))!important;color:#1a1408!important;border:0!important}
+.interface-premium .gh-carte-holder{border-radius:14px;filter:saturate(.75) brightness(.92)}
+.interface-premium .gh-outils .nav-btn{background:transparent;color:#aab4c3;border:1px solid var(--filet)}
+.interface-premium .gh-reorg-aide{color:#cfd6e2}
+body.accueil-gmao.interface-premium .gh-pied{opacity:.07;filter:none}
+body.accueil-gmao.interface-premium .gh-pied-texte{color:#5d6878;letter-spacing:.08em}
