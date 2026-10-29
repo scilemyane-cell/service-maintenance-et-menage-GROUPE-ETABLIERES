@@ -754,7 +754,7 @@
     document.body.classList.toggle("interface-nouvelle", !category && window.__interfaceNouvelle);
     // Accueil toujours sombre (comme Camileia) ; modules en clair ou en
     // sombre selon le choix de l'utilisateur (bouton ☀️/🌙 en haut).
-    document.documentElement.dataset.theme = category ? getThemeModules() : "sombre";
+    document.documentElement.dataset.theme = category ? getThemeModules() : (interfaceAccueil() === "nouvelle" ? "clair" : "sombre");
     const maintenant = new Date();
     const enteteAccueil = `
       <header class="topbar-gmao">
