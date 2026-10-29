@@ -172,6 +172,12 @@ const DEGRADES_TUILES = [
   ["#1F3B63", "#0E1B30"], ["#5B2340", "#2A0F1F"], ["#1E4F4B", "#0C2422"], ["#4A3B1C", "#231B0B"],
   ["#3A2E62", "#191430"], ["#1F4A2E", "#0D2215"], ["#5A3021", "#2A140C"], ["#23405A", "#0F1D2A"],
 ];
+// Couleur vive par tuile (styles « Moderne » et « Pastel »).
+const ACCENTS_TUILES = ["#2f6fd6", "#d9466f", "#139c8f", "#e0a526", "#7c4fd1", "#2fa35a", "#e06a2b", "#2b9bd6", "#c2399a", "#5a7d1a"];
+function accentPour(id) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACCENTS_TUILES[h % ACCENTS_TUILES.length]; }
+// Style des tuiles choisi sur cet appareil : « gmao » (d'origine), « moderne » ou « pastel ».
+const STYLES_TUILES = [["gmao", "GMAO"], ["moderne", "Moderne"], ["pastel", "Pastel"]];
+function styleTuiles() { try { const v = localStorage.getItem("etablieres-style-tuiles"); return STYLES_TUILES.some(x => x[0] === v) ? v : "gmao"; } catch { return "gmao"; } }
 function degradePour(id) {
   let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [a, b] = DEGRADES_TUILES[h % DEGRADES_TUILES.length];
@@ -733,12 +739,13 @@ function render() {
         ${afficherSites ? blocCarteHTML() : ""}
         ${afficherSites ? blocCompteursEtFavorisHTML() : ""}
 
-        <section class="gh-tuiles">
+        <section class="gh-tuiles style-${styleTuiles()}">
+          <div class="gh-style-choix"><span>🎨 Style des tuiles</span>${STYLES_TUILES.map(([k, l]) => `<button type="button" class="${styleTuiles() === k ? "on" : ""}" data-style-tuiles="${k}">${l}</button>`).join("")}</div>
           ${catsRef.map((c, idx) => {
             const peutReorganiser = modeReorganisation && estAdmin;
             return `
             <div class="gh-tuile-wrap ${peutReorganiser ? "gh-deplacable" : ""}" data-tuile-id="${c.id}">
-              <button class="gh-tuile ${c.enConstruction ? "gh-tuile-construction" : ""}" data-cat="${c.id}" title="${esc(c.desc || c.label)}${c.enConstruction ? " — 🚧 en construction, visible uniquement par le Super Admin" : ""}" style="background:${degradePour(c.id)}">
+              <button class="gh-tuile ${c.enConstruction ? "gh-tuile-construction" : ""}" data-cat="${c.id}" title="${esc(c.desc || c.label)}${c.enConstruction ? " — 🚧 en construction, visible uniquement par le Super Admin" : ""}" style="background:${degradePour(c.id)};--acc:${accentPour(c.id)}">
                 ${c.enConstruction ? `<span class="gh-ruban">🚧 En construction</span>` : ""}
                 ${c.badgeAtelier || c.badgeSites ? `
                   <span class="gh-badges">
@@ -747,6 +754,7 @@ function render() {
                   </span>` : c.badge ? `<span class="gh-badges"><span class="gh-badge">${c.badge > 99 ? "99+" : c.badge}</span></span>` : ""}
                 <span class="gh-tuile-icone">${c.iconHTML || c.icon}</span>
                 <span class="gh-tuile-label">${esc(c.label)}</span>
+                ${c.desc ? `<span class="gh-tuile-desc">${esc(c.desc.length > 70 ? c.desc.slice(0, 68).replace(/\s+\S*$/, "") + "…" : c.desc)}</span>` : ""}
               </button>
               ${peutReorganiser ? `
                 <div class="gh-reorg">
@@ -755,13 +763,13 @@ function render() {
             </div>`;
           }).join("")}
           <div class="gh-tuile-wrap">
-            <a class="gh-tuile gh-tuile-gmao" href="${URL_GMAO}" target="_blank" rel="noopener" title="Ouvrir la GMAO Camileia dans un nouvel onglet">
+            <a class="gh-tuile gh-tuile-gmao" style="--acc:#E4104B" href="${URL_GMAO}" target="_blank" rel="noopener" title="Ouvrir la GMAO Camileia dans un nouvel onglet">
               <span class="gh-tuile-icone">🛠️</span>
               <span class="gh-tuile-label">GMAO Camileia ↗</span>
             </a>
           </div>
           <div class="gh-tuile-wrap">
-            <a class="gh-tuile" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" title="Ouvrir le site SharePoint appsmm" style="background:${degradePour("sharepoint")}">
+            <a class="gh-tuile" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" title="Ouvrir le site SharePoint appsmm" style="background:${degradePour("sharepoint")};--acc:#0f7cbf">
               <span class="gh-tuile-icone">🔗</span>
               <span class="gh-tuile-label">SharePoint ↗</span>
             </a>
@@ -844,6 +852,12 @@ function render() {
     document.getElementById("gh-aiguille-m")?.setAttribute("transform", `rotate(${n.getMinutes() * 6} 24 24)`);
   }, 5000);
 
+  mountedContainer.querySelectorAll("[data-style-tuiles]").forEach(b => b.addEventListener("click", () => {
+    try { localStorage.setItem("etablieres-style-tuiles", b.dataset.styleTuiles); } catch { /* */ }
+    const z = mountedContainer.querySelector(".gh-tuiles"); if (!z) return;
+    z.className = z.className.replace(/style-\w+/, "style-" + b.dataset.styleTuiles);
+    z.querySelectorAll("[data-style-tuiles]").forEach(x => x.classList.toggle("on", x === b));
+  }));
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (modeReorganisation) return; // en mode réorganisation, un clic ne doit pas ouvrir le module
