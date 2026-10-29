@@ -4408,3 +4408,95 @@ body.interface-premium .gh-interface-choix button.on{background:linear-gradient(
 .interface-premium .gh-reorg-aide{color:#cfd6e2}
 body.accueil-gmao.interface-premium .gh-pied{opacity:.07;filter:none}
 body.accueil-gmao.interface-premium .gh-pied-texte{color:#5d6878;letter-spacing:.08em}
+
+/* ================================================================
+   Interface « Plan technique » (version de test) : l'accueil comme une
+   planche de plan — fond bleu de plan quadrillé, traits fins blancs,
+   repères d'angle, cartouche, textes techniques en mono, modules rangés
+   par métier en listes + recherche.
+   ================================================================ */
+.gh-plan-sur{display:none}
+body.accueil-gmao.interface-plan,body.accueil-gmao.interface-plan #app{
+  background:
+    linear-gradient(rgba(255,255,255,.075) 1px,transparent 1px) 0 0/120px 120px,
+    linear-gradient(90deg,rgba(255,255,255,.075) 1px,transparent 1px) 0 0/120px 120px,
+    linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px) 0 0/24px 24px,
+    linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px) 0 0/24px 24px,
+    radial-gradient(1400px 800px at 30% 0%,#174a7c 0%,#0d2c4d 55%,#0a223c 100%)!important;background-attachment:fixed!important;color:#eaf2fb}
+.interface-plan{--trait:rgba(255,255,255,.55);--trait-f:rgba(255,255,255,.22);--cyan:#7fd3ff;--mono:"IBM Plex Mono",ui-monospace,Consolas,monospace}
+/* En-tête : titre + cartouche */
+.interface-plan .gh-salut{color:#fff}
+.interface-plan .gh-salut b{font-weight:800;font-size:28px;letter-spacing:-.01em}
+.interface-plan .gh-salut-main{display:none}
+.interface-plan .gh-salut small{font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan)}
+.interface-plan .gh-plan-sur{display:block;font-style:normal;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(234,242,251,.55);margin-top:4px}
+.interface-plan .topbar-gmao .gh-date,.interface-plan .gh-user-btn{background:rgba(10,34,60,.55)!important;border:1px solid var(--trait)!important;border-radius:0!important;color:#eaf2fb!important;box-shadow:none!important;font-family:var(--mono)}
+.interface-plan .topbar-gmao svg line,.interface-plan .topbar-gmao svg circle,.interface-plan .topbar-gmao svg rect,.interface-plan .topbar-gmao svg path,.interface-plan .gh-user-btn svg *{stroke:#eaf2fb!important}
+.interface-plan .topbar-gmao svg circle[r="1.8"]{fill:#eaf2fb}
+.interface-plan .gh-compte{background:transparent!important;border:1px solid var(--trait-f)!important;border-radius:0!important;color:#eaf2fb!important;font-family:var(--mono)}
+.interface-plan .gh-compte.urg{border-color:#ff8a7a!important;color:#ffb3a8!important;animation:none}
+body.interface-plan .gh-interface-choix{background:rgba(10,34,60,.55);border:1px solid var(--trait-f);border-radius:0;color:rgba(234,242,251,.6);font-family:var(--mono)}
+body.interface-plan .gh-interface-choix button{color:#eaf2fb;border-radius:0}
+body.interface-plan .gh-interface-choix button.on{background:#eaf2fb;color:#0d2c4d}
+/* Cadres : traits fins + repères d'angle */
+.interface-plan .gh-plan-g,.interface-plan .gh-rouge,.interface-plan .gh-plan-cmd{position:relative;background:rgba(10,34,60,.5)!important;border:1px solid var(--trait-f)!important;border-radius:0!important;box-shadow:none!important;backdrop-filter:blur(2px)}
+.interface-plan .gh-plan-g::before,.interface-plan .gh-rouge::before,.interface-plan .gh-plan-g::after,.interface-plan .gh-rouge::after{content:"";position:absolute;width:12px;height:12px;border:2px solid #eaf2fb;pointer-events:none}
+.interface-plan .gh-plan-g::before,.interface-plan .gh-rouge::before{top:-2px;left:-2px;border-right:0;border-bottom:0}
+.interface-plan .gh-plan-g::after,.interface-plan .gh-rouge::after{bottom:-2px;right:-2px;border-left:0;border-top:0}
+/* Recherche façon ligne de commande */
+.gh-plan{display:flex!important;flex-direction:column;gap:16px;grid-template-columns:none!important}
+.interface-plan .gh-plan-cmd{display:flex;align-items:center;gap:10px;padding:10px 14px;font-family:var(--mono)}
+.interface-plan .gh-plan-cmd>span{color:var(--cyan);font-weight:700}
+.interface-plan .gh-plan-cmd input{flex:1;background:transparent;border:0;outline:0;color:#fff;font:500 14px var(--mono)}
+.interface-plan .gh-plan-cmd input::placeholder{color:rgba(234,242,251,.45)}
+.interface-plan .gh-plan-cmd kbd{font:600 11px var(--mono);color:rgba(234,242,251,.6);border:1px solid var(--trait-f);padding:2px 7px}
+/* Groupes de modules */
+.interface-plan .gh-plan-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start}
+.interface-plan .gh-plan-g{padding:0 0 6px}
+.interface-plan .gh-plan-gt{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--trait-f);font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px}
+.interface-plan .gh-plan-gt b{flex:1;color:#fff;font-weight:600}
+.interface-plan .gh-plan-num{color:var(--cyan);font-weight:700}
+.interface-plan .gh-plan-n{color:rgba(234,242,251,.5)}
+.interface-plan .gh-plan-l{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;background:none;border:0;border-bottom:1px dashed rgba(255,255,255,.1);color:#eaf2fb;font:inherit;text-align:left;cursor:pointer;text-decoration:none;transition:background .15s}
+.interface-plan .gh-plan-l:last-child{border-bottom:0}
+.interface-plan .gh-plan-l:hover,.interface-plan .gh-plan-l:focus-visible{background:rgba(127,211,255,.1);outline:none}
+.interface-plan .gh-plan-l:hover .gh-plan-chev{color:var(--cyan);transform:translateX(3px)}
+.interface-plan .gh-plan-ico{flex:none;width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--trait);font-size:19px;background:rgba(255,255,255,.04)}
+.interface-plan .gh-plan-ico svg{width:20px;height:auto}
+.interface-plan .gh-plan-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.interface-plan .gh-plan-t b{font-size:14.5px;font-weight:700;color:#fff}
+.interface-plan .gh-plan-t small{font-family:var(--mono);font-size:11px;color:rgba(234,242,251,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.interface-plan .gh-plan-l em{font:600 9.5px var(--mono);letter-spacing:.08em;color:#ffd166;border:1px solid #ffd166;padding:1px 5px;font-style:normal}
+.interface-plan .gh-plan-badge{font:700 11.5px var(--mono);color:#0d2c4d;background:var(--cyan);padding:2px 7px}
+.interface-plan .gh-plan-chev{color:rgba(234,242,251,.4);font-family:var(--mono);transition:transform .15s,color .15s}
+.interface-plan .gh-plan-l.constr{opacity:.75}
+/* Notifications, carte, compteurs, favoris */
+.interface-plan .gh-rouge>h3,.interface-plan .gh-notifs h3{color:#fff!important;font:600 13px var(--mono)!important;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:2px 4px 8px;border-bottom:1px solid var(--trait-f)}
+.interface-plan .gh-notifs h3::before{content:"●";color:var(--cyan);margin-right:6px}
+.interface-plan .gh-panneau-clair,.interface-plan .gh-notifs-corps{background:transparent!important;border-radius:0!important;color:#eaf2fb;box-shadow:none!important}
+.interface-plan .gh-astreinte{border-bottom:1px dashed var(--trait-f)}
+.interface-plan .gh-astreinte-titre,.interface-plan .gh-astreinte-ligne span:nth-child(2){color:var(--cyan)!important;font-family:var(--mono)}
+.interface-plan .gh-astreinte-ligne,.interface-plan .gh-notifs-corps b,.interface-plan .gh-notifs-corps p{color:#eaf2fb}
+.interface-plan .gh-notif{background:rgba(255,255,255,.04)!important;color:#eaf2fb!important;border-radius:0!important;border-left-width:3px!important;font-size:12.5px}
+.interface-plan .gh-notif:hover{background:rgba(127,211,255,.1)!important}
+.interface-plan .gh-compteurs b{color:var(--cyan)!important;font:600 32px var(--mono)!important}
+.interface-plan .gh-compteurs span{color:rgba(234,242,251,.7);font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px!important}
+.interface-plan .gh-favoris h3{color:#fff;border-bottom-color:var(--trait-f)!important;font:600 13px var(--mono);letter-spacing:.12em;text-transform:uppercase}
+.interface-plan .gh-favori{border-bottom:1px dashed var(--trait-f)}
+.interface-plan .gh-favori button:first-child{color:#fff!important}
+.interface-plan .gh-favori-ajout select,.interface-plan .gh-filtres select{background:rgba(255,255,255,.06)!important;color:#eaf2fb!important;border:1px solid var(--trait-f)!important;border-radius:0!important}
+.interface-plan .gh-favori-ajout select option,.interface-plan .gh-filtres select option{color:#1b2330}
+.interface-plan .gh-filtres,.interface-plan .gh-filtres *,.interface-plan .gh-carte-statut,.interface-plan .gh-vide{color:rgba(234,242,251,.7)!important;font-family:var(--mono)}
+.interface-plan .gh-favori-ajout button{background:#eaf2fb!important;color:#0d2c4d!important;border:0!important;border-radius:0!important;font-family:var(--mono)}
+.interface-plan .gh-carte-holder{border-radius:0;filter:grayscale(.35) contrast(1.05)}
+.interface-plan .gh-outils .nav-btn{background:transparent;color:#eaf2fb;border:1px solid var(--trait-f);border-radius:0;font-family:var(--mono)}
+.interface-plan .gh-reorg-aide{color:#eaf2fb}
+.interface-plan .gh-tuiles.style-moderne .gh-tuile{background:rgba(10,34,60,.6)!important;border:1px solid var(--trait-f)!important;border-radius:0!important;color:#fff}
+.interface-plan .gh-tuiles.style-moderne .gh-tuile-label{color:#fff}
+.interface-plan .gh-tuiles.style-moderne .gh-tuile-desc{color:rgba(234,242,251,.6)}
+.interface-plan .gh-tuiles.style-moderne .gh-tuile-icone{background:transparent!important;border-radius:0!important;box-shadow:inset 0 0 0 1px var(--trait)!important}
+body.accueil-gmao.interface-plan .gh-pied{opacity:.18;filter:none}
+body.accueil-gmao.interface-plan .gh-pied-texte{color:rgba(234,242,251,.5);font-family:var(--mono)}
+@media (min-width:1101px){.interface-plan .gh-grille{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(320px,.8fr)!important}}
+body.interface-plan .gh-interface-choix,body.interface-plan .gh-interface-choix button,.interface-plan .gh-user-btn{white-space:nowrap}
+.interface-plan .gh-user-btn b{text-transform:none}

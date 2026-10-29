@@ -177,6 +177,43 @@ const DEGRADES_TUILES = [
 // Couleur vive par tuile (styles « Moderne » et « Pastel »).
 const ACCENTS_TUILES = ["#2f6fd6", "#d9466f", "#139c8f", "#e0a526", "#7c4fd1", "#2fa35a", "#e06a2b", "#2b9bd6", "#c2399a", "#5a7d1a"];
 function accentPour(id) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACCENTS_TUILES[h % ACCENTS_TUILES.length]; }
+// ---- Interface « Plan technique » : modules regroupés par métier, en listes ----
+const GROUPES_PLAN = [
+  ["Interventions", "🛠️", ["suivi-demandes", "astreinte", "planning-individuel", "mon-planning", "taches", "previsionnel", "ecran-atelier"]],
+  ["Patrimoine & sites", "🏢", ["sites", "compteurs", "masterlock", "cles", "logements"]],
+  ["Ménage & espaces verts", "🧹", ["disp-", "stock-menage", "espaces-verts"]],
+  ["Stocks", "📦", ["stock", "stock-deporte"]],
+  ["Équipe & formation", "👥", ["fiches-poste", "ssiap360"]],
+  ["Pilotage & outils", "📈", ["statistiques", "mails", "administration"]],
+];
+function groupePlan(id) { const i = GROUPES_PLAN.findIndex(([, , l]) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id)); return i < 0 ? GROUPES_PLAN.length : i; }
+function planHTML(cats) {
+  const groupes = GROUPES_PLAN.map(([nom, ico]) => ({ nom, ico, l: [] })); groupes.push({ nom: "Autres", ico: "▫️", l: [] });
+  cats.forEach(c => groupes[groupePlan(c.id)].l.push(c));
+  const badge = (c) => { const n = (c.badgeAtelier || 0) + (c.badgeSites || 0) || c.badge || 0; return n ? `<span class="gh-plan-badge">${n > 99 ? "99+" : n}</span>` : ""; };
+  const ligne = (c) => `<button type="button" class="gh-plan-l ${c.enConstruction ? "constr" : ""}" data-cat="${c.id}" data-tuile-id="${c.id}" data-q="${esc(`${c.label} ${c.desc || ""}`.toLowerCase())}">
+      <span class="gh-plan-ico">${c.iconHTML || c.icon}</span><span class="gh-plan-t"><b>${esc(c.label)}</b>${c.desc ? `<small>${esc(c.desc)}</small>` : ""}</span>${c.enConstruction ? `<em>EN CONSTRUCTION</em>` : ""}${badge(c)}<span class="gh-plan-chev">→</span></button>`;
+  const liens = `<a class="gh-plan-l" href="${URL_GMAO}" target="_blank" rel="noopener" data-q="gmao camileia"><span class="gh-plan-ico">🛠️</span><span class="gh-plan-t"><b>GMAO Camileia</b><small>Ouvre la GMAO dans un nouvel onglet</small></span><span class="gh-plan-chev">↗</span></a>
+    <a class="gh-plan-l" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" data-q="sharepoint appsmm"><span class="gh-plan-ico">🔗</span><span class="gh-plan-t"><b>SharePoint</b><small>Site appsmm</small></span><span class="gh-plan-chev">↗</span></a>`;
+  const visibles = groupes.filter(g => g.l.length);
+  return `<section class="gh-tuiles gh-plan">
+    <div class="gh-plan-cmd"><span>&gt;</span><input id="gh-plan-q" placeholder="Rechercher un module… (Entrée pour ouvrir)" autocomplete="off"><kbd>${cats.length} modules</kbd></div>
+    <div class="gh-plan-grille">${visibles.map((g, i) => `<div class="gh-plan-g" data-g>
+      <div class="gh-plan-gt"><span class="gh-plan-num">${String(i + 1).padStart(2, "0")}</span><b>${esc(g.nom)}</b><span class="gh-plan-n">${g.l.length}</span></div>
+      ${g.l.map(ligne).join("")}${g.nom === "Pilotage & outils" ? liens : ""}</div>`).join("")}
+      ${visibles.some(g => g.nom === "Pilotage & outils") ? "" : `<div class="gh-plan-g" data-g><div class="gh-plan-gt"><span class="gh-plan-num">${String(visibles.length + 1).padStart(2, "0")}</span><b>Liens</b></div>${liens}</div>`}
+    </div></section>`;
+}
+function brancherPlan(racine) {
+  const q = racine.querySelector("#gh-plan-q"); if (!q) return;
+  const filtrer = () => {
+    const t = q.value.trim().toLowerCase();
+    racine.querySelectorAll(".gh-plan-l").forEach(l => { l.hidden = !!t && !l.dataset.q.includes(t); });
+    racine.querySelectorAll("[data-g]").forEach(g => { g.hidden = ![...g.querySelectorAll(".gh-plan-l")].some(l => !l.hidden); });
+  };
+  q.addEventListener("input", filtrer);
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { const p = [...racine.querySelectorAll(".gh-plan-l")].find(l => !l.hidden); p?.click(); } if (e.key === "Escape") { q.value = ""; filtrer(); } });
+}
 function degradePour(id) {
   let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [a, b] = DEGRADES_TUILES[h % DEGRADES_TUILES.length];
@@ -744,7 +781,7 @@ function render() {
         ${afficherSites ? blocCarteHTML() : ""}
         ${afficherSites ? blocCompteursEtFavorisHTML() : ""}
 
-        <section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
+        ${window.__interfaceMode === "plan" && !modeReorganisation ? planHTML(catsRef) : `<section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
           ${catsRef.map((c, idx) => {
             const peutReorganiser = modeReorganisation === "perso" || (modeReorganisation === "tous" && estAdmin);
             return `
@@ -778,7 +815,7 @@ function render() {
               <span class="gh-tuile-label">SharePoint ↗</span>
             </a>
           </div>
-        </section>
+        </section>`}
 
         <section class="gh-notifs gh-rouge">
           <h3>${notifs.length} Notification${notifs.length > 1 ? "s" : ""}</h3>
@@ -862,6 +899,7 @@ function render() {
       onSelectRef(btn.dataset.cat);
     });
   });
+  brancherPlan(mountedContainer);
   if (modeReorganisation === "perso" || (modeReorganisation === "tous" && estAdmin)) activerGlisserTuiles(mountedContainer.querySelector(".gh-tuiles"));
   if (afficherSites) attacherEcouteursBlocSites();
   document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
