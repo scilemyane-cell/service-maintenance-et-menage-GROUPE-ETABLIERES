@@ -140,11 +140,11 @@ function render() {
     <div class="ea-grille">
       <section class="ea-bloc ea-urg">
         <h2>🚨 Urgences en cours <span class="ea-nb ${urgTri.length ? "rouge" : "vert"}">${urgTri.length}</span></h2>
-        ${urgTri.length ? urgTri.slice(0, 5).map(u => `<div class="ea-u ${u.urgence === "Critique" ? "critique" : ""} ${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? "neuve" : ""}">
+        ${urgTri.length ? `<div class="ea-defil"><div class="ea-piste"><div class="ea-lot">${urgTri.map(u => `<div class="ea-u ${u.urgence === "Critique" ? "critique" : ""} ${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? "neuve" : ""}">
           <div class="ea-u-l1"><span class="ea-num">${esc(u.numero || "")}</span><b>${esc(u.site || "")}</b>${u.local ? `<span class="ea-loc">📍 ${esc(u.local)}</span>` : ""}<span class="ea-tag">${esc(u.urgence)}</span>${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? `<span class="ea-new">NOUVELLE</span>` : ""}</div>
           <div class="ea-u-txt">${esc(String(u.descriptif || "").slice(0, 160))}</div>
           <div class="ea-u-pied">${depuis(u.importeMs)}${u.action ? ` · 📌 ${esc(u.action.texte)}` : ""}</div>
-        </div>`).join("") + (urgTri.length > 5 ? `<div class="ea-plus">+ ${urgTri.length - 5} autre(s) urgence(s)</div>` : "") : `<div class="ea-vide">✅ Aucune urgence en cours</div>`}
+        </div>`).join("")}</div></div></div>` : `<div class="ea-vide">✅ Aucune urgence en cours</div>`}
       </section>
       <div class="ea-col">
         <section class="ea-bloc ea-memo">
@@ -165,6 +165,24 @@ function render() {
     ${mesDemandes.length ? `<footer class="ea-pied">👷 Demandes attribuées à ${esc(user?.nom || "l'équipe")} : <b>${mesDemandes.length}</b> à traiter${mesDemandes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length ? ` · dont <b class="rouge">${mesDemandes.filter(d => ["Urgent", "Critique"].includes(d.urgenceCorrigee || d.urgence)).length} urgente(s)</b>` : ""}</footer>` : ""}
   </div></div>`;
   ajuster();
+  defilerUrgences();
+}
+
+// Urgences : si elles ne tiennent pas toutes dans le bloc, la liste défile
+// en boucle (vers le haut, sans à-coup). L'horloge de départ est commune :
+// le rafraîchissement de l'écran (toutes les 30 s) ne fait pas repartir le
+// défilement du début.
+const T0_DEFIL = Date.now(), VITESSE_DEFIL = 38; // px / seconde
+function defilerUrgences() {
+  const zone = conteneur?.querySelector(".ea-defil"), piste = zone?.firstElementChild, lot = piste?.firstElementChild;
+  if (!lot) return;
+  const hLot = lot.offsetHeight, hZone = zone.clientHeight;
+  if (hLot <= hZone + 2) { piste.style.animation = "none"; return; }
+  piste.appendChild(lot.cloneNode(true));
+  const duree = hLot / VITESSE_DEFIL;
+  piste.style.setProperty("--ea-dh", `-${hLot}px`);
+  piste.style.animation = `ea-defil ${duree}s linear infinite`;
+  piste.style.animationDelay = `-${((Date.now() - T0_DEFIL) / 1000) % duree}s`;
 }
 
 // Écran « télé » : une scène fixe 1920 × 1080 (16:9, paysage) mise à
@@ -297,6 +315,11 @@ const STYLE = `<style>
   .ea-u-txt{margin-top:6px;font-size:1.05em;line-height:1.35}
   .ea-u-pied{margin-top:4px;color:var(--ea-dim);font-size:.8em}
   .ea-plus{color:var(--ea-dim);text-align:center}
+  .ea-urg{display:flex;flex-direction:column}
+  .ea-defil{flex:1;min-height:0;overflow:hidden;position:relative;-webkit-mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 30px),transparent)}
+  .ea-piste{will-change:transform;padding-top:4px}
+  .ea-lot{display:flow-root}
+  @keyframes ea-defil{from{transform:translateY(0)}to{transform:translateY(var(--ea-dh))}}
   .ea-vide{color:#5fe0a8;font-size:1.3em;text-align:center;padding:30px 0}.ea-vide.petit{font-size:.95em;color:var(--ea-dim);padding:10px 0;text-align:left}
   .ea-m{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;background:#1a2440;margin-bottom:8px;border-left:5px solid var(--ea-bord)}
   .ea-m.auj{border-left-color:#e04848;background:#2a1720}.ea-m.dem{border-left-color:#f0a020}.ea-m.semaine{border-left-color:#3b7be0}.ea-m.retard{border-left-color:#e04848;opacity:.85}
