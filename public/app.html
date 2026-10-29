@@ -88,7 +88,9 @@
   } catch (e) {}
   var etapes = ["Connexion…", "Récupération de tes tuiles…", "Mise à jour des demandes et du planning…", "Presque prêt…"], ie = 0;
   var tEtape = setInterval(function () { ie = Math.min(ie + 1, etapes.length - 1); var el = document.getElementById("sp-etape"); if (el) el.textContent = etapes[ie]; }, 1100);
-  var dernier = Date.now(), fini = false;
+  var dernier = Date.now(), fini = false, polices = false;
+  try { document.fonts.ready.then(function () { polices = true; }); } catch (e) { polices = true; }
+  setTimeout(function () { polices = true; }, 2500);
   function finir() {
     if (fini) return; fini = true; clearInterval(tEtape); clearInterval(tVerif); if (obs) obs.disconnect();
     sp.classList.add("fini"); setTimeout(function () { sp.remove(); }, 600);
@@ -102,6 +104,8 @@
       for (var i = 0; i < l.length; i++) { var m = l[i]; for (var j = 0; j < m.addedNodes.length; j++) if (m.addedNodes[j].nodeType === 1) { dernier = Date.now(); return; } }
     });
     obs.observe(app, { childList: true, subtree: true });
+    // Changement de taille de l'écran construit (images, polices, blocs qui arrivent) = encore en mouvement.
+    try { var h0 = 0; new ResizeObserver(function () { var h = app.scrollHeight; if (Math.abs(h - h0) > 4) { h0 = h; dernier = Date.now(); } }).observe(app); } catch (e) {}
   }
   observer(); document.addEventListener("DOMContentLoaded", observer);
   var tVerif = setInterval(function () {
@@ -110,8 +114,8 @@
     var pret = app && !app.querySelector(".login-screen .hint:only-child");
     var login = app && app.querySelector(".login-card, .login-screen form, input[type=password]");
     if (login && Date.now() - dernier > 300 && t > 500) return finir();          // page de connexion
-    if (pret && Date.now() - dernier > 700 && t > 900) return finir();          // espace de travail posé
-    if (t > 7000) finir();                                                       // sécurité
+    if (pret && polices && Date.now() - dernier > 1000 && t > 1200) return finir(); // espace de travail posé
+    if (t > 8000) finir();                                                       // sécurité
   }, 120);
 })();
 </script>
