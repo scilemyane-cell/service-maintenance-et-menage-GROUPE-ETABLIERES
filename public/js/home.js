@@ -175,9 +175,6 @@ const DEGRADES_TUILES = [
 // Couleur vive par tuile (styles « Moderne » et « Pastel »).
 const ACCENTS_TUILES = ["#2f6fd6", "#d9466f", "#139c8f", "#e0a526", "#7c4fd1", "#2fa35a", "#e06a2b", "#2b9bd6", "#c2399a", "#5a7d1a"];
 function accentPour(id) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACCENTS_TUILES[h % ACCENTS_TUILES.length]; }
-// Style des tuiles choisi sur cet appareil : « gmao » (d'origine), « moderne » ou « pastel ».
-const STYLES_TUILES = [["gmao", "GMAO"], ["moderne", "Moderne"], ["pastel", "Pastel"]];
-function styleTuiles() { try { const v = localStorage.getItem("etablieres-style-tuiles"); return STYLES_TUILES.some(x => x[0] === v) ? v : "gmao"; } catch { return "gmao"; } }
 function degradePour(id) {
   let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [a, b] = DEGRADES_TUILES[h % DEGRADES_TUILES.length];
@@ -739,8 +736,7 @@ function render() {
         ${afficherSites ? blocCarteHTML() : ""}
         ${afficherSites ? blocCompteursEtFavorisHTML() : ""}
 
-        <section class="gh-tuiles style-${styleTuiles()}">
-          <div class="gh-style-choix"><span>🎨 Style des tuiles</span>${STYLES_TUILES.map(([k, l]) => `<button type="button" class="${styleTuiles() === k ? "on" : ""}" data-style-tuiles="${k}">${l}</button>`).join("")}</div>
+        <section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
           ${catsRef.map((c, idx) => {
             const peutReorganiser = modeReorganisation && estAdmin;
             return `
@@ -852,12 +848,6 @@ function render() {
     document.getElementById("gh-aiguille-m")?.setAttribute("transform", `rotate(${n.getMinutes() * 6} 24 24)`);
   }, 5000);
 
-  mountedContainer.querySelectorAll("[data-style-tuiles]").forEach(b => b.addEventListener("click", () => {
-    try { localStorage.setItem("etablieres-style-tuiles", b.dataset.styleTuiles); } catch { /* */ }
-    const z = mountedContainer.querySelector(".gh-tuiles"); if (!z) return;
-    z.className = z.className.replace(/style-\w+/, "style-" + b.dataset.styleTuiles);
-    z.querySelectorAll("[data-style-tuiles]").forEach(x => x.classList.toggle("on", x === b));
-  }));
   mountedContainer.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (modeReorganisation) return; // en mode réorganisation, un clic ne doit pas ouvrir le module

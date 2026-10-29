@@ -4223,10 +4223,7 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .tj-chrono .tj-h{font-weight:700}.tj-chrono small{color:var(--text-dim)}.tj-chrono em{color:#c56a00;font-style:normal}
 @media (max-width:700px){.tj-chrono>div{grid-template-columns:1fr}}
 
-/* ---- Style des tuiles de l'accueil (choix par appareil) ---- */
-.gh-style-choix{grid-column:1/-1;display:flex;align-items:center;gap:6px;justify-content:flex-end;font-size:12px;color:var(--text-dim);margin-bottom:-2px}
-.gh-style-choix button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:99px;padding:3px 10px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
-.gh-style-choix button.on{background:var(--gh-rouge,#E4104B);border-color:var(--gh-rouge,#E4104B);color:#fff}
+/* ---- Style des tuiles de l'accueil ---- */
 .gh-tuile-desc{display:none}
 /* Moderne : cartes sobres, pastille d'icône colorée, description courte */
 .gh-tuiles.style-moderne .gh-tuile{background:var(--panel)!important;color:var(--text);border:1px solid var(--border);border-radius:16px!important;aspect-ratio:auto;min-height:128px;
@@ -4246,3 +4243,59 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .gh-tuiles.style-pastel .gh-tuile:hover{outline:none;transform:translateY(-3px) scale(1.02);box-shadow:0 10px 26px color-mix(in srgb,var(--acc) 35%,transparent)}
 .gh-tuiles.style-moderne .gh-tuile-construction,.gh-tuiles.style-pastel .gh-tuile-construction{outline:2px dashed #F2B705;outline-offset:-2px}
 @media (max-width:720px){.gh-tuiles.style-moderne .gh-tuile{min-height:112px;padding:11px}.gh-tuiles.style-moderne .gh-tuile-desc{display:none}}
+
+/* ================================================================
+   Interface « Nouvelle » de l'accueil (proposée sur la version de test)
+   Même contenu que l'interface GMAO, présenté autrement : fond nuit
+   avec halos, salutation, cartes claires arrondies, tuiles « Moderne ».
+   ================================================================ */
+.gh-salut{display:none}
+.gh-interface-choix{display:flex;align-items:center;gap:5px;align-self:center;font-size:12px;color:#9fb2cc;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:99px;padding:4px 5px 4px 10px;margin-top:14px}
+.gh-interface-choix button{border:0;background:transparent;color:#cfd8e6;border-radius:99px;padding:4px 11px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.gh-interface-choix button.on{background:#EC0440;color:#fff}
+body.interface-nouvelle .gh-interface-choix button.on{background:linear-gradient(90deg,#3fd0a6,#5aa9ff);color:#08121f}
+body.accueil-gmao.interface-nouvelle,body.accueil-gmao.interface-nouvelle #app{background:radial-gradient(1100px 600px at 12% -5%,rgba(47,111,214,.35),transparent 60%),radial-gradient(900px 600px at 100% 100%,rgba(19,156,143,.25),transparent 55%),#0a1322!important;background-attachment:fixed!important}
+.interface-nouvelle .topbar-gmao{align-items:center;padding:18px 26px 6px;gap:18px}
+.interface-nouvelle .topbar-gmao .gh-date{order:2;margin-left:auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:8px 14px;gap:12px;backdrop-filter:blur(6px)}
+.interface-nouvelle .topbar-gmao .gh-ico-horloge,.interface-nouvelle .topbar-gmao .gh-ico-cal{width:26px;height:26px;opacity:.85}
+.interface-nouvelle .topbar-gmao .gh-jour{display:none}
+.interface-nouvelle .gh-compte-dem *{border-radius:12px!important}
+.interface-nouvelle .gh-salut{display:flex;flex-direction:column;order:1;color:#eef2f8}
+.interface-nouvelle .gh-salut b{font-size:26px;font-weight:800;letter-spacing:-.01em}
+.interface-nouvelle .gh-salut small{font-size:13.5px;color:#9fb2cc;text-transform:capitalize;margin-top:2px}
+.interface-nouvelle .gh-interface-choix{order:3;margin-top:0}
+.interface-nouvelle .gh-user{order:4;padding:0}
+.interface-nouvelle .gh-user-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:99px;padding:7px 14px;font-size:14.5px}
+.interface-nouvelle .gh-user-pop{top:48px;right:0;border-radius:14px}
+.interface-nouvelle .gh-entete{display:none}
+.interface-nouvelle .gh{justify-content:flex-start;padding-top:18px}
+/* Cartes : verre sombre + intérieur clair arrondi */
+.interface-nouvelle .gh-rouge{background:rgba(255,255,255,.045)!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:22px!important;box-shadow:0 10px 30px rgba(0,0,0,.25);backdrop-filter:blur(6px)}
+.interface-nouvelle .gh-rouge>h3,.interface-nouvelle .gh-notifs h3{color:#fff;font-size:17px!important;font-weight:800;text-align:left;padding:0 4px;display:flex;align-items:center;gap:8px}
+.interface-nouvelle .gh-notifs h3::before{content:"";width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,#3fd0a6,#5aa9ff);box-shadow:0 0 10px #3fd0a6}
+.interface-nouvelle .gh-panneau-clair,.interface-nouvelle .gh-notifs-corps{background:#f4f6fa!important;border-radius:16px!important;box-shadow:inset 0 0 0 1px rgba(10,19,34,.06)}
+.interface-nouvelle .gh-compteurs b{color:#2f6fd6!important}
+.interface-nouvelle .gh-favori button:first-child{color:#2f6fd6!important}
+.interface-nouvelle .gh-carte-holder{border-radius:14px}
+/* Tuiles « Moderne », un peu plus grandes */
+.interface-nouvelle .gh-tuiles.style-moderne{gap:12px}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile{background:rgba(255,255,255,.05)!important;border-color:rgba(255,255,255,.09);color:#eef2f8;backdrop-filter:blur(4px)}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-label{color:#eef2f8}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-desc{color:#9fb2cc}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-icone img{width:28px;height:28px}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile:hover{background:rgba(255,255,255,.09)!important}
+.interface-nouvelle .gh-outils{opacity:.55}
+body.accueil-gmao.interface-nouvelle .gh-pied{opacity:.18}
+@media (min-width:1101px){
+  /* Tuiles en grand en haut, notifications à droite, carte et compteurs dessous. */
+  .interface-nouvelle .gh-grille{height:auto!important;gap:20px;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(300px,.85fr)!important;grid-template-areas:"tuiles tuiles notifs" "carte milieu notifs"!important}
+  .interface-nouvelle .gh-grille.gh-sans-sites{grid-template-columns:minmax(0,3fr) minmax(300px,1fr)!important;grid-template-areas:"tuiles notifs"!important}
+  .interface-nouvelle .gh-notifs{align-self:start;position:sticky;top:12px;max-height:calc(100vh - 40px);display:flex;flex-direction:column}
+  .interface-nouvelle .gh-tuiles{grid-auto-rows:auto!important;overflow:visible!important;grid-template-columns:repeat(auto-fill,minmax(165px,1fr))!important}
+  .interface-nouvelle .gh-tuiles.style-moderne .gh-tuile{height:auto!important;min-height:118px}
+}
+@media (max-width:720px){
+  .interface-nouvelle .topbar-gmao{flex-wrap:wrap;padding:12px 14px 4px}
+  .interface-nouvelle .gh-salut b{font-size:20px}
+  .interface-nouvelle .topbar-gmao .gh-date{order:5;margin-left:0}
+}
