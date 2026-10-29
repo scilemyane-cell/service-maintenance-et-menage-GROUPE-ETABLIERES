@@ -49,8 +49,72 @@
   });
 })();
 </script>
+<style>
+/* Écran d'accueil « chargement de ton espace de travail » : affiché tout de
+   suite, retiré en fondu quand l'appli a fini de se construire (plus de saut). */
+#splash{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;
+  background:radial-gradient(1200px 700px at 20% 10%,#1d3b6e 0%,transparent 60%),radial-gradient(900px 600px at 90% 90%,#0f5c4f 0%,transparent 55%),#0b1424;
+  color:#eef2f8;font-family:Montserrat,"Segoe UI",Arial,sans-serif;transition:opacity .45s ease,visibility .45s;text-align:center;padding:24px}
+#splash.fini{opacity:0;visibility:hidden}
+#splash .sp-logo{width:150px;height:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.35));animation:sp-flotte 3s ease-in-out infinite}
+#splash .sp-bonjour{font-size:15px;color:#9fb2cc;letter-spacing:.02em}
+#splash .sp-titre{font-size:22px;font-weight:700;margin-top:-10px}
+#splash .sp-barre{width:220px;height:5px;border-radius:9px;background:rgba(255,255,255,.12);overflow:hidden}
+#splash .sp-barre i{display:block;height:100%;width:40%;border-radius:9px;background:linear-gradient(90deg,#3fd0a6,#5aa9ff);animation:sp-charge 1.2s ease-in-out infinite}
+#splash .sp-etape{font-size:13px;color:#8ea2bd;min-height:18px}
+#splash .sp-pied{position:absolute;bottom:18px;font-size:11.5px;color:#61748f}
+@keyframes sp-charge{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+@keyframes sp-flotte{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){#splash .sp-logo,#splash .sp-barre i{animation:none}}
+</style>
 </head>
 <body>
+<div id="splash" role="status" aria-live="polite">
+  <img class="sp-logo" src="img/logo-etablieres-transparent.png" alt="Groupe Établières">
+  <div class="sp-bonjour" id="sp-bonjour">Bonjour</div>
+  <div class="sp-titre">Chargement de ton espace de travail…</div>
+  <div class="sp-barre"><i></i></div>
+  <div class="sp-etape" id="sp-etape">Connexion…</div>
+  <div class="sp-pied">Service Maintenance &amp; Ménage · Groupe Établières</div>
+</div>
+<script>
+(function () {
+  var sp = document.getElementById("splash"), app = null, debut = Date.now();
+  try {
+    var c = JSON.parse(localStorage.getItem("etablieres-profil") || "null"), nom = c && c.profil && (c.profil.nom || c.profil.displayName) || "";
+    var prenom = String(nom).trim().split(/\s+/)[0]; if (prenom && prenom.indexOf("@") < 0) prenom = prenom.charAt(0).toUpperCase() + prenom.slice(1).toLowerCase(); else prenom = "";
+    var h = new Date().getHours();
+    document.getElementById("sp-bonjour").textContent = (h >= 18 || h < 5 ? "Bonsoir" : "Bonjour") + (prenom ? " " + prenom : "") + " 👋";
+  } catch (e) {}
+  var etapes = ["Connexion…", "Récupération de tes tuiles…", "Mise à jour des demandes et du planning…", "Presque prêt…"], ie = 0;
+  var tEtape = setInterval(function () { ie = Math.min(ie + 1, etapes.length - 1); var el = document.getElementById("sp-etape"); if (el) el.textContent = etapes[ie]; }, 1100);
+  var dernier = Date.now(), fini = false;
+  function finir() {
+    if (fini) return; fini = true; clearInterval(tEtape); clearInterval(tVerif); if (obs) obs.disconnect();
+    sp.classList.add("fini"); setTimeout(function () { sp.remove(); }, 600);
+  }
+  window.__finirSplash = finir;
+  // L'écran est « posé » quand plus rien ne se reconstruit dans l'appli pendant 0,7 s.
+  var obs = null;
+  function observer() {
+    app = document.getElementById("app"); if (!app || obs) return;
+    obs = new MutationObserver(function (l) {
+      for (var i = 0; i < l.length; i++) { var m = l[i]; for (var j = 0; j < m.addedNodes.length; j++) if (m.addedNodes[j].nodeType === 1) { dernier = Date.now(); return; } }
+    });
+    obs.observe(app, { childList: true, subtree: true });
+  }
+  observer(); document.addEventListener("DOMContentLoaded", observer);
+  var tVerif = setInterval(function () {
+    observer();
+    var t = Date.now() - debut;
+    var pret = app && !app.querySelector(".login-screen .hint:only-child");
+    var login = app && app.querySelector(".login-card, .login-screen form, input[type=password]");
+    if (login && Date.now() - dernier > 300 && t > 500) return finir();          // page de connexion
+    if (pret && Date.now() - dernier > 700 && t > 900) return finir();          // espace de travail posé
+    if (t > 7000) finir();                                                       // sécurité
+  }, 120);
+})();
+</script>
 <div id="app">
   <div class="login-screen"><div class="hint">Chargement…</div></div>
 </div>
