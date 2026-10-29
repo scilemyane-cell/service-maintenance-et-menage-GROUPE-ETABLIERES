@@ -1,7 +1,7 @@
 import { differerSiSaisieDate } from "./saisie-dates.js";
 import { addDays, dateKey, fmtShort, esc, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
-import { watchFiches, saveFiche, ficheId, corrigerDateSaisie } from "./fiches-data.js";
+import { watchFiches, saveFiche, ficheId, corrigerDateSaisie, journaliserConnexion } from "./fiches-data.js";
 import { watchUsers } from "./users-data.js";
 import { watchAccess, hasAccess } from "./access-data.js";
 import { photosFusion, watchPhotosFiche, ajouterPhoto, majPhoto, supprimerPhoto } from "./fiches-photos.js";
@@ -71,6 +71,7 @@ export function mountFiches(container, user) {
   mountedUser = user;
   ui.lockDispositif = false;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
+  journaliserConnexion({ ecran: "agent", agentUid: user?.uid || "", agentNom: user?.nom || user?.email || "", role: user?.role || "", dispositif: ui.dispositif || "" });
   prendreCorrection();
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => {
@@ -95,6 +96,7 @@ export function mountFichesForDispositif(container, user, dispositif) {
   ui.lockDispositif = true;
   ui.siteId = null;
   if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
+  journaliserConnexion({ ecran: "agent", agentUid: user?.uid || "", agentNom: user?.nom || user?.email || "", role: user?.role || "", dispositif: ui.dispositif || "" });
   prendreCorrection();
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => {

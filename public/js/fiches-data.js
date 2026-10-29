@@ -2,8 +2,9 @@ import { partager } from "./ecoute-partagee.js";
 import { db } from "./firebase-init.js";
 import {
   doc, setDoc, deleteDoc, serverTimestamp, deleteField, Timestamp,
-  collection, onSnapshot,
+  collection, onSnapshot, addDoc,
 } from "./firestore-compte.js";
+import { auth } from "./firebase-init.js";
 import { ecoutePartagee } from "./ecoute-partagee.js";
 import { ecouteDelta, majLocale, docLocal } from "./cache-delta.js";
 
@@ -62,6 +63,39 @@ export async function saveFiche(id, data) {
   if (!dejaDatee && data.saisieTardiveLe && !avant?.saisieInitialeLe) { envoi.saisieTardiveLe = data.saisieTardiveLe; envoi.saisieInitialeLe = data.saisieTardiveLe; }
   majLocale("fiches", id, { ...envoi, majLe: Timestamp.now(), supprimeLe: null });
   await setDoc(doc(db, "fiches", id), { ...envoi, majLe: serverTimestamp(), supprimeLe: deleteField() }, { merge: true });
+  journaliserModif(id, data, avant);
+}
+
+// ---- Journal de remplissage (qui, quand, quoi) ----
+// Une ligne par enregistrement : cases cochées / décochées (avec leur jour),
+// observations, envoi. Sert à vérifier à quelle heure les fiches sont
+// remplies et à estimer le temps de présence (Traçabilité › Journal).
+const appareil = () => { const u = navigator.userAgent || ""; return /iPhone|iPad/.test(u) ? "iPhone/iPad" : /Android/.test(u) ? "Android" : /Windows/.test(u) ? "PC Windows" : /Mac/.test(u) ? "Mac" : "autre"; };
+function journal(ligne) {
+  const uid = auth?.currentUser?.uid; if (!uid) return;
+  addDoc(collection(db, "fiches-journal"), { ...ligne, auteurUid: uid, auteurAnonyme: !!auth.currentUser.isAnonymous, appareil: appareil(), at: Date.now(), atServeur: serverTimestamp() })
+    .catch(e => console.warn("journal fiches :", e?.message || e));
+}
+function journaliserModif(id, data, avant) {
+  const a = avant?.cells || {}, n = data.cells || {};
+  const coches = Object.keys(n).filter(k => n[k] && !a[k]), decoches = Object.keys(a).filter(k => a[k] && !n[k]);
+  const obs = Object.keys({ ...(avant?.obs || {}), ...(data.obs || {}) }).filter(k => (avant?.obs || {})[k] !== (data.obs || {})[k]).length
+    + ((avant?.observationsGenerales || "") !== (data.observationsGenerales || "") ? 1 : 0);
+  const envoi = !!data.submitted && !avant?.submitted, rouvert = !data.submitted && !!avant?.submitted;
+  const validee = !!data.validee && !avant?.validee;
+  if (!coches.length && !decoches.length && !obs && !envoi && !rouvert && !validee) return;
+  journal({ type: "modif", ficheId: id, siteId: data.siteId || "", siteName: data.siteName || "", weekStart: data.weekStart || "",
+    agentUid: data.agentUid || "", agentNom: data.agentNom || "", prestataire: !!data.prestataire, societe: data.societe || "",
+    coches: coches.slice(0, 400), decoches: decoches.slice(0, 400), nbCoches: coches.length, nbDecoches: decoches.length, obs, envoi, rouvert, validee,
+    faits: Object.values(n).filter(Boolean).length });
+}
+// Ouverture de l'écran de saisie (agent ou prestataire).
+export function journaliserConnexion(info) {
+  const uid = auth?.currentUser?.uid; if (!uid) return;
+  // Une ligne par ouverture, sauf rechargement dans les 20 minutes.
+  const cle = `fj-cnx-${uid}-${info.ecran || ""}`;
+  try { const der = +localStorage.getItem(cle) || 0; if (Date.now() - der < 20 * 60000) return; localStorage.setItem(cle, String(Date.now())); } catch { /* */ }
+  journal({ type: "connexion", ...info });
 }
 
 // Correction de la date de saisie (admins) : la date affichée/utilisée devient

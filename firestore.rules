@@ -253,6 +253,14 @@ service cloud.firestore {
     // ---- Photos des fiches de traçabilité (une photo = un document, ≈ 80 Ko) ----
     // L'agent gère ses propres photos ; un éditeur peut tout gérer (archivage
     // SharePoint en fin de semaine puis suppression).
+    // ---- Journal de remplissage des fiches (qui / quand / quoi) ----
+    // Chacun ajoute ses propres lignes (y compris prestataire anonyme) ;
+    // lecture par les responsables ; jamais modifiable (sauf Super Admin).
+    match /fiches-journal/{docId} {
+      allow create: if isSignedIn() && request.resource.data.auteurUid == request.auth.uid;
+      allow read: if isEditor();
+      allow update, delete: if isSuperAdmin();
+    }
     match /fiches-photos/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid)

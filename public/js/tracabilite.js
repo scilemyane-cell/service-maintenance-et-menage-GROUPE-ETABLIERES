@@ -212,9 +212,9 @@ function render() {
           <div class="tr-av-grille">${av.map(f => { const site = state.sites.find(x => x.id === f.siteId), { done, total } = taskCompletion(f, site), pct = total ? Math.round(done / total * 100) : 0; return `<button type="button" class="tr-av" data-open="${f.id}">
             <b>🏠 ${esc(f.siteName)}</b><span>${esc(f.agentNom)} · semaine du ${fmtShort(new Date(f.weekStart + "T00:00:00"))}</span>
             <span class="tr-g-barre"><i class="${pct >= 90 ? "vert" : pct >= 70 ? "orange" : "rouge"}" style="width:${pct}%"></i></span><small>${done}/${total} tâches · ${pct} %</small><em>👉 Vérifier</em></button>`; }).join("")}</div></div>` : ""; })() : ""}
-      <div class="tr-vues"><button type="button" class="${ui.vue === "fiches" ? "actif" : ""}" data-tr-vue="fiches">📋 Fiches</button><button type="button" class="${ui.vue === "stats" ? "actif" : ""}" data-tr-vue="stats">📊 Tableau de bord</button>
+      <div class="tr-vues"><button type="button" class="${ui.vue === "fiches" ? "actif" : ""}" data-tr-vue="fiches">📋 Fiches</button><button type="button" class="${ui.vue === "stats" ? "actif" : ""}" data-tr-vue="stats">📊 Tableau de bord</button>${isEditorUser(mountedUser) ? `<button type="button" class="${ui.vue === "journal" ? "actif" : ""}" data-tr-vue="journal">🕒 Journal & heures</button>` : ""}
         ${isEditorUser(mountedUser) ? `<button type="button" class="tr-arch" id="tr-archive" title="PDF Département (sans photos) et Interne (avec photos) des semaines terminées">☁️ Archiver sur SharePoint</button>` : ""}<small id="tr-archive-etat" class="hint">${esc(archiveEtat)}</small></div>
-      ${ui.vue === "stats" ? tableauDeBordHTML(filtered, state.sites) : `
+      ${ui.vue === "journal" && isEditorUser(mountedUser) ? `<div id="tr-journal"></div>` : ui.vue === "stats" ? tableauDeBordHTML(filtered, state.sites) : `
       ${(() => {
         if (!filtered.length && !state.sites.length) return `<div class="form-card hint">Aucune fiche pour l'instant.</div>`;
         // Grille : une ligne par semaine, une colonne par site.
@@ -276,6 +276,7 @@ ${ficheHTML(opened, openedSite, lockedDispositif || "")}` : ""}
     v.onclick = () => v.remove(); document.body.appendChild(v);
   }));
   mountedContainer.querySelectorAll("[data-tr-vue]").forEach(b => b.addEventListener("click", () => { ui.vue = b.dataset.trVue; render(); }));
+  { const zj = mountedContainer.querySelector("#tr-journal"); if (zj) { const disp = lockedDispositif || (ui.filterDispositif !== "Tous" ? ui.filterDispositif : ""); import("./tracabilite-journal.js").then(m => m.mountJournalTracabilite(zj, { dispositif: disp, sites: disp ? state.sites.filter(x => siteDispositif(x) === disp) : state.sites, fiches: state.fiches.filter(f => !disp || siteDispositif(state.sites.find(x => x.id === f.siteId)) === disp), user: mountedUser })).catch(e => { zj.textContent = "Erreur : " + e.message; }); } }
   // Réordonner les sites (colonnes) : l'ordre est enregistré pour tout le monde.
   mountedContainer.querySelectorAll("[data-ordre]").forEach(b => b.addEventListener("click", async (e) => {
     e.stopPropagation();

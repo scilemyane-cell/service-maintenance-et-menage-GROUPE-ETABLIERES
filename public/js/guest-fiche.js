@@ -7,7 +7,7 @@
 //    au responsable, qui la vérifie et la valide avant l'envoi au MNA.
 import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
-import { watchFiches, saveFiche, ficheId } from "./fiches-data.js";
+import { watchFiches, saveFiche, ficheId, journaliserConnexion } from "./fiches-data.js";
 
 const JOURS = ["LUN", "MAR", "MER", "JEU", "VEN"];
 const NOMS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "Vendredi" };
@@ -105,6 +105,7 @@ function render() {
   if (!conteneur) return;
   if (!document.contains(conteneur)) { cleanup(); return; }
   if (!identite) { formulaireIdentite(); return; }
+  journaliserConnexion({ ecran: "prestataire", agentUid: user?.uid || "", agentNom: nomAgent(), prestataire: true, societe: identite?.societe || "", invitation: invitation?.id || "" });
   const a = document.activeElement; if (a && conteneur.contains(a) && a.matches("input:not([type=checkbox]), textarea")) return;
   const { id, data, site } = currentFiche();
   const sites = sitesInvitation(invitation);

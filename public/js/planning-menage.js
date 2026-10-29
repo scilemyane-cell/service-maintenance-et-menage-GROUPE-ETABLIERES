@@ -18,7 +18,7 @@ const SPECIAUX = { trajet: { label: "Trajet", c: "#8b96a6" }, pause: { label: "P
 // Planning de Marie (PDF « planning hebdomadaire ») — amorcé une seule fois.
 const tous = (v) => Object.fromEntries(JOURS.map(j => [j, v]));
 const lmv = (v) => ({ LUN: v, MAR: "", MER: v, JEU: "", VEN: v });
-const DEFAUT = {
+export const PLANNING_DEFAUT_MENAGE = {
   "Dispositif MNA": {
     agent: "Marie NICOLAIZEAU",
     lignes: [
@@ -49,7 +49,7 @@ export function mountPlanningMenage(container, u, disp) {
   unsubs.push(onSnapshot(REF(), (snap) => {
     const d = snap.exists() ? snap.data() : {};
     st.plannings = d;
-    if (!d[dispositif] && DEFAUT[dispositif] && estEditeur(user)) setDoc(REF(), { [dispositif]: DEFAUT[dispositif] }, { merge: true }).catch(() => {});
+    if (!d[dispositif] && PLANNING_DEFAUT_MENAGE[dispositif] && estEditeur(user)) setDoc(REF(), { [dispositif]: PLANNING_DEFAUT_MENAGE[dispositif] }, { merge: true }).catch(() => {});
     render();
   }, () => { st.plannings = {}; render(); }));
 }
@@ -72,7 +72,7 @@ function calculs(p) {
 function render() {
   if (!conteneur || !document.contains(conteneur)) { cleanup(); return; }
   if (!st.plannings) return;
-  const p = st.edit ? st.brouillon : (st.plannings[dispositif] || DEFAUT[dispositif] || { agent: "", lignes: [] });
+  const p = st.edit ? st.brouillon : (st.plannings[dispositif] || PLANNING_DEFAUT_MENAGE[dispositif] || { agent: "", lignes: [] });
   const ed = st.edit, k = calculs(p);
   const sitesDisp = st.sites.filter(s => (s.dispositif || "Dispositif MNA") === dispositif);
   const options = (v) => `<option value="">—</option>${sitesDisp.map(s => `<option value="${esc(s.id)}" ${v === s.id ? "selected" : ""}>${esc(court(s.name))}</option>`).join("")}<option value="trajet" ${v === "trajet" ? "selected" : ""}>Trajet</option><option value="pause" ${v === "pause" ? "selected" : ""}>Pause déjeuner</option>`;
@@ -104,7 +104,7 @@ function render() {
 
 function brancher() {
   const q = (s) => conteneur.querySelector(s);
-  q("#pm-edit")?.addEventListener("click", () => { st.edit = true; st.brouillon = JSON.parse(JSON.stringify(st.plannings[dispositif] || DEFAUT[dispositif] || { agent: "", lignes: [] })); render(); });
+  q("#pm-edit")?.addEventListener("click", () => { st.edit = true; st.brouillon = JSON.parse(JSON.stringify(st.plannings[dispositif] || PLANNING_DEFAUT_MENAGE[dispositif] || { agent: "", lignes: [] })); render(); });
   q("#pm-annuler")?.addEventListener("click", () => { st.edit = false; st.brouillon = null; render(); });
   q("#pm-print")?.addEventListener("click", () => window.print());
   q("#pm-agent")?.addEventListener("input", (e) => { st.brouillon.agent = e.target.value; });
@@ -128,6 +128,6 @@ function brancher() {
 
 // Heures par site (planning) : sert à mettre à jour le modèle de répartition.
 export function chargeParSite(p, sites) {
-  st.sites = sites || st.sites; const k = calculs(p || DEFAUT["Dispositif MNA"]);
+  st.sites = sites || st.sites; const k = calculs(p || PLANNING_DEFAUT_MENAGE["Dispositif MNA"]);
   return Object.entries(k.parSite).map(([id, m]) => ({ label: `Ménage — ${libelle(id)}`, heures: Math.round(m / 60 * 100) / 100 }));
 }

@@ -4199,3 +4199,26 @@ table.pm-r tr.tot td{font-weight:800;font-size:15px;border-bottom:0}
 .rh-page .rh-sg-l{margin:1px 0}
 .fp-form select{padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;width:100%}
 .rh-crit label{display:flex;flex-direction:column;gap:4px}
+/* ---- Traçabilité › Journal & heures ---- */
+.tj-tete{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.tj-tete h3{margin:0;font-size:16px}
+.tj-sem{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.tj-sem .nav-btn{padding:5px 10px}
+.tj-vide{padding:14px;border:1px dashed var(--border);border-radius:12px;color:var(--text-dim)}
+.tj-pers{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.tj-pers button{display:flex;flex-direction:column;align-items:flex-start;padding:8px 12px;border-radius:12px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit;cursor:pointer}
+.tj-pers button.on{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal)}.tj-pers small{color:var(--text-dim);font-size:12px}
+.tj-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:6px 0 12px}
+.tj-kpi>div{padding:10px 12px;border-radius:12px;background:var(--panel-alt);border:1px solid var(--border);display:flex;flex-direction:column}
+.tj-kpi b{font-size:20px}.tj-kpi span{font-size:12px;color:var(--text-dim)}
+.tj-kpi .rouge b{color:#e5533d}.tj-kpi .orange b{color:#e0a526}.tj-kpi .vert b{color:#1baf7a}
+.tj-table-wrap{overflow-x:auto}
+.tj-t{width:100%;border-collapse:collapse;font-size:13px}
+.tj-t th{font-size:11px;text-transform:uppercase;color:var(--text-dim);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+.tj-t td{padding:7px 8px;border-top:1px solid var(--border);vertical-align:top}
+.tj-t td small{display:block;color:var(--text-dim);font-size:11px}
+.tj-t tr.alerte td{background:rgba(229,83,61,.05)}
+.tj-al{color:#c56a00;font-size:12px;margin:1px 0}.tj-ok{color:#1baf7a;font-weight:700}
+.tj-det{margin-top:12px}.tj-det summary{cursor:pointer;font-weight:600}
+.tj-chrono{display:flex;flex-direction:column;gap:3px;margin-top:8px;font-size:13px;max-height:420px;overflow:auto}
+.tj-chrono>div{display:grid;grid-template-columns:110px 140px 1fr auto;gap:8px;padding:4px 6px;border-radius:6px;background:var(--panel-alt)}
+.tj-chrono .tj-h{font-weight:700}.tj-chrono small{color:var(--text-dim)}.tj-chrono em{color:#c56a00;font-style:normal}
+@media (max-width:700px){.tj-chrono>div{grid-template-columns:1fr}}
