@@ -4324,3 +4324,16 @@ body.accueil-gmao.interface-nouvelle .gh-pied-texte{color:#6b7a90}
 @media (min-width:1101px){.interface-nouvelle .gh-tuiles{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))!important}}
 .gh-deplacable .gh-tuile{cursor:grab}
 .gh-reorg-aide{font-size:12.5px}
+/* Interface Nouvelle : fond de l'écran de chargement (nuit + halos bleu et vert), cartes et tuiles blanches */
+body.accueil-gmao.interface-nouvelle,body.accueil-gmao.interface-nouvelle #app{background:radial-gradient(1200px 700px at 15% 0%,#1d3b6e 0%,transparent 60%),radial-gradient(1000px 650px at 95% 100%,#0f5c4f 0%,transparent 55%),#0b1424!important;background-attachment:fixed!important}
+.interface-nouvelle .gh-salut{color:#fff}
+.interface-nouvelle .gh-salut small{color:#9fb2cc}
+body.interface-nouvelle .gh-interface-choix{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);color:#9fb2cc}
+body.interface-nouvelle .gh-interface-choix button{color:#dbe4f0}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile{border-color:transparent;box-shadow:0 6px 20px rgba(0,0,0,.28)}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile:hover{box-shadow:0 14px 34px rgba(0,0,0,.4)}
+.interface-nouvelle .gh-rouge{border-color:transparent!important;box-shadow:0 8px 28px rgba(0,0,0,.3)}
+.interface-nouvelle .gh-outils{opacity:.85}
+.interface-nouvelle .gh-reorg-aide{color:#dbe4f0}
+body.accueil-gmao.interface-nouvelle .gh-pied{opacity:.25;filter:none}
+body.accueil-gmao.interface-nouvelle .gh-pied-texte{color:#8ea2bd}
