@@ -187,7 +187,24 @@ const GROUPES_PLAN = [
   ["Pilotage & outils", "📈", ["statistiques", "mails", "administration"]],
 ];
 function groupePlan(id) { const i = GROUPES_PLAN.findIndex(([, , l]) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id)); return i < 0 ? GROUPES_PLAN.length : i; }
-function planHTML(cats) {
+const CLE_RECENTS = "etablieres-modules-recents";
+function recents() { try { return JSON.parse(localStorage.getItem(CLE_RECENTS) || "[]"); } catch { return []; } }
+function noterRecent(id) { try { const l = [id, ...recents().filter(x => x !== id)].slice(0, 6); localStorage.setItem(CLE_RECENTS, JSON.stringify(l)); } catch { /* */ } }
+// Bandeau de « cotes » : les chiffres clés du jour, façon cotation de plan.
+function cotesHTML(cats, info) {
+  const n = (id) => { const c = cats.find(x => x.id === id); return c ? ((c.badgeAtelier || 0) + (c.badgeSites || 0) || c.badge || 0) : null; };
+  const urg = urgencesAAfficher().length, nouv = (nouvelles || []).length;
+  const stock = (n("stock") || 0) + (n("stock-deporte") || 0), releves = n("compteurs");
+  const c = [
+    ["URG", "Urgences", urg, urg ? "alerte" : "ok", "suivi-demandes"],
+    nouv || ["super_admin", "admin", "n1"].includes(mountedUser?.role) ? ["NOUV", "Nouvelles demandes · 7 j", nouv, "", "suivi-demandes"] : null,
+    info?.n1 || info?.n2 ? ["AST", "Astreinte du jour", `${esc(info.n1 || "—")} <i>/</i> ${esc(info.n2 || "—")}`, "texte", "astreinte"] : null,
+    cats.some(x => x.id === "stock" || x.id === "stock-deporte") ? ["STK", "Alertes stock", stock, stock ? "attention" : "ok", cats.some(x => x.id === "stock") ? "stock" : "stock-deporte"] : null,
+    releves != null ? ["CPT", "Relevés compteurs à faire", releves, releves ? "attention" : "ok", "compteurs"] : null,
+  ].filter(Boolean);
+  return `<div class="gh-cotes">${c.map(([code, lib, v, cls, cat]) => `<button type="button" class="gh-cote ${cls}" ${cats.some(x => x.id === cat) ? `data-cat="${cat}"` : ""}><span class="gh-cote-code">${code}</span><b>${v}</b><small>${lib}</small><i class="gh-cote-ligne"></i></button>`).join("")}</div>`;
+}
+function planHTML(cats, info = null) {
   const groupes = GROUPES_PLAN.map(([nom, ico]) => ({ nom, ico, l: [] })); groupes.push({ nom: "Autres", ico: "▫️", l: [] });
   cats.forEach(c => groupes[groupePlan(c.id)].l.push(c));
   const badge = (c) => { const n = (c.badgeAtelier || 0) + (c.badgeSites || 0) || c.badge || 0; return n ? `<span class="gh-plan-badge">${n > 99 ? "99+" : n}</span>` : ""; };
@@ -196,6 +213,21 @@ function planHTML(cats) {
   const liens = `<a class="gh-plan-l" href="${URL_GMAO}" target="_blank" rel="noopener" data-q="gmao camileia"><span class="gh-plan-ico">🛠️</span><span class="gh-plan-t"><b>GMAO Camileia</b><small>Ouvre la GMAO dans un nouvel onglet</small></span><span class="gh-plan-chev">↗</span></a>
     <a class="gh-plan-l" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" data-q="sharepoint appsmm"><span class="gh-plan-ico">🔗</span><span class="gh-plan-t"><b>SharePoint</b><small>Site appsmm</small></span><span class="gh-plan-chev">↗</span></a>`;
   const visibles = groupes.filter(g => g.l.length);
+  const v2 = window.__interfaceMode === "plan2";
+  const rec = v2 ? recents().map(id => cats.find(c => c.id === id)).filter(Boolean).slice(0, 5) : [];
+  const alertesG = (g) => g.l.reduce((t, c) => t + ((c.badgeAtelier || 0) + (c.badgeSites || 0) || c.badge || 0), 0);
+  if (v2) return `<section class="gh-tuiles gh-plan gh-plan2">
+    ${cotesHTML(cats, info)}
+    <div class="gh-plan-cmd"><span>&gt;</span><input id="gh-plan-q" placeholder="Rechercher un module… (Entrée pour ouvrir)" autocomplete="off"><kbd>${cats.length} modules</kbd></div>
+    ${rec.length ? `<div class="gh-plan-rec"><span>Derniers ouverts</span>${rec.map(c => `<button type="button" data-cat="${c.id}"><i>${c.iconHTML || c.icon}</i>${esc(c.label)}</button>`).join("")}</div>` : ""}
+    <div class="gh-plan-grille">${visibles.map((g, i) => { const a = alertesG(g); return `<div class="gh-plan-g" data-g style="--i:${i}">
+      <div class="gh-plan-gt"><span class="gh-plan-num">${String(i + 1).padStart(2, "0")}</span><b>${esc(g.nom)}</b>${a ? `<span class="gh-plan-al">● ${a > 999 ? "999+" : a}</span>` : `<span class="gh-plan-okg">● OK</span>`}<span class="gh-plan-n">${g.l.length}</span></div>
+      ${g.l.map(ligne).join("")}${g.nom === "Pilotage & outils" ? liens : ""}</div>`; }).join("")}
+      ${visibles.some(g => g.nom === "Pilotage & outils") ? "" : `<div class="gh-plan-g" data-g><div class="gh-plan-gt"><span class="gh-plan-num">${String(visibles.length + 1).padStart(2, "0")}</span><b>Liens</b></div>${liens}</div>`}
+    </div>
+    <div class="gh-plan-legende"><svg viewBox="0 0 40 40" class="gh-nord" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="1"/><path d="M20 5 L25 24 L20 20 L15 24 Z" fill="currentColor"/><text x="20" y="37" text-anchor="middle" font-size="7" fill="currentColor" font-family="monospace">N</text></svg>
+      <span class="gh-echelle"><i></i><i></i><i></i><i></i></span><span>ÉCHELLE 1:100 · ${cats.length} modules · ${visibles.length} lots</span></div>
+    </section>`;
   return `<section class="gh-tuiles gh-plan">
     <div class="gh-plan-cmd"><span>&gt;</span><input id="gh-plan-q" placeholder="Rechercher un module… (Entrée pour ouvrir)" autocomplete="off"><kbd>${cats.length} modules</kbd></div>
     <div class="gh-plan-grille">${visibles.map((g, i) => `<div class="gh-plan-g" data-g>
@@ -205,6 +237,7 @@ function planHTML(cats) {
     </div></section>`;
 }
 function brancherPlan(racine) {
+  racine.querySelectorAll(".gh-plan [data-cat]").forEach(b => b.addEventListener("click", () => noterRecent(b.dataset.cat), true));
   const q = racine.querySelector("#gh-plan-q"); if (!q) return;
   const filtrer = () => {
     const t = q.value.trim().toLowerCase();
@@ -781,7 +814,7 @@ function render() {
         ${afficherSites ? blocCarteHTML() : ""}
         ${afficherSites ? blocCompteursEtFavorisHTML() : ""}
 
-        ${window.__interfaceMode === "plan" && !modeReorganisation ? planHTML(catsRef) : `<section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
+        ${["plan", "plan2"].includes(window.__interfaceMode) && !modeReorganisation ? planHTML(catsRef, { n1: n1?.assigned || n1?.nom || (typeof n1 === "string" ? n1 : ""), n2: n2?.assigned || n2?.nom || (typeof n2 === "string" ? n2 : "") }) : `<section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
           ${catsRef.map((c, idx) => {
             const peutReorganiser = modeReorganisation === "perso" || (modeReorganisation === "tous" && estAdmin);
             return `

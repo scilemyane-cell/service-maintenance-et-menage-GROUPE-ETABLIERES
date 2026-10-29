@@ -4500,3 +4500,57 @@ body.accueil-gmao.interface-plan .gh-pied-texte{color:rgba(234,242,251,.5);font-
 @media (min-width:1101px){.interface-plan .gh-grille{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(320px,.8fr)!important}}
 body.interface-plan .gh-interface-choix,body.interface-plan .gh-interface-choix button,.interface-plan .gh-user-btn{white-space:nowrap}
 .interface-plan .gh-user-btn b{text-transform:none}
+
+/* ================================================================
+   « Plan technique 2 » : cartouche, cotes du jour, derniers modules,
+   état de chaque lot, légende (nord + échelle), tracé à l'ouverture.
+   ================================================================ */
+.gh-cartouche{display:none}
+.interface-plan2 .topbar-gmao{flex-wrap:wrap}
+.interface-plan2 .gh-cartouche{display:table;order:2;margin-left:auto;border-collapse:collapse;font-family:var(--mono);font-size:10.5px;color:#eaf2fb;background:rgba(10,34,60,.55);border:1px solid var(--trait)}
+.interface-plan2 .gh-cartouche th,.interface-plan2 .gh-cartouche td{border:1px solid var(--trait-f);padding:3px 8px;text-align:left;white-space:nowrap}
+.interface-plan2 .gh-cartouche th{color:var(--cyan);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:9px}
+.interface-plan2 .gh-cartouche td{font-weight:500}
+.interface-plan2 .topbar-gmao .gh-date{order:3;margin-left:0}
+.interface-plan2 .gh-interface-choix{order:4}
+.interface-plan2 .gh-user{order:5}
+.interface-plan2 .gh-plan-sur{display:none}
+/* Cotes du jour */
+.gh-plan2 .gh-cotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+.gh-plan2 .gh-cote{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px 18px;background:rgba(10,34,60,.5);border:1px solid var(--trait-f);color:#eaf2fb;font:inherit;text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
+.gh-plan2 .gh-cote:not([data-cat]){cursor:default}
+.gh-plan2 .gh-cote:hover[data-cat]{background:rgba(127,211,255,.08);border-color:var(--trait)}
+.gh-plan2 .gh-cote-code{font:700 10px var(--mono);letter-spacing:.14em;color:var(--cyan)}
+.gh-plan2 .gh-cote b{font:600 30px var(--mono);line-height:1.1;color:#fff}
+.gh-plan2 .gh-cote.texte b{font:700 15px "Montserrat",sans-serif;margin:8px 0 5px}.gh-plan2 .gh-cote.texte b i{color:var(--cyan);font-style:normal;margin:0 4px}
+.gh-plan2 .gh-cote small{font:500 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:rgba(234,242,251,.6)}
+.gh-plan2 .gh-cote.alerte b{color:#ff9b8a}.gh-plan2 .gh-cote.alerte{border-color:rgba(255,138,122,.55)}
+.gh-plan2 .gh-cote.attention b{color:#ffd166}
+.gh-plan2 .gh-cote.ok b{color:#8ff0c2}
+/* ligne de cote |<——>| sous chaque chiffre */
+.gh-plan2 .gh-cote-ligne{position:absolute;left:14px;right:14px;bottom:7px;height:1px;background:rgba(234,242,251,.45)}
+.gh-plan2 .gh-cote-ligne::before,.gh-plan2 .gh-cote-ligne::after{content:"";position:absolute;top:-4px;width:1px;height:9px;background:rgba(234,242,251,.6)}
+.gh-plan2 .gh-cote-ligne::before{left:0}.gh-plan2 .gh-cote-ligne::after{right:0}
+/* Derniers ouverts */
+.gh-plan2 .gh-plan-rec{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono)}
+.gh-plan2 .gh-plan-rec>span{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(234,242,251,.55);margin-right:4px}
+.gh-plan2 .gh-plan-rec button{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;background:rgba(10,34,60,.55);border:1px solid var(--trait-f);color:#eaf2fb;font:600 12px var(--mono);cursor:pointer}
+.gh-plan2 .gh-plan-rec button:hover{border-color:var(--cyan);color:#fff}
+.gh-plan2 .gh-plan-rec i{font-style:normal}.gh-plan2 .gh-plan-rec svg{width:14px;height:auto}
+/* État des lots */
+.gh-plan2 .gh-plan-al{font:700 10.5px var(--mono);color:#ffd166;letter-spacing:.06em}
+.gh-plan2 .gh-plan-okg{font:700 10.5px var(--mono);color:#8ff0c2;letter-spacing:.06em}
+/* Légende */
+.gh-plan2 .gh-plan-legende{display:flex;align-items:center;gap:16px;justify-content:flex-end;color:rgba(234,242,251,.55);font:500 10.5px var(--mono);letter-spacing:.1em}
+.gh-plan2 .gh-nord{width:34px;height:34px;color:rgba(234,242,251,.75)}
+.gh-plan2 .gh-echelle{display:inline-flex;border:1px solid rgba(234,242,251,.6);height:7px}
+.gh-plan2 .gh-echelle i{width:22px;height:100%}.gh-plan2 .gh-echelle i:nth-child(odd){background:rgba(234,242,251,.6)}
+/* Tracé à l'ouverture : les cadres se dessinent, puis le contenu apparaît */
+@keyframes gh-trace{from{clip-path:inset(0 100% 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes gh-apparait{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.interface-plan2 .gh-plan-g,.interface-plan2 .gh-cote,.interface-plan2 .gh-rouge{animation:gh-trace .7s cubic-bezier(.5,0,.2,1) both;animation-delay:calc(var(--i,0) * 70ms)}
+.interface-plan2 .gh-plan-l{animation:gh-apparait .4s ease both;animation-delay:.45s}
+@media (prefers-reduced-motion:reduce){.interface-plan2 .gh-plan-g,.interface-plan2 .gh-cote,.interface-plan2 .gh-rouge,.interface-plan2 .gh-plan-l{animation:none}}
+@media (max-width:1100px){.interface-plan2 .gh-cartouche{display:none}}
+.interface-plan2 .gh-cartouche{width:auto!important;max-width:620px}
+.interface-plan2 .gh-cartouche td,.interface-plan2 .gh-cartouche th{border-top:1px solid var(--trait-f)}

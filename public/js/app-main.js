@@ -178,7 +178,7 @@
   }
   // Interface de l'accueil : « gmao » (validée) ou « nouvelle » (proposée,
   // seulement sur la version de test pour l'instant).
-  const interfaceAccueil = () => { if (!CANAL_TEST) return "gmao"; try { const v = localStorage.getItem("etablieres-interface"); return ["nouvelle", "premium", "plan"].includes(v) ? v : "gmao"; } catch { return "gmao"; } };
+  const interfaceAccueil = () => { if (!CANAL_TEST) return "gmao"; try { const v = localStorage.getItem("etablieres-interface"); return ["plan", "plan2"].includes(v) ? v : "gmao"; } catch { return "gmao"; } };
   window.__interfaceNouvelle = interfaceAccueil() !== "gmao";
   const VERSION_CHARGEE = (() => { try { return new URL(document.querySelector('script[src*="app.bundle.js"]').src).searchParams.get("v") || "dev"; } catch { return "dev"; } })();
   let versionEnLigne = null;
@@ -753,11 +753,12 @@
     window.__interfaceNouvelle = interfaceAccueil() !== "gmao";
     document.body.classList.toggle("interface-nouvelle", !category && window.__interfaceNouvelle);
     document.body.classList.toggle("interface-premium", !category && interfaceAccueil() === "premium");
-    document.body.classList.toggle("interface-plan", !category && interfaceAccueil() === "plan");
+    document.body.classList.toggle("interface-plan", !category && ["plan", "plan2"].includes(interfaceAccueil()));
+    document.body.classList.toggle("interface-plan2", !category && interfaceAccueil() === "plan2");
     window.__interfaceMode = interfaceAccueil();
     // Accueil toujours sombre (comme Camileia) ; modules en clair ou en
     // sombre selon le choix de l'utilisateur (bouton ☀️/🌙 en haut).
-    document.documentElement.dataset.theme = category ? getThemeModules() : (["gmao", "plan"].includes(interfaceAccueil()) ? "sombre" : "clair");
+    document.documentElement.dataset.theme = category ? getThemeModules() : "sombre";
     const maintenant = new Date();
     const enteteAccueil = `
       <header class="topbar-gmao">
@@ -769,7 +770,9 @@
           ${["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? `<span class="gh-compte-dem" id="gh-compte-dem">${compteDemandesHTML()}</span>` : ""}
         </div>
         <div class="gh-salut"><b>${maintenant.getHours() >= 18 || maintenant.getHours() < 5 ? "Bonsoir" : "Bonjour"} ${escapeHtml(String(currentUser.nom || "").trim().split(/\s+/)[0].replace(/^./, c => c.toUpperCase()).replace(/^(.)(.*)$/, (m, a, b) => a + b.toLowerCase()))} <span class="gh-salut-main">👋</span></b><small>${maintenant.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small><i class="gh-plan-sur">Service Maintenance &amp; Ménage — Groupe Établières · Planche ${String(maintenant.getMonth() + 1).padStart(2, "0")}/${maintenant.getFullYear()}</i></div>
-        ${CANAL_TEST ? `<div class="gh-interface-choix" title="Interface de l'accueil (version de test)"><span>🎨 Interface</span><button type="button" class="${interfaceAccueil() === "gmao" ? "on" : ""}" data-interface="gmao">GMAO</button><button type="button" class="${interfaceAccueil() === "nouvelle" ? "on" : ""}" data-interface="nouvelle">Nouvelle</button><button type="button" class="${interfaceAccueil() === "premium" ? "on" : ""}" data-interface="premium">Premium</button><button type="button" class="${interfaceAccueil() === "plan" ? "on" : ""}" data-interface="plan">Plan technique</button></div>` : ""}
+        <table class="gh-cartouche" aria-hidden="true"><tr><th>Projet</th><td colspan="3">Service Maintenance &amp; Ménage</td><th>Date</th><td>${maintenant.toLocaleDateString("fr-FR")}</td></tr>
+          <tr><th>Maître d'ouvrage</th><td>Groupe Établières</td><th>Établi par</th><td>${escapeHtml(currentUser.nom || currentUser.email)}</td><th>Indice</th><td>${versionTexte()}</td></tr></table>
+        ${CANAL_TEST ? `<div class="gh-interface-choix" title="Interface de l'accueil (version de test)"><span>🎨 Interface</span><button type="button" class="${interfaceAccueil() === "gmao" ? "on" : ""}" data-interface="gmao">GMAO</button><button type="button" class="${interfaceAccueil() === "plan" ? "on" : ""}" data-interface="plan">Plan technique</button><button type="button" class="${interfaceAccueil() === "plan2" ? "on" : ""}" data-interface="plan2">Plan technique 2</button></div>` : ""}
         <div class="gh-user">
           <button class="gh-user-btn" id="gh-user-btn" aria-haspopup="true"><svg class="gh-user-ico" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16" cy="12.5" r="5" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 26c2-5 5.5-7 9-7s7 2 9 7" fill="none" stroke="#fff" stroke-width="2"/></svg> <b>${escapeHtml(currentUser.nom || currentUser.email)}</b> <svg class="gh-user-chev" viewBox="0 0 16 10" aria-hidden="true"><path d="M1 1l7 7 7-7" fill="none" stroke="#fff" stroke-width="1.8"/></svg></button>
           <div class="gh-user-pop" id="gh-user-pop" hidden>
