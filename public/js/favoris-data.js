@@ -30,3 +30,8 @@ export async function saveFavorisDemandes(uid, ajout, retrait) {
 export async function saveVues(uid, champ, ids) {
   await setDoc(doc(db, "favoris-sites", uid), { [champ]: ids.slice(-400), majLe: Date.now() }, { merge: true });
 }
+
+// Ordre des tuiles de l'accueil propre à chaque personne (null = ordre commun).
+export async function saveOrdreTuiles(uid, ids) {
+  await setDoc(doc(db, "favoris-sites", uid), { ordreTuiles: ids, majLe: Date.now() }, { merge: true });
+}

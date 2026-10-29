@@ -4312,3 +4312,15 @@ body.accueil-gmao.interface-nouvelle .gh-pied-texte{color:#6b7a90}
 }
 .interface-nouvelle .gh-compte{background:#eef3fb;border-color:#d7e1f0;color:#1d3a66}
 .interface-nouvelle .gh-compte.urg{background:#e5533d;border-color:#e5533d;color:#fff}
+/* Interface Nouvelle : tuiles plus grandes et plus lisibles */
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile{min-height:150px!important;padding:16px 16px 14px;gap:10px;border-top:4px solid var(--acc)!important}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile::after{display:none}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-icone{width:54px;height:54px;border-radius:15px;font-size:28px;background:color-mix(in srgb,var(--acc) 18%,#fff);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--acc) 40%,transparent)}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-icone svg{transform:scale(1.15)}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-label{font-size:15.5px;font-weight:800;line-height:1.2}
+.interface-nouvelle .gh-tuiles.style-moderne .gh-tuile-desc{font-size:12.5px;line-height:1.35;color:#56657c}
+.interface-nouvelle .gh-tuiles .gh-badges{top:10px;right:10px;left:auto}
+.interface-nouvelle .gh-tuiles .gh-badge{font-size:13px;padding:3px 8px}
+@media (min-width:1101px){.interface-nouvelle .gh-tuiles{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))!important}}
+.gh-deplacable .gh-tuile{cursor:grab}
+.gh-reorg-aide{font-size:12.5px}

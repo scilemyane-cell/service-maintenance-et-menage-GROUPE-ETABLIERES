@@ -8,7 +8,7 @@ import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAssociations, rangGroupe } from "./associations-data.js";
 import { initCarteSites } from "./site-map.js";
 import { watchCompteursTotal } from "./compteurs-data.js";
-import { watchFavoris, saveFavoris, saveVues } from "./favoris-data.js";
+import { watchFavoris, saveFavoris, saveVues, saveOrdreTuiles } from "./favoris-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
 import { watchSites as watchSitesMenage } from "./sites-data.js";
 import { watchFiches } from "./fiches-data.js";
@@ -27,7 +27,8 @@ let onSelectRef = null;
 let onReorderRef = null;
 let clearCountdown = null;
 let debugForce = false;
-let modeReorganisation = false;
+let modeReorganisation = false; // false | "perso" (mon ordre) | "tous" (ordre commun, admins)
+let ordrePerso = null;           // ordre des tuiles choisi par la personne (favoris-sites/{uid}.ordreTuiles)
 let carteInstance = null;
 let filtreAssociation = "";
 let filtreSite = "";
@@ -123,6 +124,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   favoris = []; favorisErreur = null;
   if (user.uid) unsubs.push(watchFavoris(user.uid, (ids, data) => {
     // « Vu » enregistrés dans Firestore, fusionnés avec le cache local.
+    { const o = Array.isArray(data?.ordreTuiles) && data.ordreTuiles.length ? data.ordreTuiles : null; if (JSON.stringify(o) !== JSON.stringify(ordrePerso)) { ordrePerso = o; scheduleRender(); } }
     fusionnerVues(CLE_URG_VUES, data?.urgencesVues);
     fusionnerVues(CLE_NOUV_VUES, data?.nouvellesVues);
     if (ids === null) {
@@ -300,7 +302,11 @@ function activerGlisserTuiles(grille) {
         place.replaceWith(item); item.style.display = ""; fantome.remove();
         document.body.style.userSelect = "";
         const ordre = tuiles().map(el => el.dataset.tuileId);
-        if (ordre.join() !== catsRef.map(c => c.id).join()) onReorderRef?.(ordre);
+        if (ordre.join() === catsRef.map(c => c.id).join()) return;
+        if (modeReorganisation === "perso") {
+          ordrePerso = ordre; catsRef = ordre.map(id => catsRef.find(c => c.id === id)).filter(Boolean);
+          saveOrdreTuiles(mountedUser.uid, ordre).then(() => window.toast?.("✓ Ordre de tes tuiles enregistré")).catch(err => alert("Ordre non enregistré : " + (err?.message || err)));
+        } else onReorderRef?.(ordre);
       };
       document.addEventListener("pointermove", move);
       document.addEventListener("pointerup", up);
@@ -664,6 +670,8 @@ function render() {
   // technicien ou un agent, qui ne passe pas les commandes.
   const voitAlertesStock = ["super_admin", "admin", "n1"].includes(mountedUser.role);
   if (!voitAlertesStock) catsRef = catsRef.map(c => (c.badgeAtelier || c.badgeSites) ? { ...c, badgeAtelier: null, badgeSites: null } : c);
+  // Mon ordre à moi (sauf quand un admin range l'ordre commun) ; les nouvelles tuiles gardent leur place commune, à la suite.
+  if (ordrePerso && modeReorganisation !== "tous") { const rang = (id) => { const i = ordrePerso.indexOf(id); return i < 0 ? 1000 + catsRef.findIndex(c => c.id === id) : i; }; catsRef = [...catsRef].sort((a, b) => rang(a.id) - rang(b.id)); }
   catsRef.forEach(c => {
     if (c.badgeAtelier) notifs.push({ cat: c.id, icone: "🔧", texte: `${c.badgeAtelier} alerte(s) stock atelier`, niveau: "rouge" });
     if (c.badgeSites) notifs.push({ cat: c.id, icone: "🏢", texte: `${c.badgeSites} alerte(s) stock déporté (sites)`, niveau: "orange" });
@@ -738,7 +746,7 @@ function render() {
 
         <section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
           ${catsRef.map((c, idx) => {
-            const peutReorganiser = modeReorganisation && estAdmin;
+            const peutReorganiser = modeReorganisation === "perso" || (modeReorganisation === "tous" && estAdmin);
             return `
             <div class="gh-tuile-wrap ${peutReorganiser ? "gh-deplacable" : ""}" data-tuile-id="${c.id}">
               <button class="gh-tuile ${c.enConstruction ? "gh-tuile-construction" : ""}" data-cat="${c.id}" title="${esc(c.desc || c.label)}${c.enConstruction ? " — 🚧 en construction, visible uniquement par le Super Admin" : ""}" style="background:${degradePour(c.id)};--acc:${accentPour(c.id)}">
@@ -754,7 +762,7 @@ function render() {
               </button>
               ${peutReorganiser ? `
                 <div class="gh-reorg">
-                  ${onToggleConstructionRef && c.id !== "statistiques" ? `<button class="nav-btn ${c.enConstruction ? "active" : ""}" data-construction="${c.id}" title="${c.enConstruction ? "Remettre en service (visible par tous)" : "Passer en construction (masqué pour les autres)"}">🚧</button>` : ""}
+                  ${modeReorganisation === "tous" && onToggleConstructionRef && c.id !== "statistiques" ? `<button class="nav-btn ${c.enConstruction ? "active" : ""}" data-construction="${c.id}" title="${c.enConstruction ? "Remettre en service (visible par tous)" : "Passer en construction (masqué pour les autres)"}">🚧</button>` : ""}
                 </div>` : ""}
             </div>`;
           }).join("")}
@@ -789,12 +797,12 @@ function render() {
         </section>
       </div>
 
-      ${estAdmin ? `
       <div class="gh-outils">
-        ${modeReorganisation ? `<span class="gh-reorg-aide">✋ Glisse les tuiles pour les déplacer — l'ordre est enregistré à chaque dépôt.</span>` : ""}
-        <button class="nav-btn" id="toggle-reorg">${modeReorganisation ? "✓ Terminé" : (onToggleConstructionRef ? "🔧 Réorganiser / 🚧 construction" : "🔧 Réorganiser les tuiles")}</button>
-        <button class="nav-btn" id="debug-toggle">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester le bandeau de transfert"}</button>
-      </div>` : ""}
+        ${modeReorganisation ? `<span class="gh-reorg-aide">✋ Glisse les tuiles pour les déplacer — ${modeReorganisation === "perso" ? "ton ordre à toi est enregistré à chaque dépôt (les autres ne sont pas concernés)" : "ordre commun, pour tous ceux qui n'ont pas rangé leurs tuiles"}.</span>` : ""}
+        ${modeReorganisation ? `<button class="nav-btn" id="reorg-fin">✓ Terminé</button>${modeReorganisation === "perso" && ordrePerso ? `<button class="nav-btn" id="reorg-defaut">↺ Revenir à l'ordre par défaut</button>` : ""}`
+          : `<button class="nav-btn" id="reorg-perso">↕️ Ranger mes tuiles</button>${estAdmin ? `<button class="nav-btn" id="toggle-reorg">${onToggleConstructionRef ? "🔧 Ordre pour tous / 🚧 construction" : "🔧 Ordre pour tous"}</button>` : ""}`}
+        ${estAdmin ? `<button class="nav-btn" id="debug-toggle">🧪 ${debugForce ? "Arrêter le test du bandeau" : "Tester le bandeau de transfert"}</button>` : ""}
+      </div>
     </div>
   `;
 
@@ -854,10 +862,17 @@ function render() {
       onSelectRef(btn.dataset.cat);
     });
   });
-  if (modeReorganisation && estAdmin) activerGlisserTuiles(mountedContainer.querySelector(".gh-tuiles"));
+  if (modeReorganisation === "perso" || (modeReorganisation === "tous" && estAdmin)) activerGlisserTuiles(mountedContainer.querySelector(".gh-tuiles"));
   if (afficherSites) attacherEcouteursBlocSites();
   document.getElementById("debug-toggle")?.addEventListener("click", () => { debugForce = !debugForce; render(); });
-  document.getElementById("toggle-reorg")?.addEventListener("click", () => { modeReorganisation = !modeReorganisation; render(); });
+  document.getElementById("toggle-reorg")?.addEventListener("click", () => { modeReorganisation = "tous"; render(); });
+  document.getElementById("reorg-perso")?.addEventListener("click", () => { modeReorganisation = "perso"; render(); });
+  document.getElementById("reorg-fin")?.addEventListener("click", () => { modeReorganisation = false; render(); });
+  document.getElementById("reorg-defaut")?.addEventListener("click", async () => {
+    if (!confirm("Remettre tes tuiles dans l'ordre par défaut ?")) return;
+    ordrePerso = null; render();
+    try { await saveOrdreTuiles(mountedUser.uid, null); } catch (e) { alert("Échec : " + (e?.message || e)); }
+  });
 
   clearCountdown = attachTransfertListeners(mountedContainer, next, mountedUser, () => render());
 }
