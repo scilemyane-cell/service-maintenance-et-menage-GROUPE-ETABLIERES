@@ -332,6 +332,12 @@ service cloud.firestore {
     // ---- Dossiers de site (sécurité, contacts, organes techniques) ----
     // La mise à la corbeille est une mise à jour (isEditor). La purge
     // définitive (delete réel) est réservée Super Admin.
+    // ---- Copies allégées des photos SharePoint (ouverture rapide des dossiers) ----
+    match /photos-copies/{itemId} {
+      allow read: if isSignedIn();
+      allow create, update: if isEditor() && request.resource.data.data is string && request.resource.data.data.size() < 900000;
+      allow delete: if isEditor();
+    }
     match /sites-dossiers/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isEditor();

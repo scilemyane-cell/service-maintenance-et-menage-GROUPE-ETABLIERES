@@ -6,6 +6,7 @@ import {
 import { initCarteSites, categorieSite, CATEGORIES_CARTE } from "./site-map.js";
 import { nomPropre, villeDe, DESSINS, dessinPourSite } from "./sites-visuel.js";
 import { getAccessToken, uploadToDrive, getImageDisplayUrls, deleteDriveItem, getExistingFileUrl, listerDossierDrive } from "./sharepoint-storage.js";
+import { copiesPhotos, enregistrerCopie } from "./photos-copie.js";
 import { hasPublicPdf, publishPublicPdf } from "./pdf-public-share.js";
 import { renderQrWithLogo, printQrCard } from "./qr-logo.js";
 import { watchAssociations, trierGroupes } from "./associations-data.js";
@@ -202,7 +203,7 @@ function render() {
           <div><b>${state.dossiers.length}</b><small>sites</small></div>
           <div><b>${new Set(state.dossiers.map(d => d.association).filter(Boolean)).size}</b><small>associations</small></div>
           <div><b>${state.dossiers.reduce((n, d) => n + (d.sections || []).reduce((m, sec) => m + photosSection(sec).length, 0), 0)}</b><small>photos</small></div>
-          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button></div>` : ""}
+          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button><button class="nav-btn" id="sd-copier-photos" title="Garder une copie de toutes les photos dans l'appli : ouverture des dossiers instantanée">${esc(copieEtat || "⚡ Photos dans l'appli")}</button></div>` : ""}
         </div>
       </div>
       ${barreListeHTML()}
@@ -231,6 +232,7 @@ function render() {
     window.scrollTo(0, 0);
   });
   document.getElementById("sd-params")?.addEventListener("click", () => { ui.mode = "params"; render(); });
+  document.getElementById("sd-copier-photos")?.addEventListener("click", () => copierToutesLesPhotos());
   mountedContainer.querySelectorAll("[data-open]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (btn.closest("[data-drag-index]")?.dataset.dragMoved) return; // clic déclenché juste après un glissement de réorganisation, à ignorer
@@ -511,18 +513,46 @@ async function resolveGalleryImages(container) {
   const nodes = [...container.querySelectorAll("[data-resolve-img]")];
   const itemIds = [...new Set(nodes.map(n => n.dataset.resolveImg).filter(Boolean))];
   if (itemIds.length === 0) return;
-  const urls = await getImageDisplayUrls(itemIds);
-  itemIds.forEach((itemId) => {
+  const poser = (itemId, url) => container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => {
+    if (img.dataset.pose === "1") return; img.dataset.pose = "1";
+    if (!url.startsWith("data:")) img.crossOrigin = "anonymous"; // nécessaire pour que html2canvas puisse capturer l'image lors de l'export PDF
+    img.src = url;
+    if (img.dataset.lightboxPhoto) img.addEventListener("click", () => { ui.lightbox = url; render(); });
+  });
+  // 1) Copies gardées dans l'appli (Firestore) : affichage immédiat, sans passer par Microsoft.
+  const copies = await copiesPhotos(itemIds);
+  Object.entries(copies).forEach(([id, data]) => poser(id, data));
+  const restants = itemIds.filter(id => !copies[id]);
+  if (!restants.length) return;
+  // 2) Photos pas encore copiées : SharePoint comme avant, puis copie pour les prochaines fois.
+  const urls = await getImageDisplayUrls(restants);
+  restants.forEach((itemId) => {
     const url = urls[itemId];
     if (!url) { container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => { img.style.opacity = 0.3; }); return; }
-    container.querySelectorAll(`[data-resolve-img="${itemId}"]`).forEach(img => {
-      img.crossOrigin = "anonymous"; // nécessaire pour que html2canvas puisse capturer l'image lors de l'export PDF
-      img.src = url;
-      if (img.dataset.lightboxPhoto) {
-        img.addEventListener("click", () => { ui.lightbox = url; render(); });
-      }
-    });
+    poser(itemId, url);
+    if (isEditorUser(mountedUser)) enregistrerCopie(itemId, url, { source: "dossier-site" });
   });
+}
+
+// Copie, en une fois, toutes les photos des dossiers de site pas encore gardées dans l'appli.
+let copieEtat = "";
+async function copierToutesLesPhotos() {
+  if (copieEtat.startsWith("⏳")) return;
+  const btn = { set textContent(t) { copieEtat = t; const b = document.getElementById("sd-copier-photos"); if (b) b.textContent = t; }, set disabled(v) { /* */ } };
+  const ids = [...new Set(state.dossiers.flatMap(d => (d.sections || []).flatMap(sec => photosSection(sec))).map(p => p.itemId).filter(Boolean))];
+  btn.disabled = true; btn.textContent = "⏳ Vérification…";
+  const deja = await copiesPhotos(ids), manque = ids.filter(id => !deja[id]);
+  if (!manque.length) { btn.textContent = "✓ Toutes les photos sont dans l'appli"; return; }
+  let ok = 0, ko = 0;
+  for (let i = 0; i < manque.length; i += 20) {
+    const lot = manque.slice(i, i + 20);
+    let urls = {}; try { urls = await getImageDisplayUrls(lot); } catch (e) { console.warn(e); }
+    for (const id of lot) {
+      btn.textContent = `⏳ Copie ${ok + ko + 1}/${manque.length}…`;
+      if (urls[id] && await enregistrerCopie(id, urls[id], { source: "dossier-site" })) ok++; else ko++;
+    }
+  }
+  btn.textContent = `✓ ${ok} photo(s) copiée(s)${ko ? ` · ${ko} échec(s)` : ""}`;
 }
 
 // =================================================================
@@ -1163,6 +1193,7 @@ function attacherEditeurBoitesListeners(dOriginal, data) {
       const { url, itemId, isImage, name } = await uploadToDrive(
         file, e.target.dataset.readyToken, [dOriginal.nom, "Codes Masterlock", entryActuel.nom], undefined
       );
+      if (isImage !== false) enregistrerCopie(itemId, file, { source: "masterlock" });
       const photos = [...(entryActuel.photos || []), { url, itemId, isImage, name }];
       await modifierCodeMasterlock(entryActuel, { photos }, mountedUser);
       boitesEnEdition.liste = await listerCodesPourSite(dOriginal.id);
@@ -1461,6 +1492,7 @@ function renderEdit(dOriginal, workingCopy) {
       try {
         const { cible, dossierSegments } = resolverCiblePhoto(key);
         const { url, itemId, isImage, name } = await uploadToDrive(file, input.dataset.readyToken, dossierSegments);
+        if (isImage !== false) enregistrerCopie(itemId, file, { source: "dossier-site" });
         if (!cible.photos) cible.photos = [];
         cible.photos.push({ url, itemId, isImage, name });
         renderEdit(dOriginal, data);
