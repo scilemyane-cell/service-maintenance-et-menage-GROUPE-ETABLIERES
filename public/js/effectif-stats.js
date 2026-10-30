@@ -62,7 +62,9 @@ export function effectifEtClotures(data, p, demandesToutes) {
   // la date la plus ancienne entre « date de début » (astreinte) et 1re clôture.
   const closParJour = {};
   demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv) return; const t = quiA(d); if (t) (closParJour[t] = closParJour[t] || new Set()).add(d._dateInterv); });
-  const debutReel = Object.fromEntries(techs.map(t => { const premiere = [...(closParJour[t] || [])].sort()[0]; const dd = data.datesDebut?.[t]; return [t, dd && premiere ? (premiere < dd ? premiere : dd) : (dd || null)]; }));
+  // La « date de début » de l'astreinte (ex. Kevin : astreintes à partir du 1er janvier) n'est PAS
+  // sa date d'arrivée : on prend sa 1re clôture ; la date d'astreinte ne sert que s'il n'a encore rien clôturé.
+  const debutReel = Object.fromEntries(techs.map(t => { const premiere = [...(closParJour[t] || [])].sort()[0]; return [t, premiere || data.datesDebut?.[t] || null]; }));
   const avantDebut = (t, iso) => !!debutReel[t] && iso < debutReel[t];
   const apresFin = (t, iso) => !!data.datesFin?.[t] && iso > data.datesFin[t] && !(closParJour[t]?.has(iso));
   const present = (t, iso) => closParJour[t]?.has(iso) || (!avantDebut(t, iso) && !apresFin(t, iso) && !absent(t, iso));
@@ -160,7 +162,7 @@ export function effectifHTML(e) {
       ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
     <h4 class="eff-h4">Par technicien</h4>
     ${tab(["Technicien", "Jours présents", "Jours d'absence", "Pas encore / plus dans l'équipe", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.hors ? `${x.hors} <small>${e.debutReel?.[x.t] ? `(début ${new Date(e.debutReel[x.t] + "T12:00").toLocaleDateString("fr-FR")})` : ""}</small>` : "—", x.clos, f2(x.ratio)]))}
-    <p class="eff-sous">Un jour où le technicien a clôturé une demande compte toujours comme présent. Les jours avant sa date de début (Astreinte › Noms des personnes) ne sont pas des absences.</p>
+    <p class="eff-sous">Un jour où le technicien a clôturé une demande compte toujours comme présent. Avant sa 1re intervention clôturée, il n'est pas compté (ni présent, ni absent) : la date de début de l'astreinte n'est utilisée que s'il n'a encore rien clôturé.</p>
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
     ${e.nonReconnus?.length ? `<details class="eff-choix"><summary>🔎 Noms « Réalisé par » non reconnus (${e.nonReconnus.length}) — associer à un technicien</summary>
       <p class="eff-sous" style="margin:6px 0">Si un nom correspond à un technicien (autre orthographe, nom de famille, initiales…), choisis-le : toutes ses interventions lui seront comptées. Laisse « — » pour une entreprise extérieure.</p>
