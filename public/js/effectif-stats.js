@@ -69,6 +69,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const apresFin = (t, iso) => !!data.datesFin?.[t] && iso > data.datesFin[t];
   // Les absences saisies (Astreinte › Absences) font foi.
   const present = (t, iso) => !avantDebut(t, iso) && !apresFin(t, iso) && !absent(t, iso);
+  const binome = (t) => { const b = Object.entries(data.binomes || {}).find(([a]) => memePers(a, t))?.[1]; return b ? techs.find(x => memePers(b, x)) || null : null; };
   const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0, hors: 0, closAbs: 0 }]));
   const mois = p.mois.map(m => {
     const [yy, mm] = m.cle.split("-").map(Number), fin = new Date(yy, mm, 0), limite = p.aujourdhui;
@@ -82,7 +83,9 @@ export function effectifEtClotures(data, p, demandesToutes) {
     }
     const clos = demandesToutes.filter(d => d.statut === "Réalisé" && d._dateInterv && d._dateInterv.startsWith(m.cle) && d._dateInterv <= limite);
     const closAbsT = {};
-    clos.forEach(d => { const t = quiA(d); if (!t) return; closT[t] = (closT[t] || 0) + 1; if (absent(t, d._dateInterv)) closAbsT[t] = (closAbsT[t] || 0) + 1; });
+    // Binôme (Astreinte › Binômes, ex. Tony & Anthony) : clôture faite sur le compte de l'un mais à deux —
+    // pas d'alerte si l'un des deux était là.
+    clos.forEach(d => { const t = quiA(d); if (!t) return; closT[t] = (closT[t] || 0) + 1; const b = binome(t); if (absent(t, d._dateInterv) && !(b && present(b, d._dateInterv))) closAbsT[t] = (closAbsT[t] || 0) + 1; });
     return { ...m, joursT, closT, absT, horsT, closAbsT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
       parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
   }).filter(m => m.ouvres);
@@ -105,7 +108,12 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const r = (l) => { const j = l.reduce((s, m) => s + m.joursTech, 0); return j ? l.reduce((s, m) => s + m.clos, 0) / j : null; };
   return { techs, candidats, defaut, choixPerso: techs !== defaut, mois, tot, ratio, moyenPeriode: tot.ouvres ? tot.joursTech / tot.ouvres : 0,
     ratioComplet: r(complet), ratioReduit: r(reduit), nbComplet: complet.length, nbReduit: reduit.length,
-    parTech: Object.entries(parTech).map(([t, o]) => ({ t, ...o, ratio: o.jours ? o.clos / o.jours : null })).sort((a, b) => b.clos - a.clos),
+    // Un binôme = une seule ligne : les interventions sont clôturées sur l'un ou l'autre compte.
+    parTech: (() => { const vus = new Set(), l = [];
+      techs.forEach(t => { if (vus.has(t)) return; vus.add(t); const b = binome(t); const o = { ...parTech[t] };
+        if (b && !vus.has(b)) { vus.add(b); const p2 = parTech[b]; ["jours", "clos", "abs", "hors", "closAbs"].forEach(k => { o[k] = (o[k] || 0) + (p2[k] || 0); }); l.push({ t: `${t} & ${b}`, binome: true, ...o }); }
+        else l.push({ t, ...o }); });
+      return l.map(x => ({ ...x, ratio: x.jours ? x.clos / x.jours : null })).sort((a, b) => b.clos - a.clos); })(),
     nonAttribuees: tot.clos - Object.values(parTech).reduce((s, o) => s + o.clos, 0),
     nonReconnus: (() => { const debut = mois[0].cle, c = {}; demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv || d._dateInterv.slice(0, 7) < debut || quiA(d)) return; const n = nomDe(d) || "(vide)"; c[n] = (c[n] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 15); })(),
     debutReel };
@@ -163,7 +171,7 @@ export function effectifHTML(e) {
       e.mois.map(m => [esc(m.label), m.ouvres, `${f1(m.moyen)} <small>(${m.min}–${m.max})</small>`, m.joursTech, m.clos, f2(m.parJourTech), f1(m.parTechPresent)]),
       ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
     <h4 class="eff-h4">Par technicien</h4>
-    ${tab(["Technicien", "Jours présents", "Jours d'absence", "Pas encore / plus dans l'équipe", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.hors ? `${x.hors} <small>${e.debutReel?.[x.t] ? `(début ${new Date(e.debutReel[x.t] + "T12:00").toLocaleDateString("fr-FR")})` : ""}</small>` : "—", `${x.clos}${x.closAbs ? ` <span style="color:#E5533D" title="Interventions dont la date tombe pendant une absence saisie : « Réalisé par » ou date d'intervention à vérifier">⚠️ dont ${x.closAbs} pendant une absence</span>` : ""}`, f2(x.ratio)]))}
+    ${tab(["Technicien", "Jours présents", "Jours d'absence", "Pas encore / plus dans l'équipe", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [`${esc(x.t)}${x.binome ? ` <small title="Binôme (Astreinte › Binômes) : interventions clôturées sur l'un ou l'autre compte, jours de présence des deux additionnés">👥 binôme</small>` : ""}`, x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.hors ? `${x.hors} <small>${e.debutReel?.[x.t] ? `(début ${new Date(e.debutReel[x.t] + "T12:00").toLocaleDateString("fr-FR")})` : ""}</small>` : "—", `${x.clos}${x.closAbs ? ` <span style="color:#E5533D" title="Interventions dont la date tombe pendant une absence saisie : « Réalisé par » ou date d'intervention à vérifier">⚠️ dont ${x.closAbs} pendant une absence</span>` : ""}`, f2(x.ratio)]))}
     <p class="eff-sous">Les absences saisies dans Astreinte › Absences font foi. Un technicien est compté à partir du mois de sa 1re intervention clôturée (la date de début de l'astreinte n'est pas une date d'arrivée). Une intervention n'est comptée qu'à la personne indiquée dans « Réalisé par » (ou qui l'a déclarée réalisée), pas à celle à qui elle était attribuée.</p>
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
     ${e.nonReconnus?.length ? `<details class="eff-choix"><summary>🔎 Noms « Réalisé par » non reconnus (${e.nonReconnus.length}) — associer à un technicien</summary>
