@@ -3607,6 +3607,10 @@ html:not([data-theme="clair"]) .dst-ev.bon,html:not([data-theme="clair"]) .dst .
   .dst-impression .dst-hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .dst-impression .dst-carte{border:1px solid #ccc !important;background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .dst-impression{gap:12px !important}
+  .dst-impression .eff-tab,.dst-impression .eff-cal{overflow:visible !important}
+  .dst-impression .eff-tab table{font-size:11px}
+  .dst-impression .eff-c,.dst-impression .eff-cal-leg i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .dst-impression .eff-eur{display:none !important}
 }
 
 /* =====================  Clés & badges  ===================== */

@@ -457,7 +457,8 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
     ${(() => { if (!effData) return `<section class="dst-carte"><p class="dst-note">⏳ Chargement de l'analyse « interventions clôturées / techniciens présents »…</p></section>`;
       const auj = new Date(), iso = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : null;
       const dem = toutes.filter(l => !st.association || l.association === st.association).map(l => ({ ...l, _dateInterv: l.statut === "Réalisé" ? iso(dateTraitement(l)) : null }));
-      const e = effectifEtClotures(effData, { mois: douzeMois(auj), aujourdhui: iso(auj) }, dem);
+      const deb = debutPeriode(), moisP = douzeMois(auj).filter(m => !deb || m.cle >= cleMois(deb));
+      const e = effectifEtClotures(effData, { mois: moisP, aujourdhui: iso(auj) }, dem);
       return e ? `<section class="dst-carte">${effectifHTML(e)}</section>` : `<section class="dst-carte"><p class="dst-note">Analyse par technicien indisponible : aucun technicien (N2) dans la liste de l'astreinte.</p></section>`; })()}
 
     ${s.sansDate ? `<p class="dst-note">${fmt(s.sansDate)} demande${s.sansDate > 1 ? "s" : ""} sans date valide ne ${s.sansDate > 1 ? "sont" : "est"} pas comptée${s.sansDate > 1 ? "s" : ""} dans les périodes.</p>` : ""}
