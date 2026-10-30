@@ -174,6 +174,7 @@ function graphique(e) {
       <rect x="${g + bw * i + bw * .18}" y="${y(m.clos)}" width="${bw * .64}" height="${H - 26 - y(m.clos)}" rx="4" class="eff-barre"/>
       <text x="${g + bw * i + bw / 2}" y="${y(m.clos) - 4}" text-anchor="middle" class="eff-v">${m.clos || ""}</text>
       <text x="${g + bw * i + bw / 2}" y="${H - 8}" text-anchor="middle" class="eff-l">${esc(m.label)}</text></g>`).join("")}
+    ${Array.from({ length: maxT + 1 }, (_, k) => `<line x1="${g}" x2="${W - g}" y1="${yt(k)}" y2="${yt(k)}" class="eff-grille${k ? "" : " base"}"/>`).join("")}
     <polyline points="${pts}" class="eff-ligne"/>
     ${e.mois.map((m, i) => `<circle cx="${g + bw * i + bw / 2}" cy="${yt(m.moyen)}" r="4" class="eff-pt"><title>${fmtNb(m.moyen, 1)} technicien(s) présent(s)/jour</title></circle>`).join("")}
     ${Array.from({ length: maxT + 1 }, (_, k) => `<text x="${W - g + 6}" y="${yt(k) + 4}" class="eff-axe">${k}</text>`).join("")}
