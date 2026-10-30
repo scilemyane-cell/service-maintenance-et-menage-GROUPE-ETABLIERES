@@ -167,12 +167,11 @@ function tab(entetes, lignes, total) {
 
 const LIB_T = { P: "Présent", conge: "Congé", rtt: "RTT", arret: "Arrêt", autre: "Absent", H: "Pas encore / plus dans l'équipe" };
 function parTechHTML(e) {
-  const f2 = (x) => x == null ? "—" : fmtNb(x, 2);
-  const absTxt = (m) => { const t = m.types || {}; const l = [["conge", "congé"], ["rtt", "RTT"], ["arret", "arrêt"], ["autre", "autre"]].filter(([k]) => t[k]).map(([k, lib]) => `${t[k]} ${lib}`); return l.length ? l.join(" · ") : `<span style="color:#E5533D" title="Aucune absence saisie dans Astreinte › Absences">0 ⚠️</span>`; };
-  const ligne = (m, dansBinome) => `<tr class="${dansBinome ? "eff-bm" : ""}"><td>${dansBinome ? "↳ " : ""}<b>${esc(m.t)}</b></td><td class="n">${m.jours}</td><td class="n">${absTxt(m)}</td><td class="n">${m.hors ? m.hors : "—"}</td>
-    <td class="n">${m.clos}${m.closAbs ? ` <span style="color:#E5533D" title="Datées pendant une absence : « Réalisé par » ou date à vérifier">⚠️ ${m.closAbs}</span>` : ""}</td><td class="n">${dansBinome ? `<small>sur son compte</small>` : f2(m.ratio)}</td></tr>`;
-  return `<div class="eff-tab"><table><thead><tr><th>Technicien</th><th class="n">Jours présents</th><th class="n">Absences (jours ouvrés)</th><th class="n">Pas encore / plus là</th><th class="n">Clôturées</th><th class="n">Par jour présent</th></tr></thead><tbody>
-    ${e.groupes.map(g => g.binome ? `<tr class="eff-bt"><td colspan="4">👥 <b>Binôme ${esc(g.membres.map(m => m.t).join(" & "))}</b> <small>— présents au moins l'un des deux : ${g.joursBinome} j${g.membres.some(m => e.reattribT?.[m.t]) ? ` · ${g.membres.filter(m => e.reattribT?.[m.t]).map(m => `${e.reattribT[m.t]} clôturée(s) au nom de l'autre pendant son absence, rendue(s) à ${esc(m.t)}`).join(" · ")}` : ""}</small></td><td class="n"><b>${g.clos}</b></td><td class="n"><b>${f2(g.ratio)}</b> <small>/ jour de binôme</small></td></tr>${g.membres.map(m => ligne(m, true)).join("")}` : ligne(g.membres[0], false)).join("")}
+  // Présences seulement (pas de comptage des clôtures par personne).
+  const lignes = e.groupes.flatMap(g => g.membres);
+  const c = (n) => n ? n : "—";
+  return `<h4 class="eff-h4">👷 Présence par technicien</h4><div class="eff-tab"><table><thead><tr><th>Technicien</th><th class="n">Jours présents</th><th class="n">Congé</th><th class="n">RTT</th><th class="n">Arrêt</th><th class="n">Autre absence</th><th class="n">Pas encore / plus là</th></tr></thead><tbody>
+    ${lignes.map(m => `<tr><td><b>${esc(m.t)}</b></td><td class="n"><b>${m.jours}</b></td><td class="n">${c(m.types?.conge)}</td><td class="n">${c(m.types?.rtt)}</td><td class="n">${c(m.types?.arret)}</td><td class="n">${c(m.types?.autre)}</td><td class="n">${c(m.hors)}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
 // Calendrier jour par jour : une ligne par technicien, une case par jour ouvré (couleur = présent / congé / RTT / arrêt), nombre de clôtures dans la case.
@@ -182,10 +181,10 @@ function calendrierHTML(e) {
   const parMois = []; jours.forEach(j => { const d = parMois[parMois.length - 1]; if (d && d.mois === j.mois) d.n++; else parMois.push({ mois: j.mois, n: 1 }); });
   const nomMois = (k) => new Date(k + "-15").toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   return `<h4 class="eff-h4">📅 Présence jour par jour</h4>
-  <div class="eff-cal-leg">${["P", "conge", "rtt", "arret", "autre", "H"].map(k => `<span><i class="eff-c ${k}"></i>${LIB_T[k]}</span>`).join("")}<span><b>3</b> = interventions clôturées ce jour</span></div>
+  <div class="eff-cal-leg">${["P", "conge", "rtt", "arret", "autre", "H"].map(k => `<span><i class="eff-c ${k}"></i>${LIB_T[k]}</span>`).join("")}</div>
   <div class="eff-cal"><table><thead><tr><th></th>${parMois.map(p => `<th colspan="${p.n}" class="eff-cal-m">${nomMois(p.mois)}</th>`).join("")}</tr>
     <tr><th></th>${jours.map(j => { const d = new Date(j.iso + "T12:00"); return `<th class="${d.getDay() === 1 ? "lun" : ""}">${"LMMJV"[d.getDay() - 1] || ""}<br>${d.getDate()}</th>`; }).join("")}</tr></thead>
-    <tbody>${ordre.map(t => `<tr><th>${esc(t)}</th>${jours.map(j => { const et = j.etat[t] || "P", n = j.clos[t] || 0, d = new Date(j.iso + "T12:00"); return `<td class="eff-c ${et} ${d.getDay() === 1 ? "lun" : ""}" title="${esc(t)} · ${d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${LIB_T[et]}${n ? ` · ${n} clôturée(s)` : ""}">${n || ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`;
+    <tbody>${ordre.map(t => `<tr><th>${esc(t)}</th>${jours.map(j => { const et = j.etat[t] || "P", d = new Date(j.iso + "T12:00"); return `<td class="eff-c ${et} ${d.getDay() === 1 ? "lun" : ""}" title="${esc(t)} · ${d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${LIB_T[et]}"></td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 export function effectifHTML(e) {
   if (!e) return "";
@@ -210,15 +209,9 @@ export function effectifHTML(e) {
     ${tab(["Mois", "Jours ouvrés", "Techniciens présents / jour", "Jours de présence", "Clôturées", "Par jour de présence", "Par technicien présent"],
       e.mois.map(m => [esc(m.label), m.ouvres, `${f1(m.moyen)} <small>(${m.min}–${m.max})</small>`, m.joursTech, m.clos, f2(m.parJourTech), f1(m.parTechPresent)]),
       ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
-    <h4 class="eff-h4">Par technicien</h4>
-    ${parTechHTML(e)}
+        ${parTechHTML(e)}
     ${calendrierHTML(e)}
-    <p class="eff-sous">Les absences saisies dans Astreinte › Absences font foi. Un technicien est compté à partir du mois de sa 1re intervention clôturée (la date de début de l'astreinte n'est pas une date d'arrivée). Une intervention n'est comptée qu'à la personne indiquée dans « Réalisé par » (ou qui l'a déclarée réalisée), pas à celle à qui elle était attribuée. Binôme : quand l'un est absent, ce qui est clôturé à son nom est compté à l'autre (ils clôturent sur le même compte).</p>
-    ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
-    ${e.nonReconnus?.length ? `<details class="eff-choix"><summary>🔎 Noms « Réalisé par » non reconnus (${e.nonReconnus.length}) — associer à un technicien</summary>
-      <p class="eff-sous" style="margin:6px 0">Si un nom correspond à un technicien (autre orthographe, nom de famille, initiales…), choisis-le : toutes ses interventions lui seront comptées. Laisse « — » pour une entreprise extérieure.</p>
-      <div class="eff-alias">${e.nonReconnus.map(([n, v]) => `<label><span>${esc(n)} <small>(${v})</small></span><select data-eff-alias="${esc(norm(n))}"><option value="">—</option>${e.techs.map(t => `<option>${esc(t)}</option>`).join("")}</select></label>`).join("")}</div>
-    </details>` : ""}
+    <p class="eff-sous">Présences calculées sur les jours ouvrés, d'après les absences saisies dans Astreinte › Absences (congés, RTT, arrêts).</p>
   </div>`;
 }
 
