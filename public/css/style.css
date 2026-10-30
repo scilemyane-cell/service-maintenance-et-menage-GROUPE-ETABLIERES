@@ -4557,3 +4557,24 @@ body.interface-plan .gh-interface-choix,body.interface-plan .gh-interface-choix 
 .eff-alias{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:6px}
 .eff-alias label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px}
 .eff-alias select{max-width:130px}
+/* Stats : tableau par technicien (binômes regroupés) + calendrier de présence */
+.eff-tab tr.eff-bt td{background:rgba(47,111,214,.08);border-top:2px solid rgba(47,111,214,.35)}
+.eff-tab tr.eff-bm td:first-child{padding-left:18px}
+.eff-cal-leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-dim);margin:4px 0 8px}
+.eff-cal-leg span{display:inline-flex;align-items:center;gap:5px}.eff-cal-leg b{color:var(--text)}
+.eff-cal{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+.eff-cal table{border-collapse:collapse;font-size:11px}
+.eff-cal th,.eff-cal td{padding:0;text-align:center;min-width:22px;height:24px;border:1px solid var(--panel)}
+.eff-cal thead th{font-weight:600;color:var(--text-dim);font-size:10px;line-height:1.1;padding:2px 0}
+.eff-cal th.eff-cal-m{text-transform:capitalize;font-size:11px;color:var(--text);border-bottom:1px solid var(--border)}
+.eff-cal tbody th{position:sticky;left:0;background:var(--panel);text-align:left;padding:0 10px;white-space:nowrap;font-size:12px;color:var(--text);z-index:1}
+.eff-cal .lun{border-left:2px solid var(--border)}
+i.eff-c{display:inline-block;width:14px;height:14px;border-radius:3px}
+.eff-c.P{background:#bfe8d3;color:#0d5a36;font-weight:800}
+.eff-c.conge{background:#c9a227;color:#fff}
+.eff-c.rtt{background:#1f8a80;color:#fff}
+.eff-c.arret{background:#c8432f;color:#fff}
+.eff-c.autre{background:#8a6fc9;color:#fff}
+.eff-c.H{background:repeating-linear-gradient(45deg,#e3e6ec 0 4px,#f4f5f8 4px 8px);color:#888}
+html[data-theme="sombre"] .eff-c.P{background:#1f5c43;color:#d6ffe9}
+html[data-theme="sombre"] .eff-c.H{background:repeating-linear-gradient(45deg,#2a3242 0 4px,#212836 4px 8px)}

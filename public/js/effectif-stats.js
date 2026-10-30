@@ -69,16 +69,20 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const apresFin = (t, iso) => !!data.datesFin?.[t] && iso > data.datesFin[t];
   // Les absences saisies (Astreinte › Absences) font foi.
   const present = (t, iso) => !avantDebut(t, iso) && !apresFin(t, iso) && !absent(t, iso);
+  const typeAbs = (t, iso) => { const a = (data.absences || []).find(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || "")); return a ? (["conge", "rtt", "arret"].includes(a.type) ? a.type : "autre") : null; };
+  const jourParJour = []; // [{ iso, etat: { tech: "P" | "conge" | "rtt" | "arret" | "autre" | "H" }, clos: { tech: n } }]
   const binome = (t) => { const b = Object.entries(data.binomes || {}).find(([a]) => memePers(a, t))?.[1]; return b ? techs.find(x => memePers(b, x)) || null : null; };
-  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0, hors: 0, closAbs: 0 }]));
+  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0, hors: 0, closAbs: 0, types: {} }]));
   const mois = p.mois.map(m => {
     const [yy, mm] = m.cle.split("-").map(Number), fin = new Date(yy, mm, 0), limite = p.aujourdhui;
-    let ouvres = 0, joursTech = 0, minPres = Infinity, maxPres = 0; const joursT = {}, closT = {}, absT = {}, horsT = {};
+    let ouvres = 0, joursTech = 0, minPres = Infinity, maxPres = 0; const joursT = {}, closT = {}, absT = {}, horsT = {}, absTypeT = {};
     for (let d = new Date(yy, mm - 1, 1); d <= fin; d.setDate(d.getDate() + 1)) {
       const iso = isoLocal(d); if (iso > limite) break;
       if (d.getDay() === 0 || d.getDay() === 6 || estFerie(iso)) continue;
       ouvres++; let n = 0;
-      techs.forEach(t => { if (present(t, iso)) { n++; joursT[t] = (joursT[t] || 0) + 1; } else if (avantDebut(t, iso) || apresFin(t, iso)) { horsT[t] = (horsT[t] || 0) + 1; } else { absT[t] = (absT[t] || 0) + 1; } });
+      const etat = {};
+      techs.forEach(t => { if (present(t, iso)) { n++; joursT[t] = (joursT[t] || 0) + 1; etat[t] = "P"; } else if (avantDebut(t, iso) || apresFin(t, iso)) { horsT[t] = (horsT[t] || 0) + 1; etat[t] = "H"; } else { absT[t] = (absT[t] || 0) + 1; const ty = typeAbs(t, iso); etat[t] = ty; absTypeT[t] = absTypeT[t] || {}; absTypeT[t][ty] = (absTypeT[t][ty] || 0) + 1; } });
+      jourParJour.push({ iso, mois: m.cle, etat });
       joursTech += n; minPres = Math.min(minPres, n); maxPres = Math.max(maxPres, n);
     }
     const clos = demandesToutes.filter(d => d.statut === "Réalisé" && d._dateInterv && d._dateInterv.startsWith(m.cle) && d._dateInterv <= limite);
@@ -86,7 +90,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
     // Binôme (Astreinte › Binômes, ex. Tony & Anthony) : clôture faite sur le compte de l'un mais à deux —
     // pas d'alerte si l'un des deux était là.
     clos.forEach(d => { const t = quiA(d); if (!t) return; closT[t] = (closT[t] || 0) + 1; const b = binome(t); if (absent(t, d._dateInterv) && !(b && present(b, d._dateInterv))) closAbsT[t] = (closAbsT[t] || 0) + 1; });
-    return { ...m, joursT, closT, absT, horsT, closAbsT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
+    return { ...m, joursT, closT, absT, horsT, closAbsT, absTypeT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
       parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
   }).filter(m => m.ouvres);
   // On démarre au premier mois où des clôtures sont enregistrées (avant, pas de données : ça fausserait les moyennes).
@@ -99,7 +103,10 @@ export function effectifEtClotures(data, p, demandesToutes) {
   if (premier > 0) mois.splice(0, premier);
   if (premier < 0) mois.length = 0;
   if (!mois.length) return null;
-  mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; parTech[t].abs += m.absT[t] || 0; parTech[t].hors += m.horsT[t] || 0; parTech[t].closAbs += m.closAbsT[t] || 0; }));
+  mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; parTech[t].abs += m.absT[t] || 0; parTech[t].hors += m.horsT[t] || 0; parTech[t].closAbs += m.closAbsT[t] || 0; Object.entries(m.absTypeT[t] || {}).forEach(([k, v]) => { parTech[t].types[k] = (parTech[t].types[k] || 0) + v; }); }));
+  // Clôtures par jour et par technicien (calendrier).
+  const closJour = {}; demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv) return; const t = quiA(d); if (!t) return; const k = d._dateInterv + "|" + t; closJour[k] = (closJour[k] || 0) + 1; });
+  const debutAnalyse = mois[0].cle;
   const tot = mois.reduce((a, m) => ({ ouvres: a.ouvres + m.ouvres, joursTech: a.joursTech + m.joursTech, clos: a.clos + m.clos }), { ouvres: 0, joursTech: 0, clos: 0 });
   const ratio = tot.joursTech ? tot.clos / tot.joursTech : null;
   // Comparaison : mois avec l'équipe au complet (≥ 90 % de présence) vs mois en effectif réduit.
@@ -108,12 +115,17 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const r = (l) => { const j = l.reduce((s, m) => s + m.joursTech, 0); return j ? l.reduce((s, m) => s + m.clos, 0) / j : null; };
   return { techs, candidats, defaut, choixPerso: techs !== defaut, mois, tot, ratio, moyenPeriode: tot.ouvres ? tot.joursTech / tot.ouvres : 0,
     ratioComplet: r(complet), ratioReduit: r(reduit), nbComplet: complet.length, nbReduit: reduit.length,
-    // Un binôme = une seule ligne : les interventions sont clôturées sur l'un ou l'autre compte.
-    parTech: (() => { const vus = new Set(), l = [];
-      techs.forEach(t => { if (vus.has(t)) return; vus.add(t); const b = binome(t); const o = { ...parTech[t] };
-        if (b && !vus.has(b)) { vus.add(b); const p2 = parTech[b]; ["jours", "clos", "abs", "hors", "closAbs"].forEach(k => { o[k] = (o[k] || 0) + (p2[k] || 0); }); l.push({ t: `${t} & ${b}`, binome: true, ...o }); }
-        else l.push({ t, ...o }); });
-      return l.map(x => ({ ...x, ratio: x.jours ? x.clos / x.jours : null })).sort((a, b) => b.clos - a.clos); })(),
+    // Une ligne par personne ; les binômes sont regroupés (les deux lignes l'une sous l'autre + total du binôme).
+    groupes: (() => { const vus = new Set(), g = [];
+      const ligne = (t) => ({ t, ...parTech[t], ratio: parTech[t].jours ? parTech[t].clos / parTech[t].jours : null });
+      techs.forEach(t => { if (vus.has(t)) return; vus.add(t); const b = binome(t);
+        if (b && !vus.has(b)) { vus.add(b); const a = ligne(t), c = ligne(b), jours = a.jours + c.jours, clos = a.clos + c.clos;
+          // Jours où au moins l'un des deux était là (le binôme a pu intervenir).
+          const joursBinome = jourParJour.filter(j => j.mois >= debutAnalyse && (j.etat[t] === "P" || j.etat[b] === "P")).length;
+          g.push({ binome: true, membres: [a, c], clos, joursBinome, ratio: joursBinome ? clos / joursBinome : null }); }
+        else g.push({ binome: false, membres: [ligne(t)], clos: parTech[t].clos }); });
+      return g.sort((x, y) => y.clos - x.clos); })(),
+    calendrier: jourParJour.filter(j => j.mois >= debutAnalyse).map(j => ({ ...j, clos: Object.fromEntries(techs.map(t => [t, closJour[j.iso + "|" + t] || 0])) })),
     nonAttribuees: tot.clos - Object.values(parTech).reduce((s, o) => s + o.clos, 0),
     nonReconnus: (() => { const debut = mois[0].cle, c = {}; demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv || d._dateInterv.slice(0, 7) < debut || quiA(d)) return; const n = nomDe(d) || "(vide)"; c[n] = (c[n] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 15); })(),
     debutReel };
@@ -147,6 +159,28 @@ function tab(entetes, lignes, total) {
   return `<div class="eff-tab"><table><thead><tr>${entetes.map((h, i) => c(h, i, "th")).join("")}</tr></thead><tbody>${lignes.map(l => `<tr>${l.map((v, i) => c(v, i)).join("")}</tr>`).join("")}</tbody>${total ? `<tfoot><tr>${total.map((v, i) => c(`<b>${v}</b>`, i)).join("")}</tr></tfoot>` : ""}</table></div>`;
 }
 
+const LIB_T = { P: "Présent", conge: "Congé", rtt: "RTT", arret: "Arrêt", autre: "Absent", H: "Pas encore / plus dans l'équipe" };
+function parTechHTML(e) {
+  const f2 = (x) => x == null ? "—" : fmtNb(x, 2);
+  const absTxt = (m) => { const t = m.types || {}; const l = [["conge", "congé"], ["rtt", "RTT"], ["arret", "arrêt"], ["autre", "autre"]].filter(([k]) => t[k]).map(([k, lib]) => `${t[k]} ${lib}`); return l.length ? l.join(" · ") : `<span style="color:#E5533D" title="Aucune absence saisie dans Astreinte › Absences">0 ⚠️</span>`; };
+  const ligne = (m, dansBinome) => `<tr class="${dansBinome ? "eff-bm" : ""}"><td>${dansBinome ? "↳ " : ""}<b>${esc(m.t)}</b></td><td class="n">${m.jours}</td><td class="n">${absTxt(m)}</td><td class="n">${m.hors ? m.hors : "—"}</td>
+    <td class="n">${m.clos}${m.closAbs ? ` <span style="color:#E5533D" title="Datées pendant une absence : « Réalisé par » ou date à vérifier">⚠️ ${m.closAbs}</span>` : ""}</td><td class="n">${dansBinome ? `<small>sur son compte</small>` : f2(m.ratio)}</td></tr>`;
+  return `<div class="eff-tab"><table><thead><tr><th>Technicien</th><th class="n">Jours présents</th><th class="n">Absences (jours ouvrés)</th><th class="n">Pas encore / plus là</th><th class="n">Clôturées</th><th class="n">Par jour présent</th></tr></thead><tbody>
+    ${e.groupes.map(g => g.binome ? `<tr class="eff-bt"><td colspan="4">👥 <b>Binôme ${esc(g.membres.map(m => m.t).join(" & "))}</b> <small>— présents au moins l'un des deux : ${g.joursBinome} j</small></td><td class="n"><b>${g.clos}</b></td><td class="n"><b>${f2(g.ratio)}</b> <small>/ jour de binôme</small></td></tr>${g.membres.map(m => ligne(m, true)).join("")}` : ligne(g.membres[0], false)).join("")}
+  </tbody></table></div>`;
+}
+// Calendrier jour par jour : une ligne par technicien, une case par jour ouvré (couleur = présent / congé / RTT / arrêt), nombre de clôtures dans la case.
+function calendrierHTML(e) {
+  const jours = e.calendrier; if (!jours.length) return "";
+  const ordre = e.groupes.flatMap(g => g.membres.map(m => m.t));
+  const parMois = []; jours.forEach(j => { const d = parMois[parMois.length - 1]; if (d && d.mois === j.mois) d.n++; else parMois.push({ mois: j.mois, n: 1 }); });
+  const nomMois = (k) => new Date(k + "-15").toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return `<h4 class="eff-h4">📅 Présence jour par jour</h4>
+  <div class="eff-cal-leg">${["P", "conge", "rtt", "arret", "autre", "H"].map(k => `<span><i class="eff-c ${k}"></i>${LIB_T[k]}</span>`).join("")}<span><b>3</b> = interventions clôturées ce jour</span></div>
+  <div class="eff-cal"><table><thead><tr><th></th>${parMois.map(p => `<th colspan="${p.n}" class="eff-cal-m">${nomMois(p.mois)}</th>`).join("")}</tr>
+    <tr><th></th>${jours.map(j => { const d = new Date(j.iso + "T12:00"); return `<th class="${d.getDay() === 1 ? "lun" : ""}">${"LMMJV"[d.getDay() - 1] || ""}<br>${d.getDate()}</th>`; }).join("")}</tr></thead>
+    <tbody>${ordre.map(t => `<tr><th>${esc(t)}</th>${jours.map(j => { const et = j.etat[t] || "P", n = j.clos[t] || 0, d = new Date(j.iso + "T12:00"); return `<td class="eff-c ${et} ${d.getDay() === 1 ? "lun" : ""}" title="${esc(t)} · ${d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${LIB_T[et]}${n ? ` · ${n} clôturée(s)` : ""}">${n || ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
 export function effectifHTML(e) {
   if (!e) return "";
   const f1 = (x) => x == null ? "—" : fmtNb(x, 1), f2 = (x) => x == null ? "—" : fmtNb(x, 2);
@@ -171,7 +205,8 @@ export function effectifHTML(e) {
       e.mois.map(m => [esc(m.label), m.ouvres, `${f1(m.moyen)} <small>(${m.min}–${m.max})</small>`, m.joursTech, m.clos, f2(m.parJourTech), f1(m.parTechPresent)]),
       ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
     <h4 class="eff-h4">Par technicien</h4>
-    ${tab(["Technicien", "Jours présents", "Jours d'absence", "Pas encore / plus dans l'équipe", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [`${esc(x.t)}${x.binome ? ` <small title="Binôme (Astreinte › Binômes) : interventions clôturées sur l'un ou l'autre compte, jours de présence des deux additionnés">👥 binôme</small>` : ""}`, x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.hors ? `${x.hors} <small>${e.debutReel?.[x.t] ? `(début ${new Date(e.debutReel[x.t] + "T12:00").toLocaleDateString("fr-FR")})` : ""}</small>` : "—", `${x.clos}${x.closAbs ? ` <span style="color:#E5533D" title="Interventions dont la date tombe pendant une absence saisie : « Réalisé par » ou date d'intervention à vérifier">⚠️ dont ${x.closAbs} pendant une absence</span>` : ""}`, f2(x.ratio)]))}
+    ${parTechHTML(e)}
+    ${calendrierHTML(e)}
     <p class="eff-sous">Les absences saisies dans Astreinte › Absences font foi. Un technicien est compté à partir du mois de sa 1re intervention clôturée (la date de début de l'astreinte n'est pas une date d'arrivée). Une intervention n'est comptée qu'à la personne indiquée dans « Réalisé par » (ou qui l'a déclarée réalisée), pas à celle à qui elle était attribuée.</p>
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
     ${e.nonReconnus?.length ? `<details class="eff-choix"><summary>🔎 Noms « Réalisé par » non reconnus (${e.nonReconnus.length}) — associer à un technicien</summary>
