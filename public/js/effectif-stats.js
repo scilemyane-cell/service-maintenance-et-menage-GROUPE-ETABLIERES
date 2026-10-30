@@ -49,7 +49,9 @@ export function effectifEtClotures(data, p, demandesToutes) {
     for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
     return d[a.length][b.length] <= 1; };
   const alias = data.aliasTechniciens || {};
-  const nomDe = (d) => String(d.intervenant || d.contact || d.declarePar || d.attribueANom || "").trim();
+  // « Réalisé par » (ou la personne qui a déclaré la demande réalisée dans l'appli) —
+  // jamais la personne à qui la demande était attribuée : attribuée ≠ réalisée.
+  const nomDe = (d) => String(d.intervenant || d.contact || d.declarePar || "").trim();
   const quiA = (d) => {
     const brut = nomDe(d), n = norm(brut); if (!n) return null;
     if (alias[n]) return techs.includes(alias[n]) ? alias[n] : null;
@@ -58,17 +60,16 @@ export function effectifEtClotures(data, p, demandesToutes) {
     const c = nomCle(brut); const p = techs.filter(t => proche(c, nomCle(t)));
     return p.length === 1 ? p[0] : null;
   };
-  // Une clôture prouve la présence ce jour-là, et le début réel d'activité est
-  // la date la plus ancienne entre « date de début » (astreinte) et 1re clôture.
+  // Date d'arrivée : début du mois de sa 1re clôture (la « date de début » de l'astreinte,
+  // ex. Kevin au 1er janvier, ne dit rien de sa présence au travail).
   const closParJour = {};
   demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv) return; const t = quiA(d); if (t) (closParJour[t] = closParJour[t] || new Set()).add(d._dateInterv); });
-  // La « date de début » de l'astreinte (ex. Kevin : astreintes à partir du 1er janvier) n'est PAS
-  // sa date d'arrivée : on prend sa 1re clôture ; la date d'astreinte ne sert que s'il n'a encore rien clôturé.
-  const debutReel = Object.fromEntries(techs.map(t => { const premiere = [...(closParJour[t] || [])].sort()[0]; return [t, premiere || data.datesDebut?.[t] || null]; }));
+  const debutReel = Object.fromEntries(techs.map(t => { const premiere = [...(closParJour[t] || [])].sort()[0]; return [t, premiere ? premiere.slice(0, 8) + "01" : null]; }));
   const avantDebut = (t, iso) => !!debutReel[t] && iso < debutReel[t];
-  const apresFin = (t, iso) => !!data.datesFin?.[t] && iso > data.datesFin[t] && !(closParJour[t]?.has(iso));
-  const present = (t, iso) => closParJour[t]?.has(iso) || (!avantDebut(t, iso) && !apresFin(t, iso) && !absent(t, iso));
-  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0, hors: 0 }]));
+  const apresFin = (t, iso) => !!data.datesFin?.[t] && iso > data.datesFin[t];
+  // Les absences saisies (Astreinte › Absences) font foi.
+  const present = (t, iso) => !avantDebut(t, iso) && !apresFin(t, iso) && !absent(t, iso);
+  const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0, hors: 0, closAbs: 0 }]));
   const mois = p.mois.map(m => {
     const [yy, mm] = m.cle.split("-").map(Number), fin = new Date(yy, mm, 0), limite = p.aujourdhui;
     let ouvres = 0, joursTech = 0, minPres = Infinity, maxPres = 0; const joursT = {}, closT = {}, absT = {}, horsT = {};
@@ -80,8 +81,9 @@ export function effectifEtClotures(data, p, demandesToutes) {
       joursTech += n; minPres = Math.min(minPres, n); maxPres = Math.max(maxPres, n);
     }
     const clos = demandesToutes.filter(d => d.statut === "Réalisé" && d._dateInterv && d._dateInterv.startsWith(m.cle) && d._dateInterv <= limite);
-    clos.forEach(d => { const t = quiA(d); if (t) closT[t] = (closT[t] || 0) + 1; });
-    return { ...m, joursT, closT, absT, horsT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
+    const closAbsT = {};
+    clos.forEach(d => { const t = quiA(d); if (!t) return; closT[t] = (closT[t] || 0) + 1; if (absent(t, d._dateInterv)) closAbsT[t] = (closAbsT[t] || 0) + 1; });
+    return { ...m, joursT, closT, absT, horsT, closAbsT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
       parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
   }).filter(m => m.ouvres);
   // On démarre au premier mois où des clôtures sont enregistrées (avant, pas de données : ça fausserait les moyennes).
@@ -94,7 +96,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
   if (premier > 0) mois.splice(0, premier);
   if (premier < 0) mois.length = 0;
   if (!mois.length) return null;
-  mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; parTech[t].abs += m.absT[t] || 0; parTech[t].hors += m.horsT[t] || 0; }));
+  mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; parTech[t].abs += m.absT[t] || 0; parTech[t].hors += m.horsT[t] || 0; parTech[t].closAbs += m.closAbsT[t] || 0; }));
   const tot = mois.reduce((a, m) => ({ ouvres: a.ouvres + m.ouvres, joursTech: a.joursTech + m.joursTech, clos: a.clos + m.clos }), { ouvres: 0, joursTech: 0, clos: 0 });
   const ratio = tot.joursTech ? tot.clos / tot.joursTech : null;
   // Comparaison : mois avec l'équipe au complet (≥ 90 % de présence) vs mois en effectif réduit.
@@ -161,8 +163,8 @@ export function effectifHTML(e) {
       e.mois.map(m => [esc(m.label), m.ouvres, `${f1(m.moyen)} <small>(${m.min}–${m.max})</small>`, m.joursTech, m.clos, f2(m.parJourTech), f1(m.parTechPresent)]),
       ["Total", e.tot.ouvres, f1(e.moyenPeriode), e.tot.joursTech, e.tot.clos, f2(e.ratio), f1(e.moyenPeriode ? e.tot.clos / e.moyenPeriode : null)])}
     <h4 class="eff-h4">Par technicien</h4>
-    ${tab(["Technicien", "Jours présents", "Jours d'absence", "Pas encore / plus dans l'équipe", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.hors ? `${x.hors} <small>${e.debutReel?.[x.t] ? `(début ${new Date(e.debutReel[x.t] + "T12:00").toLocaleDateString("fr-FR")})` : ""}</small>` : "—", x.clos, f2(x.ratio)]))}
-    <p class="eff-sous">Un jour où le technicien a clôturé une demande compte toujours comme présent. Avant sa 1re intervention clôturée, il n'est pas compté (ni présent, ni absent) : la date de début de l'astreinte n'est utilisée que s'il n'a encore rien clôturé.</p>
+    ${tab(["Technicien", "Jours présents", "Jours d'absence", "Pas encore / plus dans l'équipe", "Interventions clôturées", "Par jour présent"], e.parTech.map(x => [esc(x.t), x.jours, x.abs || `<span style="color:#E5533D" title="Aucune absence trouvée : vérifie Astreinte › Absences">0 ⚠️</span>`, x.hors ? `${x.hors} <small>${e.debutReel?.[x.t] ? `(début ${new Date(e.debutReel[x.t] + "T12:00").toLocaleDateString("fr-FR")})` : ""}</small>` : "—", `${x.clos}${x.closAbs ? ` <span style="color:#E5533D" title="Interventions dont la date tombe pendant une absence saisie : « Réalisé par » ou date d'intervention à vérifier">⚠️ dont ${x.closAbs} pendant une absence</span>` : ""}`, f2(x.ratio)]))}
+    <p class="eff-sous">Les absences saisies dans Astreinte › Absences font foi. Un technicien est compté à partir du mois de sa 1re intervention clôturée (la date de début de l'astreinte n'est pas une date d'arrivée). Une intervention n'est comptée qu'à la personne indiquée dans « Réalisé par » (ou qui l'a déclarée réalisée), pas à celle à qui elle était attribuée.</p>
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
     ${e.nonReconnus?.length ? `<details class="eff-choix"><summary>🔎 Noms « Réalisé par » non reconnus (${e.nonReconnus.length}) — associer à un technicien</summary>
       <p class="eff-sous" style="margin:6px 0">Si un nom correspond à un technicien (autre orthographe, nom de famille, initiales…), choisis-le : toutes ses interventions lui seront comptées. Laisse « — » pour une entreprise extérieure.</p>
