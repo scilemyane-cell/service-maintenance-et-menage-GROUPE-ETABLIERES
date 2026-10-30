@@ -72,6 +72,11 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const typeAbs = (t, iso) => { const a = (data.absences || []).find(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || "")); return a ? (["conge", "rtt", "arret"].includes(a.type) ? a.type : "autre") : null; };
   const jourParJour = []; // [{ iso, etat: { tech: "P" | "conge" | "rtt" | "arret" | "autre" | "H" }, clos: { tech: n } }]
   const binome = (t) => { const b = Object.entries(data.binomes || {}).find(([a]) => memePers(a, t))?.[1]; return b ? techs.find(x => memePers(b, x)) || null : null; };
+  // Binôme qui clôture « sur le même espace » : pendant l'absence de l'un, ce qui est clôturé
+  // à son nom a forcément été fait par l'autre (s'il était là) → attribué à celui qui était présent.
+  let reattribuees = 0; const reattribT = {};
+  const realisateur = (d, compter = false) => { const t = quiA(d); if (!t) return null; const b = binome(t);
+    if (b && absent(t, d._dateInterv) && present(b, d._dateInterv)) { if (compter) { reattribuees++; reattribT[b] = (reattribT[b] || 0) + 1; } return b; } return t; };
   const parTech = Object.fromEntries(techs.map(t => [t, { jours: 0, clos: 0, abs: 0, hors: 0, closAbs: 0, types: {} }]));
   const mois = p.mois.map(m => {
     const [yy, mm] = m.cle.split("-").map(Number), fin = new Date(yy, mm, 0), limite = p.aujourdhui;
@@ -89,7 +94,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
     const closAbsT = {};
     // Binôme (Astreinte › Binômes, ex. Tony & Anthony) : clôture faite sur le compte de l'un mais à deux —
     // pas d'alerte si l'un des deux était là.
-    clos.forEach(d => { const t = quiA(d); if (!t) return; closT[t] = (closT[t] || 0) + 1; const b = binome(t); if (absent(t, d._dateInterv) && !(b && present(b, d._dateInterv))) closAbsT[t] = (closAbsT[t] || 0) + 1; });
+    clos.forEach(d => { const t = realisateur(d, true); if (!t) return; closT[t] = (closT[t] || 0) + 1; if (absent(t, d._dateInterv)) closAbsT[t] = (closAbsT[t] || 0) + 1; });
     return { ...m, joursT, closT, absT, horsT, closAbsT, absTypeT, ouvres, joursTech, moyen: ouvres ? joursTech / ouvres : 0, min: ouvres ? minPres : 0, max: maxPres, clos: clos.length,
       parJourTech: joursTech ? clos.length / joursTech : null, parTechPresent: ouvres && joursTech ? clos.length / (joursTech / ouvres) : null };
   }).filter(m => m.ouvres);
@@ -105,7 +110,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
   if (!mois.length) return null;
   mois.forEach(m => techs.forEach(t => { parTech[t].jours += m.joursT[t] || 0; parTech[t].clos += m.closT[t] || 0; parTech[t].abs += m.absT[t] || 0; parTech[t].hors += m.horsT[t] || 0; parTech[t].closAbs += m.closAbsT[t] || 0; Object.entries(m.absTypeT[t] || {}).forEach(([k, v]) => { parTech[t].types[k] = (parTech[t].types[k] || 0) + v; }); }));
   // Clôtures par jour et par technicien (calendrier).
-  const closJour = {}; demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv) return; const t = quiA(d); if (!t) return; const k = d._dateInterv + "|" + t; closJour[k] = (closJour[k] || 0) + 1; });
+  const closJour = {}; demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv) return; const t = realisateur(d); if (!t) return; const k = d._dateInterv + "|" + t; closJour[k] = (closJour[k] || 0) + 1; });
   const debutAnalyse = mois[0].cle;
   const tot = mois.reduce((a, m) => ({ ouvres: a.ouvres + m.ouvres, joursTech: a.joursTech + m.joursTech, clos: a.clos + m.clos }), { ouvres: 0, joursTech: 0, clos: 0 });
   const ratio = tot.joursTech ? tot.clos / tot.joursTech : null;
@@ -125,6 +130,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
           g.push({ binome: true, membres: [a, c], clos, joursBinome, ratio: joursBinome ? clos / joursBinome : null }); }
         else g.push({ binome: false, membres: [ligne(t)], clos: parTech[t].clos }); });
       return g.sort((x, y) => y.clos - x.clos); })(),
+    reattribT,
     calendrier: jourParJour.filter(j => j.mois >= debutAnalyse).map(j => ({ ...j, clos: Object.fromEntries(techs.map(t => [t, closJour[j.iso + "|" + t] || 0])) })),
     nonAttribuees: tot.clos - Object.values(parTech).reduce((s, o) => s + o.clos, 0),
     nonReconnus: (() => { const debut = mois[0].cle, c = {}; demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv || d._dateInterv.slice(0, 7) < debut || quiA(d)) return; const n = nomDe(d) || "(vide)"; c[n] = (c[n] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 15); })(),
@@ -166,7 +172,7 @@ function parTechHTML(e) {
   const ligne = (m, dansBinome) => `<tr class="${dansBinome ? "eff-bm" : ""}"><td>${dansBinome ? "↳ " : ""}<b>${esc(m.t)}</b></td><td class="n">${m.jours}</td><td class="n">${absTxt(m)}</td><td class="n">${m.hors ? m.hors : "—"}</td>
     <td class="n">${m.clos}${m.closAbs ? ` <span style="color:#E5533D" title="Datées pendant une absence : « Réalisé par » ou date à vérifier">⚠️ ${m.closAbs}</span>` : ""}</td><td class="n">${dansBinome ? `<small>sur son compte</small>` : f2(m.ratio)}</td></tr>`;
   return `<div class="eff-tab"><table><thead><tr><th>Technicien</th><th class="n">Jours présents</th><th class="n">Absences (jours ouvrés)</th><th class="n">Pas encore / plus là</th><th class="n">Clôturées</th><th class="n">Par jour présent</th></tr></thead><tbody>
-    ${e.groupes.map(g => g.binome ? `<tr class="eff-bt"><td colspan="4">👥 <b>Binôme ${esc(g.membres.map(m => m.t).join(" & "))}</b> <small>— présents au moins l'un des deux : ${g.joursBinome} j</small></td><td class="n"><b>${g.clos}</b></td><td class="n"><b>${f2(g.ratio)}</b> <small>/ jour de binôme</small></td></tr>${g.membres.map(m => ligne(m, true)).join("")}` : ligne(g.membres[0], false)).join("")}
+    ${e.groupes.map(g => g.binome ? `<tr class="eff-bt"><td colspan="4">👥 <b>Binôme ${esc(g.membres.map(m => m.t).join(" & "))}</b> <small>— présents au moins l'un des deux : ${g.joursBinome} j${g.membres.some(m => e.reattribT?.[m.t]) ? ` · ${g.membres.filter(m => e.reattribT?.[m.t]).map(m => `${e.reattribT[m.t]} clôturée(s) au nom de l'autre pendant son absence, rendue(s) à ${esc(m.t)}`).join(" · ")}` : ""}</small></td><td class="n"><b>${g.clos}</b></td><td class="n"><b>${f2(g.ratio)}</b> <small>/ jour de binôme</small></td></tr>${g.membres.map(m => ligne(m, true)).join("")}` : ligne(g.membres[0], false)).join("")}
   </tbody></table></div>`;
 }
 // Calendrier jour par jour : une ligne par technicien, une case par jour ouvré (couleur = présent / congé / RTT / arrêt), nombre de clôtures dans la case.
@@ -207,7 +213,7 @@ export function effectifHTML(e) {
     <h4 class="eff-h4">Par technicien</h4>
     ${parTechHTML(e)}
     ${calendrierHTML(e)}
-    <p class="eff-sous">Les absences saisies dans Astreinte › Absences font foi. Un technicien est compté à partir du mois de sa 1re intervention clôturée (la date de début de l'astreinte n'est pas une date d'arrivée). Une intervention n'est comptée qu'à la personne indiquée dans « Réalisé par » (ou qui l'a déclarée réalisée), pas à celle à qui elle était attribuée.</p>
+    <p class="eff-sous">Les absences saisies dans Astreinte › Absences font foi. Un technicien est compté à partir du mois de sa 1re intervention clôturée (la date de début de l'astreinte n'est pas une date d'arrivée). Une intervention n'est comptée qu'à la personne indiquée dans « Réalisé par » (ou qui l'a déclarée réalisée), pas à celle à qui elle était attribuée. Binôme : quand l'un est absent, ce qui est clôturé à son nom est compté à l'autre (ils clôturent sur le même compte).</p>
     ${e.nonAttribuees > 0 ? `<p class="eff-sous">${e.nonAttribuees} intervention(s) clôturée(s) sans technicien identifiable (entreprise extérieure, superviseur ou « Réalisé par » vide) : comptées dans le total, pas par technicien.</p>` : ""}
     ${e.nonReconnus?.length ? `<details class="eff-choix"><summary>🔎 Noms « Réalisé par » non reconnus (${e.nonReconnus.length}) — associer à un technicien</summary>
       <p class="eff-sous" style="margin:6px 0">Si un nom correspond à un technicien (autre orthographe, nom de famille, initiales…), choisis-le : toutes ses interventions lui seront comptées. Laisse « — » pour une entreprise extérieure.</p>
