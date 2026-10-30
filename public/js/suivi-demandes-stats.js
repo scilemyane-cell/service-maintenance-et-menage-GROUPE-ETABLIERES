@@ -14,7 +14,7 @@ function chargerEffectif(rerender) {
   effChargement = Promise.all([getDoc(doc(db, "config", "people")), getDocs(collection(db, "absences")), getDoc(doc(db, "config", "stats-effectif")).catch(() => null)]).then(([pp, abs, ch]) => {
     const p = pp.exists() ? pp.data() : {};
     const absences = []; abs.forEach(d => absences.push({ id: d.id, ...d.data() }));
-    effData = { techniciensChoisis: ch?.exists?.() ? ch.data().techniciens || [] : [], aliasTechniciens: ch?.exists?.() ? ch.data().alias || {} : {}, n1: p.n1 || [], techniciens: p.n2 || [], astreinteActive: p.astreinteActive || {}, datesDebut: p.datesDebut || {}, datesFin: p.datesFin || {}, binomes: p.binomes || {}, absences };
+    effData = { techniciensChoisis: ch?.exists?.() ? ch.data().techniciens || [] : [], aliasTechniciens: ch?.exists?.() ? ch.data().alias || {} : {}, arrivees: ch?.exists?.() ? ch.data().arrivees || {} : {}, n1: p.n1 || [], techniciens: p.n2 || [], astreinteActive: p.astreinteActive || {}, datesDebut: p.datesDebut || {}, datesFin: p.datesFin || {}, binomes: p.binomes || {}, absences };
     rerender();
   }).catch(e => { console.error("Effectif techniciens :", e); effData = { techniciens: [], absences: [] }; });
 }
@@ -467,7 +467,7 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
   onToggle();
   const rerender = () => renderStatsDemandes(container, toutes, { toggleHTML, onToggle, ouvrirTableau, source, extrait, doublons });
   chargerEffectif(() => { if (document.contains(container) && container.querySelector("#dst-rapport")) rerender(); });
-  brancherEffectif(container, (liste, alias) => { if (effData) { if (liste) effData.techniciensChoisis = liste; if (alias) effData.aliasTechniciens = { ...(effData.aliasTechniciens || {}), ...alias }; } rerender(); });
+  brancherEffectif(container, (liste, alias, arr) => { if (effData) { if (arr) effData.arrivees = { ...(effData.arrivees || {}), ...arr }; if (liste) effData.techniciensChoisis = liste; if (alias) effData.aliasTechniciens = { ...(effData.aliasTechniciens || {}), ...alias }; } rerender(); });
   container.querySelectorAll("[data-dst-per]").forEach(b => b.addEventListener("click", () => { st.periode = b.dataset.dstPer; rerender(); }));
   container.querySelectorAll("[data-dst-asso]").forEach(b => b.addEventListener("click", () => { st.association = b.dataset.dstAsso; rerender(); }));
   container.querySelectorAll("[data-dst-mois]").forEach(g => g.addEventListener("click", () => { st.moisSel = g.dataset.dstMois; rerender(); }));

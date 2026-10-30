@@ -64,7 +64,9 @@ export function effectifEtClotures(data, p, demandesToutes) {
   // ex. Kevin au 1er janvier, ne dit rien de sa présence au travail).
   const closParJour = {};
   demandesToutes.forEach(d => { if (d.statut !== "Réalisé" || !d._dateInterv) return; const t = quiA(d); if (t) (closParJour[t] = closParJour[t] || new Set()).add(d._dateInterv); });
-  const debutReel = Object.fromEntries(techs.map(t => { const premiere = [...(closParJour[t] || [])].sort()[0]; return [t, premiere ? premiere.slice(0, 8) + "01" : null]; }));
+  // Date d'arrivée : uniquement celle saisie ici (« Techniciens comptés › date d'arrivée »).
+  // Ni la date de début d'astreinte, ni la 1re clôture (un agent espaces verts clôture peu) ne la donnent.
+  const debutReel = Object.fromEntries(techs.map(t => [t, (data.arrivees || {})[t] || null]));
   const avantDebut = (t, iso) => !!debutReel[t] && iso < debutReel[t];
   const apresFin = (t, iso) => !!data.datesFin?.[t] && iso > data.datesFin[t];
   // Les absences saisies (Astreinte › Absences) font foi.
@@ -196,6 +198,8 @@ export function effectifHTML(e) {
     <details class="eff-choix"><summary>👷 Techniciens comptés : <b>${e.techs.map(esc).join(", ")}</b> — modifier</summary>
       <p class="eff-sous" style="margin:6px 0">Coche les personnes qui font les interventions. Le choix est enregistré pour tout le monde.</p>
       <div class="eff-choix-l">${e.candidats.map(t => `<label><input type="checkbox" data-eff-tech="${esc(t)}" ${e.techs.includes(t) ? "checked" : ""}> ${esc(t)}</label>`).join("")}</div>
+      <p class="eff-sous" style="margin:10px 0 4px">Date d'arrivée (seulement pour quelqu'un arrivé en cours de période — avant, il n'est compté ni présent ni absent) :</p>
+      <div class="eff-choix-l">${e.techs.map(t => `<label>${esc(t)} <input type="date" data-eff-arrivee="${esc(t)}" value="${esc(e.debutReel?.[t] || "")}"></label>`).join("")}</div>
       <div class="eff-ajout"><input data-eff-ajout placeholder="Autre technicien (nom tel qu'il apparaît dans les absences)"><button type="button" class="nav-btn" data-eff-ajout-btn>Ajouter</button>${e.choixPerso ? `<button type="button" class="nav-btn" data-eff-defaut>↺ Liste par défaut</button>` : ""}</div>
     </details>
     <div class="stat-eff-kpis">
@@ -279,6 +283,11 @@ export function brancherEffectif(container, apres) {
   container.querySelector("[data-eff-ajout-btn]")?.addEventListener("click", add);
   container.querySelector("[data-eff-ajout]")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   container.querySelector("[data-eff-defaut]")?.addEventListener("click", () => enreg([]));
+  container.querySelectorAll("[data-eff-arrivee]").forEach(inp => inp.addEventListener("change", async () => {
+    const { db } = await import("./firebase-init.js"); const { doc, setDoc } = await import("./firestore-compte.js");
+    try { await setDoc(doc(db, "config", "stats-effectif"), { arrivees: { [inp.dataset.effArrivee]: inp.value || null }, majLe: Date.now() }, { merge: true }); apres(null, null, { [inp.dataset.effArrivee]: inp.value || null }); }
+    catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
+  }));
   container.querySelectorAll("[data-eff-alias]").forEach(sel => sel.addEventListener("change", async () => {
     const { db } = await import("./firebase-init.js"); const { doc, setDoc } = await import("./firestore-compte.js");
     if (!sel.value) return;
