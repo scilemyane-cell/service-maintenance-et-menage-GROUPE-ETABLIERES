@@ -4578,3 +4578,10 @@ i.eff-c{display:inline-block;width:14px;height:14px;border-radius:3px}
 .eff-c.H{background:repeating-linear-gradient(45deg,#e3e6ec 0 4px,#f4f5f8 4px 8px);color:#888}
 html[data-theme="sombre"] .eff-c.P{background:#1f5c43;color:#d6ffe9}
 html[data-theme="sombre"] .eff-c.H{background:repeating-linear-gradient(45deg,#2a3242 0 4px,#212836 4px 8px)}
+.eff-c.demi.conge{background:linear-gradient(135deg,#bfe8d3 50%,#c9a227 50%)}
+.eff-c.demi.rtt{background:linear-gradient(135deg,#bfe8d3 50%,#1f8a80 50%)}
+.eff-c.demi.arret{background:linear-gradient(135deg,#bfe8d3 50%,#c8432f 50%)}
+.eff-c.demi.autre{background:linear-gradient(135deg,#bfe8d3 50%,#8a6fc9 50%)}
+.eff-eur{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 10px}
+.eff-eur label{cursor:pointer}
+.eff-eur small{opacity:.75}
