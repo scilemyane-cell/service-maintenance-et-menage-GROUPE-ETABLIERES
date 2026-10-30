@@ -4554,3 +4554,6 @@ body.interface-plan .gh-interface-choix,body.interface-plan .gh-interface-choix 
 @media (max-width:1100px){.interface-plan2 .gh-cartouche{display:none}}
 .interface-plan2 .gh-cartouche{width:auto!important;max-width:620px}
 .interface-plan2 .gh-cartouche td,.interface-plan2 .gh-cartouche th{border-top:1px solid var(--trait-f)}
+.eff-alias{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:6px}
+.eff-alias label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px}
+.eff-alias select{max-width:130px}

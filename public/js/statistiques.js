@@ -86,7 +86,7 @@ async function collecterDonnees() {
   // programmé, pas de l'astreinte.
   try { const snap = await getDoc(doc(db, "config", "people")); const pp = snap.exists() ? snap.data() : {}; data.astreinteActive = pp.astreinteActive || {}; data.techniciens = pp.n2 || []; data.n1 = pp.n1 || []; data.heureReprise = pp.heureRepriseDefaut || "08:00"; data.datesDebut = pp.datesDebut || {}; data.datesFin = pp.datesFin || {}; }
   catch (e) { console.error("Statistiques — config/people:", e); data.astreinteActive = {}; data.techniciens = []; data.datesDebut = {}; data.datesFin = {}; }
-  try { const snap = await getDoc(doc(db, "config", "stats-effectif")); data.techniciensChoisis = snap.exists() ? snap.data().techniciens || [] : []; } catch { data.techniciensChoisis = []; }
+  try { const snap = await getDoc(doc(db, "config", "stats-effectif")); data.techniciensChoisis = snap.exists() ? snap.data().techniciens || [] : []; data.aliasTechniciens = snap.exists() ? snap.data().alias || {} : {}; } catch { data.techniciensChoisis = []; data.aliasTechniciens = {}; }
   try { const snap = await getDoc(doc(db, "config", "menage-sites")); data.sitesMenage = (snap.exists() && snap.data().sites) || []; }
   catch (e) { console.error("Statistiques — sites ménage:", e); data.sitesMenage = []; }
   resultats.forEach((r, idx) => {
@@ -633,7 +633,7 @@ function render() {
       typesCompteur: TYPE_COMPTEUR, seuilReleve: SEUIL_RETARD_RELEVE_J, ordreUrgence: ORDRE_URGENCE });
   });
   document.getElementById("stat-rafraichir")?.addEventListener("click", () => { lectureLe = 0; mountStatistiques(mountedContainer, userCourant); });
-  brancherEffectif(mountedContainer, (liste) => { if (cache) cache.techniciensChoisis = liste; render(); });
+  brancherEffectif(mountedContainer, (liste, alias) => { if (cache) { if (liste) cache.techniciensChoisis = liste; if (alias) cache.aliasTechniciens = { ...(cache.aliasTechniciens || {}), ...alias }; } render(); });
 
   dessinerGraphiques(s, p);
 }
