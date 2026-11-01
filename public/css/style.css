@@ -4745,7 +4745,7 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .va.pro .va-fonds{gap:0;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.2);overflow:hidden}.va.pro .va-fonds .va-btn{border:0;border-radius:0;box-shadow:none}
 .va.pro .leaflet-control-zoom a{background:#fff;color:#1d2533;border-color:#d3dae3}.va.pro .leaflet-control-scale-line{background:rgba(255,255,255,.85);color:#1d2533;border-color:#1d2533}
 .va.pro .va-actions .va-btn{box-shadow:0 2px 8px rgba(0,0,0,.25)}
-.va-p{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center}
+.va-p{position:absolute;transform:translate(-50%,calc(-100% - 7px));display:flex;flex-direction:column;align-items:center} /* la pointe de l'épingle (carré tourné de 34 px : coin à +7 px) tombe EXACTEMENT sur le point : plus de décalage en dézoomant */
 .va-p-pin{width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--c);border:3px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.4);display:grid;place-items:center}
 .va-p-pin span{transform:rotate(45deg);font-size:16px;line-height:1;display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
 .va-p-etat{position:absolute;top:-4px;right:-6px;width:13px;height:13px;border-radius:50%;border:2px solid #fff;background:#2e9d58;box-shadow:0 1px 3px rgba(0,0,0,.4)}
