@@ -4633,3 +4633,5 @@ html[data-theme="sombre"] .eff-c.H{background:repeating-linear-gradient(45deg,#2
 .de-chk{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0}.de-ajout{display:flex;gap:8px}
 @media (max-width:720px){.de-kpis{grid-template-columns:repeat(2,1fr)}.de-grille{grid-template-columns:1fr}.de-grille .large{grid-column:auto}.de-site{grid-template-columns:1fr}.de-site-b{justify-content:flex-start}}
 .de-btns button{flex:0 0 auto!important;width:auto!important}.de-site-b button{width:auto}
+.cd-demande{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:10px 14px;border:1px dashed var(--border);border-radius:12px;background:var(--panel);font-size:13px}
+.cd-demande-btns{display:flex;flex-wrap:wrap;gap:6px}.cd-camp{color:#c06d00;font-weight:600}

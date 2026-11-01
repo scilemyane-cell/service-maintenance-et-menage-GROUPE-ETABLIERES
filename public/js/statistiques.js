@@ -325,7 +325,7 @@ function calculer(data, p) {
   const limiteRetard = Date.now() - SEUIL_RETARD_RELEVE_J * JOUR_MS;
   const compteursEnRetard = compteurs
     .map(c => ({ ...c, _dernier: c.dernierReleve?.at || null }))
-    .filter(c => !c._dernier || c._dernier < limiteRetard)
+    .filter(c => c.frequence === "demande" ? !!c.campagneLe && (!c._dernier || c._dernier < c.campagneLe) : (!c._dernier || c._dernier < limiteRetard))
     .sort((a, b) => (a._dernier || 0) - (b._dernier || 0));
 
   // ---- Stock ----

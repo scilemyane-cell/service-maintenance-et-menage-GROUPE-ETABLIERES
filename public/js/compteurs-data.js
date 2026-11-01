@@ -185,6 +185,12 @@ function derniereEcheanceAnnuelle(compteur) {
 // - fréquence annuelle : l'échéance (jour/mois) la plus récente est
 //   passée sans qu'un relevé n'ait été fait depuis.
 export function estEnRetard(compteur) {
+  // « Sur demande » : jamais de relance, sauf pendant un relevé en masse lancé par un admin
+  // (à relever tant qu'il n'a pas été relevé depuis le lancement).
+  if (compteur.frequence === "demande") {
+    if (!compteur.campagneLe) return false;
+    return !compteur.dernierReleve?.at || compteur.dernierReleve.at < compteur.campagneLe;
+  }
   if (compteur.frequence === "annuel") {
     if (!compteur.dernierReleve?.at) return true;
     return compteur.dernierReleve.at < derniereEcheanceAnnuelle(compteur).getTime();
@@ -211,6 +217,7 @@ export function fenetreReleve(d = new Date()) {
 export const motRetard = () => (fenetreReleve().ouverte ? "à relever" : "en retard");
 
 export function prochaineEcheanceLabel(compteur) {
+  if (compteur.frequence === "demande") return compteur.campagneLe ? `relevé en masse demandé le ${new Date(compteur.campagneLe).toLocaleDateString("fr-FR")}` : "sur demande (pas de relevé mensuel)";
   if (compteur.frequence === "annuel") {
     return `chaque année le ${String(compteur.echeanceJour || 1).padStart(2, "0")}/${String(compteur.echeanceMois || 1).padStart(2, "0")}`;
   }

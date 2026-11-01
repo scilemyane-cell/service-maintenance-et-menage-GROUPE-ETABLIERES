@@ -376,6 +376,21 @@ function renderPageSite(site) {
       <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 SharePoint</button>
       ${isEditorUser(mountedUser) ? `<button class="nav-btn" data-open-add="${site.id}">➕ Ajouter un compteur</button>` : ""}
     </div>
+    ${(() => { if (!tous.length) return "";
+      const admin = ["super_admin", "admin"].includes(mountedUser?.role) && !mountedUser?.lectureSeule;
+      const dem = tous.filter(c => c.frequence === "demande"), mens = tous.filter(c => (c.frequence || "mensuel") === "mensuel");
+      const camp = dem.length ? Math.max(0, ...dem.map(c => c.campagneLe || 0)) : 0;
+      const enCours = dem.filter(c => c.campagneLe), faits = enCours.filter(c => !estEnRetard(c)).length;
+      if (!dem.length && !admin) return "";
+      return `<div class="cd-demande">
+        ${dem.length ? `<div><b>📣 Relevé sur demande</b> — ${dem.length} compteur${dem.length > 1 ? "s" : ""} sans relevé mensuel ni relance.${enCours.length ? ` <span class="cd-camp">Relevé en masse demandé le ${new Date(camp).toLocaleDateString("fr-FR")} : <b>${faits}/${enCours.length}</b> relevé${faits > 1 ? "s" : ""}</span>` : ""}</div>` : ""}
+        ${admin ? `<div class="cd-demande-btns">
+          ${dem.length ? `<button class="add-btn" data-campagne="${site.id}">📣 Lancer un relevé en masse</button>` : ""}
+          ${enCours.length ? `<button class="nav-btn" data-campagne-clore="${site.id}">✕ Clore la demande</button>` : ""}
+          ${mens.length ? `<button class="nav-btn" data-site-demande="${site.id}">⏸ Pas de relevé mensuel pour ce site</button>` : ""}
+          ${dem.length ? `<button class="nav-btn" data-site-mensuel="${site.id}">▶ Revenir au relevé mensuel</button>` : ""}
+        </div>` : ""}
+      </div>`; })()}
     ${ui.addingSiteId === site.id ? renderAddForm(site) : ""}
 
     ${tous.length ? `<div class="cd-filtres">
@@ -566,6 +581,22 @@ function renderListe() {
   mountedContainer.querySelectorAll("[data-export-pdf]").forEach(btn => btn.addEventListener("click", () => {
     exporterPdfSite(btn.dataset.exportPdf);
   }));
+  // Relevé « sur demande » (admin) : pas de relance mensuelle, relevé en masse lancé à la main.
+  const majSite = async (btn, siteId, filtre, patch, question) => {
+    const l = state.compteurs.filter(c => c.dossierId === siteId && filtre(c)); if (!l.length) return;
+    if (!(await window.confirmDialog(question(l.length)))) return;
+    btn.disabled = true;
+    try { for (const c of l) { await modifierCompteur(c.id, patch); Object.assign(c, patch); } window.toast?.("✓ " + l.length + " compteur(s) mis à jour", "success"); render(); }
+    catch (e) { alert("Échec : " + (e?.message || e)); btn.disabled = false; }
+  };
+  mountedContainer.querySelectorAll("[data-campagne]").forEach(btn => btn.addEventListener("click", () => majSite(btn, btn.dataset.campagne, c => c.frequence === "demande", { campagneLe: Date.now() },
+    n => `Lancer un relevé en masse des ${n} compteur(s) « sur demande » de ce site ? Ils passeront « à relever » (avec relance) jusqu'à ce que chacun soit relevé.`)));
+  mountedContainer.querySelectorAll("[data-campagne-clore]").forEach(btn => btn.addEventListener("click", () => majSite(btn, btn.dataset.campagneClore, c => c.frequence === "demande" && c.campagneLe, { campagneLe: null },
+    n => `Clore la demande de relevé ? Les compteurs pas encore relevés ne seront plus relancés.`)));
+  mountedContainer.querySelectorAll("[data-site-demande]").forEach(btn => btn.addEventListener("click", () => { const sid = btn.dataset.siteDemande; return majSite(btn, sid, c => (c.frequence || "mensuel") === "mensuel", { frequence: "demande", campagneLe: null },
+    n => `Passer les ${n} compteur(s) mensuels de ce site en « sur demande » ? Plus de relevé mensuel ni de relance : tu lanceras un relevé en masse quand tu en auras besoin.`); }));
+  mountedContainer.querySelectorAll("[data-site-mensuel]").forEach(btn => btn.addEventListener("click", () => majSite(btn, btn.dataset.siteMensuel, c => c.frequence === "demande", { frequence: "mensuel", campagneLe: null },
+    n => `Remettre les ${n} compteur(s) « sur demande » de ce site en relevé mensuel (du 27 au 3) ?`)));
   mountedContainer.querySelectorAll("[data-voir-rapport]").forEach(btn => btn.addEventListener("click", () => {
     ui.rapportSiteId = btn.dataset.voirRapport;
     render();
@@ -970,6 +1001,7 @@ function frequenceFieldsHTML(prefix, frequence, jour, mois) {
         <select id="${prefix}-frequence">
           <option value="mensuel" ${frequence === "mensuel" ? "selected" : ""}>Tous les mois</option>
           <option value="annuel" ${frequence === "annuel" ? "selected" : ""}>Une fois par an, à date fixe</option>
+          <option value="demande" ${frequence === "demande" ? "selected" : ""}>Sur demande (pas de relance — relevé en masse lancé par un admin)</option>
         </select>
       </label>
       ${frequence === "annuel" ? `
