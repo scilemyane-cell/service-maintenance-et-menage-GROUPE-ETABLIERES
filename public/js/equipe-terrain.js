@@ -14,7 +14,7 @@ const FONDS = {
 };
 const RECENT = 15 * 60000, VIEUX = 12 * 3600000;
 const COULEURS = ["#1f6feb", "#e8590c", "#2b8a3e", "#ae3ec9", "#c2255c", "#0c8599", "#5f3dc4", "#d9480f"];
-let bloques = [];
+let bloques = [], monUid = null;
 let cont = null, map = null, fond = null, unsubs = [], positions = [], sites = [], marq = {}, timer = null, premierCadrage = true;
 
 const couleur = (uid) => { let h = 0; for (const ch of String(uid)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COULEURS[h % COULEURS.length]; };
@@ -25,7 +25,8 @@ function dist(a, b) { const R = 6371e3, r = Math.PI / 180, dLat = (b.lat - a.lat
 function siteProche(p) { let best = null; sites.forEach(s => { const d = dist(p, s.geo); if (!best || d < best.d) best = { s, d }; }); return best; }
 const libDist = (d) => d < 1000 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1).replace(".", ",")} km`;
 
-export async function mountEquipeTerrain(container) {
+export async function mountEquipeTerrain(container, u) {
+  monUid = u?.uid || null;
   unsubs.forEach(f => { try { f(); } catch { /* */ } }); unsubs = []; clearInterval(timer);
   cont = container; premierCadrage = true; marq = {};
   cont.innerHTML = `<div class="et va pro">
@@ -76,7 +77,7 @@ function rendre() {
     vus.add(p.uid);
     const frais = Date.now() - p.at < RECENT, c = couleur(p.uid), pr = siteProche(p);
     const html = `<div class="et-pers ${frais ? "frais" : "vieux"}" style="--c:${c}"><span class="et-halo"></span><span class="et-av">${esc(initiales(p.nom))}</span><span class="et-nom">${esc(prenom(p.nom))}</span></div>`;
-    const pop = `<div class="va-fiche"><div class="va-fiche-t"><span>👷 Technicien</span><em class="${frais ? "ok" : "veille"}">${ilYa(p.at)}</em></div><h4>${esc(p.nom)}</h4>
+    const pop = `<div class="va-fiche"><div class="va-fiche-t"><span>👷 ${p.role === "technicien" ? "Technicien" : "Encadrement"}</span><em class="${frais ? "ok" : "veille"}">${ilYa(p.at)}</em></div><h4>${esc(p.nom)}</h4>
       ${pr ? `<p>${pr.d < 150 ? "Sur le site" : "Près de"} <b>${esc(pr.s.nom)}</b>${pr.d >= 150 ? ` (${libDist(pr.d)})` : ""}</p>` : ""}
       <dl><dt>Précision</dt><dd>± ${p.precision || "?"} m</dd><dt>Heure</dt><dd>${new Date(p.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</dd></dl>
       <div class="va-fiche-b"><a class="va-btn plein" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}">➤ Itinéraire</a></div></div>`;
@@ -88,8 +89,8 @@ function rendre() {
   Object.keys(marq).forEach(uid => { if (!vus.has(uid)) { map.removeLayer(marq[uid]); if (marq[uid]._cercle) map.removeLayer(marq[uid]._cercle); delete marq[uid]; } });
   const tri = [...positions].sort((a, b) => b.at - a.at);
   cont.querySelector("[data-et-liste]").innerHTML = tri.length ? tri.map(p => { const pr = siteProche(p), frais = Date.now() - p.at < RECENT;
-    return `<div class="va-li ${frais ? "ok" : "veille"}" style="--c:${couleur(p.uid)}"><button class="va-li-m" data-et-aller="${p.uid}"><span class="et-av mini" style="--c:${couleur(p.uid)}">${esc(initiales(p.nom))}</span><span class="va-li-t"><b>${esc(p.nom)}</b><small>${ilYa(p.at)}${pr ? ` · ${pr.d < 150 ? "sur" : "près de"} ${esc(pr.s.nom)}` : ""}</small></span></button></div>`; }).join("")
-    : `<p class="hint">Aucune position pour l'instant : elles arrivent dès qu'un technicien ouvre l'appli sur sa tablette.</p>`;
+    return `<div class="va-li ${frais ? "ok" : "veille"}" style="--c:${couleur(p.uid)}"><button class="va-li-m" data-et-aller="${p.uid}"><span class="et-av mini" style="--c:${couleur(p.uid)}">${esc(initiales(p.nom))}</span><span class="va-li-t"><b>${esc(p.nom)}${p.uid === monUid ? " (moi)" : ""}</b><small>${ilYa(p.at)}${pr ? ` · ${pr.d < 150 ? "sur" : "près de"} ${esc(pr.s.nom)}` : ""}</small></span></button></div>`; }).join("")
+    : `<p class="hint">Aucune position pour l'instant : elles arrivent dès qu'un technicien ouvre l'appli sur sa tablette ou son téléphone (les PC n'envoient pas de position).</p>`;
   cont.querySelector("[data-et-liste]").insertAdjacentHTML("beforeend", bloques.map(p => `<div class="va-li alerte" style="--c:#9aa4b2"><div class="va-li-m"><span class="et-av mini" style="--c:#9aa4b2">${esc(initiales(p.nom))}</span><span class="va-li-t"><b>${esc(p.nom)}</b><small>📵 Localisation désactivée sur l'appareil (${ilYa(p.at)})</small></span></div></div>`).join(""));
   cont.querySelectorAll("[data-et-aller]").forEach(b => b.onclick = () => { const m = marq[b.dataset.etAller]; if (m) { map.flyTo(m.getLatLng(), 18, { duration: 0.8 }); setTimeout(() => m.openPopup(), 850); } });
   cadrer(false);

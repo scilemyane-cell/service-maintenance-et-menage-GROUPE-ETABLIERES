@@ -5,7 +5,10 @@
 import { db } from "./firebase-init.js";
 import { doc, setDoc, deleteDoc } from "./firestore-compte.js";
 
-const ROLES = ["technicien"];
+// Personnes du terrain. Seuls les téléphones / tablettes envoient leur position (pas les PC,
+// dont la position wifi écraserait celle du téléphone de la même personne).
+const ROLES = ["technicien", "n1", "admin", "super_admin"];
+const estMobile = () => /Mobi|Android|iPhone|iPad|Tablet/i.test(navigator.userAgent || "") || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent || ""));
 const MODULE = "equipe-terrain";
 let user = null, watchId = null, dernier = null, chip = null, actifModule = false;
 
@@ -16,7 +19,7 @@ let user = null, watchId = null, dernier = null, chip = null, actifModule = fals
 export function initPartagePosition(u, modulesEnConstruction = []) {
   user = u;
   actifModule = !modulesEnConstruction.includes(MODULE);
-  if (!u?.uid || !ROLES.includes(u.role) || u.apercu || !actifModule || !("geolocation" in navigator)) { arreter(false); retirerUI(); return; }
+  if (!u?.uid || !ROLES.includes(u.role) || u.apercu || !estMobile() || !(actifModule || u.role === "super_admin") || !("geolocation" in navigator)) { arreter(false); retirerUI(); return; }
   demarrer(); afficherUI();
 }
 
@@ -47,7 +50,7 @@ async function envoyer(p) {
 function retirerUI() { chip?.remove(); chip = null; }
 function afficherUI() {
   const html = bloque ? `<span title="La localisation est désactivée pour l'appli sur cet appareil">📍 Localisation désactivée — à réactiver dans les réglages</span>`
-    : `<span title="Ta position est visible par le responsable pendant que l'appli est ouverte">📍 Position visible par le responsable</span>`;
+    : (user?.role === "technicien" ? `<span title="Ta position est visible par le responsable pendant que l'appli est ouverte">📍 Position visible par le responsable</span>` : `<span title="Ta position est visible sur « Équipe sur le terrain » pendant que l'appli est ouverte">📍 Position partagée avec l'équipe</span>`);
   if (chip && chip.innerHTML === html) return;
   retirerUI();
   chip = document.createElement("div");
