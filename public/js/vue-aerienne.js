@@ -117,7 +117,7 @@ function choisirFond(k) {
   ov.querySelectorAll("[data-va-fond]").forEach(b => b.classList.toggle("on", b.dataset.vaFond === k));
   ov.querySelector(".va-carte-zone")?.classList.toggle("va-plan", k === "plan");
 }
-function majZoom() { const z = map.getZoom(), el = ov?.querySelector("[data-va-zoom]"); if (el) el.textContent = `ALT ≈ ${Math.round(40075016 * Math.cos((map.getCenter().lat * Math.PI) / 180) / Math.pow(2, z) * 1.6)} M · Z${z}`; ov?.classList.toggle("va-proche", z >= 18.5); }
+function majZoom() { const z = map.getZoom(), el = ov?.querySelector("[data-va-zoom]"); if (el) el.textContent = `ALT ≈ ${Math.round(40075016 * Math.cos((map.getCenter().lat * Math.PI) / 180) / Math.pow(2, z) * 1.6)} M · Z${z}`; ov?.classList.toggle("va-proche", z >= 18.5); ov?.classList.toggle("va-loin", z < 18); }
 function tic() { const el = ov?.querySelector("[data-va-heure]"); if (el) el.textContent = new Date().toLocaleTimeString("fr-FR") + " LOC"; }
 function bandeau(txt, cls = "") { const b = ov?.querySelector("[data-va-bandeau]"); if (!b) return; b.hidden = !txt; b.className = "va-bandeau " + cls; b.textContent = txt || ""; }
 
