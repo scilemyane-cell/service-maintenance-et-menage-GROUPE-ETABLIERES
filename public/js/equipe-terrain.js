@@ -12,6 +12,7 @@ const FONDS = {
 };
 const RECENT = 15 * 60000, VIEUX = 12 * 3600000;
 const COULEURS = ["#1f6feb", "#e8590c", "#2b8a3e", "#ae3ec9", "#c2255c", "#0c8599", "#5f3dc4", "#d9480f"];
+let bloques = [];
 let cont = null, map = null, fond = null, unsubs = [], positions = [], sites = [], marq = {}, timer = null, premierCadrage = true;
 
 const couleur = (uid) => { let h = 0; for (const ch of String(uid)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COULEURS[h % COULEURS.length]; };
@@ -41,7 +42,7 @@ export async function mountEquipeTerrain(container) {
   cont.querySelectorAll("[data-et-fond]").forEach(b => b.onclick = () => choisirFond(b.dataset.etFond));
   cont.querySelector("[data-et-tous]").onclick = () => cadrer(true);
   unsubs.push(watchSitesDossiers((l) => { sites = (l || []).filter(d => d.geo?.lat && !d.supprimeLe); dessinerSites(); rendre(); }));
-  unsubs.push(onSnapshot(collection(db, "positions"), (s) => { positions = s.docs.map(d => ({ uid: d.id, ...d.data() })).filter(p => p.lat && Date.now() - (p.at || 0) < VIEUX); rendre(); },
+  unsubs.push(onSnapshot(collection(db, "positions"), (s) => { const tous = s.docs.map(d => ({ uid: d.id, ...d.data() })); bloques = tous.filter(p => p.refus && !p.lat); positions = tous.filter(p => p.lat && !p.refus && Date.now() - (p.at || 0) < VIEUX); rendre(); },
     (e) => { cont.querySelector("[data-et-liste]").innerHTML = `<p class="hint" style="color:var(--red)">❌ ${esc(e.message)}<br>Publie la règle Firestore « positions ».</p>`; }));
   timer = setInterval(() => { if (!document.contains(cont)) { clearInterval(timer); unsubs.forEach(f => f()); unsubs = []; return; } rendre(); }, 30000);
   setTimeout(() => map?.invalidateSize(), 60);
@@ -84,7 +85,8 @@ function rendre() {
   const tri = [...positions].sort((a, b) => b.at - a.at);
   cont.querySelector("[data-et-liste]").innerHTML = tri.length ? tri.map(p => { const pr = siteProche(p), frais = Date.now() - p.at < RECENT;
     return `<div class="va-li ${frais ? "ok" : "veille"}" style="--c:${couleur(p.uid)}"><button class="va-li-m" data-et-aller="${p.uid}"><span class="et-av mini" style="--c:${couleur(p.uid)}">${esc(initiales(p.nom))}</span><span class="va-li-t"><b>${esc(p.nom)}</b><small>${ilYa(p.at)}${pr ? ` · ${pr.d < 150 ? "sur" : "près de"} ${esc(pr.s.nom)}` : ""}</small></span></button></div>`; }).join("")
-    : `<p class="hint">Aucun technicien ne partage sa position pour l'instant. Chacun reçoit la question dans son appli et peut accepter ou refuser.</p>`;
+    : `<p class="hint">Aucune position pour l'instant : elles arrivent dès qu'un technicien ouvre l'appli sur sa tablette.</p>`;
+  cont.querySelector("[data-et-liste]").insertAdjacentHTML("beforeend", bloques.map(p => `<div class="va-li alerte" style="--c:#9aa4b2"><div class="va-li-m"><span class="et-av mini" style="--c:#9aa4b2">${esc(initiales(p.nom))}</span><span class="va-li-t"><b>${esc(p.nom)}</b><small>📵 Localisation désactivée sur l'appareil (${ilYa(p.at)})</small></span></div></div>`).join(""));
   cont.querySelectorAll("[data-et-aller]").forEach(b => b.onclick = () => { const m = marq[b.dataset.etAller]; if (m) { map.flyTo(m.getLatLng(), 18, { duration: 0.8 }); setTimeout(() => m.openPopup(), 850); } });
   cadrer(false);
 }
