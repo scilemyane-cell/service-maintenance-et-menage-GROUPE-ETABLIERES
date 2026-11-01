@@ -9,7 +9,7 @@ import { suivreMaPosition } from "./ma-position.js";
 let moi = null;
 
 const FONDS = {
-  ign: { lib: "IGN HR", url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg", attr: "© IGN Géoplateforme", max: 19 },
+  ign: { lib: "IGN HR", url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg", attr: "© IGN Géoplateforme", max: 19, fin: 19 },
   plan: { lib: "PLAN", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "© OpenStreetMap", max: 19 },
 };
 const TYPE_LIB = { eau: "Eau", gaz: "Gaz", chauffage: "Chauffage", elec: "Électricité" };
@@ -107,12 +107,20 @@ function construire() {
   const g = Object.values(marqueurs);
   if (g.length) map.fitBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19 });
   setTimeout(() => map?.invalidateSize(), 50);
+  // Taille de la carte toujours à jour (barre d'adresse du téléphone, rotation…) : sinon le zoom au doigt se recentre mal.
+  try { const z = ov.querySelector(".va-carte-zone"), ro = new ResizeObserver(() => map?.invalidateSize({ pan: false })); ro.observe(z); } catch { /* */ }
 }
 
 function choisirFond(k) {
   if (fond) map.removeLayer(fond);
   const f = FONDS[k];
-  fond = window.L.tileLayer(f.url, { attribution: f.attr, maxNativeZoom: f.max, maxZoom: 21, subdomains: "abc", crossOrigin: true }).addTo(map);
+  const L = window.L, o = { attribution: f.attr, subdomains: "abc", crossOrigin: true };
+  // Orthophoto : de près (≥ 17.5) on affiche TOUJOURS la même image (niveau 19, la plus fine) quel que soit le zoom.
+  // Avant, chaque niveau de zoom chargeait une autre image (prise de vue/redressement différents) : le bâtiment
+  // semblait bouger sous le repère quand on dézoomait. Vue lointaine : niveaux habituels.
+  fond = f.fin
+    ? L.layerGroup([L.tileLayer(f.url, { ...o, maxNativeZoom: f.max, maxZoom: 17 }), L.tileLayer(f.url, { ...o, minZoom: 17.5, maxZoom: 21, minNativeZoom: f.fin, maxNativeZoom: f.fin })]).addTo(map)
+    : L.tileLayer(f.url, { ...o, maxNativeZoom: f.max, maxZoom: 21 }).addTo(map);
   try { localStorage.setItem(CLE_FOND, k); } catch { /* */ }
   ov.querySelectorAll("[data-va-fond]").forEach(b => b.classList.toggle("on", b.dataset.vaFond === k));
   ov.querySelector(".va-carte-zone")?.classList.toggle("va-plan", k === "plan");
