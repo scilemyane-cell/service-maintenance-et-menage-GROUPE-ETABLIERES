@@ -333,6 +333,13 @@ service cloud.firestore {
     // La mise à la corbeille est une mise à jour (isEditor). La purge
     // définitive (delete réel) est réservée Super Admin.
     // ---- Copies allégées des photos SharePoint (ouverture rapide des dossiers) ----
+    // Contrôles de dureté de l'eau : saisis par les techniciens (pour eux-mêmes) et l'encadrement.
+    match /durete-eau/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isEditor() || (myRole() == 'technicien' && request.resource.data.agentUid == request.auth.uid));
+      allow update, delete: if isEditor() || (isSignedIn() && resource.data.agentUid == request.auth.uid);
+    }
+
     match /photos-copies/{itemId} {
       allow read: if isSignedIn();
       allow create, update: if isEditor() && request.resource.data.data is string && request.resource.data.data.size() < 900000;

@@ -12,17 +12,22 @@ import { doc, onSnapshot, setDoc } from "./firestore-compte.js";
 
 const REF = () => doc(db, "config", "modules-construction");
 let courant = [];
+// Nouveaux modules mis « en construction » d'office, tant que le Super Admin ne les a pas basculés une première fois.
+const NOUVEAUX = ["durete-eau"];
+let connus = [];
 
 export function watchModulesConstruction(callback) {
   return onSnapshot(REF(), (snap) => {
     courant = (snap.exists() && Array.isArray(snap.data().ids)) ? snap.data().ids : [];
+    connus = (snap.exists() && Array.isArray(snap.data().connus)) ? snap.data().connus : [];
+    courant = [...new Set([...courant, ...NOUVEAUX.filter(id => !connus.includes(id))])];
     callback(courant);
   }, (err) => { console.error("watchModulesConstruction:", err); callback(courant); });
 }
 
 export async function basculerModuleConstruction(id) {
   const ids = courant.includes(id) ? courant.filter(x => x !== id) : [...courant, id];
-  await setDoc(REF(), { ids }, { merge: true });
+  await setDoc(REF(), { ids, connus: [...new Set([...connus, ...NOUVEAUX])] }, { merge: true });
 }
 
 // Modules dont les données doivent être masquées pour cet utilisateur

@@ -122,6 +122,7 @@
   const mountPlanningMenage = aLaDemande(() => import("./planning-menage.js"), "mountPlanningMenage");
   const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
   const mountContratsRH = aLaDemande(() => import("./contrats-rh.js"), "mountContratsRH");
+  const mountDureteEau = aLaDemande(() => import("./durete-eau.js"), "mountDureteEau");
   // SSIAP360 : appli de formation SSIAP / SST, affichée dans l'appli (même connexion).
   const mountSsiap360 = (c, u) => {
     window.__smmRole = u?.role || null;
@@ -268,7 +269,7 @@
   }
   let compteursAlertSubscribed = false;
   let backButtonGuardSetup = false;
-  let modulesConstruction = [];
+  let modulesConstruction = ["durete-eau"]; // nouveaux modules masqués tant que la config n'est pas lue
   let modulesConstructionSubscribed = false;
   // Mode "Aperçu en tant que…" (Super Admin uniquement) : l'appli est
   // affichée avec le rôle et les droits de la personne choisie, pour
@@ -465,6 +466,12 @@
         subtabs: [
           { id: "pense-bete", label: "Pense-bête", icon: "📌", roles: GESTION, mount: mountPenseBete },
           { id: "ecran", label: "Écran", icon: "📺", roles: [...GESTION, "technicien"], mount: mountEcranAtelier },
+        ],
+      },
+      {
+        id: "durete-eau", label: "Dureté de l'eau", icon: "💧", desc: "Contrôle de la dureté de l'eau (TH) tous les 3 mois par le technicien en charge de chaque site",
+        subtabs: [
+          { id: "controles", label: "Contrôles", icon: "💧", roles: [...GESTION, "technicien", "direction"], mount: mountDureteEau },
         ],
       },
       {
