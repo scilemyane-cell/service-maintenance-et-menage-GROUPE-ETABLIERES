@@ -142,6 +142,33 @@ async function load() {
   if (ui.screen === "liste") render();
 }
 
+// ---- Compteur le plus proche (géolocalisation) : proposé directement au technicien sur place ----
+const prox = { etat: "idle", pos: null, t: 0 };
+function distM(a, b) { const R = 6371e3, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r; const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
+function localiserProx(force = false) {
+  if (!("geolocation" in navigator) || prox.etat === "cherche") return;
+  if (!force && prox.pos && Date.now() - prox.t < 60000) return;
+  if (!state.compteurs.some(c => c.geo?.lat)) return; // aucun compteur pointé : inutile de localiser
+  prox.etat = "cherche";
+  navigator.geolocation.getCurrentPosition((p) => {
+    prox.pos = { lat: p.coords.latitude, lng: p.coords.longitude, precision: p.coords.accuracy || 0 }; prox.t = Date.now(); prox.etat = "ok";
+    if (ui.screen === "liste") render();
+  }, () => { prox.etat = "refus"; if (ui.screen === "liste") render(); }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 });
+}
+function procheHTML(siteId = null) {
+  if (!prox.pos || mountedUser?.lectureSeule) return "";
+  const rayon = Math.min(150, Math.max(40, prox.pos.precision + 25));
+  const l = state.compteurs.filter(c => c.geo?.lat && !c.supprimeLe && (!siteId || c.dossierId === siteId))
+    .map(c => ({ c, d: distM(prox.pos, c.geo) })).filter(x => x.d <= rayon).sort((a, b) => a.d - b.d).slice(0, 4);
+  if (!l.length) return "";
+  const [p, ...autres] = l, m = (d) => d < 5 ? "juste à côté" : `à ${Math.round(d)} m`;
+  return `<div class="cpt-proche">
+    <div class="cpt-proche-t"><span class="cpt-proche-ico">📍</span><div><small>Compteur le plus proche de toi</small><b>${TYPE_ICONE[p.c.type] || ""} ${esc(p.c.nom || "")}</b><em>${esc(nomPropre(p.c.dossierNom || ""))} · ${m(p.d)}${estEnRetard(p.c) ? ` · <span class="r">${motRetard()}</span>` : ""}</em></div></div>
+    <div class="cpt-proche-b"><button class="add-btn" data-prox-relever="${p.c.id}" data-prox-site="${p.c.dossierId}">📝 Relever ce compteur</button><button class="nav-btn" data-prox-refresh title="Relocaliser">↻</button></div>
+    ${autres.length ? `<div class="cpt-proche-autres">Aussi à proximité : ${autres.map(x => `<button data-prox-relever="${x.c.id}" data-prox-site="${x.c.dossierId}">${TYPE_ICONE[x.c.type] || ""} ${esc(x.c.nom || "")} <small>${m(x.d)}</small></button>`).join("")}</div>` : ""}
+  </div>`;
+}
+
 function render() {
   if (!mountedContainer) return;
   if (!document.contains(mountedContainer)) return;
@@ -369,6 +396,7 @@ function renderPageSite(site) {
       <div class="cd-titre"><small>${esc([site.association, site.groupe].filter(Boolean).join(" · "))}</small><h2>${esc(nomPropre(site.nom))}</h2></div>
       <div class="cd-kpis"><span><b>${tous.length}</b> compteur${tous.length > 1 ? "s" : ""}</span>${enRetard ? `<span class="r"><b>${enRetard}</b> ${motRetard()}</span>` : tous.length ? `<span class="ok">✓ à jour</span>` : ""}</div>
     </div>
+    ${procheHTML(site.id)}
     <div class="cd-actions">
       <button class="add-btn" data-rapide-site="${site.id}" ${tous.length === 0 || mountedUser?.lectureSeule ? 'disabled style="opacity:.4"' : ''}>🚀 Relever en mode rapide</button>
       <button class="nav-btn va-lanceur" data-vue-aerienne="${site.id}" ${tous.length === 0 ? 'disabled style="opacity:.4"' : ''}>🛰️ Vue aérienne</button>
@@ -471,6 +499,7 @@ function renderListe() {
           </div>
         </div>
       </div>
+      ${procheHTML()}
       ${pendingCount > 0 ? `
         <div class="stat-chip" style="width:fit-content;border-color:var(--gold);color:var(--gold)">
           📡 ${pendingCount} relevé(s) enregistré(s) sur cet appareil, en attente d'envoi (pas de réseau au moment de la saisie) — envoi automatique dès le retour de connexion.
@@ -598,6 +627,9 @@ function renderListe() {
     n => `Passer les ${n} compteur(s) de ce site (mensuels ou annuels) en « sur demande » ? Plus aucune relance : tu lanceras un relevé en masse quand tu en auras besoin.`); }));
   mountedContainer.querySelectorAll("[data-site-mensuel]").forEach(btn => btn.addEventListener("click", () => majSite(btn, btn.dataset.siteMensuel, c => c.frequence === "demande", { frequence: "mensuel", campagneLe: null },
     n => `Remettre les ${n} compteur(s) « sur demande » de ce site en relevé mensuel (du 27 au 3) ?`)));
+  localiserProx();
+  mountedContainer.querySelectorAll("[data-prox-relever]").forEach(b => b.addEventListener("click", () => ouvrirReleve(b.dataset.proxRelever, ui.pageSiteId || null)));
+  mountedContainer.querySelector("[data-prox-refresh]")?.addEventListener("click", () => localiserProx(true));
   mountedContainer.querySelectorAll("[data-vue-aerienne]").forEach(btn => btn.addEventListener("click", async () => {
     const site = state.sites.find(s => s.id === btn.dataset.vueAerienne); if (!site) return;
     const { ouvrirVueAerienne } = await import("./vue-aerienne.js");
