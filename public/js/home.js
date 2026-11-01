@@ -197,7 +197,7 @@ const GROUPES_PLAN = [
 function groupePlan(id) { const i = GROUPES_PLAN.findIndex(([, , l]) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id)); return i < 0 ? GROUPES_PLAN.length : i; }
 // ---- Espaces de tuiles : Maintenance / Ménage (les tuiles communes sont dans les deux) ----
 const TUILES_MENAGE = ["disp-", "stock-menage"];
-const TUILES_MAINT = ["astreinte", "compteurs", "masterlock", "cles", "previsionnel", "taches", "stock", "stock-deporte", "espaces-verts", "ecran-atelier"];
+const TUILES_MAINT = ["astreinte", "compteurs", "masterlock", "cles", "previsionnel", "taches", "stock", "stock-deporte", "espaces-verts", "ecran-atelier", "logements", "ssiap360", "statistiques", "planning-individuel", "suivi-demandes", "sites"];
 const dansListe = (id, l) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id);
 function espaceTuile(id) { return dansListe(id, TUILES_MENAGE) ? "menage" : dansListe(id, TUILES_MAINT) ? "maint" : "commun"; }
 const CLE_ESPACE = "etablieres-espace-tuiles";
