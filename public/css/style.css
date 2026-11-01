@@ -4792,3 +4792,6 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .cpt-proche-b{display:flex;gap:6px}.cpt-proche-b .add-btn{background:#fff!important;color:#1a56c4!important;border-color:#fff!important;font-weight:800}.cpt-proche-b .nav-btn{background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.4)}
 .cpt-proche-autres{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;opacity:.95}
 .cpt-proche-autres button{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:16px;padding:3px 10px;font-size:12px;cursor:pointer}.cpt-proche-autres small{opacity:.8}
+.moi-pt{position:absolute;transform:translate(-50%,-50%);width:18px;height:18px}
+.moi-pt b{position:absolute;inset:0;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)}
+.moi-pt i{position:absolute;inset:-10px;border-radius:50%;background:#1a73e8;opacity:.35;animation:va-pulse 2s ease-out infinite}

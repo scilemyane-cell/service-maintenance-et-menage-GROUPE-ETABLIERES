@@ -5,6 +5,8 @@ import { collection, onSnapshot } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 import { chargerLeaflet } from "./site-map.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
+import { suivreMaPosition } from "./ma-position.js";
+let moi = null;
 
 const FONDS = {
   ign: { lib: "IGN HR", url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg", attr: "© IGN Géoplateforme" },
@@ -32,7 +34,7 @@ export async function mountEquipeTerrain(container) {
         <div class="va-legende"><span><i class="ok"></i>Moins de 15 min</span><span><i class="veille"></i>Plus ancienne</span></div></aside>
       <div class="va-carte-zone et-carte-zone"><div class="va-carte" data-et-carte></div>
         <div class="va-fonds">${Object.entries(FONDS).map(([k, f]) => `<button class="va-btn" data-et-fond="${k}">${f.lib}</button>`).join("")}</div>
-        <div class="va-actions"><button class="va-btn" data-et-tous>⌖ Voir tout le monde</button></div></div>
+        <div class="va-actions"><button class="va-btn" data-et-moi>◉ Moi</button><button class="va-btn" data-et-tous>⌖ Voir tout le monde</button></div></div>
     </div></div>`;
   try { await chargerLeaflet(); } catch { cont.querySelector("[data-et-carte]").innerHTML = `<p class="hint" style="padding:20px">Carte indisponible (réseau).</p>`; return; }
   const L = window.L;
@@ -41,10 +43,12 @@ export async function mountEquipeTerrain(container) {
   choisirFond("plan");
   cont.querySelectorAll("[data-et-fond]").forEach(b => b.onclick = () => choisirFond(b.dataset.etFond));
   cont.querySelector("[data-et-tous]").onclick = () => cadrer(true);
+  moi?.arreter(); moi = suivreMaPosition(map, { onPremiere: (p) => { if (!Object.keys(marq).length) map.setView([p.lat, p.lng], 16); } });
+  cont.querySelector("[data-et-moi]").onclick = () => { if (!moi.aller()) window.toast?.("Position en cours de recherche…"); };
   unsubs.push(watchSitesDossiers((l) => { sites = (l || []).filter(d => d.geo?.lat && !d.supprimeLe); dessinerSites(); rendre(); }));
   unsubs.push(onSnapshot(collection(db, "positions"), (s) => { const tous = s.docs.map(d => ({ uid: d.id, ...d.data() })); bloques = tous.filter(p => p.refus && !p.lat); positions = tous.filter(p => p.lat && !p.refus && Date.now() - (p.at || 0) < VIEUX); rendre(); },
     (e) => { cont.querySelector("[data-et-liste]").innerHTML = `<p class="hint" style="color:var(--red)">❌ ${esc(e.message)}<br>Publie la règle Firestore « positions ».</p>`; }));
-  timer = setInterval(() => { if (!document.contains(cont)) { clearInterval(timer); unsubs.forEach(f => f()); unsubs = []; return; } rendre(); }, 30000);
+  timer = setInterval(() => { if (!document.contains(cont)) { clearInterval(timer); unsubs.forEach(f => f()); unsubs = []; moi?.arreter(); moi = null; return; } rendre(); }, 30000);
   setTimeout(() => map?.invalidateSize(), 60);
 }
 

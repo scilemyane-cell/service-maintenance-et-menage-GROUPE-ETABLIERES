@@ -5,6 +5,8 @@ import { esc } from "./astreinte-logic.js";
 import { chargerLeaflet } from "./site-map.js";
 import { saveDossierGeo, watchSitesDossiers } from "./site-dossier-data.js";
 import { modifierCompteur } from "./compteurs-data.js";
+import { suivreMaPosition } from "./ma-position.js";
+let moi = null;
 
 const FONDS = {
   ign: { lib: "IGN HR", url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg", attr: "© IGN Géoplateforme", max: 19 },
@@ -73,6 +75,7 @@ function construire() {
       <div class="va-fonds">${Object.entries(FONDS).map(([k, f]) => `<button class="va-btn" data-va-fond="${k}">${f.lib}</button>`).join("")}</div>
       ${st.pro ? "" : `<div class="va-boussole"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="27"/><path d="M30 6 L35 30 L30 26 L25 30 Z" class="n"/><path d="M30 54 L35 30 L30 34 L25 30 Z"/><text x="30" y="5">N</text></svg></div>`}
       <div class="va-actions">
+        <button class="va-btn" data-va-moi title="Ma position">◉ Moi</button>
         <button class="va-btn" data-va-centrer title="Recentrer sur le site">${T("⌖ SITE", "⌖ Recentrer")}</button>
         ${st.peutPointer ? `<button class="va-btn" data-va-placer-site title="Placer le centre du site">${T("◎ POSITION SITE", "◎ Position du site")}</button>` : ""}
       </div>
@@ -97,6 +100,8 @@ function construire() {
   ov.querySelectorAll("[data-va-fond]").forEach(b => b.onclick = () => choisirFond(b.dataset.vaFond));
   ov.querySelector("[data-va-centrer]").onclick = () => { const g = Object.values(marqueurs); if (g.length) map.flyToBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19, duration: 0.8 }); else if (st.geoSite) map.flyTo([st.geoSite.lat, st.geoSite.lng], 18, { duration: 0.8 }); };
   ov.querySelector("[data-va-placer-site]")?.addEventListener("click", () => { st.placerSite = !st.placerSite; st.pointage = null; modePointage(); });
+  moi?.arreter(); moi = suivreMaPosition(map);
+  ov.querySelector("[data-va-moi]").onclick = () => { if (!moi.aller()) window.toast?.("Position en cours de recherche… (autorise la localisation si le navigateur le demande)"); };
   horloge = setInterval(tic, 1000); tic();
   dessinerMarqueurs(); panneau();
   const g = Object.values(marqueurs);
@@ -202,7 +207,7 @@ function panneau() {
 
 function echap(e) { if (e.key !== "Escape" || !ov) return; if (st?.pointage || st?.placerSite) { st.pointage = null; st.placerSite = false; modePointage(); } else fermer(); }
 export function fermer() {
-  clearInterval(horloge); horloge = null;
+  clearInterval(horloge); horloge = null; moi?.arreter(); moi = null;
   try { map?.remove(); } catch { /* */ } map = null; fond = null; marqueurs = {};
   const cb = st?.onFermer;
   ov?.remove(); ov = null; document.documentElement.classList.remove("va-ouvert");
