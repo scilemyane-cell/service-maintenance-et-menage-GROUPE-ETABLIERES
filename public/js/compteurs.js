@@ -371,6 +371,7 @@ function renderPageSite(site) {
     </div>
     <div class="cd-actions">
       <button class="add-btn" data-rapide-site="${site.id}" ${tous.length === 0 || mountedUser?.lectureSeule ? 'disabled style="opacity:.4"' : ''}>🚀 Relever en mode rapide</button>
+      <button class="nav-btn va-lanceur" data-vue-aerienne="${site.id}" ${tous.length === 0 ? 'disabled style="opacity:.4"' : ''}>🛰️ Vue aérienne</button>
       <button class="nav-btn" data-voir-rapport="${site.id}" ${tous.length === 0 ? 'disabled style="opacity:.4"' : ''}>📊 Rapport</button>
       <button class="nav-btn" data-export-pdf="${site.id}" ${tous.length === 0 ? 'disabled style="opacity:.4"' : ''}>🖨️ PDF</button>
       <button class="nav-btn" data-open-sharepoint="${site.id}" data-nom-site="${esc(site.nom)}">🔗 SharePoint</button>
@@ -597,6 +598,12 @@ function renderListe() {
     n => `Passer les ${n} compteur(s) de ce site (mensuels ou annuels) en « sur demande » ? Plus aucune relance : tu lanceras un relevé en masse quand tu en auras besoin.`); }));
   mountedContainer.querySelectorAll("[data-site-mensuel]").forEach(btn => btn.addEventListener("click", () => majSite(btn, btn.dataset.siteMensuel, c => c.frequence === "demande", { frequence: "mensuel", campagneLe: null },
     n => `Remettre les ${n} compteur(s) « sur demande » de ce site en relevé mensuel (du 27 au 3) ?`)));
+  mountedContainer.querySelectorAll("[data-vue-aerienne]").forEach(btn => btn.addEventListener("click", async () => {
+    const site = state.sites.find(s => s.id === btn.dataset.vueAerienne); if (!site) return;
+    const { ouvrirVueAerienne } = await import("./vue-aerienne.js");
+    ouvrirVueAerienne({ site, compteurs: state.compteurs.filter(c => c.dossierId === site.id), user: mountedUser, estEnRetard, peutPointer: isEditorUser(mountedUser) && !mountedUser?.lectureSeule && !mountedUser?.apercu,
+      onFiche: (id) => { ui.detailCompteurId = id; ui.editingCompteurId = null; load().catch(() => render()); } });
+  }));
   mountedContainer.querySelectorAll("[data-voir-rapport]").forEach(btn => btn.addEventListener("click", () => {
     ui.rapportSiteId = btn.dataset.voirRapport;
     render();

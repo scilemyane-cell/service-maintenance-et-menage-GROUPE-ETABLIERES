@@ -6,7 +6,7 @@
 import { esc } from "./astreinte-logic.js";
 import { saveDossierGeo } from "./site-dossier-data.js";
 
-function chargerLeaflet() {
+export function chargerLeaflet() {
   if (window.L) return Promise.resolve();
   if (window.__leafletLoading) return window.__leafletLoading;
   window.__leafletLoading = new Promise((resolve, reject) => {
