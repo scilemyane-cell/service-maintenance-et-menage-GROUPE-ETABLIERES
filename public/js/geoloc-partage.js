@@ -51,6 +51,9 @@ async function envoyer(p) {
 
 function retirerUI() { chip?.remove(); chip = null; }
 function afficherUI() {
+  // Encadrement : pas de bandeau en bas d'écran (inutile pour eux) ; seul le
+  // technicien garde l'indicateur « position visible par le responsable ».
+  if (user?.role !== "technicien") { retirerUI(); return; }
   const h = envoiLe ? new Date(envoiLe).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
   const etat = erreurEnvoi ? ` · ⚠️ non envoyée (${erreurEnvoi})` : envoiLe ? ` · envoyée à ${h}` : " · recherche GPS…";
   const html = bloque ? `<span title="La localisation est désactivée pour l'appli sur cet appareil">📍 Localisation désactivée — à réactiver dans les réglages</span>`
