@@ -8,7 +8,6 @@ import { modifierCompteur } from "./compteurs-data.js";
 
 const FONDS = {
   ign: { lib: "IGN HR", url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg", attr: "© IGN Géoplateforme", max: 19 },
-  sat: { lib: "SAT", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "© Esri, Maxar", max: 19 },
   plan: { lib: "PLAN", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "© OpenStreetMap", max: 19 },
 };
 const TYPE_LIB = { eau: "Eau", gaz: "Gaz", chauffage: "Chauffage", elec: "Électricité" };
@@ -33,7 +32,7 @@ const T = (tactique, pro) => st?.pro ? pro : tactique;
 export async function ouvrirVueAerienne({ site, compteurs, user, estEnRetard, peutPointer, onFiche, onFermer }) {
   fermer();
   // Techniciens (et tous ceux qui ne pointent pas) : présentation sobre « pro ». Encadrement : au choix.
-  let pro = !peutPointer; if (peutPointer) { try { pro = localStorage.getItem(CLE_STYLE) === "pro"; } catch { /* */ } }
+  const pro = true; // présentation « pro » pour tout le monde
   st = { site, compteurs, pro, onFermer, user, estEnRetard, peutPointer, onFiche, pointage: null, filtre: "", geoSite: null, placerSite: false };
   ov = document.createElement("div");
   ov.className = "va" + (pro ? " pro" : "");
@@ -55,7 +54,6 @@ function construire() {
     ${st.pro ? `<div class="va-id"><span class="va-pro-ico">📍</span><div><small>Plan des compteurs</small><span>${esc(st.site.nom)}</span></div></div>`
       : `<div class="va-id"><span class="va-rec">●</span><b>VUE AÉRIENNE</b><i>//</i><span>${esc(st.site.nom)}</span><em>${esc(refSite(st.site.nom))}</em></div>`}
     <div class="va-tel">${st.pro ? "" : `<span data-va-coord>— — —</span><span data-va-zoom></span><span data-va-heure></span>`}
-      ${st.peutPointer ? `<button class="va-btn" data-va-style title="Changer de présentation">${st.pro ? "◉ Vue surveillance" : "◐ Vue pro"}</button>` : ""}
       <button class="va-btn va-x" data-va-fermer title="Fermer (Échap)">✕</button></div>
   </div>
   <div class="va-corps">

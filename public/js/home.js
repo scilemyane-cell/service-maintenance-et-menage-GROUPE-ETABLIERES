@@ -187,7 +187,7 @@ const ACCENTS_TUILES = ["#2f6fd6", "#d9466f", "#139c8f", "#e0a526", "#7c4fd1", "
 function accentPour(id) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACCENTS_TUILES[h % ACCENTS_TUILES.length]; }
 // ---- Interface « Plan technique » : modules regroupés par métier, en listes ----
 const GROUPES_PLAN = [
-  ["Interventions", "🛠️", ["suivi-demandes", "astreinte", "planning-individuel", "mon-planning", "taches", "previsionnel", "ecran-atelier"]],
+  ["Interventions", "🛠️", ["equipe-terrain", "suivi-demandes", "astreinte", "planning-individuel", "mon-planning", "taches", "previsionnel", "ecran-atelier"]],
   ["Patrimoine & sites", "🏢", ["sites", "compteurs", "masterlock", "cles", "logements", "durete-eau"]],
   ["Ménage & espaces verts", "🧹", ["disp-", "stock-menage", "espaces-verts"]],
   ["Stocks", "📦", ["stock", "stock-deporte"]],
@@ -197,7 +197,7 @@ const GROUPES_PLAN = [
 function groupePlan(id) { const i = GROUPES_PLAN.findIndex(([, , l]) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id)); return i < 0 ? GROUPES_PLAN.length : i; }
 // ---- Espaces de tuiles : Maintenance / Ménage (les tuiles communes sont dans les deux) ----
 const TUILES_MENAGE = ["disp-", "stock-menage"];
-const TUILES_MAINT = ["astreinte", "compteurs", "masterlock", "cles", "previsionnel", "taches", "stock", "stock-deporte", "espaces-verts", "ecran-atelier", "logements", "ssiap360", "statistiques", "planning-individuel", "suivi-demandes", "sites", "durete-eau"];
+const TUILES_MAINT = ["astreinte", "compteurs", "masterlock", "cles", "previsionnel", "taches", "stock", "stock-deporte", "espaces-verts", "ecran-atelier", "logements", "ssiap360", "statistiques", "planning-individuel", "suivi-demandes", "sites", "durete-eau", "equipe-terrain"];
 const dansListe = (id, l) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id);
 function espaceTuile(id) { return dansListe(id, TUILES_MENAGE) ? "menage" : dansListe(id, TUILES_MAINT) ? "maint" : "commun"; }
 const CLE_ESPACE = "etablieres-espace-tuiles";

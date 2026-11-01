@@ -334,6 +334,12 @@ service cloud.firestore {
     // définitive (delete réel) est réservée Super Admin.
     // ---- Copies allégées des photos SharePoint (ouverture rapide des dossiers) ----
     // Contrôles de dureté de l'eau : saisis par les techniciens (pour eux-mêmes) et l'encadrement.
+    // Position partagée par un technicien (dernière seulement, écrasée) : lue par l'encadrement.
+    match /positions/{uid} {
+      allow read: if isEditor();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
     match /durete-eau/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (isEditor() || (myRole() == 'technicien' && request.resource.data.agentUid == request.auth.uid));

@@ -123,6 +123,7 @@
   const mountFichesPoste = aLaDemande(() => import("./fiches-poste.js"), "mountFichesPoste");
   const mountContratsRH = aLaDemande(() => import("./contrats-rh.js"), "mountContratsRH");
   const mountDureteEau = aLaDemande(() => import("./durete-eau.js"), "mountDureteEau");
+  const mountEquipeTerrain = aLaDemande(() => import("./equipe-terrain.js"), "mountEquipeTerrain");
   // SSIAP360 : appli de formation SSIAP / SST, affichée dans l'appli (même connexion).
   const mountSsiap360 = (c, u) => {
     window.__smmRole = u?.role || null;
@@ -269,7 +270,7 @@
   }
   let compteursAlertSubscribed = false;
   let backButtonGuardSetup = false;
-  let modulesConstruction = ["durete-eau"]; // nouveaux modules masqués tant que la config n'est pas lue
+  let modulesConstruction = ["durete-eau", "equipe-terrain"]; // nouveaux modules masqués tant que la config n'est pas lue
   let modulesConstructionSubscribed = false;
   // Mode "Aperçu en tant que…" (Super Admin uniquement) : l'appli est
   // affichée avec le rôle et les droits de la personne choisie, pour
@@ -469,6 +470,12 @@
         ],
       },
       {
+        id: "equipe-terrain", label: "Équipe sur le terrain", icon: "📍", desc: "Où sont les techniciens qui partagent leur position (appli ouverte), avec le site le plus proche",
+        subtabs: [
+          { id: "carte", label: "Carte", icon: "📍", roles: GESTION, mount: mountEquipeTerrain },
+        ],
+      },
+      {
         id: "durete-eau", label: "Dureté de l'eau", icon: "💧", desc: "Contrôle de la dureté de l'eau (TH) tous les 3 mois par le technicien en charge de chaque site",
         subtabs: [
           { id: "controles", label: "Contrôles", icon: "💧", roles: [...GESTION, "technicien", "direction"], mount: mountDureteEau },
@@ -510,6 +517,7 @@
     // utilisateurs sont renvoyés vers la version validée (même lien, même QR).
     if (CANAL_TEST && user.role !== "super_admin") { window.location.replace("/app.html" + window.location.search + window.location.hash); return; }
     currentUser = user;
+    import("./geoloc-partage.js").then(m => m.initPartagePosition(user, modulesConstruction)).catch(() => {});
     suivreMembresAstreinte(() => { try { render(); } catch (e) { /* écran pas encore prêt */ } });
     // Télé de l'atelier : .../app.html?ecran=atelier ouvre directement l'écran,
     // en mode télé (plein écran dans la fenêtre, sans la barre de l'appli).
@@ -605,7 +613,7 @@
     // Badges d'alerte stock : abonnement dans render() (voir « QUOTA »).
     if (!modulesConstructionSubscribed) {
       modulesConstructionSubscribed = true;
-      watchModulesConstruction((ids) => { modulesConstruction = ids; if (currentCategory === null || estMasqueConstruction(currentCategory, utilisateurEffectif())) render(); });
+      watchModulesConstruction((ids) => { modulesConstruction = ids; if (currentUser) import("./geoloc-partage.js").then(m => m.initPartagePosition(currentUser, ids)).catch(() => {}); if (currentCategory === null || estMasqueConstruction(currentCategory, utilisateurEffectif())) render(); });
     }
     // Interventions gardées sur l'appareil (quota/réseau) : envoi automatique.
     if (!window.__intervAttente) { window.__intervAttente = true; import("./interventions-attente.js").then(m => m.demarrerEnvoiAuto()).catch(() => {}); }

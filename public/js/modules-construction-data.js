@@ -13,7 +13,7 @@ import { doc, onSnapshot, setDoc } from "./firestore-compte.js";
 const REF = () => doc(db, "config", "modules-construction");
 let courant = [];
 // Nouveaux modules mis « en construction » d'office, tant que le Super Admin ne les a pas basculés une première fois.
-const NOUVEAUX = ["durete-eau"];
+const NOUVEAUX = ["durete-eau", "equipe-terrain"];
 let connus = [];
 
 export function watchModulesConstruction(callback) {
