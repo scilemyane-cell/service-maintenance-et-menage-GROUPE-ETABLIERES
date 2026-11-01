@@ -602,7 +602,8 @@ function renderListe() {
     const site = state.sites.find(s => s.id === btn.dataset.vueAerienne); if (!site) return;
     const { ouvrirVueAerienne } = await import("./vue-aerienne.js");
     ouvrirVueAerienne({ site, compteurs: state.compteurs.filter(c => c.dossierId === site.id), user: mountedUser, estEnRetard, peutPointer: isEditorUser(mountedUser) && !mountedUser?.lectureSeule && !mountedUser?.apercu,
-      onFiche: (id) => { ui.detailCompteurId = id; ui.editingCompteurId = null; load().catch(() => render()); } });
+      onFiche: (id) => { ui.detailCompteurId = id; ui.editingCompteurId = null; },
+      onFermer: () => render() });
   }));
   mountedContainer.querySelectorAll("[data-voir-rapport]").forEach(btn => btn.addEventListener("click", () => {
     ui.rapportSiteId = btn.dataset.voirRapport;

@@ -4721,3 +4721,43 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 @media (max-width:760px){.va-corps{flex-direction:column-reverse}.va-panneau{width:auto;flex:0 0 38%;border-right:0;border-top:1px solid rgba(34,211,238,.2)}.va-tel span[data-va-coord],.va-tel span[data-va-zoom]{display:none}.va-fonds{right:12px;top:56px}.va-boussole{top:96px;right:12px;width:40px}.va-id em{display:none}}
 @media (prefers-reduced-motion:reduce){.va-scan::after,.va-radar i,.va-m-pulse,.va-perimetre{animation:none}}
 .va-pop a.va-btn{color:#bfe6f0}.va-pop a.va-btn:hover{color:#fff}.va-m-tag{left:28px}
+/* --- Vue aérienne : présentation « pro » (techniciens, ou au choix) --- */
+.va.pro{--va-c:#1f6feb;background:#eef1f5;color:#1d2533;font-family:Montserrat,"Segoe UI",system-ui,sans-serif;letter-spacing:0}
+.va.pro .va-hud-top{background:#fff;border-bottom:1px solid #dde3ea;padding:10px 16px;box-shadow:0 1px 6px rgba(15,30,50,.06)}
+.va.pro .va-id{gap:10px}.va.pro .va-id>div{display:flex;flex-direction:column;line-height:1.2}.va.pro .va-id small{font-size:11px;color:#6b7686;font-weight:600}.va.pro .va-id span{color:#111827;font-size:16px;font-weight:800}
+.va-pro-ico{font-size:22px}
+.va.pro .va-btn{clip-path:none;border-radius:8px;background:#fff;color:#1d2533;border:1px solid #d3dae3;font-size:12.5px;font-weight:600;letter-spacing:0;padding:7px 12px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.va.pro .va-btn:hover{background:#f3f6fa;border-color:#b9c3cf;color:#111}.va.pro .va-btn.on,.va.pro .va-btn.plein{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.va.pro .va-btn.danger{color:#c62828;border-color:#f1c4c4}
+.va.pro .va-panneau{background:#fff;border-right:1px solid #dde3ea}
+.va.pro .va-kpis div{border:1px solid #e3e8ee;border-radius:10px;background:#f7f9fb}.va.pro .va-kpis b{color:#111827;font-weight:800}.va.pro .va-kpis span{color:#6b7686;font-size:11px;letter-spacing:0;font-weight:600}
+.va.pro .va-kpis .al{border-color:#f3c2c2;background:#fdf2f2}.va.pro .va-kpis .al b{color:#d32f2f;text-shadow:none}
+.va.pro .va-li{border-left:4px solid var(--c);background:#f7f9fb;border-radius:8px;overflow:hidden}.va.pro .va-li.alerte{background:#fdf2f2}.va.pro .va-li.cible{outline:2px solid #1f6feb;background:#eef4ff}
+.va.pro .va-li-t b{color:#111827}.va.pro .va-li-t small{color:#6b7686;letter-spacing:0;font-size:11px;font-weight:600}.va.pro .va-li.alerte small{color:#d32f2f}.va.pro .va-li.ok small{color:#2e7d32}
+.va.pro .va-aide{color:#6b7686;border-top-color:#e3e8ee}
+.va-legende{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11.5px;color:#4b5563;font-weight:600}.va-legende i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.va-legende i.alerte{background:#e53935}.va-legende i.ok{background:#2e9d58}.va-legende i.veille{background:#9aa4b2}
+.va.pro .va-grille,.va.pro .va-scan,.va.pro .va-vignette,.va.pro .va-coin,.va.pro .va-radar,.va.pro .va-perimetre{display:none}
+.va.pro .va-carte .leaflet-tile-pane{filter:none}.va.pro.va-plan .va-carte .leaflet-tile-pane,.va.pro .va-plan .va-carte .leaflet-tile-pane{filter:none}
+.va.pro .va-mire i{background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.va.pro .va-mire b{border-color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.va.pro .va-bandeau{background:#fff;color:#1d2533;border:0;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.2);letter-spacing:0;font-size:13px;font-weight:600;animation:none}
+.va.pro .va-bandeau.warn{background:#fff8e1;color:#8a5a00}
+.va.pro .va-fonds{gap:0;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.2);overflow:hidden}.va.pro .va-fonds .va-btn{border:0;border-radius:0;box-shadow:none}
+.va.pro .leaflet-control-zoom a{background:#fff;color:#1d2533;border-color:#d3dae3}.va.pro .leaflet-control-scale-line{background:rgba(255,255,255,.85);color:#1d2533;border-color:#1d2533}
+.va.pro .va-actions .va-btn{box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.va-p{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center}
+.va-p-pin{width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--c);border:3px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.4);display:grid;place-items:center}
+.va-p-pin span{transform:rotate(45deg);font-size:16px;line-height:1;display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+.va-p-etat{position:absolute;top:-4px;right:-6px;width:13px;height:13px;border-radius:50%;border:2px solid #fff;background:#2e9d58;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.va-p.alerte .va-p-etat{background:#e53935;animation:va-blink-doux 1.4s infinite}.va-p.veille .va-p-etat{background:#9aa4b2}.va-p.veille .va-p-pin{opacity:.8}
+.va-p-tag{position:absolute;top:42px;white-space:nowrap;background:#fff;color:#111827;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);display:none}
+.va-proche .va-p-tag,.va-p:hover .va-p-tag{display:block}
+.va-p.verrou .va-p-pin{animation:va-pose .5s ease-out}
+@keyframes va-pose{0%{transform:rotate(-45deg) translate(0,-30px);opacity:0}70%{transform:rotate(-45deg) translate(0,3px);opacity:1}100%{transform:rotate(-45deg)}}
+.va-pop.pro .leaflet-popup-content-wrapper{background:#fff;color:#1d2533;border:0;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.25)}
+.va-pop.pro .leaflet-popup-tip{background:#fff}.va-pop.pro .leaflet-popup-content{font-family:Montserrat,"Segoe UI",system-ui,sans-serif}.va-pop.pro a.leaflet-popup-close-button{color:#6b7686}
+.va-pop.pro .va-fiche-t{letter-spacing:0;font-size:12px;font-weight:700}.va-pop.pro .va-fiche-t em{border-radius:20px;padding:1px 8px;border:0;color:#fff}
+.va-pop.pro .va-fiche-t em.alerte{background:#e53935;color:#fff}.va-pop.pro .va-fiche-t em.ok{background:#2e9d58;color:#fff}.va-pop.pro .va-fiche-t em.veille{background:#9aa4b2;color:#fff}
+.va-pop.pro .va-fiche h4{color:#111827;font-size:15px}.va-pop.pro .va-fiche p{color:#6b7686}.va-pop.pro .va-fiche dt{color:#6b7686;letter-spacing:0;font-size:11px;font-weight:600}.va-pop.pro .va-fiche dd{color:#1d2533}
+.va-pop.pro .va-btn{clip-path:none;border-radius:8px;background:#fff;color:#1d2533;border:1px solid #d3dae3;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:0}
+.va-pop.pro .va-btn.plein{background:#1f6feb;color:#fff;border-color:#1f6feb}.va-pop.pro a.va-btn{color:#1d2533}.va-pop.pro .va-btn.danger{color:#c62828}
