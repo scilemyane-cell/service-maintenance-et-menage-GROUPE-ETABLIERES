@@ -100,8 +100,8 @@ function construire() {
   ov.querySelectorAll("[data-va-fond]").forEach(b => b.onclick = () => choisirFond(b.dataset.vaFond));
   ov.querySelector("[data-va-centrer]").onclick = () => { const g = Object.values(marqueurs); if (g.length) map.flyToBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19, duration: 0.8 }); else if (st.geoSite) map.flyTo([st.geoSite.lat, st.geoSite.lng], 18, { duration: 0.8 }); };
   ov.querySelector("[data-va-placer-site]")?.addEventListener("click", () => { st.placerSite = !st.placerSite; st.pointage = null; modePointage(); });
-  moi?.arreter(); moi = suivreMaPosition(map);
-  ov.querySelector("[data-va-moi]").onclick = () => { if (!moi.aller()) window.toast?.("Position en cours de recherche… (autorise la localisation si le navigateur le demande)"); };
+  moi?.arreter(); moi = suivreMaPosition(map, { bouton: ov.querySelector("[data-va-moi]") });
+  ov.querySelector("[data-va-moi]").onclick = () => { if (!moi.aller()) window.toast?.("Position en cours de recherche… (à l'intérieur d'un bâtiment, le GPS peut mettre un peu de temps)"); };
   horloge = setInterval(tic, 1000); tic();
   dessinerMarqueurs(); panneau();
   const g = Object.values(marqueurs);

@@ -43,7 +43,7 @@ export async function mountEquipeTerrain(container) {
   choisirFond("plan");
   cont.querySelectorAll("[data-et-fond]").forEach(b => b.onclick = () => choisirFond(b.dataset.etFond));
   cont.querySelector("[data-et-tous]").onclick = () => cadrer(true);
-  moi?.arreter(); moi = suivreMaPosition(map, { onPremiere: (p) => { if (!Object.keys(marq).length) map.setView([p.lat, p.lng], 16); } });
+  moi?.arreter(); moi = suivreMaPosition(map, { bouton: cont.querySelector("[data-et-moi]"), onPremiere: (p) => { if (!Object.keys(marq).length) map.setView([p.lat, p.lng], 16); } });
   cont.querySelector("[data-et-moi]").onclick = () => { if (!moi.aller()) window.toast?.("Position en cours de recherche…"); };
   unsubs.push(watchSitesDossiers((l) => { sites = (l || []).filter(d => d.geo?.lat && !d.supprimeLe); dessinerSites(); rendre(); }));
   unsubs.push(onSnapshot(collection(db, "positions"), (s) => { const tous = s.docs.map(d => ({ uid: d.id, ...d.data() })); bloques = tous.filter(p => p.refus && !p.lat); positions = tous.filter(p => p.lat && !p.refus && Date.now() - (p.at || 0) < VIEUX); rendre(); },

@@ -4795,3 +4795,5 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .moi-pt{position:absolute;transform:translate(-50%,-50%);width:18px;height:18px}
 .moi-pt b{position:absolute;inset:0;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)}
 .moi-pt i{position:absolute;inset:-10px;border-radius:50%;background:#1a73e8;opacity:.35;animation:va-pulse 2s ease-out infinite}
+.va-btn[data-etat="ok"]{border-color:#1a73e8!important;color:#1a73e8!important}.va-btn[data-etat="ko"]{border-color:#e57373!important;color:#c62828!important}
+.va-actions{max-width:calc(100% - 70px);flex-wrap:wrap;justify-content:center}.va-actions .va-btn{white-space:nowrap}
