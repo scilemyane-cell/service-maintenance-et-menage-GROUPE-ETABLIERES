@@ -4590,3 +4590,13 @@ html[data-theme="sombre"] .eff-c.H{background:repeating-linear-gradient(45deg,#2
 .eff-eur{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 10px}
 .eff-eur label{cursor:pointer}
 .eff-eur small{opacity:.75}
+
+/* Espaces de tuiles Maintenance / Ménage (accueil GMAO) */
+.gh-espaces{grid-column:1/-1;display:flex;gap:4px;padding:4px;background:var(--surface-2,rgba(0,0,0,.05));border:1px solid var(--border);border-radius:12px;width:max-content;max-width:100%}
+.gh-espaces button{border:0;background:transparent;padding:7px 14px;border-radius:9px;font-weight:700;font-size:13px;color:var(--text-dim);cursor:pointer;white-space:nowrap}
+.gh-espaces button.on{background:var(--brand,#E4104B);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.gh-espaces button:not(.on):hover{background:rgba(0,0,0,.06);color:var(--text)}
+.gh-espaces{align-self:start;justify-self:start}
+.gh-tuiles:has(.gh-espaces){grid-template-rows:auto}
+@media (min-width:1401px){.accueil-gmao .gh-tuiles:has(.gh-espaces){grid-auto-rows:calc((100% - 106px) / 5)}}
+@media (max-width:720px){.gh-espaces{width:100%}.gh-espaces button{flex:1;padding:8px 6px}}

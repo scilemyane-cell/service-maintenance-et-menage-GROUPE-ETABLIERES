@@ -756,6 +756,7 @@
     document.body.classList.toggle("interface-plan", !category && ["plan", "plan2"].includes(interfaceAccueil()));
     document.body.classList.toggle("interface-plan2", !category && interfaceAccueil() === "plan2");
     window.__interfaceMode = interfaceAccueil();
+    window.__espacesTuiles = CANAL_TEST;
     // Accueil toujours sombre (comme Camileia) ; modules en clair ou en
     // sombre selon le choix de l'utilisateur (bouton ☀️/🌙 en haut).
     document.documentElement.dataset.theme = category ? getThemeModules() : "sombre";
