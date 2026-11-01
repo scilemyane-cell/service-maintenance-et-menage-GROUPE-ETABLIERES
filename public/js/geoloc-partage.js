@@ -23,7 +23,7 @@ export function initPartagePosition(u, modulesEnConstruction = []) {
   demarrer(); afficherUI();
 }
 
-let bloque = false;
+let bloque = false, envoiLe = 0, erreurEnvoi = "";
 function demarrer() {
   if (watchId != null) return;
   watchId = navigator.geolocation.watchPosition((p) => { bloque = false; envoyer(p); afficherUI(); }, (e) => {
@@ -44,13 +44,17 @@ async function envoyer(p) {
   // Pas plus d'un envoi toutes les 2 min, sauf déplacement de plus de 40 m.
   if (dernier && Date.now() - dernier.t < 120000 && distance(dernier, pos) < 40) return;
   dernier = { ...pos, t: Date.now() };
-  try { await setDoc(doc(db, "positions", user.uid), { ...pos, at: Date.now(), nom: user.nom || user.email || "", role: user.role }); } catch { /* règle pas encore publiée / réseau */ }
+  try { await setDoc(doc(db, "positions", user.uid), { ...pos, at: Date.now(), nom: user.nom || user.email || "", role: user.role }); envoiLe = Date.now(); erreurEnvoi = ""; }
+  catch (e) { erreurEnvoi = /permission/i.test(e?.message || "") ? "règles Firestore non publiées" : (e?.message || "réseau"); dernier = null; }
+  afficherUI();
 }
 
 function retirerUI() { chip?.remove(); chip = null; }
 function afficherUI() {
+  const h = envoiLe ? new Date(envoiLe).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+  const etat = erreurEnvoi ? ` · ⚠️ non envoyée (${erreurEnvoi})` : envoiLe ? ` · envoyée à ${h}` : " · recherche GPS…";
   const html = bloque ? `<span title="La localisation est désactivée pour l'appli sur cet appareil">📍 Localisation désactivée — à réactiver dans les réglages</span>`
-    : (user?.role === "technicien" ? `<span title="Ta position est visible par le responsable pendant que l'appli est ouverte">📍 Position visible par le responsable</span>` : `<span title="Ta position est visible sur « Équipe sur le terrain » pendant que l'appli est ouverte">📍 Position partagée avec l'équipe</span>`);
+    : (user?.role === "technicien" ? `<span title="Ta position est visible par le responsable pendant que l'appli est ouverte">📍 Position visible par le responsable</span>` : `<span title="Ta position est visible sur « Équipe sur le terrain » pendant que l'appli est ouverte">📍 Position partagée avec l'équipe${etat}</span>`);
   if (chip && chip.innerHTML === html) return;
   retirerUI();
   chip = document.createElement("div");
