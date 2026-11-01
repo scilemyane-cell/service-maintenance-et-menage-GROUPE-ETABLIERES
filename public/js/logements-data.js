@@ -32,7 +32,7 @@ export function watchMesLogements(uid, callback) {
       if (r.interventionDate > iso(max) || r.interventionDate < iso(min)) return;
       l.push({ bat: b.label || "", etage: f.name || "", numero: r.number, date: r.interventionDate, creneau: r.creneau || "", note: r.occupant || "", pour: r.assigneNom || "" });
     })));
-    l.sort((a, b) => a.date.localeCompare(b.date) || (a.creneau === "matin" ? -1 : b.creneau === "matin" ? 1 : 0) || String(a.numero).localeCompare(String(b.numero), "fr", { numeric: true }));
+    l.sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.creneau === "matin" ? -1 : b.creneau === "matin" ? 1 : 0) || String(a.numero).localeCompare(String(b.numero), "fr", { numeric: true }));
     callback(l);
   }, (err) => { console.error("logements :", err); callback([]); });
 }

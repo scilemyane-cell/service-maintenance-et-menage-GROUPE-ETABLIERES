@@ -65,7 +65,7 @@ export async function enregistrerEurecia(lu, par, fichier) {
     const actuels = Object.fromEntries(Object.entries(jours[p.nom] || {}).filter(([iso]) => iso < lu.debut || iso > lu.fin));
     jours[p.nom] = { ...actuels, ...p.jours };
   });
-  const periodes = [...(d.periodes || []).filter(x => !(x.debut === lu.debut && x.fin === lu.fin)), { debut: lu.debut, fin: lu.fin, importeLe: Date.now(), par: par || "", fichier: fichier || "" }].sort((a, b) => a.debut.localeCompare(b.debut));
+  const periodes = [...(d.periodes || []).filter(x => !(x.debut === lu.debut && x.fin === lu.fin)), { debut: lu.debut, fin: lu.fin, importeLe: Date.now(), par: par || "", fichier: fichier || "" }].sort((a, b) => (a.debut || "").localeCompare(b.debut || ""));
   await setDoc(ref, { periodes, jours, majLe: Date.now() });
   return { periodes, jours };
 }

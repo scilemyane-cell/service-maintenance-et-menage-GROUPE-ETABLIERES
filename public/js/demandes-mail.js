@@ -60,7 +60,7 @@ export function ouvrirEnvoiMail({ ligne: l, utilisateur = "", peutMemoriser = fa
       const email = f.a.value.trim(); if (!/@/.test(email)) { f.a.focus(); return; }
       const nom = prompt("Nom du contact (ex. Vendée Habitat, Plomberie Dupont) :", contacts.find(c => c.email === email)?.nom || "");
       if (!nom) return;
-      const nv = [...contacts.filter(c => c.email !== email), { nom: nom.trim(), email, type }].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+      const nv = [...contacts.filter(c => c.email !== email), { nom: nom.trim(), email, type }].sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr"));
       try { await setDoc(REF, { contacts: nv }, { merge: true }); contacts = nv; window.toast?.("✓ Contact mémorisé"); dessiner({ a: email, objet: f.objet.value, corps: f.corps.value }); }
       catch (e) { alert("Échec : " + (e?.message || e)); }
     });

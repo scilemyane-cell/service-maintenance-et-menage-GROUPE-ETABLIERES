@@ -327,7 +327,7 @@ function blocMonPlanningHTML(personne) {
     .slice(0, 8);
   const abs = absences
     .filter(a => estMoi(a.person) && (a.end || a.start) >= auj && a.start <= fin)
-    .sort((a, b) => a.start.localeCompare(b.start));
+    .sort((a, b) => (a.start || "").localeCompare(b.start || ""));
   const LIB_ABS = { conge: "Congé", rtt: "RTT", arret: "Arrêt" };
   return `
     <div class="gh-astreinte">

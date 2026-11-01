@@ -266,7 +266,7 @@ export function heuresPerduesRepos(data, p) {
     // Plusieurs sorties la même nuit : seule la plus tardive compte.
     if (!parCle[cle] || parCle[cle].heures < h) parCle[cle] = { tech: i.technicien, jour: iso, heures: h, fin, repos, site: i.site || "", numero: i.numero || "" };
   });
-  const tous = Object.values(parCle).filter(x => x.jour >= (p.mois[0]?.cle || "") + "-01" && x.jour <= p.aujourdhui).sort((a, b) => b.jour.localeCompare(a.jour));
+  const tous = Object.values(parCle).filter(x => x.jour >= (p.mois[0]?.cle || "") + "-01" && x.jour <= p.aujourdhui).sort((a, b) => (b.jour || "").localeCompare(a.jour || ""));
   const mois = p.mois.map(m => { const l = tous.filter(x => x.jour.startsWith(m.cle)); return { ...m, heures: l.reduce((t, x) => t + x.heures, 0), nb: l.length }; });
   const parTech = {}; tous.forEach(x => { const o = parTech[x.tech] || (parTech[x.tech] = { heures: 0, nb: 0 }); o.heures += x.heures; o.nb++; });
   return { reprise: `${String(hR).padStart(2, "0")}h${String(mR).padStart(2, "0")}`, tous, mois, total: tous.reduce((t, x) => t + x.heures, 0),

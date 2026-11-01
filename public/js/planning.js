@@ -733,7 +733,7 @@ function calculerLignesNoteFrais(nom, mois, touteLHistoire = false) {
   const kmAllerRetour = c.kmDomicileService || 0;
   const interventionsRetenues = state.interventions
     .filter(i => estIntervenant(i, nom) && i.date && !i.fraisRembourse && !i.vehiculeService && !c.vehiculeService && (touteLHistoire || i.date.startsWith(mois)))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const parJour = new Map();
   interventionsRetenues.forEach(i => {
     if (!parJour.has(i.date)) parJour.set(i.date, []);
@@ -2699,7 +2699,7 @@ function calculerRecapAstreinte(person, start, end) {
   state.interventions.filter(i => dans(i) && i.n1Contacte === person && !i.appelOrigineId).forEach(i => { ligne(i.date.slice(0, 7)).appels++; });
   const miennes = state.interventions.filter(i => dans(i) && estIntervenant(i, person) && !i.sansDeplacement);
   miennes.forEach(i => { const l = ligne(i.date.slice(0, 7)); l.depl++; l.heures += parseFloat(i.heures) || 0; l.nuit += parseFloat(i.heuresNuit) || 0; l.primes += parseFloat(i.primeDimanche) || 0; });
-  const lignes = [...moisMap.values()].sort((a, b) => a.cle.localeCompare(b.cle));
+  const lignes = [...moisMap.values()].sort((a, b) => (a.cle || "").localeCompare(b.cle || ""));
   const tot = lignes.reduce((t, l) => { ["n1", "n2", "we", "ferie", "appels", "depl", "heures", "nuit", "primes"].forEach(k => t[k] += l[k]); l.semaines.forEach(x => t.semaines.add(x)); return t; },
     { n1: 0, n2: 0, we: 0, ferie: 0, semaines: new Set(), appels: 0, depl: 0, heures: 0, nuit: 0, primes: 0 });
   const nonValidees = miennes.filter(i => !i.transmis).length;

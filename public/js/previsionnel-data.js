@@ -105,5 +105,5 @@ export function anneesDisponibles(lignes) {
   });
   return [...map.entries()]
     .map(([valeur, libelle]) => ({ valeur, libelle }))
-    .sort((a, b) => b.libelle.localeCompare(a.libelle));
+    .sort((a, b) => (b.libelle || "").localeCompare(a.libelle || ""));
 }

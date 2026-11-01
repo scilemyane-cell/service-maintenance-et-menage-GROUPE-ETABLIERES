@@ -78,7 +78,7 @@ function rendre() {
   const base = st.vue === "miens" ? miens : tous;
   const q = st.filtre.trim().toLowerCase();
   const liste = base.filter(e => !q || e.site.toLowerCase().includes(q) || e.techs.join(" ").toLowerCase().includes(q))
-    .sort((a, b) => ORDRE[a.etat] - ORDRE[b.etat] || (a.prochain || "").localeCompare(b.prochain || "") || a.site.localeCompare(b.site, "fr"));
+    .sort((a, b) => ORDRE[a.etat] - ORDRE[b.etat] || (a.prochain || "").localeCompare(b.prochain || "") || (a.site || "").localeCompare(b.site || "", "fr"));
   const compte = (k) => base.filter(e => e.etat === k).length;
   const sitesSaisie = (st.vue === "miens" && miens.length ? miens : tous).map(e => e.site);
   cont.innerHTML = `<div class="de">

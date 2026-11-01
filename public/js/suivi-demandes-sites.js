@@ -587,7 +587,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         const j = joursDepuis(l.date); if (j !== null && j > s.plusVieille) s.plusVieille = j;
       } else if (l.statut === "Réalisé" && (l.dateIntervention || l.dateStatut || "").slice(0, 7) === aujourdhui().slice(0, 7)) s.realiseesMois++;
     });
-    const tri = (a, b) => (b.urgentes - a.urgentes) || (b.ouvertes - a.ouvertes) || a.nom.localeCompare(b.nom, "fr");
+    const tri = (a, b) => (b.urgentes - a.urgentes) || (b.ouvertes - a.ouvertes) || (a.nom || "").localeCompare(b.nom || "", "fr");
     const tous = Object.values(parSite).filter(s => !q || sa(s.nom).includes(q));
     // Technicien : ses sites attribués d'abord. Superviseur : filtre par technicien.
     const attribues = estTech && uid ? tous.filter(s => techsDuSite(s.nom).includes(uid)).sort(tri) : [];

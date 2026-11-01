@@ -10,7 +10,7 @@ export function mountLogements(container, user) {
   // Liste des techniciens (attribution d'un logement), tenue à jour.
   window.smmTechs = window.smmTechs || [];
   import("./users-data.js").then(({ watchUsers }) => watchUsers((l) => {
-    window.smmTechs = (l || []).filter(x => !x.supprimeLe && ["technicien", "n1", "admin", "super_admin", "mi_temps"].includes(x.role)).map(x => ({ uid: x.uid || x.id, nom: x.nom || x.email || "" })).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+    window.smmTechs = (l || []).filter(x => !x.supprimeLe && ["technicien", "n1", "admin", "super_admin", "mi_temps"].includes(x.role)).map(x => ({ uid: x.uid || x.id, nom: x.nom || x.email || "" })).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr"));
   })).catch(() => {});
   container.innerHTML = `
     <div class="lg-miroir">

@@ -259,7 +259,7 @@ function majPuces() {
   contrats.forEach(c => ajout(`${cap(c.prenom)} ${String(c.nom || "").toUpperCase()}`, "📝"));
   fiches.forEach(f => ajout(f.collaborateur, "📄"));
   personnes.forEach(p => ajout(p, ""));
-  const l = [...vus.values()].filter(x => !q || sansAcc(x.n).includes(q.split(" ").filter(Boolean).pop() || "")).filter(x => sansAcc(x.n) !== q).sort((a, b) => a.n.localeCompare(b.n, "fr"));
+  const l = [...vus.values()].filter(x => !q || sansAcc(x.n).includes(q.split(" ").filter(Boolean).pop() || "")).filter(x => sansAcc(x.n) !== q).sort((a, b) => (a.n || "").localeCompare(b.n || "", "fr"));
   z.innerHTML = l.length ? `<span class="hint">👥 Choisir :</span>${l.slice(0, 40).map(x => `<button type="button" data-rh-pers="${esc(x.n)}" title="${x.src === "📝" ? "a déjà une demande : elle sera reprise" : x.src === "📄" ? "a une fiche de poste" : ""}">${esc(x.n)}${x.src ? " " + x.src : ""}</button>`).join("")}` : "";
   z.querySelectorAll("[data-rh-pers]").forEach(b => b.addEventListener("click", () => choisirPersonne(b.dataset.rhPers)));
 }

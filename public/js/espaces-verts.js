@@ -72,7 +72,7 @@ function monter(container, u, quelleVue) {
     const vus = new Set();
     sitesDossiers = (l || []).filter(d => !d.supprimeLe && (/MNA/i.test(d.groupe || "") || /MNA/i.test(d.association || "") || /MNA/i.test(d.nom || "")))
       .map(d => ({ id: "mna-" + slug(d.nom), name: d.nom, association: d.association || "Agropolis" }))
-      .filter(x => x.name && !vus.has(x.id) && vus.add(x.id)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+      .filter(x => x.name && !vus.has(x.id) && vus.add(x.id)).sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"));
     majSites(); render();
   }));
   unsubs.push(watchPassages((l, e) => {
@@ -409,7 +409,7 @@ async function surChangement(e) {
 // ---------- Impression ----------
 async function imprimer(siteId) {
   const s = sites.find(x => x.id === siteId); const annee = String(ui.anneeImpr);
-  const liste = passages.filter(p => p.siteId === siteId && (p.date || "").startsWith(annee)).sort((a, b) => a.date.localeCompare(b.date));
+  const liste = passages.filter(p => p.siteId === siteId && (p.date || "").startsWith(annee)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   if (!liste.length) { toast(`Aucun passage en ${annee} sur ce site`, "info"); return; }
   const w = window.open("", "_blank");
   if (!w) { toast("Autorise les fenêtres pop-up pour imprimer", "error"); return; }

@@ -18,7 +18,7 @@ export function calculerEV(passages, sites, auj = new Date()) {
   const ceMois = moisCle(auj), moisPrec = moisCle(new Date(auj.getFullYear(), auj.getMonth() - 1, 1));
   const annee = String(auj.getFullYear());
   const parSite = sites.map(s => {
-    const l = ps.filter(p => p.siteId === s.id).sort((a, b) => b.date.localeCompare(a.date));
+    const l = ps.filter(p => p.siteId === s.id).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     const dernier = l[0] || null, j = dernier ? joursDepuis(dernier.date, auj) : null;
     // « jamais faite » n'est pas un retard (démarrage du suivi) : compté à part.
     const tous = retardsSite(ps, s.id, auj), retards = tous.filter(r => !r.jamais), jamais = tous.filter(r => r.jamais);

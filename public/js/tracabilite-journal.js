@@ -102,7 +102,7 @@ function analyser() {
         sites: [...new Set(modifs.map(e => e.siteName).filter(Boolean))] };
     }).filter(x => x.ev.length || x.prevu);
     return { ...p, prevu, jours, totalEstime: jours.reduce((t, x) => t + x.estime, 0), totalPrevu: jours.filter(x => !x.avenir && !(x.avantJournal && !x.ev.length)).reduce((t, x) => t + (x.prevu?.min || 0), 0) };
-  }).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  }).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr"));
 }
 
 function libelleEvt(e) {
@@ -144,7 +144,7 @@ function rendre() {
         <td><b>${x.ev.length ? dureeTxt(x.estime) : "—"}</b>${x.sessions?.length > 1 ? `<small>${x.sessions.length} périodes : ${x.sessions.map(s => `${hm(s.debut)}–${hm(s.fin)}`).join(", ")}</small>` : ""}</td>
         <td>${x.prevu ? `${dureeTxt(x.prevu.min)}<small>${dureeTxt(x.prevu.debut).replace(" h ", "h")}–${dureeTxt(x.prevu.fin).replace(" h ", "h")}</small>` : "—"}</td>
         <td>${x.coches ?? 0}</td><td>${esc((x.sites || []).join(", "))}</td>
-        <td>${x.alertes.map(a => `<div class="tj-al">⚠️ ${esc(a)}</div>`).join("") || (x.note ? `<small class="hint">${x.note}</small>` : `<span class="tj-ok">✓</span>`)}</td></tr>`; }).join("")}</tbody></table></div>
+        <td>${x.alertes.map(a => `<div class="tj-al">⚠️ ${esc(a)}</div>`).join("") || (x.note ? `<small class="hint">${esc(x.note)}</small>` : `<span class="tj-ok">✓</span>`)}</td></tr>`; }).join("")}</tbody></table></div>
     <details class="tj-det" ${ui.detail === choix ? "open" : ""} data-tj-det><summary>📜 Détail de toutes les actions (${p.evts.length})</summary>
       <div class="tj-chrono">${p.evts.map(e => `<div><span class="tj-h">${new Date(e.at).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit" })} ${hm(e.at)}</span><span>${esc(e.siteName || "")}</span><span>${libelleEvt(e)}${e.auteurUid && e.agentUid && e.auteurUid !== e.agentUid ? ` <em>(par un responsable)</em>` : ""}</span><small>${esc(e.appareil || "")}</small></div>`).join("")}</div></details>` : ""}`}
   </div>`;

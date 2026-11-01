@@ -177,7 +177,7 @@ async function chercherDoublonsExports() {
       }
       for (const liste of groupes.values()) {
         if (liste.length < 2) continue;
-        liste.sort((a, b) => b.name.localeCompare(a.name) || new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
+        liste.sort((a, b) => (b.name || "").localeCompare(a.name || "") || new Date(b.lastModifiedDateTime) - new Date(a.lastModifiedDateTime));
         liste.slice(1).forEach(it => doublons.liste.push({ ...it, site: `Archives ${segments.slice(0, -1).join(" / ")}` }));
       }
       return;

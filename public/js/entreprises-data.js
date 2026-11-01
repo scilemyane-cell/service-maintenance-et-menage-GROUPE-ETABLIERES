@@ -30,6 +30,6 @@ export function watchEntreprises(callback) { return abonnerEntreprises(callback)
 export async function saveEntreprises(liste) {
   const t = (x) => String(x || "").trim();
   const propre = liste.map(e => ({ nom: t(e.nom), contact: t(e.contact), metier: t(e.metier), tel: t(e.tel), email: t(e.email), notes: t(e.notes) }))
-    .filter(e => e.nom).sort((a, b) => a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" }));
+    .filter(e => e.nom).sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { sensitivity: "base" }));
   await setDoc(REF, { liste: propre, majLe: Date.now() });
 }
