@@ -442,7 +442,7 @@ function exporterProduitsExcel(produits) {
   feuille["!cols"] = [{ wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 26 }];
   const classeur = window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(classeur, feuille, "Produits stock maintenance");
-  window.XLSX.writeFile(classeur, `Stock_maintenance_produits_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  window.XLSX.writeFile(classeur, `Stock_maintenance_produits_${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.xlsx`);
 }
 
 // Encodage du QR : un vrai lien vers l'appli avec l'id du produit en

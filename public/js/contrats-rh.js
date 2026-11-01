@@ -28,7 +28,7 @@ const sansAcc = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").
 const nomComplet = (c) => `${c.prenom || ""} ${c.nom || ""}`.trim();
 const cap = (w) => String(w || "").toLocaleLowerCase("fr").replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toLocaleUpperCase("fr"));
 function nomFichier(c) {
-  const d = (c.dateManager || new Date().toISOString().slice(0, 10)).replace(/-/g, ".");
+  const d = (c.dateManager || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)).replace(/-/g, ".");
   return `${d}_Dmd_${c.demandeDe && c.demandeDe !== "CONTRAT" ? "AVT_" : ""}${c.typeContrat || ""}_${String(c.nom || "NOM").toUpperCase()}_${cap(c.prenom) || "Prenom"}.pdf`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "_");
 }
 const getP = (o, p) => p.split(".").reduce((x, k) => x?.[k], o);
@@ -305,7 +305,7 @@ function controles(c, r) {
   if (!c.fonction) l.push("Fonction occupée à choisir");
   else if (!r.m && !c.categorie) l.push("Métier non répertorié : indique la catégorie (et vois avec le service RH)");
   if (!c.dateDebut) l.push("Date de début à indiquer");
-  else { const j = Math.round((new Date(c.dateDebut) - new Date(new Date().toISOString().slice(0, 10))) / 864e5); if (j < 8) l.push(`Début dans ${j} jour(s) : la demande doit être déposée au moins 8 jours avant`); }
+  else { const j = Math.round((new Date(c.dateDebut) - new Date(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))) / 864e5); if (j < 8) l.push(`Début dans ${j} jour(s) : la demande doit être déposée au moins 8 jours avant`); }
   if (String(c.typeContrat).toUpperCase() === "CDD") { if (!c.dateFin) l.push("CDD : date de fin à indiquer"); if (/néant/i.test(c.motif || "")) l.push("CDD : motif du contrat à choisir"); }
   if (String(c.typeContrat).toUpperCase() === "CDI" && c.motif && !/néant/i.test(c.motif)) l.push("CDI : le motif doit être « Néant (si CDI) »");
   if (/remplacement/i.test(c.motif || "") && !c.remplacement) l.push("Remplacement : préciser le motif d'absence et la personne remplacée");
@@ -507,13 +507,13 @@ function brancher() {
   el.querySelector("[data-rh-avenant]")?.addEventListener("click", () => {
     const prec = ui.c, r = calculer(prec, bareme);
     const c = { ...JSON.parse(JSON.stringify(prec)), demandeDe: "AV. AUG. TPS TRAVAIL", dateDebut: "", dateDirection: "", commentaire: "", precisionsDirection: "", motif: "Néant (si CDI)", spLe: null, spFichier: null, importee: false,
-      dateManager: new Date().toISOString().slice(0, 10), valeursAvant: `Avant : ${prec.typeContrat || ""} ${nb(+String(prec.heures || 0).replace(",", "."), 2)} h/an (${pct(r.quotite)}, ${nb(r.hebdo, 2)} h/sem) · ${r.total} pts · ${eur(r.mensuel)} TP` };
+      dateManager: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), valeursAvant: `Avant : ${prec.typeContrat || ""} ${nb(+String(prec.heures || 0).replace(",", "."), 2)} h/an (${pct(r.quotite)}, ${nb(r.hebdo, 2)} h/sem) · ${r.total} pts · ${eur(r.mensuel)} TP` };
     ui = { ...ui, id: null, c, modif: true }; render(); window.toast?.("Avenant prêt : choisis le type d'avenant, la date et modifie ce qui change.");
   });
   el.querySelector("[data-rh-dup]")?.addEventListener("click", () => {
     const c = { ...contratVierge(ui.c.manager), ...JSON.parse(JSON.stringify(ui.c)) };
     ["nom", "prenom", "nomNaissance", "adresse", "cp", "ville", "email", "tel", "dateNaissance", "lieuNaissance", "nir", "nationalite", "diplome", "valeursAvant", "anciennete", "spLe", "spFichier", "dateDirection"].forEach(k => { c[k] = k === "anciennete" ? "0" : ""; });
-    c.importee = false; c.dateManager = new Date().toISOString().slice(0, 10);
+    c.importee = false; c.dateManager = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     ui = { ...ui, id: null, c, modif: true }; render(); window.toast?.("Copie prête : indique la personne puis enregistre.");
   });
   el.querySelector("[data-rh-del]")?.addEventListener("click", async () => { if (!confirm(`Supprimer la demande de ${nomComplet(ui.c) || "cette personne"} ?`)) return; await deleteDoc(doc(db, COL, ui.id)); ui = { ...ui, id: null, c: null, modif: false }; render(); });

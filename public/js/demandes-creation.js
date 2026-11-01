@@ -8,7 +8,7 @@ import { doc, collection, runTransaction, serverTimestamp } from "./firestore-co
 import { esc } from "./astreinte-logic.js";
 
 const URGENCES = ["Normal", "Urgent", "À planifier", "Critique"];
-const aujourdhui = () => new Date().toISOString().slice(0, 10);
+const aujourdhui = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 export async function creerDemande(champs) {
   const refCompteur = doc(db, "config", "compteur-demandes-app");

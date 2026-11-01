@@ -13,7 +13,7 @@ let params = { seuilSemaine: 42, nbSemainesMoyenne: 8, seuilMoyenne: 44 };
 let state = { heures: [] };
 let ui = {
   filterPerson: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), heuresInterne: "", hasExterne: false, employeurExterne: "", heuresExterne: "", note: "" },
+  form: { date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), heuresInterne: "", hasExterne: false, employeurExterne: "", heuresExterne: "", note: "" },
 };
 let unsubs = [];
 let mountedContainer = null;
@@ -86,7 +86,7 @@ function renderSelf(container, user) {
   const byWeek = weeklyTotalsFor(user.uid, state.heures);
   const overWeeks = Object.entries(byWeek).filter(([, total]) => total > params.seuilSemaine);
   const avgBreaches = slidingAverageBreaches(byWeek, params.nbSemainesMoyenne, params.seuilMoyenne);
-  const currentWeekKey = weekStartKey(new Date().toISOString().slice(0, 10));
+  const currentWeekKey = weekStartKey(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
   const currentWeekTotal = byWeek[currentWeekKey] || 0;
 
   container.innerHTML = `
@@ -169,7 +169,7 @@ function renderSelf(container, user) {
       validated: false,
       createdBy: user.uid,
     });
-    ui.form = { date: new Date().toISOString().slice(0, 10), heuresInterne: "", hasExterne: false, employeurExterne: "", heuresExterne: "", note: "" };
+    ui.form = { date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), heuresInterne: "", hasExterne: false, employeurExterne: "", heuresExterne: "", note: "" };
     render();
   });
 

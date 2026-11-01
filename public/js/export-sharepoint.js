@@ -23,7 +23,7 @@ import { listerTousLesCodes } from "./masterlock-data.js";
 const STATUS_DOC = doc(db, "config", "export-sharepoint-status");
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10); // YYYY-MM-DD
 }
 // Archives : une seule copie par mois (la dernière du mois remplace les
 // précédentes du même mois).

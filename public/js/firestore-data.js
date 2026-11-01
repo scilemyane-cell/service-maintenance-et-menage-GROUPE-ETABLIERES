@@ -219,7 +219,7 @@ export async function updateDemande(id, fields) {
   // l'action qui y était attribuée est close en même temps.
   if (fields && fields.statut && demandeClose(fields) && !("actionFaiteLe" in fields)) {
     const d = docLocal("demandes", id);
-    if (d && d.actionPour && !d.actionFaiteLe) { fields = { ...fields, actionFaiteLe: new Date().toISOString().slice(0, 10), actionFaitePar: "Clôture de la demande" }; }
+    if (d && d.actionPour && !d.actionFaiteLe) { fields = { ...fields, actionFaiteLe: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), actionFaitePar: "Clôture de la demande" }; }
   }
   majLocale("demandes", id, { ...fields, dateMaj: Timestamp.now() }); // affichage immédiat, même hors ligne
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });

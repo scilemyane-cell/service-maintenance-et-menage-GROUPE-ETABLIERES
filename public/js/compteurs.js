@@ -804,14 +804,14 @@ async function chargerEtAfficherHistorique(compteurId) {
       const iso = fond.querySelector("#corr-date").value;
       const at = iso === isoLocal(d) ? r.createdAt : new Date(`${iso}T12:00:00`).getTime(); // même jour : on garde l'heure d'origine
       if (!Number.isFinite(at) || at > Date.now() + 60000) { alert("Date invalide."); return; }
-      ev.currentTarget.disabled = true;
+      const bouton = ev.currentTarget; bouton.disabled = true;
       try {
         await modifierReleve(compteurId, r, valeurs, at, mountedUser);
         statsReleves = null;
         fermer(); window.toast?.("✓ Relevé corrigé");
         await load();
         await chargerEtAfficherHistorique(compteurId);
-      } catch (e) { alert("Correction impossible : " + (e.message || e)); ev.currentTarget.disabled = false; }
+      } catch (e) { alert("Correction impossible : " + (e.message || e)); bouton.disabled = false; }
     };
   }));
   holder.querySelectorAll("[data-del-releve]").forEach(btn => btn.addEventListener("click", async () => {

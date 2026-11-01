@@ -102,7 +102,7 @@ export function calculer(c, bareme = BAREME_DEFAUT) {
 }
 
 export function contratVierge(user = "") {
-  const auj = new Date().toISOString().slice(0, 10);
+  const auj = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   return { demandeDe: "CONTRAT", valeursAvant: "", nom: "", nomNaissance: "", prenom: "", adresse: "", cp: "", ville: "", pays: "France", email: "", tel: "",
     dateNaissance: "", lieuNaissance: "", nir: "", nationalite: "", diplome: "", rqth: "NON", typeContrat: "CDI", parrain: "", association: "AGROPOLIS",
     repartition1: "100", site1: "", repartition2: "", site2: "", dateDebut: "", dateFin: "", motif: "Néant (si CDI)", commentaire: "", remplacement: "", precisez: "",

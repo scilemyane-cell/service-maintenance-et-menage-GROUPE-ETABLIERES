@@ -354,7 +354,7 @@ function brancher() {
   });
   el.querySelector("[data-fp-pdf]")?.addEventListener("click", async () => { etat("⏳ Création du PDF…"); try { const blob = await pdf(ui.f); await livrerPDF(blob, nomFichier(ui.f)); etat("✓ PDF prêt"); } catch (e) { etat("❌ " + (e.message || e)); } });
   el.querySelector("[data-fp-sp]")?.addEventListener("click", envoyerSP);
-  el.querySelector("[data-fp-dup]")?.addEventListener("click", () => { ui = { ...ui, id: null, f: { ...JSON.parse(JSON.stringify(ui.f)), collaborateur: "", etablieLe: new Date().toISOString().slice(0, 10), spLe: null, spFichier: null }, modif: true }; render(); window.toast?.("Copie prête : indique le nom de la personne puis enregistre."); });
+  el.querySelector("[data-fp-dup]")?.addEventListener("click", () => { ui = { ...ui, id: null, f: { ...JSON.parse(JSON.stringify(ui.f)), collaborateur: "", etablieLe: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), spLe: null, spFichier: null }, modif: true }; render(); window.toast?.("Copie prête : indique le nom de la personne puis enregistre."); });
   el.querySelector("[data-fp-del]")?.addEventListener("click", async () => { if (!confirm(`Supprimer la fiche de poste de ${ui.f.collaborateur || "cette personne"} ?`)) return; await deleteDoc(doc(db, COL, ui.id)); ui = { ...ui, id: null, f: null, modif: false }; render(); });
 }
 

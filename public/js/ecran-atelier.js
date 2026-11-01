@@ -249,10 +249,13 @@ export function mountEcranAtelier(container, u) {
   if (!container.dataset.eaEcoute) {
     container.addEventListener("click", surClic);
     container.addEventListener("submit", surEnvoi);
-    document.addEventListener("fullscreenchange", () => conteneur && render());
-    window.addEventListener("resize", () => conteneur && ajuster());
-    document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && document.fullscreenElement && navigator.wakeLock) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } } });
     container.dataset.eaEcoute = "1";
+  }
+  if (!window.__eaGlobal) {
+    window.__eaGlobal = true; // écoutes de la fenêtre : une seule fois (avant : ajoutées à chaque ouverture)
+    document.addEventListener("fullscreenchange", () => conteneur && document.contains(conteneur) && render());
+    window.addEventListener("resize", () => conteneur && document.contains(conteneur) && ajuster());
+    document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && document.fullscreenElement && navigator.wakeLock) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } } });
   }
   unsubs.push(watchUrgencesOuvertes((l) => {
     const ids = new Set(l.map(x => x.id));

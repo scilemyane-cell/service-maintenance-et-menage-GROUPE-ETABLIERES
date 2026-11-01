@@ -557,7 +557,6 @@ export async function mountMails(container, user) {
   if (!container.dataset.mlEcoute) {
     container.addEventListener("click", surClic);
     container.addEventListener("input", (e) => {
-      if (e.target.classList.contains("ml-q")) { recherche = e.target.value; render(); }
       const b = e.target.closest("[data-brouillon]"); if (b) { const m = mails.find(x => x.id === b.dataset.brouillon); if (m) m.brouillonEdit = b.value; }
     });
     container.addEventListener("focusout", () => setTimeout(() => { if (renduDiffere) render(); }, 300));

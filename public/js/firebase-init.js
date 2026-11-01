@@ -19,5 +19,7 @@ export const auth = getAuth(app);
 // les onglets partagent le même cache et les mêmes écoutes : un onglet
 // supplémentaire ne relit presque rien.
 export const db = initializeFirestore(app, {
+  // Un champ « undefined » oublié dans un enregistrement est ignoré au lieu de faire échouer tout l'enregistrement.
+  ignoreUndefinedProperties: true,
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });

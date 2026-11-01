@@ -3,7 +3,7 @@ import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { doc, getDoc, setDoc, deleteDoc } from "./firestore-compte.js";
-import { journaliserConnexion } from "./connexions-data.js";
+import { journaliserConnexion, arreterSuiviConnexions } from "./connexions-data.js";
 
 // Rôles possibles : "super_admin" | "admin" | "n1" | "technicien" | "menage" | "mi_temps" | "direction"
 
@@ -62,7 +62,7 @@ function oublierProfil() {
 
 export function watchAuth(callback) {
   onAuthStateChanged(auth, async (user) => {
-    if (!user) { oublierProfil(); callback(null); return; }
+    if (!user) { arreterSuiviConnexions(); oublierProfil(); callback(null); return; }
     // Session « invité » (lien prestataire, SSIAP360 ouvert sans compte) restée
     // dans ce navigateur : ce n'est pas un compte de l'appli → on la ferme et
     // on affiche l'écran de connexion normal.

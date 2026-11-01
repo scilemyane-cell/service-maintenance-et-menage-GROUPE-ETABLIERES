@@ -19,7 +19,7 @@ const st = { vue: null, filtre: "", ouvert: null, saisie: null, reglages: false 
 const pad = (n) => String(n).padStart(2, "0");
 const isoJ = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const frD = (iso) => iso ? new Date(iso + "T12:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
-const plusMois = (iso, n) => { const d = new Date(iso + "T12:00"); d.setMonth(d.getMonth() + n); return isoJ(d); };
+const plusMois = (iso, n) => { const d = new Date(iso + "T12:00"), j = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); d.setDate(Math.min(j, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return isoJ(d); };
 const jours = (a, b) => Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 86400000);
 const nomUid = (uid) => { const u = users.find(x => x.uid === uid); return u ? (u.nom || u.displayName || u.email || "?") : "?"; };
 const estGestion = () => GESTION.includes(user?.role) && !user?.apercu;
@@ -69,6 +69,10 @@ export function mountDureteEau(container, u) {
 
 function rendre() {
   if (!cont || !document.contains(cont)) return;
+  // Une mise à jour en direct (autre technicien, liste des sites…) ne doit pas effacer la saisie en cours.
+  const fAvant = cont.querySelector("[data-de-form]");
+  if (fAvant && st.saisie) st.saisie.vals = Object.fromEntries([...fAvant.elements].filter(x => x.name).map(x => [x.name, x.value]));
+  const actif = document.activeElement?.name;
   const tous = sites().map(etatSite);
   const miens = tous.filter(e => (affect[e.site] || []).includes(user.uid));
   const base = st.vue === "miens" ? miens : tous;
@@ -98,6 +102,8 @@ function rendre() {
     ${!liste.length ? `<div class="form-card">${st.vue === "miens" ? "Aucun site ne t'est attribué. Les sites sont attribués aux techniciens dans Suivi des demandes (« sites des techniciens »). Passe sur « Tous les sites » pour saisir quand même." : "Aucun site."}</div>` : ""}
     <div class="de-sites">${liste.map(carteHTML).join("")}</div>
   </div>`;
+  const fApres = cont.querySelector("[data-de-form]");
+  if (fApres && st.saisie?.vals) { Object.entries(st.saisie.vals).forEach(([k, v]) => { const el = fApres.elements[k]; if (el) el.value = v; }); if (actif && fApres.elements[actif]) fApres.elements[actif].focus(); }
   if (st.saisie) cont.querySelector("[data-de-form] [name=thAdouci]")?.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -158,7 +164,7 @@ function saisie(e) {
 async function clic(e) {
   const b = e.target.closest("button, input[type=checkbox]"); if (!b || !cont.contains(b)) return;
   if (b.dataset.deVue) { st.vue = b.dataset.deVue; rendre(); }
-  else if (b.hasAttribute("data-de-nouveau")) { st.saisie = { site: b.dataset.deNouveau || "" }; rendre(); cont.querySelector("[data-de-form]")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  else if (b.hasAttribute("data-de-nouveau")) { cont.querySelector("[data-de-form]")?.remove(); st.saisie = { site: b.dataset.deNouveau || "" }; rendre(); cont.querySelector("[data-de-form]")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
   else if (b.hasAttribute("data-de-annuler")) { st.saisie = null; rendre(); }
   else if (b.dataset.deHisto) { st.ouvert = st.ouvert === b.dataset.deHisto ? null : b.dataset.deHisto; rendre(); }
   else if (b.hasAttribute("data-de-reglages")) { st.reglages = !st.reglages; rendre(); }

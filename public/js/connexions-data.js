@@ -22,20 +22,23 @@ function appareil() {
 // on compte donc aussi le RETOUR sur l'appli (écran rallumé, onglet réaffiché),
 // toujours au plus une fois toutes les 30 min par appareil.
 let suivi = null, enCours = false;
+// À la déconnexion : plus aucune activité comptée pour l'ancien compte.
+export function arreterSuiviConnexions() { suivi = null; }
 function suivreRetours(authUser, profil) {
   suivi = { authUser, profil };
   if (suivreRetours.branche) return; suivreRetours.branche = true;
-  const relancer = () => { if (document.visibilityState === "visible" && suivi) journaliserConnexion(suivi.authUser, suivi.profil); };
+  const relancer = () => { if (document.visibilityState === "visible" && suivi) journaliserConnexion(suivi.authUser, suivi.profil, true); };
   document.addEventListener("visibilitychange", relancer);
   window.addEventListener("focus", relancer);
   window.addEventListener("online", relancer);
   setInterval(relancer, 10 * 60 * 1000);
 }
 
-export async function journaliserConnexion(authUser, profil) {
+export async function journaliserConnexion(authUser, profil, retour = false) {
   try {
     if (!authUser?.uid) return;
-    suivreRetours(authUser, profil);
+    if (!retour) suivreRetours(authUser, profil);
+    else if (!suivi) return;
     if (enCours) return;
     const cle = "smm-derniere-connexion-" + authUser.uid;
     let derniere = 0;

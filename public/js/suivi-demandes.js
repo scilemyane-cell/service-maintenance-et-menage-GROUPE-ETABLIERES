@@ -246,7 +246,7 @@ function injecterMesActions(container) {
 
 // Vue superviseur : actions en cours de chaque personne (échéance dépassée en rouge).
 function actionsParPersonneHTML() {
-  const auj = new Date().toISOString().slice(0, 10);
+  const auj = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const fr = (x) => (x ? String(x).slice(0, 10).split("-").reverse().join("/") : "");
   const enCours = toutesLesLignes().filter(l => l.actionPour && l.actionTexte && !l.actionFaiteLe && !l.lieeA);
   if (!enCours.length) return "";
@@ -581,10 +581,6 @@ function renderVue(container) {
       },
     });
   }
-  const cle = ui.moisOuvert;
-  const mois = cle ? DONNEES_DEMANDES.mois.find(m => m.cle === cle) : null;
-  if (mois) return renderPageMois(container, mois);
-  return renderAccueil(container);
 }
 
 function toggleVueHTML() {
@@ -645,7 +641,7 @@ function renderEnPause(container) {
   attacherToggleVue(container);
   container.querySelectorAll("[data-reprendre]").forEach(b => b.addEventListener("click", async () => {
     b.disabled = true; b.textContent = "⏳…";
-    try { await updateDemande(b.dataset.reprendre, { statut: "Pris en compte", dateStatut: new Date().toISOString().slice(0, 10) }); planifierDepotAuto(); window.toast?.("✓ Demande remise en service"); }
+    try { await updateDemande(b.dataset.reprendre, { statut: "Pris en compte", dateStatut: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) }); planifierDepotAuto(); window.toast?.("✓ Demande remise en service"); }
     catch (e) { alert("Impossible : " + (e?.message || e)); b.disabled = false; b.textContent = "▶ Remettre en service"; }
   }));
 }
@@ -1083,7 +1079,7 @@ function renderTableau(container) {
       sel.addEventListener("change", async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        try { await updateDemande(id, perms.isEditor ? { statut: e.target.value, dateStatut: new Date().toISOString().slice(0, 10) } : { statut: e.target.value }); planifierDepotAuto(); }
+        try { await updateDemande(id, perms.isEditor ? { statut: e.target.value, dateStatut: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } : { statut: e.target.value }); planifierDepotAuto(); }
         catch (err) { console.error("updateDemande statut:", err); alert("Échec de l'enregistrement du statut — réessaie."); e.target.disabled = false; }
         // Pas de réactivation en cas de succès : le onSnapshot Firestore va rafraîchir tout l'écran de toute façon.
       });
@@ -1100,7 +1096,7 @@ function renderTableau(container) {
       inp.addEventListener(evt, async (e) => {
         const id = e.target.closest("tr").dataset.id;
         e.target.disabled = true;
-        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date().toISOString().slice(0, 10), ...(permsUtilisateur().isEditor ? { commentaireMajMs: Date.now(), commentaireMajPar: identite().nom } : {}) } : {};
+        const auteur = champ === "commentaireTech" ? { commentaireTechPar: identite().nom, commentaireTechLe: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), ...(permsUtilisateur().isEditor ? { commentaireMajMs: Date.now(), commentaireMajPar: identite().nom } : {}) } : {};
         try { await updateDemande(id, { [champ]: e.target.value.trim(), ...auteur }); planifierDepotAuto(); }
         catch (err) { console.error("updateDemande " + champ, err); alert(`Échec de l'enregistrement (${libelle}) — réessaie.`); e.target.disabled = false; }
       });

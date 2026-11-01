@@ -139,21 +139,21 @@ let ui = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   selectedDate: null,
   filterTech: "Tous", filterSite: "Tous",
-  form: { date: new Date().toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "" },
+  form: { date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), technicien: "", association: "", groupe: "", site: "", type: "", heures: "", heureDebut: "", heureFin: "", description: "", photos: [], appelN1: true, n1Contacte: "", motifAppelN1: "", decisionN1: "" },
   editingId: null,
   ficheOuverte: null, // nom de la personne dont la fiche technicien est dépliée
   noteFraisMois: new Date().toISOString().slice(0, 7),
   noteFraisPreview: null,
   noteFraisTech: null,
-  absForm: { person: "", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" },
+  absForm: { person: "", start: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), end: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), type: "conge", note: "" },
   absEditingId: null,
   absFiltrePersonne: "Tous",
   absFiltreOrigine: "tous", // "tous" | "prtt" | "manuel"
   prttImportOuvert: false, prttWorkbook: null, prttFeuilles: [], prttFeuilleChoisie: "", prttPersonne: "", prttPreview: null, prttNomFichier: "",
-  docForm: { person: "Tous", start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), generated: false },
+  docForm: { person: "Tous", start: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), end: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), generated: false },
   planningIndivPerson: null, planningIndivYear: null, // année scolaire de départ ; résolue à anneeScolaireCourante() au premier rendu
   planningVueMulti: false, planningMultiPersonnes: null, planningMultiMoisIdx: null,
-  recurForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" },
+  recurForm: { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), dateFin: "" },
   recurEditingId: null,
   recurDetailsOpen: {}, // par personne : mémorise si le panneau "Planning récurrent" est déplié, pour ne pas le refermer à chaque saisie (voir renderRecurrencesPanel)
   planningQuickDate: null,
@@ -1620,7 +1620,7 @@ function renderPlanningIndividuel(container, perms) {
         } else {
           await addRecurrence({ ...payload, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
         }
-        ui.recurForm = { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date().toISOString().slice(0, 10), dateFin: "" };
+        ui.recurForm = { association: "", groupe: "", site: "", type: "Espaces verts", heureDebut: "", heureFin: "", description: "", frequenceSemaines: 2, jourSemaine: 1, dateDebut: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), dateFin: "" };
         renderAll();
       } catch (e) {
         statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec : ${esc(e.message || String(e))}</span>`;
@@ -1635,7 +1635,7 @@ function renderPlanningIndividuel(container, perms) {
         association: rec.association || "", groupe: rec.groupe || "", site: rec.site || "", type: rec.type || "Espaces verts",
         heureDebut: rec.heureDebut || "", heureFin: rec.heureFin || "", description: rec.description || "",
         frequenceSemaines: rec.frequenceSemaines || 1, jourSemaine: rec.jourSemaine || 0,
-        dateDebut: rec.dateDebut || new Date().toISOString().slice(0, 10), dateFin: rec.dateFin || "",
+        dateDebut: rec.dateDebut || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), dateFin: rec.dateFin || "",
       };
       renderAll();
     }));
@@ -2092,7 +2092,7 @@ function renderAbsences(container, perms) {
     });
     document.getElementById("cancel-abs-edit")?.addEventListener("click", () => {
       ui.absEditingId = null;
-      ui.absForm = { person: ui.absForm.person, start: new Date().toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10), type: "conge", note: "" };
+      ui.absForm = { person: ui.absForm.person, start: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), end: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), type: "conge", note: "" };
       renderAll();
     });
     container.querySelectorAll("[data-edit-abs]").forEach(btn => {
@@ -2119,9 +2119,9 @@ function renderAbsences(container, perms) {
           const maj = { person: v("person"), type: v("type"), start: v("start"), end: v("end"), note: v("note") };
           if (!isPlausibleDate(maj.start) || !isPlausibleDate(maj.end)) { window.toast("Une des dates semble incorrecte — vérifie-la."); return; }
           if (maj.end < maj.start) { window.toast("La date de fin doit être après la date de début."); return; }
-          ev.currentTarget.disabled = true;
+          const bouton = ev.currentTarget; bouton.disabled = true;
           try { await updateAbsence(a.id, maj); fermer(); window.toast?.("✓ Absence modifiée"); }
-          catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); ev.currentTarget.disabled = false; }
+          catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); bouton.disabled = false; }
         };
       });
     });
@@ -2132,6 +2132,8 @@ function renderAbsences(container, perms) {
   attacherImportPrttListeners(container);
 }
 
+// Date → "AAAA-MM-JJ" à l'heure locale (toISOString donnait la veille pour une date à minuit).
+const isoJourLocal = (d) => { const x = new Date(d.getTime() + 12 * 3600e3); x.setHours(0, 0, 0, 0); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
 function attacherImportPrttListeners(container) {
   document.getElementById("prtt-toggle")?.addEventListener("click", () => { ui.prttImportOuvert = !ui.prttImportOuvert; renderAll(); });
   document.getElementById("prtt-personne")?.addEventListener("change", (e) => { ui.prttPersonne = e.target.value; });
@@ -2188,7 +2190,7 @@ function attacherImportPrttListeners(container) {
       for (const p of ui.prttPreview) {
         await addAbsence({
           person: ui.prttPersonne, type: p.type,
-          start: p.start.toISOString().slice(0, 10), end: p.end.toISOString().slice(0, 10),
+          start: isoJourLocal(p.start), end: isoJourLocal(p.end),
           note: "Importé du planning PRTT", source: "prtt", createdBy: mountedUser.uid,
         });
       }

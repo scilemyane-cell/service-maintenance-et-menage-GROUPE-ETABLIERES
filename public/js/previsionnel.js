@@ -406,7 +406,7 @@ function exporterExcel(lignes) {
   feuille["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 24 }, { wch: 30 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 12 }];
   const classeur = window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(classeur, feuille, "Prévisionnel travaux");
-  window.XLSX.writeFile(classeur, `Previsionnel_travaux_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  window.XLSX.writeFile(classeur, `Previsionnel_travaux_${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.xlsx`);
 }
 
 // Vue d'ensemble : uniquement les demandes déjà VALIDÉES par le CA,

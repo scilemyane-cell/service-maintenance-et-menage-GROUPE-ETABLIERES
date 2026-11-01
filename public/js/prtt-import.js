@@ -74,9 +74,11 @@ export function extraireJours(sheet, XLSX) {
     for (let c = range.s.c; c <= colMax; c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r, c })];
       if (cell && cell.t === "d" && cell.v instanceof Date) {
-        if (periode && (cell.v < periode.debut || cell.v > periode.fin)) continue;
+        // La lecture Excel peut donner la veille à 23:59 ou minuit à l'heure anglaise : on ramène au jour exact (local).
+        const dj = new Date(cell.v.getTime() + 12 * 3600e3); dj.setHours(0, 0, 0, 0);
+        if (periode && (dj < periode.debut || dj > periode.fin)) continue;
         const valCell = sheet[XLSX.utils.encode_cell({ r, c: c + 1 })];
-        jours.push({ date: cell.v, valeur: valCell ? valCell.v : undefined });
+        jours.push({ date: dj, valeur: valCell ? valCell.v : undefined });
       }
     }
   }

@@ -183,6 +183,6 @@ export function ficheDepuisModele(modeleId) {
     missions: m.missions.map(id => { const x = missionParId(id); return { texte: x.texte, niveau: x.niveau, sous: x.sous ? [...x.sous] : [] }; }),
     savoirFaire: m.sf.map(i => SAVOIR_FAIRE[i]), savoirEtre: m.se.map(i => SAVOIR_ETRE[i]),
     signatureNonConcerne: !m.management, signatures: "",
-    etablieLe: new Date().toISOString().slice(0, 10), etabliePar: "le manager",
+    etablieLe: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), etabliePar: "le manager",
   };
 }
