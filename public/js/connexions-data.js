@@ -18,14 +18,30 @@ function appareil() {
   return { type, nav, os };
 }
 
+// L'appli reste souvent ouverte des jours entiers (téléphone, onglet jamais fermé) :
+// on compte donc aussi le RETOUR sur l'appli (écran rallumé, onglet réaffiché),
+// toujours au plus une fois toutes les 30 min par appareil.
+let suivi = null, enCours = false;
+function suivreRetours(authUser, profil) {
+  suivi = { authUser, profil };
+  if (suivreRetours.branche) return; suivreRetours.branche = true;
+  const relancer = () => { if (document.visibilityState === "visible" && suivi) journaliserConnexion(suivi.authUser, suivi.profil); };
+  document.addEventListener("visibilitychange", relancer);
+  window.addEventListener("focus", relancer);
+  window.addEventListener("online", relancer);
+  setInterval(relancer, 10 * 60 * 1000);
+}
+
 export async function journaliserConnexion(authUser, profil) {
   try {
     if (!authUser?.uid) return;
+    suivreRetours(authUser, profil);
+    if (enCours) return;
     const cle = "smm-derniere-connexion-" + authUser.uid;
     let derniere = 0;
     try { derniere = +localStorage.getItem(cle) || 0; } catch (e) { /* stockage indisponible */ }
     if (Date.now() - derniere < 30 * 60 * 1000) return;
-    try { localStorage.setItem(cle, String(Date.now())); } catch (e) { /* ignore */ }
+    enCours = true;
     const a = appareil();
     await addDoc(COL(), {
       uid: authUser.uid,
@@ -35,9 +51,11 @@ export async function journaliserConnexion(authUser, profil) {
       at: serverTimestamp(),
       appareil: a.type, navigateur: a.nav, systeme: a.os,
     });
+    // Mémorisé seulement une fois la ligne bien envoyée (avant : un échec bloquait le suivi 30 min).
+    try { localStorage.setItem(cle, String(Date.now())); } catch (e) { /* ignore */ }
   } catch (e) {
     console.warn("journaliserConnexion:", e); // jamais bloquant
-  }
+  } finally { enCours = false; }
 }
 
 export async function listerConnexions(jours = 90) {

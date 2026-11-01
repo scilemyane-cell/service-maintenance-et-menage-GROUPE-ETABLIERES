@@ -21,13 +21,17 @@ export async function mountConnexions(container) {
 const fmt = (d) => d ? d.toLocaleString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
 function ilYa(d) {
   if (!d) return "jamais";
-  const min = Math.round((Date.now() - d) / 60000);
+  const min = Math.floor((Date.now() - d) / 60000);
   if (min < 2) return "à l'instant";
   if (min < 60) return `il y a ${min} min`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `il y a ${h} h`;
-  const j = Math.round(h / 24);
-  return j === 1 ? "hier" : `il y a ${j} jours`;
+  // Au-delà d'une heure : en jours de calendrier (avant, 36 h s'affichait « il y a 2 jours »).
+  const j0 = new Date(); j0.setHours(0, 0, 0, 0);
+  const jd = new Date(d); jd.setHours(0, 0, 0, 0);
+  const j = Math.round((j0 - jd) / 864e5);
+  const h = new Date(d).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (j <= 0) return `aujourd'hui à ${h} (il y a ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")})`;
+  if (j === 1) return `hier à ${h}`;
+  return `il y a ${j} jours`;
 }
 const icone = (a) => a === "Téléphone" ? "📱" : a === "Tablette" ? "📲" : "💻";
 
@@ -96,7 +100,7 @@ function render() {
     <div class="form-card" style="padding:0;overflow:hidden">
       <div class="table-wrap" style="border:none">
         <table class="cx-table">
-          <thead><tr><th>Personne</th><th>Rôle</th><th>Dernière connexion</th><th style="text-align:center">Connexions (${periode} j)</th></tr></thead>
+          <thead><tr><th>Personne</th><th>Rôle</th><th>Dernière activité</th><th style="text-align:center">Connexions (${periode} j)</th></tr></thead>
           <tbody>
             ${personnes.map(p => `
               <tr class="${!p.derniere ? "cx-jamais" : ""}">
@@ -119,7 +123,7 @@ function render() {
         </table>
       </div>
     </details>
-    <p class="hint" style="margin:0">* Le suivi démarre avec cette version : les connexions antérieures ne sont pas connues. Une connexion est comptée au plus une fois toutes les 30 minutes par appareil.</p>
+    <p class="hint" style="margin:0">* Le suivi démarre avec cette version : les connexions antérieures ne sont pas connues. Une connexion est comptée à l'ouverture de l'appli et à chaque retour dessus (écran rallumé, onglet réaffiché), au plus une fois toutes les 30 minutes par appareil.</p>
   </div>`;
 
   const inp = document.getElementById("cx-q");
