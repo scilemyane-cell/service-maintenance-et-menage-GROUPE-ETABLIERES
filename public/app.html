@@ -54,14 +54,16 @@
    suite, retiré en fondu quand l'appli a fini de se construire (plus de saut). */
 #splash{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;
   background:radial-gradient(1200px 700px at 20% 10%,#1d3b6e 0%,transparent 60%),radial-gradient(900px 600px at 90% 90%,#0f5c4f 0%,transparent 55%),#0b1424;
-  color:#eef2f8;font-family:Montserrat,"Segoe UI",Arial,sans-serif;transition:opacity .45s ease,visibility .45s;text-align:center;padding:24px}
+  color:#eef2f8;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;transition:opacity .45s ease,visibility .45s;text-align:center;padding:24px}
 #splash.fini{opacity:0;visibility:hidden}
-#splash .sp-logo{width:150px;height:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.35));animation:sp-flotte 3s ease-in-out infinite}
+#splash .sp-logo{width:150px;height:91px;flex:0 0 auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.35));animation:sp-flotte 3s ease-in-out infinite}
 #splash .sp-bonjour{font-size:15px;color:#9fb2cc;letter-spacing:.02em}
-#splash .sp-titre{font-size:22px;font-weight:700;margin-top:-10px}
+#splash .sp-titre{font-size:22px;font-weight:700;margin-top:-10px;max-width:92vw}
+html.chargement,html.chargement body{overflow:hidden;height:100%;touch-action:none}
 #splash .sp-barre{width:220px;height:5px;border-radius:9px;background:rgba(255,255,255,.12);overflow:hidden}
 #splash .sp-barre i{display:block;height:100%;width:40%;border-radius:9px;background:linear-gradient(90deg,#3fd0a6,#5aa9ff);animation:sp-charge 1.2s ease-in-out infinite}
-#splash .sp-etape{font-size:13px;color:#8ea2bd;min-height:18px}
+#splash .sp-etape{font-size:13px;color:#8ea2bd;height:18px;line-height:18px;white-space:nowrap}
+#splash .sp-bonjour{height:20px;line-height:20px}
 #splash .sp-pied{position:absolute;bottom:18px;font-size:11.5px;color:#61748f}
 @keyframes sp-charge{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
 @keyframes sp-flotte{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
@@ -70,7 +72,7 @@
 </head>
 <body>
 <div id="splash" role="status" aria-live="polite">
-  <img class="sp-logo" src="img/logo-etablieres-transparent.png" alt="Groupe Établières">
+  <img class="sp-logo" src="img/logo-etablieres-transparent.png" width="150" height="91" alt="Groupe Établières" fetchpriority="high">
   <div class="sp-bonjour" id="sp-bonjour">Bonjour</div>
   <div class="sp-titre">Chargement de ton espace de travail…</div>
   <div class="sp-barre"><i></i></div>
@@ -80,6 +82,7 @@
 <script>
 (function () {
   var sp = document.getElementById("splash"), app = null, debut = Date.now();
+  document.documentElement.classList.add("chargement");
   try {
     var c = JSON.parse(localStorage.getItem("etablieres-profil") || "null"), nom = c && c.profil && (c.profil.nom || c.profil.displayName) || "";
     var prenom = String(nom).trim().split(/\s+/)[0]; if (prenom && prenom.indexOf("@") < 0) prenom = prenom.charAt(0).toUpperCase() + prenom.slice(1).toLowerCase(); else prenom = "";
@@ -93,7 +96,7 @@
   setTimeout(function () { polices = true; }, 2500);
   function finir() {
     if (fini) return; fini = true; clearInterval(tEtape); clearInterval(tVerif); if (obs) obs.disconnect();
-    sp.classList.add("fini"); setTimeout(function () { sp.remove(); }, 600);
+    sp.classList.add("fini"); setTimeout(function () { sp.remove(); document.documentElement.classList.remove("chargement"); window.scrollTo(0, 0); }, 500);
   }
   window.__finirSplash = finir;
   // L'écran est « posé » quand plus rien ne se reconstruit dans l'appli pendant 0,7 s.
@@ -114,8 +117,10 @@
     var pret = app && !app.querySelector(".login-screen .hint:only-child");
     var login = app && app.querySelector(".login-card, .login-screen form, input[type=password]");
     if (login && Date.now() - dernier > 300 && t > 500) return finir();          // page de connexion
-    if (pret && polices && Date.now() - dernier > 1000 && t > 1200) return finir(); // espace de travail posé
-    if (t > 8000) finir();                                                       // sécurité
+    // Sur l'accueil, on attend en plus que toutes les données de départ soient arrivées (tuiles, sites, astreinte…).
+    var accueilEnCours = app && app.querySelector(".content-accueil") && !window.__accueilPret;
+    if (pret && polices && !accueilEnCours && Date.now() - dernier > 900 && t > 1200) return finir(); // espace de travail posé
+    if (t > 12000) finir();                                                       // sécurité
   }, 120);
 })();
 </script>

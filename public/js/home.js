@@ -87,15 +87,22 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   filtreAssociation = ""; filtreSite = "";
   container.classList.add("content-accueil");
   container.innerHTML = `<div class="hint">Chargement…</div>`;
-  unsubs.push(watchPeople((p) => { people = p; scheduleRender(); }));
+  // Écran de chargement : on le garde tant que les données de départ ne sont pas toutes là (sinon l'accueil « saute »).
+  const attendus = new Set(["people", "dossiers", "assoc", "urgences", ...(user.uid ? ["favoris"] : [])]);
+  window.__accueilPret = false;
+  const recu = (k) => { if (!attendus.delete(k)) return; if (!attendus.size) window.__accueilPret = true; };
+  setTimeout(() => { window.__accueilPret = true; }, 9000);
+  // Ordre perso des tuiles : repris tout de suite du dernier passage (évite que les tuiles changent de place après l'ouverture).
+  try { const o = JSON.parse(localStorage.getItem("etablieres-ordre-tuiles-" + user.uid) || "null"); ordrePerso = Array.isArray(o) && o.length ? o : null; } catch { ordrePerso = null; }
+  unsubs.push(watchPeople((p) => { people = p; recu("people"); scheduleRender(); }));
   unsubs.push(watchAbsences((a) => { absences = a; scheduleRender(); }));
   unsubs.push(watchTransferts((t) => { transferts = t; scheduleRender(); }));
-  unsubs.push(watchSitesDossiers((d) => { dossiers = d; calculerDepots(user); scheduleRender(); }));
-  unsubs.push(watchAssociations((a) => { associations = a; scheduleRender(); }));
+  unsubs.push(watchSitesDossiers((d) => { dossiers = d; recu("dossiers"); calculerDepots(user); scheduleRender(); }));
+  unsubs.push(watchAssociations((a) => { associations = a; recu("assoc"); scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
   urgences = []; uidTechSeul = user.role === "technicien" ? user.uid : null;
-  unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; scheduleRender(); }));
+  unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; recu("urgences"); scheduleRender(); }));
   nouvelles = []; uidVues = user.uid || null;
   // Actions immédiates : pour moi, et sur un poste partagé pour la personne choisie.
   immediates = {};
@@ -124,7 +131,8 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   favoris = []; favorisErreur = null;
   if (user.uid) unsubs.push(watchFavoris(user.uid, (ids, data) => {
     // « Vu » enregistrés dans Firestore, fusionnés avec le cache local.
-    { const o = Array.isArray(data?.ordreTuiles) && data.ordreTuiles.length ? data.ordreTuiles : null; if (JSON.stringify(o) !== JSON.stringify(ordrePerso)) { ordrePerso = o; scheduleRender(); } }
+    { const o = Array.isArray(data?.ordreTuiles) && data.ordreTuiles.length ? data.ordreTuiles : null; try { localStorage.setItem("etablieres-ordre-tuiles-" + user.uid, JSON.stringify(o)); } catch { /* */ } if (JSON.stringify(o) !== JSON.stringify(ordrePerso)) { ordrePerso = o; scheduleRender(); } }
+    recu("favoris");
     fusionnerVues(CLE_URG_VUES, data?.urgencesVues);
     fusionnerVues(CLE_NOUV_VUES, data?.nouvellesVues);
     if (ids === null) {
@@ -136,7 +144,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
       if (locaux.length) saveFavoris(user.uid, locaux).then(() => { try { localStorage.removeItem(CLE_FAVORIS_LOCAL); } catch {} }).catch(() => {});
     } else favoris = ids;
     favorisErreur = null; scheduleRender();
-  }, (err) => { favorisErreur = err; scheduleRender(); }));
+  }, (err) => { favorisErreur = err; recu("favoris"); scheduleRender(); }));
 }
 
 // L'accueil écoute 5 flux Firestore indépendants — sans regroupement, la
