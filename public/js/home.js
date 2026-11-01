@@ -201,7 +201,7 @@ const TUILES_MAINT = ["astreinte", "compteurs", "masterlock", "cles", "prevision
 const dansListe = (id, l) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id);
 function espaceTuile(id) { return dansListe(id, TUILES_MENAGE) ? "menage" : dansListe(id, TUILES_MAINT) ? "maint" : "commun"; }
 const CLE_ESPACE = "etablieres-espace-tuiles";
-function espaceChoisi(role) { try { const v = localStorage.getItem(CLE_ESPACE); if (["maint", "menage", "tout"].includes(v)) return v; } catch { /* */ } return ["menage", "mi_temps"].includes(role) ? "menage" : "maint"; }
+function espaceChoisi(role) { try { const v = localStorage.getItem(CLE_ESPACE); if (["maint", "menage", "tout", "travaux"].includes(v)) return v; } catch { /* */ } return ["menage", "mi_temps"].includes(role) ? "menage" : "maint"; }
 const CLE_RECENTS = "etablieres-modules-recents";
 function recents() { try { return JSON.parse(localStorage.getItem(CLE_RECENTS) || "[]"); } catch { return []; } }
 function noterRecent(id) { try { const l = [id, ...recents().filter(x => x !== id)].slice(0, 6); localStorage.setItem(CLE_RECENTS, JSON.stringify(l)); } catch { /* */ } }
@@ -831,11 +831,14 @@ function render() {
 
         ${["plan", "plan2"].includes(window.__interfaceMode) && !modeReorganisation ? planHTML(catsRef, { n1: n1?.assigned || n1?.nom || (typeof n1 === "string" ? n1 : ""), n2: n2?.assigned || n2?.nom || (typeof n2 === "string" ? n2 : "") }) : `<section class="gh-tuiles style-${window.__interfaceNouvelle ? "moderne" : "gmao"}">
           ${(() => { if (!window.__espacesTuiles || modeReorganisation) return "";
-            const nM = catsRef.filter(c => espaceTuile(c.id) === "maint").length, nE = catsRef.filter(c => espaceTuile(c.id) === "menage").length;
-            if (!nM || !nE) return "";
-            const e = espaceChoisi(mountedUser?.role);
-            return `<div class="gh-espaces" role="tablist"><button type="button" data-espace="maint" class="${e === "maint" ? "on" : ""}">🛠️ Maintenance</button><button type="button" data-espace="menage" class="${e === "menage" ? "on" : ""}">🧹 Ménage</button><button type="button" data-espace="tout" class="${e === "tout" ? "on" : ""}">Tout</button></div>`; })()}
-          ${catsRef.filter(c => { if (!window.__espacesTuiles || modeReorganisation) return true; const e = espaceChoisi(mountedUser?.role), t = espaceTuile(c.id); return e === "tout" || t === "commun" || t === e; }).map((c, idx) => {
+            const ok = catsRef.filter(c => !c.enConstruction), nT = catsRef.length - ok.length;
+            const nM = ok.filter(c => espaceTuile(c.id) === "maint").length, nE = ok.filter(c => espaceTuile(c.id) === "menage").length;
+            if ((!nM || !nE) && !nT) return "";
+            let e = espaceChoisi(mountedUser?.role); if (e === "travaux" && !nT) e = "maint";
+            return `<div class="gh-espaces" role="tablist"><button type="button" data-espace="maint" class="${e === "maint" ? "on" : ""}">🛠️ Maintenance</button><button type="button" data-espace="menage" class="${e === "menage" ? "on" : ""}">🧹 Ménage</button><button type="button" data-espace="tout" class="${e === "tout" ? "on" : ""}">Tout</button>${nT ? `<button type="button" data-espace="travaux" class="travaux ${e === "travaux" ? "on" : ""}">🚧 En travaux <small>${nT}</small></button>` : ""}</div>`; })()}
+          ${catsRef.filter(c => { if (!window.__espacesTuiles || modeReorganisation) return true; let e = espaceChoisi(mountedUser?.role); if (e === "travaux" && !catsRef.some(x => x.enConstruction)) e = "maint";
+            if (e === "travaux") return !!c.enConstruction; if (c.enConstruction) return false;
+            const t = espaceTuile(c.id); return e === "tout" || t === "commun" || t === e; }).map((c, idx) => {
             const peutReorganiser = modeReorganisation === "perso" || (modeReorganisation === "tous" && estAdmin);
             return `
             <div class="gh-tuile-wrap ${peutReorganiser ? "gh-deplacable" : ""}" data-tuile-id="${c.id}">
@@ -856,18 +859,18 @@ function render() {
                 </div>` : ""}
             </div>`;
           }).join("")}
-          ${window.__espacesTuiles && !modeReorganisation && espaceChoisi(mountedUser?.role) === "menage" ? "" : `<div class="gh-tuile-wrap">
+          ${window.__espacesTuiles && !modeReorganisation && ["menage", "travaux"].includes(espaceChoisi(mountedUser?.role)) && (espaceChoisi(mountedUser?.role) !== "travaux" || catsRef.some(x => x.enConstruction)) ? "" : `<div class="gh-tuile-wrap">
             <a class="gh-tuile gh-tuile-gmao" style="--acc:#E4104B" href="${URL_GMAO}" target="_blank" rel="noopener" title="Ouvrir la GMAO Camileia dans un nouvel onglet">
               <span class="gh-tuile-icone">🛠️</span>
               <span class="gh-tuile-label">GMAO Camileia ↗</span>
             </a>
           </div>`}
-          <div class="gh-tuile-wrap">
+          ${window.__espacesTuiles && !modeReorganisation && espaceChoisi(mountedUser?.role) === "travaux" && catsRef.some(x => x.enConstruction) ? "" : `<div class="gh-tuile-wrap">
             <a class="gh-tuile" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" title="Ouvrir le site SharePoint appsmm" style="background:${degradePour("sharepoint")};--acc:#0f7cbf">
               <span class="gh-tuile-icone">🔗</span>
               <span class="gh-tuile-label">SharePoint ↗</span>
             </a>
-          </div>
+          </div>`}
         </section>`}
 
         <section class="gh-notifs gh-rouge">

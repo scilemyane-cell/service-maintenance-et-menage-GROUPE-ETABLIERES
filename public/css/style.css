@@ -4600,3 +4600,6 @@ html[data-theme="sombre"] .eff-c.H{background:repeating-linear-gradient(45deg,#2
 .gh-tuiles:has(.gh-espaces){grid-template-rows:auto}
 @media (min-width:1401px){.accueil-gmao .gh-tuiles:has(.gh-espaces){grid-auto-rows:calc((100% - 106px) / 5)}}
 @media (max-width:720px){.gh-espaces{width:100%}.gh-espaces button{flex:1;padding:8px 6px}}
+.gh-espaces button.travaux.on{background:#F2B705;color:#1b1b1b;box-shadow:inset 0 -3px 0 #1b1b1b}
+.gh-espaces button small{opacity:.8;font-weight:600;margin-left:2px}
+@media (max-width:720px){.gh-espaces{flex-wrap:wrap}.gh-espaces button{flex:1 1 40%}}
