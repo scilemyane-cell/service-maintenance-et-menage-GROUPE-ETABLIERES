@@ -74,6 +74,8 @@ function geoValide(d) {
   // Position placée à la main : valable tant que l'adresse n'a pas changé
   // (y compris pour un site sans adresse).
   if (d.geo.manuel) return normAdresse(d.geo.adresse) === normAdresse(d.adresse);
+  // Positions automatiques d'avant la Base Adresse Nationale (OpenStreetMap, souvent décalées) : refaites une fois.
+  if (!d.geo.src) return false;
   return !!d.geo.adresse && normAdresse(d.geo.adresse) === normAdresse(d.adresse);
 }
 
@@ -94,12 +96,21 @@ async function geocoderAdresse(adresse) {
 const echecsGeocodage = new Set(); // adresses introuvables cette session (pas de nouvelle tentative)
 
 async function geocoderRequete(adresse) {
+  // 1) Base Adresse Nationale (IGN) : précise au numéro de rue en France. 2) Repli OpenStreetMap.
+  for (const u of [`https://data.geopf.fr/geocodage/search?limit=1&q=${encodeURIComponent(adresse)}`, `https://api-adresse.data.gouv.fr/search/?limit=1&q=${encodeURIComponent(adresse)}`]) {
+    try {
+      const r = await fetch(u); if (!r.ok) continue;
+      const f = (await r.json()).features?.[0];
+      if (f && (f.properties?.score ?? 1) >= 0.45) { const c = { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }; if (dansFranceMetro(c)) return { ...c, src: "ban" }; }
+      if (f || r.ok) break; // service joignable mais adresse non trouvée → OpenStreetMap
+    } catch { /* service suivant */ }
+  }
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${encodeURIComponent(adresse)}`;
   const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
   if (!res.ok) return null;
   const data = await res.json();
   if (!data || !data.length) return null;
-  const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), src: "osm" };
   if (!dansFranceMetro(coords)) {
     console.warn("Géocodage hors zone attendue, ignoré :", adresse, coords);
     return null;

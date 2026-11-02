@@ -103,7 +103,7 @@ function construire() {
     if (st.peutPointer) {
       ms.on("dragstart", () => bandeau(T("DÉPLACEMENT DU SITE — relâche sur le bâtiment", "Relâche le repère sur le bâtiment"), "info"));
       ms.on("dragend", async () => {
-        const p = ms.getLatLng(), geo = { lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) };
+        const p = ms.getLatLng(), geo = geoManuel(p.lat, p.lng);
         bandeau("");
         try { await saveDossierGeo(st.site.id, geo); st.geoSite = geo; window.toast?.("🏢 Position du site enregistrée"); }
         catch (e) { ms.setLatLng([st.geoSite.lat, st.geoSite.lng]); alert("Position non enregistrée : " + (e?.message || e)); }
@@ -137,6 +137,9 @@ function construire() {
   try { const z = ov.querySelector(".va-carte-zone"), ro = new ResizeObserver(() => map?.invalidateSize()); ro.observe(z); } catch { /* */ }
 }
 
+// Position du site posée à la main : marquée « manuelle » avec l'adresse du dossier, sinon la carte des sites
+// (géocodage automatique) la jugeait invalide et la remplaçait par une position approximative de l'adresse.
+const geoManuel = (lat, lng) => ({ lat: +(+lat).toFixed(6), lng: +(+lng).toFixed(6), manuel: true, adresse: st?.dossier?.adresse || "" });
 // ---- Recherche d'adresse (Base Adresse Nationale, Géoplateforme IGN) ----
 async function geocoder(q) {
   const urls = [`https://data.geopf.fr/geocodage/search?limit=6&q=${encodeURIComponent(q)}`, `https://api-adresse.data.gouv.fr/search/?limit=6&q=${encodeURIComponent(q)}`];
@@ -158,7 +161,7 @@ function cible(a) {
     ${st.peutPointer ? `<div class="va-fiche-b"><button class="va-btn plein" data-va-site-ici>🏢 Mettre le site ici</button></div><p style="margin-top:6px">Ou zoome et touche le bâtiment exact avec « Position du site ».</p>` : ""}</div>`);
   repereCible.bindPopup(pop).openPopup();
   pop.getElement()?.querySelector("[data-va-site-ici]")?.addEventListener("click", async () => {
-    try { const geo = { lat: +a.lat.toFixed(6), lng: +a.lng.toFixed(6) }; await saveDossierGeo(st.site.id, geo); st.geoSite = geo; repereCible = null; window.toast?.("🏢 Position du site enregistrée"); construire(); }
+    try { const geo = geoManuel(a.lat, a.lng); await saveDossierGeo(st.site.id, geo); st.geoSite = geo; repereCible = null; window.toast?.("🏢 Position du site enregistrée"); construire(); }
     catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
   });
 }
@@ -298,7 +301,7 @@ async function sauverGeo(c, geo) {
 async function clicCarte(e) {
   if (st.placerSite) {
     st.placerSite = false; modePointage();
-    try { const geo = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) }; await saveDossierGeo(st.site.id, geo); st.geoSite = geo; bandeau(""); window.toast?.("◎ Position du site enregistrée"); construire(); }
+    try { const geo = geoManuel(e.latlng.lat, e.latlng.lng); await saveDossierGeo(st.site.id, geo); st.geoSite = geo; bandeau(""); window.toast?.("◎ Position du site enregistrée"); construire(); }
     catch (err) { alert("Enregistrement impossible : " + (err?.message || err)); }
     return;
   }
