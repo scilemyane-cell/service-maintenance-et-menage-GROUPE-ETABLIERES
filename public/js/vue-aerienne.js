@@ -105,11 +105,18 @@ function construire() {
   ov.querySelector("[data-va-moi]").onclick = () => { if (!moi.aller()) window.toast?.("Position en cours de recherche… (à l'intérieur d'un bâtiment, le GPS peut mettre un peu de temps)"); };
   horloge = setInterval(tic, 1000); tic();
   dessinerMarqueurs(); panneau();
-  const g = Object.values(marqueurs);
-  if (g.length) map.fitBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19 });
-  setTimeout(() => map?.invalidateSize(), 50);
-  // Taille de la carte toujours à jour (barre d'adresse du téléphone, rotation…) : sinon le zoom au doigt se recentre mal.
-  try { const z = ov.querySelector(".va-carte-zone"), ro = new ResizeObserver(() => map?.invalidateSize({ pan: false })); ro.observe(z); } catch { /* */ }
+  // Cadrage sur le site : refait une fois la fenêtre réellement affichée (avant, la carte était cadrée alors
+  // qu'elle n'avait pas encore sa taille → on n'arrivait pas sur le site).
+  const cadrer = () => {
+    if (!map) return;
+    map.invalidateSize({ pan: false });
+    const g = Object.values(marqueurs);
+    if (g.length) map.fitBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19, animate: false });
+    else if (st.geoSite) map.setView([st.geoSite.lat, st.geoSite.lng], 18, { animate: false });
+  };
+  cadrer(); requestAnimationFrame(() => requestAnimationFrame(cadrer)); setTimeout(cadrer, 300);
+  // Taille de la carte toujours à jour (barre d'adresse du téléphone, rotation…), en gardant le même centre.
+  try { const z = ov.querySelector(".va-carte-zone"), ro = new ResizeObserver(() => map?.invalidateSize()); ro.observe(z); } catch { /* */ }
 }
 
 function choisirFond(k) {
