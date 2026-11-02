@@ -938,6 +938,13 @@
   function renderContent(category) {
     const content = document.getElementById("content");
     const currentUser = utilisateurEffectif(); // masque volontairement la variable globale : tout le rendu se fait avec l'utilisateur affiché
+    // Navigation depuis un module vers un autre (ex. dossier de site → relevé d'un compteur).
+    window.__allerCategorie = (catId) => {
+      const cat = allCategories(currentUser).find(c => c.id === catId);
+      if (!cat || !visibleCategoriesFor(currentUser).some(c => c.id === catId)) return false;
+      currentCategory = catId; currentSubtab = categorySubtabsFor(cat, currentUser)[0]?.id || null;
+      render(); window.scrollTo(0, 0); return true;
+    };
 
     if (!category) {
       const cats = visibleCategoriesFor(currentUser);

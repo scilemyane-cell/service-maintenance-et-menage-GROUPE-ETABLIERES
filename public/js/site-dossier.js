@@ -825,6 +825,7 @@ function renderView(d) {
               ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del">🗑️ Mettre à la corbeille</button>` : ""}
             </div>
           </details>
+          ${d.compteursActifs ? `<button class="nav-btn va-lanceur" id="sd-plan-compteurs">🛰️ Plan des compteurs</button>` : ""}
           ${isEditorUser(mountedUser) ? `<button class="add-btn sdv-modifier" id="sd-edit">✏️ Modifier le dossier</button>` : ""}
         </div>
       </div>
@@ -922,6 +923,18 @@ function renderView(d) {
     cible.scrollIntoView({ behavior: "smooth", block: "start" });
     cible.classList.remove("sdv-flash"); void cible.offsetWidth; cible.classList.add("sdv-flash");
   }));
+  document.getElementById("sd-plan-compteurs")?.addEventListener("click", async (ev) => {
+    const b = ev.currentTarget, txt = b.textContent; b.disabled = true; b.textContent = "⏳ Plan…";
+    try {
+      const [{ listerTousLesCompteurs, estEnRetard }, { ouvrirVueAerienne }] = await Promise.all([import("./compteurs-data.js"), import("./vue-aerienne.js")]);
+      const compteurs = (await listerTousLesCompteurs()).filter(c => c.dossierId === d.id);
+      const editeur = isEditorUser(mountedUser) && !mountedUser?.lectureSeule;
+      ouvrirVueAerienne({ site: { id: d.id, nom: d.nom }, compteurs, user: mountedUser, estEnRetard, peutPointer: editeur,
+        onRelever: mountedUser?.lectureSeule ? null : (id) => { window.compteurRelevDeepLinkId = id; if (!window.__allerCategorie?.("compteurs")) { window.compteurRelevDeepLinkId = null; window.toast?.("Le relevé de compteur n'est pas accessible avec ce compte."); } },
+        onFermer: null });
+    } catch (e) { window.toast?.("Plan indisponible : " + (e?.message || e)); }
+    finally { b.disabled = false; b.textContent = txt; }
+  });
   document.getElementById("sd-edit")?.addEventListener("click", () => { ui.mode = "edit"; boitesEnEdition = { dossierId: null, liste: [] }; render(); });
   document.getElementById("sd-preview").addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");

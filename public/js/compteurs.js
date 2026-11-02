@@ -660,6 +660,7 @@ function renderListe() {
     const { ouvrirVueAerienne } = await import("./vue-aerienne.js");
     ouvrirVueAerienne({ site, compteurs: state.compteurs.filter(c => c.dossierId === site.id), user: mountedUser, estEnRetard, peutPointer: isEditorUser(mountedUser) && !mountedUser?.lectureSeule && !mountedUser?.apercu,
       onFiche: (id) => { ui.detailCompteurId = id; ui.editingCompteurId = null; },
+      onRelever: mountedUser?.lectureSeule ? null : (id) => { ui.detailCompteurId = null; ouvrirReleve(id, site.id); },
       onFermer: () => render() });
   }));
   mountedContainer.querySelectorAll("[data-voir-rapport]").forEach(btn => btn.addEventListener("click", () => {

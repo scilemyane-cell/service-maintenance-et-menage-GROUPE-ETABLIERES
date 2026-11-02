@@ -4,7 +4,7 @@
 import { esc } from "./astreinte-logic.js";
 import { chargerLeaflet } from "./site-map.js";
 import { saveDossierGeo, watchSitesDossiers } from "./site-dossier-data.js";
-import { modifierCompteur } from "./compteurs-data.js";
+import { modifierCompteur, trouverSectionPourType } from "./compteurs-data.js";
 import { suivreMaPosition } from "./ma-position.js";
 let moi = null;
 
@@ -31,11 +31,11 @@ function etat(c) {
 const CLE_STYLE = "etablieres-va-style";
 const T = (tactique, pro) => st?.pro ? pro : tactique;
 
-export async function ouvrirVueAerienne({ site, compteurs, user, estEnRetard, peutPointer, onFiche, onFermer }) {
+export async function ouvrirVueAerienne({ site, compteurs, user, estEnRetard, peutPointer, onFiche, onRelever, onFermer }) {
   fermer();
   // Techniciens (et tous ceux qui ne pointent pas) : présentation sobre « pro ». Encadrement : au choix.
   const pro = true; // présentation « pro » pour tout le monde
-  st = { site, compteurs, pro, onFermer, user, estEnRetard, peutPointer, onFiche, pointage: null, filtre: "", geoSite: null, placerSite: false };
+  st = { site, compteurs, pro, onFermer, user, estEnRetard, peutPointer, onFiche, onRelever, dossier: null, pointage: null, filtre: "", geoSite: null, placerSite: false };
   ov = document.createElement("div");
   ov.className = "va" + (pro ? " pro" : "");
   ov.innerHTML = pro ? `<div class="va-boot"><div class="va-boot-l">Chargement du plan…</div><div class="va-boot-b"><i></i></div></div>` : `<div class="va-boot"><div class="va-boot-l">INITIALISATION DU FLUX AÉRIEN<span>…</span></div><div class="va-boot-b"><i></i></div><small>${esc(refSite(site.nom))} · CANAL SÉCURISÉ</small></div>`;
@@ -44,6 +44,7 @@ export async function ouvrirVueAerienne({ site, compteurs, user, estEnRetard, pe
   try { await chargerLeaflet(); } catch { ov.innerHTML = `<div class="va-boot"><div class="va-boot-l">⚠ CARTE INDISPONIBLE (réseau)</div><button class="va-btn" data-va-fermer>Fermer</button></div>`; ov.querySelector("[data-va-fermer]").onclick = fermer; return; }
   const dossier = await new Promise((ok) => { let u = null, fini = false; u = watchSitesDossiers((l) => { if (fini) return; fini = true; setTimeout(() => u && u(), 0); ok((l || []).find(d => d.id === site.id) || null); }); setTimeout(() => { if (!fini) { fini = true; ok(null); } }, 5000); });
   st.geoSite = dossier?.geo?.lat ? dossier.geo : null;
+  st.dossier = dossier;
   construire();
 }
 
@@ -145,6 +146,7 @@ function dessinerMarqueurs() {
 }
 function carte(c, m) {
   const t = TYPES[c.type] || TYPES.eau, e = etat(c), d = c.dernierReleve;
+  const phD = photosDossier(c), phR = Object.entries(d?.photos || {}).filter(([, p]) => p?.itemId || p?.url).map(([k, p]) => ({ ...p, legende: k === "valeur" ? "" : k }));
   const pop = window.L.popup({ className: "va-pop" + (st.pro ? " pro" : ""), closeButton: true, offset: [0, -14], maxWidth: 300 }).setLatLng(m.getLatLng()).setContent(`
     <div class="va-fiche" style="--c:${t.c}">
       <div class="va-fiche-t"><span>${t.i} ${T(t.l, TYPE_LIB[c.type] || t.l)}</span><em class="${e.k}">${e.l}</em></div>
@@ -154,15 +156,61 @@ function carte(c, m) {
       ${c.pdl ? `<dt>${T("PDL", "PDL")}</dt><dd>${esc(c.pdl)}</dd>` : ""}
       ${st.pro ? "" : `<dt>POSITION</dt><dd>${c.geo.lat.toFixed(6)}, ${c.geo.lng.toFixed(6)}</dd>`}</dl>
       <div class="va-fiche-b">
-        <button class="va-btn plein" data-va-fiche="${c.id}">${T("📝 RELEVER / FICHE", "📝 Relever / fiche")}</button>
+        ${st.onRelever ? `<button class="va-btn plein" data-va-relever="${c.id}">📝 Relever ce compteur</button>` : ""}
+        ${st.onFiche ? `<button class="va-btn ${st.onRelever ? "" : "plein"}" data-va-fiche="${c.id}">${T("📝 RELEVER / FICHE", st.onRelever ? "📋 Fiche" : "📝 Relever / fiche")}</button>` : ""}
+        ${phD.length ? `<button class="va-btn" data-va-photos="dossier">📷 Photo dossier${phD.length > 1 ? ` (${phD.length})` : ""}</button>` : ""}
+        ${phR.length ? `<button class="va-btn" data-va-photos="releve">🧾 Photo du relevé</button>` : ""}
         <a class="va-btn" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${c.geo.lat},${c.geo.lng}">${T("➤ ITINÉRAIRE", "➤ Itinéraire")}</a>
         ${st.peutPointer ? `<button class="va-btn" data-va-deplacer="${c.id}">${T("✥ DÉPLACER", "✥ Déplacer")}</button><button class="va-btn danger" data-va-retirer="${c.id}">${T("⌫ RETIRER", "⌫ Retirer")}</button>` : ""}
       </div>
     </div>`).openOn(map);
   const el = pop.getElement();
-  el.querySelector("[data-va-fiche]").onclick = () => { const cb = st.onFiche, id = c.id; fermer(); cb?.(id); };
+  el.querySelector("[data-va-fiche]")?.addEventListener("click", () => { const cb = st.onFiche, id = c.id; fermer(); cb?.(id); });
+  el.querySelector("[data-va-relever]")?.addEventListener("click", () => { const cb = st.onRelever, id = c.id; fermer(); cb?.(id); });
+  el.querySelectorAll("[data-va-photos]").forEach(b => b.addEventListener("click", () => visionneuse(b.dataset.vaPhotos === "dossier" ? phD : phR, b.dataset.vaPhotos === "dossier" ? `${c.nom} — dossier de site` : `${c.nom} — relevé du ${fmtD(d?.at)}`)));
   el.querySelector("[data-va-deplacer]")?.addEventListener("click", () => { map.closePopup(); m.dragging.enable(); bandeau(T("DÉPLACEMENT — fais glisser le repère puis relâche", "Fais glisser le repère puis relâche"), "info"); });
   el.querySelector("[data-va-retirer]")?.addEventListener("click", async () => { map.closePopup(); await sauverGeo(c, null); });
+}
+
+// Photos de l'équipement correspondant dans le dossier de site (même type de compteur ; si l'équipement a
+// plusieurs lignes, priorité à celle qui porte le nom du compteur).
+function photosDossier(c) {
+  const sec = trouverSectionPourType(st.dossier?.sections || [], c.type);
+  if (!sec) return [];
+  const img = (l) => (l || []).filter(p => p && p.isImage !== false && (p.itemId || p.url));
+  if (sec.multiLignes) {
+    const n = String(c.nom || "").toLowerCase();
+    const l = (sec.lignes || []).find(x => n && String(x.titre || "").toLowerCase() && (n.includes(String(x.titre).toLowerCase()) || String(x.titre).toLowerCase().includes(n)));
+    const ph = img(l?.photos);
+    return ph.length ? ph : (sec.lignes || []).flatMap(x => img(x.photos));
+  }
+  return img(sec.photos);
+}
+async function visionneuse(photos, titre) {
+  if (!photos.length || !ov) return;
+  let i = 0, fini = false; const urls = {};
+  const v = document.createElement("div"); v.className = "va-visio";
+  ov.appendChild(v);
+  const dessiner = () => {
+    const p = photos[i], u = p.itemId ? urls[p.itemId] : p.url;
+    v.innerHTML = `<div class="va-visio-t"><b>${esc(titre)}${p.legende ? ` · ${esc(p.legende)}` : ""}</b><button class="va-btn" data-x>✕</button></div>
+      <div class="va-visio-img">${u ? `<img src="${esc(u)}" alt="">` : `<span>${fini ? "Photo indisponible (connexion SharePoint ?)" : "⏳ Chargement de la photo…"}</span>`}</div>
+      ${photos.length > 1 ? `<div class="va-visio-nav"><button class="va-btn" data-p>‹</button><span>${i + 1} / ${photos.length}</span><button class="va-btn" data-n>›</button></div>` : ""}`;
+    v.querySelector("[data-x]").onclick = () => v.remove();
+    v.querySelector("[data-p]")?.addEventListener("click", () => { i = (i + photos.length - 1) % photos.length; dessiner(); });
+    v.querySelector("[data-n]")?.addEventListener("click", () => { i = (i + 1) % photos.length; dessiner(); });
+  };
+  v.onclick = (e) => { if (e.target === v) v.remove(); };
+  dessiner();
+  const ids = photos.map(p => p.itemId).filter(Boolean);
+  if (!ids.length) { fini = true; return; }
+  try {
+    const { copiesPhotos } = await import("./photos-copie.js");
+    Object.assign(urls, await copiesPhotos(ids)); dessiner();
+    const reste = ids.filter(id => !urls[id]);
+    if (reste.length) { const { getImageDisplayUrls } = await import("./sharepoint-storage.js"); Object.assign(urls, await getImageDisplayUrls(reste)); }
+  } catch (e) { console.warn("Photos :", e); }
+  fini = true; if (document.contains(v)) dessiner();
 }
 
 async function sauverGeo(c, geo) {
