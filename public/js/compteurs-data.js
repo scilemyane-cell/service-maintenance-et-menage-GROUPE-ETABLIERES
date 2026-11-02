@@ -467,10 +467,11 @@ function watchCompteursAlertCountBrut(callback) {
 // plutôt que 0 (pour ne pas laisser croire à une consommation nulle).
 
 // Mois de relevé : un relevé fait du 27 au 3 clôture le mois qui se termine (le relevé du 2 novembre est celui
-// d'OCTOBRE). Les mois de consommation vont donc du 4 au 4 (et non du 1er au 1er).
-export const JOUR_BASCULE = 4;
+// d'OCTOBRE) — et un relevé fait EN RETARD, jusqu'au 15, compte encore pour le mois précédent. Les mois de
+// consommation vont donc du 16 au 16 (relevé du 16 au 31 → ce mois-ci ; du 1er au 15 → mois précédent).
+export const JOUR_BASCULE = 16;
 export const debutMoisReleve = (y, m) => new Date(y, m, JOUR_BASCULE);
-// Mois de relevé « en cours » (1er jour du mois) : le 2 novembre, on est encore sur octobre.
+// Mois de relevé « en cours » (1er jour du mois) : jusqu'au 15 novembre, on est encore sur octobre.
 export const moisReleveCourant = (d = new Date()) => d.getDate() < JOUR_BASCULE ? new Date(d.getFullYear(), d.getMonth() - 1, 1) : new Date(d.getFullYear(), d.getMonth(), 1);
 
 export function consommationMensuelle(releves, cle, nbMois = 12) {

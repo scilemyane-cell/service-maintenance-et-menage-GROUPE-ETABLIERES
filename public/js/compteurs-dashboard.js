@@ -156,7 +156,7 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
 
   const auj = new Date();
   const fin = auj.getTime() + 1;
-  // Mois de relevé (du 4 au 4) : le relevé du 27 au 3 compte pour le mois qui se termine.
+  // Mois de relevé (du 16 au 16) : un relevé du 1er au 15 (période du 27 au 3, ou en retard) compte pour le mois précédent.
   const ref = moisReleveCourant(auj);
   const debut = f.periode === "mois" ? debutMoisReleve(ref.getFullYear(), ref.getMonth())
     : f.periode === "scolaire" ? debutMoisReleve(ref.getMonth() >= 8 ? ref.getFullYear() : ref.getFullYear() - 1, 8)
