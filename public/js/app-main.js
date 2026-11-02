@@ -215,7 +215,14 @@
   }
   setTimeout(verifierVersion, 3000);
   setInterval(verifierVersion, 5 * 60 * 1000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") verifierVersion(); });
+  // Tablettes laissées ouvertes des jours entiers (agents) : au retour sur l'appli après plus de 3 h en arrière-plan,
+  // on recharge — sinon elles restaient sur une ancienne semaine, une ancienne version et des listes figées.
+  let cacheeDepuis = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") { cacheeDepuis = Date.now(); return; }
+    if (cacheeDepuis && Date.now() - cacheeDepuis > 3 * 3600000 && !window.__modeTele) { location.reload(); return; }
+    verifierVersion();
+  });
 
   const runDailyExportIfNeeded = () => { setTimeout(() => import("./export-sharepoint.js").then(m => m.runDailyExportIfNeeded()).catch(e => console.warn("Export quotidien :", e)), 4000); };
   let currentSubtab = null;

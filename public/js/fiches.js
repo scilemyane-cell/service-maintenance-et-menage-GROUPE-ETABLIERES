@@ -95,7 +95,8 @@ export function mountFichesForDispositif(container, user, dispositif) {
   ui.dispositif = dispositif;
   ui.lockDispositif = true;
   ui.siteId = null;
-  if (!ui.weekStart) ui.weekStart = dateKey(mondayOf(new Date()));
+  // Agent : on arrive toujours sur la semaine en cours (avant : la semaine du dernier passage restait affichée).
+  if (!ui.weekStart || !isEditorUser(user)) ui.weekStart = dateKey(mondayOf(new Date()));
   journaliserConnexion({ ecran: "agent", agentUid: user?.uid || "", agentNom: user?.nom || user?.email || "", role: user?.role || "", dispositif: ui.dispositif || "" });
   prendreCorrection();
   container.innerHTML = `<div class="hint">Chargement…</div>`;
