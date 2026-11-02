@@ -73,6 +73,10 @@ export async function listPendingReleves() {
 }
 
 export async function countPendingReleves() {
+  // Jamais bloquant : si le stockage de l'appareil ne répond pas (navigateur privé, PC verrouillé…), on compte 0.
+  return Promise.race([countPendingRelevesBrut().catch(() => 0), new Promise(ok => setTimeout(() => ok(0), 3000))]);
+}
+async function countPendingRelevesBrut() {
   return withStore("readonly", (store) => new Promise((resolve, reject) => {
     const req = store.count();
     req.onsuccess = () => resolve(req.result || 0);

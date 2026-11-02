@@ -13,6 +13,7 @@ const DB_NOM = "smm-cache", STORE = "kv", RELECTURE_COMPLETE = 7 * 86400000, MAR
 
 function ouvrirIDB() {
   return new Promise((ok, ko) => {
+    setTimeout(() => ko(new Error("stockage local sans réponse")), 4000); // jamais d'attente infinie
     try {
       const r = indexedDB.open(DB_NOM, 1);
       r.onupgradeneeded = () => r.result.createObjectStore(STORE);
@@ -93,7 +94,7 @@ export function ecouteDelta({ cle, col, champs, numerique = false }) {
       pret = true; emettre(liste());
     } else {
       try {
-        const snap = await getDocs(collection(db, col));
+        const snap = await Promise.race([getDocs(collection(db, col)), new Promise((_, ko) => setTimeout(() => ko(new Error("réseau trop lent")), 25000))]);
         snap.forEach(d => { const x = d.data(); docs.set(d.id, x); noterDate(x); });
         completLe = Date.now();
         sauver();

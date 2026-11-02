@@ -102,9 +102,13 @@ export async function mountCompteurs(container, user) {
   }
   pendingCount = await countPendingReleves();
 
+  // Message si le chargement traîne (au lieu d'un « Chargement… » sans fin).
+  const lent = setTimeout(() => { if (container.querySelector(".hint") && /Chargement/.test(container.textContent)) container.innerHTML = `<div class="hint">⏳ Chargement plus long que prévu (connexion lente ?)… <button class="nav-btn" onclick="location.reload()">↻ Recharger</button></div>`; }, 12000);
   try {
     await load();
+    clearTimeout(lent);
   } catch (e) {
+    clearTimeout(lent);
     container.innerHTML = `<div class="hint" style="color:var(--red)">❌ ${esc(e.message || String(e))}${e.code === "permission-denied" ? " — les règles Firestore pour ce nouvel onglet (collections 'compteurs' / 'compteurs-releves') n'ont probablement pas encore été republiées (Console Firebase > Firestore Database > Règles)." : ""}</div>`;
     return;
   }
