@@ -86,6 +86,12 @@ export async function mountCompteurs(container, user) {
     rapideSiteId: null, rapideIndex: 0, rapportSiteId: null,
   };
   container.innerHTML = `<div class="hint">Chargement…</div>`;
+  // Diagnostic visible si le chargement reste bloqué : étape en cours + dernière erreur de la page.
+  let etape = "démarrage", derniereErreur = "";
+  const noterErr = (e) => { derniereErreur = String(e?.reason?.message || e?.reason || e?.message || e?.error?.message || "").slice(0, 200); };
+  window.addEventListener("error", noterErr); window.addEventListener("unhandledrejection", noterErr);
+  setTimeout(() => { window.removeEventListener("error", noterErr); window.removeEventListener("unhandledrejection", noterErr); }, 11000);
+  const lent = setTimeout(() => { if (mountedContainer === container && /Chargement/.test(container.textContent) && container.textContent.length < 200) container.innerHTML = `<div class="hint">⏳ Chargement plus long que prévu… <button class="nav-btn" onclick="location.reload()">↻ Recharger</button><br><small style="opacity:.7">Étape : ${esc(etape)}${derniereErreur ? ` · Erreur : ${esc(derniereErreur)}` : ""} · ${esc(navigator.userAgent.slice(0, 90))}</small></div>`; }, 10000);
 
   if (!syncDemarre) {
     syncDemarre = true;
@@ -100,13 +106,12 @@ export async function mountCompteurs(container, user) {
       if (ui.screen === "liste" && !ui.rapideSiteId) render();
     });
   }
+  etape = "relevés en attente sur l'appareil";
   pendingCount = await countPendingReleves();
-
-  // Message si le chargement traîne (au lieu d'un « Chargement… » sans fin).
-  const lent = setTimeout(() => { if (container.querySelector(".hint") && /Chargement/.test(container.textContent)) container.innerHTML = `<div class="hint">⏳ Chargement plus long que prévu (connexion lente ?)… <button class="nav-btn" onclick="location.reload()">↻ Recharger</button></div>`; }, 12000);
+  etape = "liste des sites et compteurs";
   try {
     await load();
-    clearTimeout(lent);
+    etape = "affichage";
   } catch (e) {
     clearTimeout(lent);
     container.innerHTML = `<div class="hint" style="color:var(--red)">❌ ${esc(e.message || String(e))}${e.code === "permission-denied" ? " — les règles Firestore pour ce nouvel onglet (collections 'compteurs' / 'compteurs-releves') n'ont probablement pas encore été republiées (Console Firebase > Firestore Database > Règles)." : ""}</div>`;
