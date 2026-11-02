@@ -160,7 +160,7 @@ function dessinerMarqueurs() {
   st.compteurs.filter(c => c.geo?.lat).forEach(c => {
     const m = window.L.marker([c.geo.lat, c.geo.lng], { icon: iconeCompteur(c), draggable: false, riseOnHover: true }).addTo(map);
     m.on("click", () => carte(c, m));
-    m.on("dragend", async () => { const p = m.getLatLng(); await sauverGeo(c, { lat: +p.lat.toFixed(7), lng: +p.lng.toFixed(7) }); m.dragging.disable(); bandeau(""); });
+    m.on("dragend", async () => { const p = m.getLatLng(); bandeau(""); try { m.dragging?.disable(); } catch { /* */ } await sauverGeo(c, { lat: +p.lat.toFixed(7), lng: +p.lng.toFixed(7) }); });
     marqueurs[c.id] = m;
   });
 }
@@ -240,9 +240,12 @@ async function sauverGeo(c, geo) {
   const envoi = modifierCompteur(c.id, { geo: geo || null, geoLe: Date.now(), geoPar: st.user?.nom || st.user?.email || "" });
   c.geo = geo;
   dessinerMarqueurs(); panneau();
-  if (geo) { const m = marqueurs[c.id]; m?.getElement()?.querySelector(".va-m, .va-p")?.classList.add("verrou"); window.toast?.(st.pro ? `📍 ${c.nom} : position enregistrée` : `◉ ${c.nom} — position verrouillée`); }
-  try { await envoi; }
-  catch (e) { c.geo = avant; if (ov) { dessinerMarqueurs(); panneau(); } alert("Position non enregistrée : " + (e?.message || e)); }
+  if (geo) { const m = marqueurs[c.id]; m?.getElement()?.querySelector(".va-m, .va-p")?.classList.add("verrou"); }
+  // Confirmation seulement quand le SERVEUR a bien reçu la position (avant : « enregistrée » affiché tout de suite,
+  // même si l'envoi n'aboutissait jamais → le point revenait à son ancienne place à la réouverture).
+  const lent = setTimeout(() => window.toast?.(`⏳ ${c.nom} : position pas encore envoyée au serveur (connexion ?) — ne ferme pas l'appli`), 6000);
+  try { await envoi; clearTimeout(lent); window.toast?.(geo ? `✅ ${c.nom} : position enregistrée` : `${c.nom} retiré du plan`, "success"); }
+  catch (e) { clearTimeout(lent); c.geo = avant; if (ov) { dessinerMarqueurs(); panneau(); } alert("Position non enregistrée : " + (e?.message || e)); }
 }
 
 async function clicCarte(e) {
