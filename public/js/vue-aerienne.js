@@ -94,6 +94,9 @@ function construire() {
   if (st.geoSite && !st.pro) {
     L.circle(centre, { radius: 120, className: "va-perimetre", interactive: false }).addTo(map);
     L.marker(centre, { interactive: false, icon: L.divIcon({ className: "", html: `<div class="va-radar"><i></i></div>`, iconSize: [0, 0] }) }).addTo(map);
+  } else if (st.geoSite) {
+    // Présentation pro : le bâtiment / site est signalé par un repère à son nom.
+    L.marker(centre, { interactive: false, zIndexOffset: -500, icon: L.divIcon({ className: "", iconSize: [0, 0], html: `<div class="va-site"><span class="va-site-ico">🏢</span><span class="va-site-nom">${esc(st.site.nom || "Site")}</span></div>` }) }).addTo(map);
   } else if (!st.geoSite) bandeau(st.peutPointer ? T("POSITION DU SITE INCONNUE — utilise « ◎ POSITION SITE » puis touche la carte", "Position du site inconnue : clique sur « ◎ Position du site » puis touche la carte") : T("POSITION DU SITE INCONNUE — à placer par un responsable", "Position du site pas encore renseignée"), "warn");
   map.on("mousemove", (e) => { const el = ov?.querySelector("[data-va-coord]"); if (el) el.textContent = `${dms(e.latlng.lat, "N", "S")}  ${dms(e.latlng.lng, "E", "O")}`; });
   map.on("zoomend", majZoom); majZoom();
@@ -111,7 +114,7 @@ function construire() {
     if (!map) return;
     map.invalidateSize({ pan: false });
     const g = Object.values(marqueurs);
-    if (g.length) map.fitBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19, animate: false });
+    if (g.length) { const bb = window.L.featureGroup(g).getBounds(); if (st.geoSite) bb.extend([st.geoSite.lat, st.geoSite.lng]); map.fitBounds(bb.pad(0.4), { maxZoom: 19, animate: false }); }
     else if (st.geoSite) map.setView([st.geoSite.lat, st.geoSite.lng], 18, { animate: false });
   };
   cadrer(); requestAnimationFrame(() => requestAnimationFrame(cadrer)); setTimeout(cadrer, 300);

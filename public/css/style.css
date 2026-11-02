@@ -4813,3 +4813,8 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .va-visio-img{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;color:#cbd5e1}
 .va-visio-img img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);background:#fff}
 .va-visio-nav{display:flex;align-items:center;justify-content:center;gap:14px;color:#fff}
+/* Plan des compteurs : repère du bâtiment / site */
+.va-site{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;background:#1e293b;color:#fff;border:2px solid #fff;border-radius:999px;padding:3px 10px 3px 4px;box-shadow:0 2px 8px rgba(0,0,0,.45);white-space:nowrap;pointer-events:none}
+.va-site-ico{width:24px;height:24px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:14px}
+.va-site-nom{font-size:12px;font-weight:800;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.va-loin .va-site{transform:translate(-50%,-50%) scale(.85)}
