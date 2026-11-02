@@ -75,6 +75,7 @@ let ui = {
 export async function mountCompteurs(container, user) {
   mountedContainer = container;
   mountedUser = user;
+  boucleBloquee = false; rendusRecents = [];
   state = { sites: [], compteurs: [], associations: associationsActuelles };
   statsReleves = null; // redemande l'historique complet à chaque (re)montage, plutôt qu'un cache qui pourrait dater
   ui = {
@@ -181,9 +182,21 @@ function procheHTML(siteId = null) {
   </div>`;
 }
 
+// Garde-fou : si l'écran se redessine en boucle (> 25 fois en 4 s), on s'arrête net et on affiche d'où vient
+// la boucle (à photographier), au lieu d'un écran qui « saute » sans fin.
+let rendusRecents = [], boucleBloquee = false;
 function render() {
   if (!mountedContainer) return;
   if (!document.contains(mountedContainer)) return;
+  const now = Date.now(); rendusRecents = rendusRecents.filter(t => now - t < 4000); rendusRecents.push(now);
+  if (boucleBloquee) return;
+  if (rendusRecents.length > 25) {
+    boucleBloquee = true;
+    const pile = String(new Error().stack || "").split("\n").slice(2, 7).map(l => l.trim().replace(/https?:\/\/[^/]+\//, "")).join(" ← ");
+    mountedContainer.innerHTML = `<div class="hint" style="padding:16px">⚠️ L'écran se redessinait en boucle : affichage arrêté. <button class="nav-btn" id="cpt-boucle-reprendre">↻ Reprendre</button><br><small style="opacity:.75;word-break:break-all">Écran : ${esc(ui.screen)}${ui.rapideSiteId ? " (rapide)" : ""} · prox : ${esc(prox.etat)} · file : ${pendingCount} · ${esc(pile)} · ${esc(navigator.userAgent.slice(0, 80))}</small></div>`;
+    mountedContainer.querySelector("#cpt-boucle-reprendre").onclick = () => { boucleBloquee = false; rendusRecents = []; render(); };
+    return;
+  }
   if (differerSiSaisieDate(mountedContainer, render)) return;
   if (ui.screen === "releve") return renderReleve();
   if (ui.rapideSiteId) return renderRapide();
