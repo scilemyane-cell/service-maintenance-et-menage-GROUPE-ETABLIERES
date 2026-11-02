@@ -4818,3 +4818,5 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .va-site-ico{width:24px;height:24px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:14px}
 .va-site-nom{font-size:12px;font-weight:800;max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .va-loin .va-site{transform:translate(-50%,-50%) scale(.85)}
+.va-site.mobile{pointer-events:auto;cursor:grab}.va-site.mobile:active{cursor:grabbing}
+.va-site.mobile::after{content:"✥";margin-left:2px;font-size:12px;opacity:.75}

@@ -96,7 +96,17 @@ function construire() {
     L.marker(centre, { interactive: false, icon: L.divIcon({ className: "", html: `<div class="va-radar"><i></i></div>`, iconSize: [0, 0] }) }).addTo(map);
   } else if (st.geoSite) {
     // Présentation pro : le bâtiment / site est signalé par un repère à son nom.
-    L.marker(centre, { interactive: false, zIndexOffset: -500, icon: L.divIcon({ className: "", iconSize: [0, 0], html: `<div class="va-site"><span class="va-site-ico">🏢</span><span class="va-site-nom">${esc(st.site.nom || "Site")}</span></div>` }) }).addTo(map);
+    // Encadrement : le repère se déplace en le faisant glisser (position du site enregistrée au relâcher).
+    const ms = L.marker(centre, { interactive: !!st.peutPointer, draggable: !!st.peutPointer, zIndexOffset: -500, icon: L.divIcon({ className: "", iconSize: [0, 0], html: `<div class="va-site ${st.peutPointer ? "mobile" : ""}" title="${st.peutPointer ? "Fais glisser pour déplacer" : ""}"><span class="va-site-ico">🏢</span><span class="va-site-nom">${esc(st.site.nom || "Site")}</span></div>` }) }).addTo(map);
+    if (st.peutPointer) {
+      ms.on("dragstart", () => bandeau(T("DÉPLACEMENT DU SITE — relâche sur le bâtiment", "Relâche le repère sur le bâtiment"), "info"));
+      ms.on("dragend", async () => {
+        const p = ms.getLatLng(), geo = { lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) };
+        bandeau("");
+        try { await saveDossierGeo(st.site.id, geo); st.geoSite = geo; window.toast?.("🏢 Position du site enregistrée"); }
+        catch (e) { ms.setLatLng([st.geoSite.lat, st.geoSite.lng]); alert("Position non enregistrée : " + (e?.message || e)); }
+      });
+    }
   } else if (!st.geoSite) bandeau(st.peutPointer ? T("POSITION DU SITE INCONNUE — utilise « ◎ POSITION SITE » puis touche la carte", "Position du site inconnue : clique sur « ◎ Position du site » puis touche la carte") : T("POSITION DU SITE INCONNUE — à placer par un responsable", "Position du site pas encore renseignée"), "warn");
   map.on("mousemove", (e) => { const el = ov?.querySelector("[data-va-coord]"); if (el) el.textContent = `${dms(e.latlng.lat, "N", "S")}  ${dms(e.latlng.lng, "E", "O")}`; });
   map.on("zoomend", majZoom); majZoom();
