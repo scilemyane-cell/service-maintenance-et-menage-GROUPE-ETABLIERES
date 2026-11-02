@@ -203,7 +203,7 @@
       if (!r.ok) return;
       versionEnLigne = await r.json();
       document.querySelectorAll(".app-version").forEach(el => { el.innerHTML = versionTexte(); });
-      if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) bandeauNouvelleVersion(versionEnLigne);
+      if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) { if (window.__modeTele) location.reload(); else bandeauNouvelleVersion(versionEnLigne); }
     } catch { /* hors ligne : on réessaiera */ }
   }
   setTimeout(verifierVersion, 3000);

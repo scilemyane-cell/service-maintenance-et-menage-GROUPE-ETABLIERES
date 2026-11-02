@@ -253,9 +253,15 @@ export function mountEcranAtelier(container, u) {
   }
   if (!window.__eaGlobal) {
     window.__eaGlobal = true; // écoutes de la fenêtre : une seule fois (avant : ajoutées à chaque ouverture)
+    // Mode télé (lancement automatique) : l'écran ne se met jamais en veille, et l'appli se recharge seule chaque nuit à 4 h.
+    if (window.__modeTele) {
+      (async () => { try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } })();
+      const lance = Date.now();
+      setInterval(() => { if (new Date().getHours() === 4 && Date.now() - lance > 3600000) location.reload(); }, 600000);
+    }
     document.addEventListener("fullscreenchange", () => conteneur && document.contains(conteneur) && render());
     window.addEventListener("resize", () => conteneur && document.contains(conteneur) && ajuster());
-    document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && document.fullscreenElement && navigator.wakeLock) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } } });
+    document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && (document.fullscreenElement || window.__modeTele) && navigator.wakeLock) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } } });
   }
   unsubs.push(watchUrgencesOuvertes((l) => {
     const ids = new Set(l.map(x => x.id));
