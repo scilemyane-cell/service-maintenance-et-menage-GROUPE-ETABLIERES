@@ -15,7 +15,7 @@
 // (bleu) pour la période, gris pour N-1, vert = baisse, rouge = hausse.
 
 import { esc } from "./astreinte-logic.js";
-import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur } from "./compteurs-data.js";
+import { estEnRetard, motRetard, uniteValeur, clesIndex, fenetreReleve, modifierCompteur, debutMoisReleve, moisReleveCourant, JOUR_BASCULE } from "./compteurs-data.js";
 import { reseauxHTML, ENERGIES as ENERGIES_SCHEMA, estDeduit, normaliserEauChaude } from "./compteurs-schema.js";
 import { trierGroupes } from "./associations-data.js";
 
@@ -156,9 +156,11 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
 
   const auj = new Date();
   const fin = auj.getTime() + 1;
-  const debut = f.periode === "mois" ? new Date(auj.getFullYear(), auj.getMonth(), 1)
-    : f.periode === "scolaire" ? new Date(auj.getMonth() >= 8 ? auj.getFullYear() : auj.getFullYear() - 1, 8, 1)
-    : new Date(auj.getFullYear(), auj.getMonth() - 11, 1);
+  // Mois de relevé (du 4 au 4) : le relevé du 27 au 3 compte pour le mois qui se termine.
+  const ref = moisReleveCourant(auj);
+  const debut = f.periode === "mois" ? debutMoisReleve(ref.getFullYear(), ref.getMonth())
+    : f.periode === "scolaire" ? debutMoisReleve(ref.getMonth() >= 8 ? ref.getFullYear() : ref.getFullYear() - 1, 8)
+    : debutMoisReleve(ref.getFullYear(), ref.getMonth() - 11);
   const t0 = debut.getTime(), t0p = decalerAn(debut, -1).getTime(), t1p = decalerAn(auj, -1).getTime() + 1;
   const libPeriode = { mois: "ce mois", "12mois": "12 mois", scolaire: "année scolaire" }[f.periode];
 
@@ -167,7 +169,7 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
     const l = compteurs.filter(c => c.type === e.id);
     const v = somme(l, t0, fin), vp = somme(l, t0p, t1p);
     const spark = []; for (let i = 12; i >= 1; i--) { // 12 mois COMPLETS (le mois en cours, partiel, fausserait la tendance)
-      const d = new Date(auj.getFullYear(), auj.getMonth() - i, 1), d2 = new Date(auj.getFullYear(), auj.getMonth() - i + 1, 1); spark.push(somme(l, d.getTime(), Math.min(d2.getTime(), fin))); }
+      const d = debutMoisReleve(ref.getFullYear(), ref.getMonth() - i), d2 = debutMoisReleve(ref.getFullYear(), ref.getMonth() - i + 1); spark.push(somme(l, d.getTime(), Math.min(d2.getTime(), fin))); }
     const connus = spark.filter(x => x !== null);
     return { ...e, v, vp, d: pct(v, vp), unite: uniteValeur({ type: e.id }), spark, moy: connus.length ? connus.reduce((a, b) => a + b, 0) / connus.length : null };
   });
@@ -180,7 +182,7 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
   const lG = compteurs.filter(c => c.type === f.energieGraphe);
   const mois = [];
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(auj.getFullYear(), auj.getMonth() - i, 1), d2 = new Date(auj.getFullYear(), auj.getMonth() - i + 1, 1);
+    const d = debutMoisReleve(ref.getFullYear(), ref.getMonth() - i), d2 = debutMoisReleve(ref.getFullYear(), ref.getMonth() - i + 1);
     mois.push({
       label: d.toLocaleDateString("fr-FR", { month: "short" }), long: d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }),
       n: somme(lG, d.getTime(), Math.min(d2.getTime(), fin)), p: somme(lG, decalerAn(d, -1).getTime(), decalerAn(d2, -1).getTime()),
@@ -200,7 +202,7 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
     });
     const lGs = cs.filter(c => c.type === f.energieGraphe);
     const tendance = lGs.length ? mois.map((m, i) => {
-      const d = new Date(auj.getFullYear(), auj.getMonth() - (11 - i), 1), d2 = new Date(auj.getFullYear(), auj.getMonth() - (11 - i) + 1, 1);
+      const d = debutMoisReleve(ref.getFullYear(), ref.getMonth() - (11 - i)), d2 = debutMoisReleve(ref.getFullYear(), ref.getMonth() - (11 - i) + 1);
       return somme(lGs, d.getTime(), Math.min(d2.getTime(), fin));
     }) : null;
     const retard = cs.filter(estEnRetard).length;
@@ -218,7 +220,7 @@ export function renderPilotage(container, { compteurs: compteursBruts, sites, as
 
   // ---------- Points d'attention ----------
   const attention = [];
-  const mDebut = new Date(auj.getFullYear(), auj.getMonth() - 1, 1), mFin = new Date(auj.getFullYear(), auj.getMonth(), 1);
+  const mDebut = debutMoisReleve(ref.getFullYear(), ref.getMonth() - 1), mFin = debutMoisReleve(ref.getFullYear(), ref.getMonth());
   const nomMois = mDebut.toLocaleDateString("fr-FR", { month: "long" });
   compteurs.forEach(c => {
     const v = conso(c, mDebut.getTime(), mFin.getTime()), vp = conso(c, decalerAn(mDebut, -1).getTime(), decalerAn(mFin, -1).getTime());

@@ -465,6 +465,14 @@ function watchCompteursAlertCountBrut(callback) {
 // dernière valeur connue avant la fin du mois moins la dernière valeur
 // connue avant son début ; un mois sans donnée suffisante renvoie null
 // plutôt que 0 (pour ne pas laisser croire à une consommation nulle).
+
+// Mois de relevé : un relevé fait du 27 au 3 clôture le mois qui se termine (le relevé du 2 novembre est celui
+// d'OCTOBRE). Les mois de consommation vont donc du 4 au 4 (et non du 1er au 1er).
+export const JOUR_BASCULE = 4;
+export const debutMoisReleve = (y, m) => new Date(y, m, JOUR_BASCULE);
+// Mois de relevé « en cours » (1er jour du mois) : le 2 novembre, on est encore sur octobre.
+export const moisReleveCourant = (d = new Date()) => d.getDate() < JOUR_BASCULE ? new Date(d.getFullYear(), d.getMonth() - 1, 1) : new Date(d.getFullYear(), d.getMonth(), 1);
+
 export function consommationMensuelle(releves, cle, nbMois = 12) {
   const chrono = [...releves].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   const valeurAvant = (ms) => {
@@ -477,11 +485,11 @@ export function consommationMensuelle(releves, cle, nbMois = 12) {
     return derniere;
   };
 
-  const maintenant = new Date();
+  const maintenant = moisReleveCourant();
   const mois = [];
   for (let i = nbMois - 1; i >= 0; i--) {
-    const debut = new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1);
-    const fin = new Date(maintenant.getFullYear(), maintenant.getMonth() - i + 1, 1);
+    const debut = debutMoisReleve(maintenant.getFullYear(), maintenant.getMonth() - i);
+    const fin = debutMoisReleve(maintenant.getFullYear(), maintenant.getMonth() - i + 1);
     const avant = valeurAvant(debut.getTime());
     const apres = valeurAvant(fin.getTime());
     const conso = (avant !== null && apres !== null) ? Math.max(0, apres - avant) : null;
@@ -520,12 +528,12 @@ function valeurTotaleAvant(relevesChrono, cles, ms) {
 // installations confondues, pour une vue d'ensemble plutôt que
 // compteur par compteur.
 export function consommationMensuelleAgregee(compteurs, tousReleves, nbMois = 12) {
-  const maintenant = new Date();
+  const maintenant = moisReleveCourant();
   const mois = [];
   for (let i = nbMois - 1; i >= 0; i--) {
     mois.push({
-      debut: new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1),
-      fin: new Date(maintenant.getFullYear(), maintenant.getMonth() - i + 1, 1),
+      debut: debutMoisReleve(maintenant.getFullYear(), maintenant.getMonth() - i),
+      fin: debutMoisReleve(maintenant.getFullYear(), maintenant.getMonth() - i + 1),
       label: new Date(maintenant.getFullYear(), maintenant.getMonth() - i, 1).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }),
     });
   }
