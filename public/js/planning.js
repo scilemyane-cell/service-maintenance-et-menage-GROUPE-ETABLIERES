@@ -2645,7 +2645,8 @@ function clotureMoisHTML(mois) {
     return { fini, html: `<div class="clo-carte ${fini ? "fini" : ""}">
       <div class="clo-tete"><span class="clo-av">${esc(initialesNom(t))}</span>
         <div class="clo-id"><b>${esc(t)}</b><small>${l.length} intervention${l.length > 1 ? "s" : ""} · ${fmtDureeH(s(l, "heures"))}${s(l, "heuresNuit") ? ` · dont nuit ${fmtDureeH(s(l, "heuresNuit"))}` : ""}${primes ? ` · primes ${primes} €` : ""}</small></div>
-        ${fini ? `<span class="clo-badge ok">✓ Terminé</span>` : ""}</div>
+        ${fini ? `<span class="clo-badge ok">✓ Terminé</span>` : ""}
+        <button class="clo-forfait ${forfait ? "on" : ""}" data-clo-forfait="${esc(t)}" title="${forfait ? "Forfait jours : astreintes payées une fois par an, en août. Cliquer pour revenir au relevé mensuel." : "Passer en forfait jours : astreintes payées une fois par an, en août (plus de relevé à valider chaque mois)"}">📅 ${forfait ? "Forfait jours" : "Forfait jours ?"}</button></div>
       ${doublons ? `<p class="clo-doublon">⚠ ${doublons} intervention${doublons > 1 ? "s semblent saisies" : " semble saisie"} en double (même jour, mêmes horaires, même site) — vérifie dans « Interventions réalisées » et mets le doublon à la corbeille.</p>` : ""}
       <div class="clo-etapes">
         <button class="clo-etape ${att ? "" : "ok"}" data-clo-releve="${esc(t)}" ${an ? `data-clo-an="1"` : ""}><span class="clo-num">${att ? "1" : "✓"}</span>
@@ -3641,6 +3642,13 @@ function renderInterventions(container, perms) {
     mountedContainer.querySelectorAll("[data-clo-releve]").forEach(b => b.addEventListener("click", () => ouvrirReleveCloture(b.dataset.cloReleve, ui.cloture, b.dataset.cloAn ? bornesAnForfait(ui.cloture) : null)));
     mountedContainer.querySelectorAll("[data-recap-prime]").forEach(b => b.addEventListener("click", () => ouvrirRecapPrime(b.dataset.recapPrime)));
     mountedContainer.querySelectorAll("[data-clo-km]").forEach(b => b.addEventListener("click", () => ouvrirKmCloture(b.dataset.cloKm, ui.cloture)));
+    mountedContainer.querySelectorAll("[data-clo-forfait]").forEach(b => b.addEventListener("click", async () => {
+      const nom = b.dataset.cloForfait, c = state.coordonnees[nom] || {}, oui = !c.forfaitJours;
+      if (!(await window.confirmDialog(oui ? `Passer ${nom} en forfait jours ? Ses interventions d'astreinte ne seront plus à valider chaque mois : un relevé annuel (septembre → août) sera à valider en août, pour paiement.` : `Remettre ${nom} en relevé d'heures mensuel ?`))) return;
+      b.disabled = true;
+      try { await saveCoordonnee(nom, { ...c, forfaitJours: oui }); state.coordonnees[nom] = { ...c, forfaitJours: oui }; renderAll(); window.toast?.(oui ? `📅 ${nom} : forfait jours (payé en août)` : `${nom} : relevé mensuel`); }
+      catch (e) { b.disabled = false; alert("Non enregistré : " + (e?.message || e)); }
+    }));
     if (ui.defilerCloture) { ui.defilerCloture = false; setTimeout(() => document.getElementById("iv-cloture")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120); }
     attacherApercuNoteFraisListeners();
   }
