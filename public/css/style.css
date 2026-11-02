@@ -4822,3 +4822,5 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .va-site.mobile::after{content:"✥";margin-left:2px;font-size:12px;opacity:.75}
 .clo-forfait{margin-left:auto;border:1px dashed #cbd5e1;background:transparent;color:#64748b;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
 .clo-forfait.on{border-style:solid;border-color:#c7d2fe;background:#eef2ff;color:#4338ca}
+.clo-marques{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.clo-marques .clo-forfait{margin-left:0}
+.clo-marques .clo-badge{padding:2px 9px;font-size:11px}
