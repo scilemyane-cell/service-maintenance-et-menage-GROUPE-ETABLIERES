@@ -4825,3 +4825,11 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .clo-marques{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.clo-marques .clo-forfait{margin-left:0}
 .clo-marques .clo-badge{padding:2px 9px;font-size:11px}
 .year-cal-day.enfant{background:#8b5cf6;color:#fff;font-weight:700}
+/* Plan des compteurs : recherche d'adresse */
+.va-recherche{position:absolute;top:14px;left:14px;z-index:650;width:min(360px,calc(100% - 200px));min-width:200px}
+.va-recherche input{width:100%;padding:9px 12px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;color:#111827;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.va-res{margin-top:4px;background:#fff;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.25);overflow:hidden}
+.va-res button{display:block;width:100%;text-align:left;padding:8px 12px;border:0;border-bottom:1px solid #eef0f3;background:#fff;color:#111827;cursor:pointer;font-size:13px}
+.va-res button:hover{background:#f1f5f9}.va-res small{display:block;color:#64748b;font-size:11px}
+.va-cible{position:absolute;transform:translate(-50%,-100%);font-size:30px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))}
+@media (max-width:760px){.va-recherche{left:8px;top:8px;width:calc(100% - 150px);min-width:0}}

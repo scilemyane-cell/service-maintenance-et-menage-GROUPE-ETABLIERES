@@ -51,6 +51,7 @@ export async function ouvrirVueAerienne({ site, compteurs, user, estEnRetard, pe
 function construire() {
   const L = window.L;
   if (map) { try { map.remove(); } catch { /* */ } map = null; fond = null; marqueurs = {}; }
+  repereCible = null;
   clearInterval(horloge);
   ov.innerHTML = `
   <div class="va-hud-top">
@@ -73,6 +74,7 @@ function construire() {
       <div class="va-coin tl"></div><div class="va-coin tr"></div><div class="va-coin bl"></div><div class="va-coin br"></div>
       <div class="va-mire" data-va-mire><i></i><i></i><b></b></div>
       <div class="va-bandeau" data-va-bandeau hidden></div>
+      <form class="va-recherche" data-va-recherche autocomplete="off"><input type="search" placeholder="🔎 Rechercher une adresse…" value="" data-va-q><div class="va-res" data-va-res hidden></div></form>
       <div class="va-fonds">${Object.entries(FONDS).map(([k, f]) => `<button class="va-btn" data-va-fond="${k}">${f.lib}</button>`).join("")}</div>
       ${st.pro ? "" : `<div class="va-boussole"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="27"/><path d="M30 6 L35 30 L30 26 L25 30 Z" class="n"/><path d="M30 54 L35 30 L30 34 L25 30 Z"/><text x="30" y="5">N</text></svg></div>`}
       <div class="va-actions">
@@ -112,6 +114,9 @@ function construire() {
   map.on("zoomend", majZoom); majZoom();
   map.on("click", clicCarte);
   ov.querySelectorAll("[data-va-fond]").forEach(b => b.onclick = () => choisirFond(b.dataset.vaFond));
+  brancherRecherche();
+  // Site sans position mais avec une adresse dans son dossier : on part de l'adresse.
+  if (!st.geoSite && st.dossier?.adresse) geocoder(st.dossier.adresse).then(l => { if (l[0] && map) { map.setView([l[0].lat, l[0].lng], 18); cible(l[0]); } }).catch(() => {});
   ov.querySelector("[data-va-centrer]").onclick = () => { const g = Object.values(marqueurs); if (g.length) map.flyToBounds(window.L.featureGroup(g).getBounds().pad(0.4), { maxZoom: 19, duration: 0.8 }); else if (st.geoSite) map.flyTo([st.geoSite.lat, st.geoSite.lng], 18, { duration: 0.8 }); };
   ov.querySelector("[data-va-placer-site]")?.addEventListener("click", () => { st.placerSite = !st.placerSite; st.pointage = null; modePointage(); });
   moi?.arreter(); moi = suivreMaPosition(map, { bouton: ov.querySelector("[data-va-moi]") });
@@ -130,6 +135,48 @@ function construire() {
   cadrer(); requestAnimationFrame(() => requestAnimationFrame(cadrer)); setTimeout(cadrer, 300);
   // Taille de la carte toujours à jour (barre d'adresse du téléphone, rotation…), en gardant le même centre.
   try { const z = ov.querySelector(".va-carte-zone"), ro = new ResizeObserver(() => map?.invalidateSize()); ro.observe(z); } catch { /* */ }
+}
+
+// ---- Recherche d'adresse (Base Adresse Nationale, Géoplateforme IGN) ----
+async function geocoder(q) {
+  const urls = [`https://data.geopf.fr/geocodage/search?limit=6&q=${encodeURIComponent(q)}`, `https://api-adresse.data.gouv.fr/search/?limit=6&q=${encodeURIComponent(q)}`];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u); if (!r.ok) continue;
+      const j = await r.json();
+      return (j.features || []).map(f => ({ label: f.properties?.label || q, ctx: f.properties?.context || "", lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }));
+    } catch { /* on essaie le service suivant */ }
+  }
+  return [];
+}
+let repereCible = null;
+function cible(a) {
+  const L = window.L; if (!map) return;
+  if (repereCible) map.removeLayer(repereCible);
+  repereCible = L.marker([a.lat, a.lng], { zIndexOffset: 800, icon: L.divIcon({ className: "", iconSize: [0, 0], html: `<div class="va-cible">📍</div>` }) }).addTo(map);
+  const pop = L.popup({ className: "va-pop pro", offset: [0, -30], maxWidth: 260 }).setContent(`<div class="va-fiche"><h4>${esc(a.label)}</h4>${a.ctx ? `<p>${esc(a.ctx)}</p>` : ""}
+    ${st.peutPointer ? `<div class="va-fiche-b"><button class="va-btn plein" data-va-site-ici>🏢 Mettre le site ici</button></div><p style="margin-top:6px">Ou zoome et touche le bâtiment exact avec « Position du site ».</p>` : ""}</div>`);
+  repereCible.bindPopup(pop).openPopup();
+  pop.getElement()?.querySelector("[data-va-site-ici]")?.addEventListener("click", async () => {
+    try { const geo = { lat: +a.lat.toFixed(6), lng: +a.lng.toFixed(6) }; await saveDossierGeo(st.site.id, geo); st.geoSite = geo; repereCible = null; window.toast?.("🏢 Position du site enregistrée"); construire(); }
+    catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
+  });
+}
+function brancherRecherche() {
+  const f = ov.querySelector("[data-va-recherche]"), inp = f.querySelector("[data-va-q]"), res = f.querySelector("[data-va-res]");
+  let t = null, liste = [];
+  const afficher = () => {
+    res.hidden = !liste.length;
+    res.innerHTML = liste.map((a, i) => `<button type="button" data-i="${i}"><b>${esc(a.label)}</b>${a.ctx ? `<small>${esc(a.ctx)}</small>` : ""}</button>`).join("");
+    res.querySelectorAll("[data-i]").forEach(b => b.onclick = () => aller(liste[+b.dataset.i]));
+  };
+  const aller = (a) => { if (!a) return; liste = []; afficher(); inp.value = a.label; inp.blur(); map.flyTo([a.lat, a.lng], 19, { duration: 0.8 }); setTimeout(() => cible(a), 850); };
+  const chercher = async () => { const q = inp.value.trim(); if (q.length < 3) { liste = []; afficher(); return; } liste = await geocoder(q); if (inp.value.trim() === q) afficher(); };
+  inp.addEventListener("input", () => { clearTimeout(t); t = setTimeout(chercher, 300); });
+  inp.addEventListener("focus", () => { if (!inp.value && st.dossier?.adresse) { inp.value = st.dossier.adresse; chercher(); } });
+  f.addEventListener("submit", async (e) => { e.preventDefault(); if (!liste.length) await chercher(); aller(liste[0]); });
+  // La carte ne doit pas réagir aux clics / molette dans la zone de recherche.
+  try { window.L.DomEvent.disableClickPropagation(f); window.L.DomEvent.disableScrollPropagation(f); } catch { /* */ }
 }
 
 function choisirFond(k) {
