@@ -790,7 +790,10 @@ function render() {
     const mois = moisACloturer();
     if (mois) {
       const [ca, cm] = mois.split("-").map(Number);
-      const aValider = interventionsToutes.filter(i => !i.supprimeLe && !i.transmis && (i.date || "").startsWith(mois)).length;
+      // Même calcul que l'écran « Clôture » : seulement les interventions avec un intervenant (pas les appels réglés
+      // par téléphone), et pas celles des intervenants au forfait jours (payés en août, relevé annuel).
+      const forfait = (nom) => { const n = nrmIv(nom), p = n.split(/\s+/)[0]; const e = Object.entries(coordonnees).find(([k]) => nrmIv(k) === n) || Object.entries(coordonnees).find(([k]) => nrmIv(k).split(/\s+/)[0] === p); return !!e?.[1]?.forfaitJours; };
+      const aValider = interventionsToutes.filter(i => !i.supprimeLe && !i.transmis && i.technicien && (i.date || "").startsWith(mois) && (cm === 8 || !forfait(i.technicien))).length;
       const nomMois = new Date(ca, cm - 1, 1).toLocaleDateString("fr-FR", { month: "long" });
       if (aValider) notifs.push({ cat: "astreinte", sub: "interventions", mois, icone: "🗓️", texte: `Clôture de ${nomMois} : ${aValider} intervention${aValider > 1 ? "s" : ""} d'astreinte à valider — relevés d'heures et notes de frais km à imprimer`, niveau: "rouge" });
     }
