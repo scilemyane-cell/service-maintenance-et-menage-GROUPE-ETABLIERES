@@ -279,7 +279,12 @@ export function mountEcranAtelier(container, u) {
   unsubs.push(onSnapshot(REF_TELECOMMANDE(), (snap) => {
     const t = snap.exists() ? snap.data() : {};
     if (typeof t.son === "boolean" && t.son !== sonActif) { sonActif = t.son; try { localStorage.setItem("ea-son", sonActif ? "1" : "0"); } catch { /* */ } render(); }
-    if (t.rechargerLe && t.rechargerLe > CHARGE_LE + 5000) location.reload();
+    // Rechargement à distance : une seule fois par demande (avant : comparaison avec l'horloge du PC — si elle
+    // retardait, la télé se rechargeait en boucle).
+    if (t.rechargerLe) {
+      let fait = 0; try { fait = +localStorage.getItem("ea-recharge-fait") || 0; } catch { /* */ }
+      if (t.rechargerLe !== fait) { try { localStorage.setItem("ea-recharge-fait", String(t.rechargerLe)); } catch { /* */ } if (fait && Date.now() - CHARGE_LE > 5000) location.reload(); }
+    }
   }, () => { /* */ }));
   unsubs.push(watchPeople((p) => { people = p; render(); }));
   unsubs.push(watchAbsences((a) => { absences = a || []; render(); }));

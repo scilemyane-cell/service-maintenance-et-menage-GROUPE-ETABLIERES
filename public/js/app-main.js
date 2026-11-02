@@ -203,7 +203,14 @@
       if (!r.ok) return;
       versionEnLigne = await r.json();
       document.querySelectorAll(".app-version").forEach(el => { el.innerHTML = versionTexte(); });
-      if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) { if (window.__modeTele) location.reload(); else bandeauNouvelleVersion(versionEnLigne); }
+      if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) {
+        // Télé : recharge seule, UNE fois par nouvelle version et au plus toutes les 10 min (sinon, si le PC garde
+        // l'ancienne page en mémoire, l'écran se rechargeait en boucle). Sinon bandeau « Mettre à jour ».
+        let deja = null; try { deja = JSON.parse(localStorage.getItem("etablieres-tele-recharge") || "null"); } catch { /* */ }
+        const ok = window.__modeTele && !(deja && (deja.v === String(versionEnLigne.version) || Date.now() - deja.t < 600000));
+        if (ok) { try { localStorage.setItem("etablieres-tele-recharge", JSON.stringify({ v: String(versionEnLigne.version), t: Date.now() })); } catch { /* */ } location.reload(); }
+        else bandeauNouvelleVersion(versionEnLigne);
+      }
     } catch { /* hors ligne : on réessaiera */ }
   }
   setTimeout(verifierVersion, 3000);

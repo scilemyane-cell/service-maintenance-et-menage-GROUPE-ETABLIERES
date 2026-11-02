@@ -157,12 +157,15 @@ function distM(a, b) { const R = 6371e3, r = Math.PI / 180, dLat = (b.lat - a.la
 function localiserProx(force = false) {
   if (!("geolocation" in navigator) || prox.etat === "cherche") return;
   if (!force && prox.pos && Date.now() - prox.t < 60000) return;
+  // Localisation refusée/indisponible (PC de l'atelier…) : on ne redemande pas avant 10 min. Avant, l'échec
+  // redessinait l'écran, qui redemandait aussitôt la position… en boucle : l'écran « sautait » sans arrêt.
+  if (!force && prox.etat === "refus" && Date.now() - prox.t < 600000) return;
   if (!state.compteurs.some(c => c.geo?.lat)) return; // aucun compteur pointé : inutile de localiser
   prox.etat = "cherche";
   navigator.geolocation.getCurrentPosition((p) => {
     prox.pos = { lat: p.coords.latitude, lng: p.coords.longitude, precision: p.coords.accuracy || 0 }; prox.t = Date.now(); prox.etat = "ok";
     if (ui.screen === "liste") render();
-  }, () => { prox.etat = "refus"; if (ui.screen === "liste") render(); }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 });
+  }, () => { prox.etat = "refus"; prox.t = Date.now(); }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 });
 }
 function procheHTML(siteId = null) {
   if (!prox.pos || mountedUser?.lectureSeule) return "";
