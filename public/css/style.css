@@ -4824,3 +4824,4 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .clo-forfait.on{border-style:solid;border-color:#c7d2fe;background:#eef2ff;color:#4338ca}
 .clo-marques{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.clo-marques .clo-forfait{margin-left:0}
 .clo-marques .clo-badge{padding:2px 9px;font-size:11px}
+.year-cal-day.enfant{background:#8b5cf6;color:#fff;font-weight:700}

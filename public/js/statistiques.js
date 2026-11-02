@@ -199,8 +199,8 @@ function variation(actuel, precedent) {
 const STATUTS_TRAITES_DEMANDES = ["Réalisé", "Annulé"];
 const COULEUR_URGENCE = { "Normal": "#3FB6AC", "Urgent": "#D9B24C", "À planifier": "#8B96A6", "Non renseignée": "#5A6577", "Critique": "#E5533D" };
 const ORDRE_URGENCE = ["Critique", "Urgent", "Normal", "À planifier", "Non renseignée"];
-const TYPE_ABSENCE_LABELS = { conge: "Congés", rtt: "RTT", arret: "Arrêts" };
-const COULEUR_ABSENCE = { conge: "#D9B24C", rtt: "#3FB6AC", arret: "#E5533D" };
+const TYPE_ABSENCE_LABELS = { conge: "Congés", rtt: "RTT", arret: "Arrêts", enfant: "Enfant malade" };
+const COULEUR_ABSENCE = { conge: "#D9B24C", rtt: "#3FB6AC", arret: "#E5533D", enfant: "#8B5CF6" };
 const TYPE_COMPTEUR = { eau: { label: "Eau", icone: "💧", unite: "m³" }, gaz: { label: "Gaz", icone: "🔥", unite: "m³" }, chauffage: { label: "Chauffage urbain", icone: "🌡️", unite: "kWh" }, elec: { label: "Électricité", icone: "⚡", unite: "kWh" } };
 const JOURS_SEMAINE = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const SEUIL_RETARD_RELEVE_J = 35;
@@ -363,7 +363,7 @@ function calculer(data, p) {
     const d1 = s > deb ? s : deb; const d2 = e < fin ? e : fin;
     return d2 < d1 ? 0 : joursEntre(d1, d2) + 1;
   };
-  const joursParType = { conge: 0, rtt: 0, arret: 0 };
+  const joursParType = { conge: 0, rtt: 0, arret: 0, enfant: 0 };
   const joursParPersonne = {};
   const absencesParMois = p.mois.map(() => 0);
   let totalJoursAbsence = 0;

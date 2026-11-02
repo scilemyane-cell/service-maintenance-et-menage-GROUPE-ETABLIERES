@@ -1441,6 +1441,7 @@ function renderVueMultiPersonnes(container, allPeople) {
         <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
         <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> RTT</span>
         <span><i class="year-cal-legend-dot" style="background:var(--red)"></i> Arrêt de travail</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--violet-abs, #8b5cf6)"></i> Enfant malade</span>
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention</span>
         <span><i class="year-cal-legend-dot" style="background:var(--violet, #8F5FBF)"></i> Jour férié</span>
       </div>
@@ -1462,7 +1463,7 @@ function renderVueMultiPersonnes(container, allPeople) {
                   const interv = interventionsParPersonneDate[`${p}|${k}`];
                   const weekend = d.getDay() === 0 || d.getDay() === 6;
                   let bg = "transparent", titre = "Présent";
-                  if (abs) { bg = abs.type === "arret" ? "var(--red)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
+                  if (abs) { bg = abs.type === "arret" ? "var(--red)" : abs.type === "enfant" ? "var(--violet-abs, #8b5cf6)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
                   else if (j.ferie) { titre = j.ferie; }
                   else if (weekend) { titre = "Week-end"; }
                   const bordureCol = j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : "";
@@ -1544,10 +1545,10 @@ function renderPlanningIndividuel(container, perms) {
       const classes = ["year-cal-day"];
       if (horsMois) classes.push("hors-mois");
       else if (weekend) classes.push("weekend");
-      if (abs) classes.push(abs.type === "arret" ? "arret" : abs.type === "rtt" ? "rtt" : "conge");
+      if (abs) classes.push(abs.type === "arret" ? "arret" : abs.type === "enfant" ? "enfant" : abs.type === "rtt" ? "rtt" : "conge");
       if (k === todayKey) classes.push("today");
       if (cliquable) classes.push("clickable");
-      const titre = abs ? (abs.type === "arret" ? "Arrêt de travail" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : (cliquable ? (infoInterv ? "Cliquer pour voir/modifier l'intervention" : "Cliquer pour ajouter une intervention ponctuelle") : "");
+      const titre = abs ? (abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : (cliquable ? (infoInterv ? "Cliquer pour voir/modifier l'intervention" : "Cliquer pour ajouter une intervention ponctuelle") : "");
       const dotTitre = infoInterv ? (infoInterv.recurrente ? "Intervention programmée (récurrence)" : "Intervention") : "";
       return `<div class="${classes.join(" ")}" title="${esc(titre)}" ${cliquable ? `data-date="${k}"` : ""} style="${cliquable ? "cursor:pointer" : ""}">${d.getDate()}${infoInterv ? `<span class="year-cal-dot${infoInterv.recurrente ? " year-cal-dot-recur" : ""}" title="${esc(dotTitre)}"></span>` : ""}</div>`;
     }).join("");
@@ -1575,6 +1576,7 @@ function renderPlanningIndividuel(container, perms) {
         <span><i class="year-cal-legend-dot" style="background:var(--gold)"></i> Congé</span>
         <span><i class="year-cal-legend-dot" style="background:var(--teal)"></i> ${esc(libelleRtt(person || ""))}</span>
         <span><i class="year-cal-legend-dot" style="background:var(--red)"></i> Arrêt de travail</span>
+        <span><i class="year-cal-legend-dot" style="background:var(--violet-abs, #8b5cf6)"></i> Enfant malade</span>
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention ponctuelle</span>
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline year-cal-legend-dot-recur"></i> Intervention programmée (récurrence)</span>
       </div>
@@ -1940,8 +1942,8 @@ function renderVueEnsembleAbsences(allPeople) {
                     const j = Math.round((finEffective - debutEffectif) / 86400000) + 1;
                     parType[a.type] = (parType[a.type] || 0) + j;
                   });
-                  const couleur = parType.arret ? "var(--red)" : parType.conge ? "var(--gold)" : "var(--teal)";
-                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? libelleRtt(p) : "arrêt"}`).join(", ");
+                  const couleur = parType.arret ? "var(--red)" : parType.enfant ? "var(--violet-abs, #8b5cf6)" : parType.conge ? "var(--gold)" : "var(--teal)";
+                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? libelleRtt(p) : t === "enfant" ? "enfant malade" : "arrêt"}`).join(", ");
                   return `<td style="color:${couleur};font-weight:700" title="${esc(detail)}">${Object.values(parType).reduce((s, v) => s + v, 0)}j</td>`;
                 }).join("")}
               </tr>
@@ -2029,7 +2031,7 @@ function renderAbsences(container, perms) {
       <div class="form-card">
         <div class="form-grid">
           <label>Personne<select id="a-person">${allPeople.map(p => `<option value="${esc(p)}" ${ui.absForm.person === p ? 'selected' : ''}>${esc(p)}</option>`).join("")}</select></label>
-          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>${libelleRtt(ui.absForm.person || allPeople[0])}</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option></select></label>
+          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>${libelleRtt(ui.absForm.person || allPeople[0])}</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option><option value="enfant" ${ui.absForm.type === 'enfant' ? 'selected' : ''}>Absence enfant malade</option></select></label>
           <label>Du<input type="date" id="a-start" value="${esc(ui.absForm.start)}"></label>
           <label>Au<input type="date" id="a-end" value="${esc(ui.absForm.end)}"></label>
           <label class="desc-field">Note<input id="a-note" value="${esc(ui.absForm.note)}" placeholder="optionnel"></label>
@@ -2054,7 +2056,7 @@ function renderAbsences(container, perms) {
                 const days = (new Date(a.end) - new Date(a.start)) / 86400000 + 1;
                 return `<tr ${ui.absEditingId === a.id ? 'style="outline:2px solid var(--gold);outline-offset:-2px"' : ""}>
                   <td>${esc(a.person)}</td>
-                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? libelleRtt(a.person) : 'Arrêt'}</span></td>
+                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : a.type === 'enfant' ? 'var(--violet-abs, #8b5cf6)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? libelleRtt(a.person) : a.type === 'enfant' ? 'Enfant malade' : 'Arrêt'}</span></td>
                   <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td>
                   <td>${esc(a.note || "")}${estPrtt(a) ? ` <span class="tag" style="font-size:9px">📥 PRTT</span>` : ""}</td>
                   ${perms.canManageAbsences ? `<td style="white-space:nowrap"><button class="nav-btn" data-edit-abs="${a.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
@@ -2105,7 +2107,7 @@ function renderAbsences(container, perms) {
         fond.innerHTML = `<div class="cd-fenetre" style="max-width:460px"><div class="cd-fenetre-tete"><div><b>✏️ Modifier l'absence</b><small>${esc(a.person)}</small></div><button class="cd-x" data-x>✕</button></div>
           <div class="stack" style="gap:10px">
             <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Personne<select data-f="person">${[...new Set(allPeople)].map(p => `<option value="${esc(p)}" ${p === a.person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
-            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Type<select data-f="type"><option value="conge" ${a.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${a.type === "rtt" ? "selected" : ""}>${esc(libelleRtt(a.person))}</option><option value="arret" ${a.type === "arret" ? "selected" : ""}>Arrêt</option></select></label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Type<select data-f="type"><option value="conge" ${a.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${a.type === "rtt" ? "selected" : ""}>${esc(libelleRtt(a.person))}</option><option value="arret" ${a.type === "arret" ? "selected" : ""}>Arrêt</option><option value="enfant" ${a.type === "enfant" ? "selected" : ""}>Enfant malade</option></select></label>
             <div style="display:flex;gap:10px"><label style="flex:1;display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Du<input type="date" data-f="start" value="${esc(a.start)}"></label><label style="flex:1;display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Au<input type="date" data-f="end" value="${esc(a.end)}"></label></div>
             <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Note<input data-f="note" value="${esc(a.note || "")}" placeholder="optionnel"></label>
             <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>💾 Enregistrer</button></div>
