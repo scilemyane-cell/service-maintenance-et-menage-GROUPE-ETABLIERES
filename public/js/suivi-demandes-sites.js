@@ -823,7 +823,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       <div class="dps-champs">
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
-        <label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>
+        ${perms.isEditor ? `<label>Contact / entreprise<input data-dps-champ="intervenant" value="${esc(val(l, "intervenant"))}" placeholder="ex. Ronald, Écol'eau…"></label>`
+          : `<label>Intervenant<input value="${esc(val(l, "intervenant") || l.attribueANom || "")}" readonly class="dps-lecture-seule" title="Fixé par le superviseur — à la clôture, l'appli te demande qui a fait l'intervention"></label>`}
         ${perms.isEditor && !TRAITE(l.statut) ? (() => {
           // Clôture par un superviseur : qui a réellement fait l'intervention.
           const noms = [...new Set([...techs.map(t => t.nom || t.email), utilisateur].filter(Boolean))];
@@ -1129,6 +1130,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       const l = ligneDe(c.dataset.id), br = st.brouillons[c.dataset.id] || {};
       const champs = {};
       Object.keys(br).forEach(k => { const v = String(br[k] ?? "").trim(); if (v !== (l[k] || "")) champs[k] = v; });
+      if (!perms.isEditor) delete champs.intervenant; // technicien : l'intervenant n'est jamais saisi à la main
       if (!Object.keys(champs).length) return;
       // Clôture : le commentaire (ce qui a été fait) est obligatoire.
       if (champs.statut === "Réalisé" || champs.statut === "Annulé") {

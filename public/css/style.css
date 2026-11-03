@@ -4864,3 +4864,4 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .pj-urg{display:inline-flex;align-items:center;gap:3px;flex:none;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;background:#f1f5f9;color:#475569}
 .pj-urg.crit{background:#fee2e2;color:#b91c1c}.pj-urg.urg{background:#ffedd5;color:#c2410c}.pj-urg.plan{background:#dbeafe;color:#1d4ed8}
 .pj-total-urg{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}.pj-groupe-d{display:flex;gap:6px;align-items:center}
+.dps-lecture-seule{background:#f1f5f9!important;color:#475569;cursor:not-allowed}
