@@ -359,26 +359,24 @@
         ],
       },
       {
-        id: "astreinte", label: "Astreinte", icon: "📅", desc: CANAL_TEST ? "Planning d'astreinte, interventions" : "Planning, absences, interventions",
+        id: "astreinte", label: "Astreinte", icon: "📅", desc: "Planning d'astreinte, interventions",
         subtabs: [
           { id: "calendrier",     label: "Calendrier",     icon: "📅", roles: ALL,                         mount: mountCalendrier },
-          ...(CANAL_TEST ? [] : [{ id: "absences",       label: "Absences",       icon: "👥", roles: GESTION,              mount: mountAbsencesTab }]),
           { id: "interventions",  label: "Interventions",  icon: "🔧", roles: [...GESTION,"technicien"], mount: mountInterventionsTab },
           { id: "synthese",       label: "Synthèse",       icon: "📊", roles: [...GESTION,"direction"],  mount: mountSyntheseTab },
           { id: "transferts",     label: "Historique transferts", icon: "🔄", roles: [...GESTION,"direction"], mount: mountTransfertsTab },
-          ...(CANAL_TEST ? [] : [{ id: "coordonnees",    label: "Coordonnées",    icon: "📞", roles: ALL, mount: mountCoordonneesTab }]),
           { id: "archive-releves", label: "Archive relevés", icon: "🗄️", roles: [...GESTION,"direction"], mount: mountArchiveRelevesTab },
         ],
       },
-      // Équipe & absences (version de test) : sorti de l'Astreinte, car les absences servent à toute l'appli.
-      ...(CANAL_TEST ? [{
+      // Équipe & absences : sorti de l'Astreinte, car les absences servent à toute l'appli.
+      {
         id: "equipe", label: "Équipe & absences", icon: "👥", desc: "Qui est là aujourd'hui, absences (congés, RTT, arrêts, enfant malade), coordonnées",
         subtabs: [
           { id: "aujourdhui",  label: "Aujourd'hui", icon: "☀️", roles: ALL, mount: mountEquipeAujourdhui },
           { id: "absences",    label: "Absences",    icon: "🏖️", roles: GESTION, mount: mountAbsencesTab },
           { id: "coordonnees", label: "Coordonnées", icon: "📞", roles: ALL, mount: mountCoordonneesTab },
         ],
-      }] : []),
+      },
       {
         id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès remplaçants",
         subtabs: [
