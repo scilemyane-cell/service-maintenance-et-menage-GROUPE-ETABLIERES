@@ -202,7 +202,7 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
         </section>`}
       </div>
     </div>
-    ${mesDemandes.length ? `<footer class="eb-pied">👷 ${esc(user?.nom || "Équipe")} : <b>${mesDemandes.length}</b> demande${mesDemandes.length > 1 ? "s" : ""} attribuée${mesDemandes.length > 1 ? "s" : ""} à traiter</footer>` : ""}
+    
   </div></div>`;
   ajuster();
   defilerUrgences();
