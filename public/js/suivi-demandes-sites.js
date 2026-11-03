@@ -1142,6 +1142,16 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         }
       }
       if (champs.statut === "Réalisé" && !(champs.dateIntervention || l.dateIntervention)) champs.dateIntervention = aujourdhui();
+      // Technicien : interdit de mettre à la main le nom d'un AUTRE membre de l'équipe dans « Contact / entreprise »
+      // (c'est la question « C'est toi qui t'en es occupé ? » qui note le bon nom à la clôture).
+      if (!perms.isEditor && "intervenant" in champs && champs.intervenant) {
+        const autre = techs.map(u => u.nom || u.email).filter(Boolean).find(n => sa(n) === sa(champs.intervenant) || sa(n).split(" ")[0] === sa(champs.intervenant).split(" ")[0]);
+        if (autre && sa(autre) !== sa(utilisateur)) {
+          const inp = c.querySelector('[data-dps-champ="intervenant"]'); inp?.classList.add("dps-obligatoire"); inp?.focus();
+          const etat = c.querySelector(".dps-etat"); if (etat) { etat.textContent = `✋ Tu ne peux pas mettre le nom de ${autre} : à la clôture, l'appli te demande qui a fait l'intervention et note le bon nom.`; etat.className = "dps-etat erreur"; }
+          return;
+        }
+      }
       // Clôture d'une demande attribuée à quelqu'un d'autre (technicien ou
       // entreprise) : on demande qui l'a réellement faite.
       const attribuee = l.attribueA && l.attribueA !== uid ? (l.attribueANom || "") : "";
@@ -1159,12 +1169,18 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
             ? !(await dlg(`Tiens, cette demande était confiée à ${entreprise} !\n\nC'est eux qui s'en sont occupés ?`, { titre: "🙌 Petite vérif avant de clôturer", texteValider: `🏢 Oui, c'est ${entreprise}`, texteAnnuler: "💪 Non, c'est moi" }))
             : await dlg(`Tiens, cette demande était pour ${attribuee} !\n\nC'est toi qui t'en es occupé ?`, { titre: "🙌 Petite vérif avant de clôturer", texteValider: "💪 Oui, c'est moi", texteAnnuler: `Non, c'est bien ${attribuee}` });
           if (moi) {
-            Object.assign(champs, { intervenant: utilisateur, categorieIntervenant: "Interne SG", attribueAvant: pour, clotureParAutre: true });
-            if (perms.isEditor) { Object.assign(champs, { declarePar: utilisateur, attribueA: uid || "", attribueANom: utilisateur }); br.declarePar = utilisateur; }
+            // Technicien : seulement des champs autorisés par les règles Firestore (avant, « attribueAvant » faisait
+            // refuser tout l'enregistrement → « Oui, c'est moi » ne marchait pas). Son nom est noté via « déclaré par ».
+            Object.assign(champs, { intervenant: utilisateur, categorieIntervenant: "Interne SG" });
+            if (perms.isEditor) { Object.assign(champs, { attribueAvant: pour, clotureParAutre: true, declarePar: utilisateur, attribueA: uid || "", attribueANom: utilisateur }); br.declarePar = utilisateur; }
             window.toast?.(`Bien joué ${String(utilisateur || "").split(" ")[0]} ! C'est ton nom qui est noté sur l'intervention 👍`, "success");
           } else if (perms.isEditor) {
             if (entreprise) { br.declarePar = "Entreprise extérieure"; champs.intervenant = champs.intervenant || entreprise; }
             else if (!choix) br.declarePar = attribuee;
+          } else {
+            // Technicien qui clôture pour le compte de la personne prévue : c'est elle qui est notée.
+            champs.declareParAutre = entreprise ? "Entreprise extérieure" : attribuee;
+            if (entreprise) champs.intervenant = champs.intervenant || entreprise; else champs.intervenant = attribuee;
           }
         }
       }
@@ -1181,13 +1197,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       }
       if (champs.statut === "Réalisé") {
         if (perms.isEditor) Object.assign(champs, { validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur });
-        else Object.assign(champs, { statut: A_VALIDER, validation: "", declarePar: utilisateur, declareLe: aujourdhui() });
+        else { Object.assign(champs, { statut: A_VALIDER, validation: "", declarePar: champs.declareParAutre || utilisateur, declareLe: aujourdhui() }); }
       }
       // Annulation par un technicien : passe aussi par la validation du superviseur.
       if (champs.statut === "Annulé") {
         if (perms.isEditor) Object.assign(champs, { validation: "OUI", dateValidation: aujourdhui(), validePar: utilisateur });
         else Object.assign(champs, { statut: A_VALIDER, validation: "ANNULATION", declarePar: utilisateur, declareLe: aujourdhui() });
       }
+      delete champs.declareParAutre;
       if (champs.statut && perms.isEditor) champs.dateStatut = aujourdhui();
       if ("commentaireTech" in champs) Object.assign(champs, { commentaireTechPar: utilisateur, commentaireTechLe: aujourdhui(), ...(perms.isEditor ? { commentaireMajMs: Date.now(), commentaireMajPar: utilisateur } : {}) }); // champs « nouveau commentaire » : superviseurs seulement (règles Firestore des techniciens)
       e.target.disabled = true;
