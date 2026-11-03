@@ -12,6 +12,7 @@ import { watchAffectationsSites, saveAffectationSite, saveAffectationsSites } fr
 import { abonnerEntreprises, saveEntreprises, entreprises, ficheEntreprise, cleEntreprise } from "./entreprises-data.js";
 import { watchPhrasesDemandes, savePhrasesDemandes, PHRASES_DEFAUT } from "./phrases-demandes-data.js";
 import { watchAbsences } from "./firestore-data.js";
+import { CATEGORIES_PANNES, categorieAuto, categorieDe } from "./categories-pannes.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
 
 // ---------- Phrases types (commentaires / actions) ----------
@@ -848,6 +849,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Site <select data-site-corr="${esc(l.id)}">${(() => { const m = {}; lignes.forEach(x => { if (x.site && x.site !== "Non renseigné") m[x.site] = m[x.site] || x.association || "Autres"; }); return ["Agropolis", "École", "Armonia", "Autres"].map(as => { const n = Object.keys(m).filter(k => (m[k] || "Autres") === as).sort((a, b) => a.localeCompare(b, "fr")); return n.length ? `<optgroup label="${as}">${n.map(k => `<option value="${esc(k)}" data-asso="${esc(m[k])}" ${k === l.site ? "selected" : ""}>${esc(k)}</option>`).join("")}</optgroup>` : ""; }).join(""); })()}</select></label></div>` : ""}
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
         : l.urgenceCorrigee ? `<div class="dps-urg-edit"><small>Urgence requalifiée (demandée « ${esc(l.urgenceDemandee)} »)</small></div>` : ""}
+      ${perms.isEditor ? (() => { const auto = categorieAuto(`${l.descr || ""} ${l.type || ""}`), cur = categorieDe(l), info = CATEGORIES_PANNES.find(c => c.id === auto);
+        return `<div class="dps-urg-edit"><label>Catégorie <select data-cat-panne="${esc(l.id)}"><option value="">${info.ic} ${esc(info.lib)} (auto)</option>${CATEGORIES_PANNES.map(c => `<option value="${c.id}" ${l.categoriePanne === c.id ? "selected" : ""}>${c.ic} ${esc(c.lib)}</option>`).join("")}</select></label>${l.categoriePanne && l.categoriePanne !== auto ? `<small>corrigée à la main</small>` : ""}</div>`; })() : ""}
       ${attribBlocHTML(l)}
       ${lieesHTML(l)}${suggestionHTML(l)}
       ${perms.peutTraiter ? `
@@ -1052,6 +1055,11 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const champs = v === l.urgenceDemandee ? { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" } : { urgenceCorrigee: v, urgenceCorrigeePar: utilisateur, urgenceCorrigeeLe: aujourdhui() };
     sel.disabled = true;
     try { await maj(l.id, champs); window.toast?.(`Urgence ${v === l.urgenceDemandee ? "remise comme demandée" : `requalifiée : ${v}`}`); } catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; }
+  }));
+  container.querySelectorAll("[data-cat-panne]").forEach(sel => sel.addEventListener("change", async () => {
+    sel.disabled = true;
+    try { await maj(sel.dataset.catPanne, { categoriePanne: sel.value }); window.toast?.(sel.value ? `Catégorie : ${CATEGORIES_PANNES.find(c => c.id === sel.value)?.lib}` : "Catégorie automatique"); }
+    catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; }
   }));
   container.querySelectorAll("[data-urgence-reset]").forEach(b => b.addEventListener("click", async () => {
     try { await maj(b.dataset.urgenceReset, { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" }); } catch (e) { alert("Échec : " + (e?.message || e)); }

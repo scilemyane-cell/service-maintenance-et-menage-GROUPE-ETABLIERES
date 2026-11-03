@@ -4882,3 +4882,4 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .gh-raccourcis a:hover{background:rgba(255,255,255,.14)}.gh-raccourcis span{font-size:17px}
 body:has(.gh-raccourcis) #app{padding-bottom:84px}
 @media (max-width:600px){.gh-raccourcis{bottom:8px;gap:4px}.gh-raccourcis a{padding:7px 10px;font-size:12px}}
+.dst-cat-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}.dst-cat-g h4{margin:0 0 8px}

@@ -750,6 +750,7 @@ function ligneDepuisDoc(d) {
     actionImmediate: !!d.actionImmediate,
     notePresta: d.notePresta || "", notePrestaLe: d.notePrestaLe || "",
     attribueA: d.attribueA || "", attribueANom: d.attribueANom || "", attribueLe: d.attribueLe || "", attribuePar: d.attribuePar || "",
+    categoriePanne: d.categoriePanne || "",
   };
 }
 

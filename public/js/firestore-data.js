@@ -222,7 +222,7 @@ const CHAMPS_HISTO = {
   dateIntervention: "Date d'intervention", urgenceCorrigee: "Urgence", siteCorrige: "Site", descriptifCorrige: "Descriptif",
   localCorrige: "Local", attribueANom: "Attribuée à", validation: "Validation", refusMotif: "Motif du refus",
   supprimeeLe: "Suppression", supprimeeMotif: "Motif de suppression", actionTexte: "Action demandée", actionPourNom: "Action pour",
-  actionFaitePar: "Action faite par", lieeANumero: "Reliée à",
+  actionFaitePar: "Action faite par", lieeANumero: "Reliée à", categoriePanne: "Catégorie",
 };
 const texteHisto = (v) => { if (v == null || v === "") return ""; if (typeof v === "object") { if (typeof v.toMillis === "function") return new Date(v.toMillis()).toLocaleDateString("fr-FR"); return ""; } return String(v).slice(0, 300); };
 function journaliserDemande(id, avant, fields) {

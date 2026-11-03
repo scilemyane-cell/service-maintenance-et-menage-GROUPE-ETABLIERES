@@ -5,6 +5,7 @@ import { esc } from "./astreinte-logic.js";
 import { db } from "./firebase-init.js";
 import { doc, getDoc, getDocs, collection } from "./firestore-compte.js";
 import { effectifEtClotures, effectifHTML, douzeMois, brancherEffectif } from "./effectif-stats.js";
+import { CATEGORIES_PANNES, categorieDe } from "./categories-pannes.js";
 
 // Techniciens (config/people) et absences : lus une fois, pour l'analyse
 // « interventions clôturées / techniciens présents ».
@@ -235,7 +236,10 @@ function calculer(toutes) {
   const quiTraite = (l) => l.attribueANom || l.declarePar || l.contact || l.intervenant || "Non renseigné";
   const parQuiM = {}; traitM.filter(l => l.statut === "Réalisé").forEach(l => { const k = String(quiTraite(l)).trim(); parQuiM[k] = (parQuiM[k] || 0) + 1; });
   const urgArrM = ORDRE_URG.map(u => ({ n: u, v: arrM.filter(x => (x.urgence || "Non renseignée") === u).length })).filter(u => u.v);
-  const detail = { ms, msPrec, arrM, traitM, delaisM, sites: Object.values(parSiteM).sort((a, b) => (b.arr + b.trait) - (a.arr + a.trait)), qui: Object.entries(parQuiM).sort((a, b) => b[1] - a[1]), urgArr: urgArrM };
+  // Catégories de pannes : demandes arrivées dans le mois choisi, et sur la période choisie.
+  const parCat = (l) => CATEGORIES_PANNES.map(c => ({ ...c, v: l.filter(x => categorieDe(x) === c.id).length })).filter(c => c.v).sort((a, b) => b.v - a.v);
+  const categoriesM = parCat(arrM), categoriesP = parCat(periode);
+  const detail = { ms, msPrec, arrM, categoriesM, categoriesP, traitM, delaisM, sites: Object.values(parSiteM).sort((a, b) => (b.arr + b.trait) - (a.arr + a.trait)), qui: Object.entries(parQuiM).sort((a, b) => b[1] - a[1]), urgArr: urgArrM };
   // ---- Indicateurs « direction » : période choisie vs période précédente de même durée ----
   const fenetre = (a, b) => {
     const dans = (x) => x && (!a || x >= a) && x <= b;
@@ -452,6 +456,13 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
         <div><h4>Urgence des arrivées</h4>
           ${D.urgArr.length ? barresH(D.urgArr.map(u => ({ n: u.n, v: u.v, c: u.n === "Critique" ? "var(--dst-crit)" : u.n === "Urgent" ? "var(--dst-s2)" : "var(--dst-s1)" })), { suffixe: " arrivées" }).replace(/dst-bh-rang">\d+/g, 'dst-bh-rang">•') : `<div class="dst-vide">—</div>`}</div>
       </div>
+    </section>`; })()}
+    ${(() => { const D = s.detail, tot = (l) => l.reduce((t, c) => t + c.v, 0);
+      const bloc = (l, lib) => l.length ? `${donut(l.map(c => ({ n: `${c.ic} ${c.lib}`, v: c.v, c: c.c })), tot(l), lib)}` : `<div class="dst-vide">Aucune demande</div>`;
+      return `<section class="dst-carte dst-cat">
+      <div class="dst-carte-tete"><div><h3>🧩 Catégories de pannes</h3><p>Demandes arrivées · classées d'après le descriptif (corrigeable sur la demande par un superviseur)</p></div>
+        <div class="dst-mois-nav"><button data-dst-nav="-1" ${D.ms === s.flux[0] ? "disabled" : ""} aria-label="Mois précédent">‹</button><b>${esc(D.ms.label)}</b><button data-dst-nav="1" ${D.ms === s.flux[s.flux.length - 1] ? "disabled" : ""} aria-label="Mois suivant">›</button></div></div>
+      <div class="dst-cat-g"><div><h4>${esc(D.ms.label)}</h4>${bloc(D.categoriesM, "demandes")}</div><div><h4>${esc(libPeriode.replace(/^./, c => c.toUpperCase()))}</h4>${bloc(D.categoriesP, "demandes")}</div></div>
     </section>`; })()}
 
     ${(() => { if (!effData) return `<section class="dst-carte"><p class="dst-note">⏳ Chargement de l'analyse « interventions clôturées / techniciens présents »…</p></section>`;
