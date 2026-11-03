@@ -181,9 +181,12 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
           : `<div class="eb-ok"><span>✅</span>Aucune urgence en cours</div>`}
       </section>
       <div class="eb-mil">
+        <section class="eb-bloc eb-absents">
+          <div class="eb-h"><span>🏖️ ABSENTS AUJOURD'HUI</span>${absentsAuj.length ? `<b class="eb-big orange">${absentsAuj.length}</b>` : ""}</div>
+          ${absentsAuj.length ? `<div class="eb-abs-l">${absentsAuj.map(a => `<b>${esc(a)}</b>`).join("")}</div>` : `<p class="eb-abs-ok">👷 Toute l'équipe est là</p>`}
+        </section>
         <section class="eb-bloc eb-jour">
           <div class="eb-h"><span>📋 AUJOURD'HUI</span></div>
-          ${absentsAuj.length ? `<div class="eb-abs"><span class="eb-abs-t">🏖️ ABSENT${absentsAuj.length > 1 ? "S" : ""} AUJOURD'HUI</span><div class="eb-abs-l">${absentsAuj.map(a => `<b>${esc(a)}</b>`).join("")}</div></div>` : `<div class="eb-abs ok"><span class="eb-abs-t">👷 TOUTE L'ÉQUIPE EST LÀ</span></div>`}
           <div class="ea-defil eb-defil"><div class="ea-piste"><div class="ea-lot">${logAuj.length || logProch.length ? `<div class="eb-ligne"><span class="eb-ic">🏠</span><div><b>Logements à préparer${logAuj.length ? ` : ${logAuj.length} aujourd'hui` : ""}</b><p>${(logAuj.length ? logAuj : logProch).slice(0, 4).map(r => `${esc(r.bat)} ${esc(String(r.numero))}${r.creneau ? ` (${r.creneau === "matin" ? "matin" : "après-midi"})` : ""}${logAuj.length ? "" : ` · ${new Date(r.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}`}${r.pour ? ` → ${esc(String(r.pour).split(" ")[0])}` : ""}`).join(" · ")}${(logAuj.length || logProch.length) > 4 ? " …" : ""}</p></div></div>` : ""}
           ${memosAuj.length ? `<div class="eb-sep">📌 À ne pas oublier</div>${memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("")}` : ""}</div></div></div>
         </section>
@@ -430,10 +433,10 @@ const STYLE_V2 = `<style>
   .eb-met{display:flex;align-items:center;gap:18px}.eb-met .eb-met-ic{font-size:120px;line-height:1;font-weight:400}.eb-met b{display:block;font-size:96px;line-height:1}.eb-met span{font-size:34px;font-weight:800}.eb-met small{display:block;font-size:24px;color:#cbd5e1;margin-top:6px}
   .eb-met-al{margin-top:10px;padding:10px 14px;border-radius:12px;background:#3b2a0b;color:#fde68a;font-size:24px;font-weight:700}
   .eb-met-j{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.eb-met-j div{background:#0d1526;border-radius:12px;padding:10px 12px}.eb-met-j span{display:block;font-size:22px;color:#cbd5e1}.eb-met-j span::first-letter{text-transform:uppercase}.eb-met-j b{font-size:32px}.eb-met-j small{display:block;color:#cbd5e1;font-size:21px}
-  .eb-abs{flex:none;border-radius:18px;padding:16px 20px;margin-bottom:14px;background:linear-gradient(135deg,#5b21b6,#7c3aed);border:5px solid #fde047;box-shadow:0 0 0 4px rgba(253,224,71,.25),0 0 36px rgba(253,224,71,.45);animation:eb-abs 2.4s ease-in-out infinite}
-  @keyframes eb-abs{0%,100%{box-shadow:0 0 0 4px rgba(253,224,71,.25),0 0 36px rgba(253,224,71,.45)}50%{box-shadow:0 0 0 10px rgba(253,224,71,.12),0 0 60px rgba(253,224,71,.7)}}
-  .eb-abs.ok{background:#0f2a1d;border:3px solid #22c55e;box-shadow:none;animation:none}.eb-abs-t{font-size:24px;font-weight:800;letter-spacing:.1em;color:#fef9c3}.eb-abs.ok .eb-abs-t{color:#86efac}
-  .eb-abs-l{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.eb-abs-l b{font-size:42px;font-weight:800;background:rgba(255,255,255,.14);border-radius:12px;padding:4px 16px}
+  .eb-absents{flex:none;border:2px solid #f59e0b}.eb-absents .eb-h{margin-bottom:10px}.eb-big.orange{color:#fbbf24}
+  .eb-abs-l{display:flex;flex-wrap:wrap;gap:10px}.eb-abs-l b{font-size:38px;font-weight:800;background:#0d1526;border:1px solid #334155;border-radius:12px;padding:4px 16px}
+  .eb-abs-ok{margin:0;font-size:28px;font-weight:700;color:#86efac}
+  .eb-jour .eb-defil{flex:1;min-height:0}
   .eb-bilan{position:relative}.eb-graphe h2{margin:0 0 6px;font-size:22px;letter-spacing:.06em}.eb-graphe .ea-svg{width:100%;flex:1;min-height:0}.eb-graphe .ea-bravo{display:none}.eb-graphe .ea-sous{margin:0 0 4px}
   .eb-bilan .ea-prog{position:absolute;left:0;right:0;bottom:0}
   .eb-bilan .eb-tech{grid-template-columns:170px 1fr 44px;font-size:23px}
