@@ -130,6 +130,7 @@ function peutModifierRoleDe(user, targetRole) {
 const TUILES_GEREES = [
   { id: "statistiques", label: "Statistiques" },
   { id: "astreinte", label: "Astreinte" },
+  { id: "equipe", label: "Équipe & absences" },
   { id: "sites", label: "Dossiers de site" },
   { id: "compteurs", label: "Relevé compteur" },
   { id: "masterlock", label: "Codes Masterlock" },
