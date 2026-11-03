@@ -118,6 +118,64 @@ function astreinteHTML() {
   } catch { return ""; }
 }
 
+// ---- Nouvelle présentation (proposée sur la version de TEST /beta) ----
+const CANAL_TEST = location.pathname.startsWith("/beta/");
+const presentationV2 = () => { if (!CANAL_TEST) return false; try { return localStorage.getItem("ea-v2") !== "0"; } catch { return true; } };
+const urgK = (u) => { const v = sansAccent(u); return v.startsWith("crit") ? "crit" : v.startsWith("urg") ? "urg" : ""; };
+function renderV2(now, actifsMemos, urgTri, nouv, plein) {
+  const auj = iso(now), lundi = new Date(now); lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7)); const lun = iso(lundi);
+  const l = toutes.filter(valide);
+  const traiteesAuj = l.filter(x => dateTraitee(x) === auj && !x.lieeA);
+  const parTech = {}; traiteesAuj.forEach(x => { const t = x.declarePar || "Équipe"; parTech[t] = (parTech[t] || 0) + 1; });
+  const techs = Object.entries(parTech).sort((a, b) => b[1] - a[1]);
+  const semT = l.filter(x => { const t = dateTraitee(x); return t >= lun && t <= auj; }).length;
+  const semR = l.filter(x => { const t = dateOk(x.dateDemande); return t >= lun && t <= auj; }).length;
+  // Astreinte
+  let ast = null;
+  try { if (people?.n1?.length) { const a = people.astreinteActive || {}, p = { ...people, n1: people.n1.filter(n => a[n] !== false), n2: (people.n2 || []).filter(n => a[n] !== false) };
+    if (p.n1.length && p.n2.length) { const { titN1, titN2 } = computeWeeklyTitulaires(p, absences); ast = { n1: resolveDayN1(now, p, absences, titN1)?.assigned, n2: resolveDayN2(now, p, absences, titN2)?.assigned }; } } } catch { /* */ }
+  const tel = (n) => coord[n]?.telephone ? `<em>${esc(coord[n].telephone)}</em>` : "";
+  const memosAuj = actifsMemos.slice(0, 5);
+  const maxT = Math.max(1, ...techs.map(x => x[1]));
+  conteneur.innerHTML = `${STYLE}${STYLE_V2}<div class="ea-scene ${window.__modeTele ? "tele" : ""}"><div class="eb">
+    <header class="eb-tete">
+      <div class="eb-id"><div class="eb-titre">ATELIER · SERVICE MAINTENANCE</div><div class="eb-date">${now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div></div>
+      <div class="eb-heure">${now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+      <div class="eb-ast">${ast ? `<div class="eb-ast-t">📞 Astreinte</div><div class="eb-ast-l"><span>N1</span><b>${esc(ast.n1 || "—")}</b>${tel(ast.n1)}</div><div class="eb-ast-l n2"><span>N2</span><b>${esc(ast.n2 || "—")}</b>${tel(ast.n2)}</div>` : ""}</div>
+      <div class="eb-cmd"><button data-ea="son" class="${sonActif ? "on" : ""}" title="Son des nouvelles urgences">${sonActif ? "🔔" : "🔕"}</button><button data-ea="edit" title="Pense-bête">✏️</button><button data-ea="plein" title="Plein écran">${plein ? "⤢" : "⛶"}</button><button data-ea="v1" title="Revenir à l'ancienne présentation">↺</button></div>
+    </header>
+    ${edition ? editionHTML() : ""}
+    <div class="eb-corps">
+      <section class="eb-urg ${urgTri.length ? "" : "calme"}">
+        <div class="eb-h"><span>🚨 URGENCES</span><b class="eb-big ${urgTri.length ? "rouge" : "vert"}">${urgTri.length}</b></div>
+        ${urgTri.length ? `<div class="ea-defil eb-defil"><div class="ea-piste"><div class="ea-lot">${urgTri.map(u => `<div class="eb-u ${urgK(u.urgence)} ${u.importeMs && Date.now() - u.importeMs < 4 * 36e5 ? "neuve" : ""}">
+            <div class="eb-u-l1"><span class="eb-u-tag">${u.urgence === "Critique" ? "CRITIQUE" : "URGENT"}</span><b>${esc(u.site || "")}</b>${u.local ? `<span class="eb-u-loc">📍 ${esc(u.local)}</span>` : ""}<span class="eb-u-dep">${depuis(u.importeMs)}</span></div>
+            <div class="eb-u-txt">${esc(String(u.descriptif || "").slice(0, 150))}</div>
+            ${u.action ? `<div class="eb-u-act">📌 ${esc(u.action.texte)}</div>` : ""}</div>`).join("")}</div></div></div>`
+          : `<div class="eb-ok"><span>✅</span>Aucune urgence en cours</div>`}
+      </section>
+      <div class="eb-mil">
+        <section class="eb-bloc">
+          <div class="eb-h"><span>✅ TRAITÉES AUJOURD'HUI</span><b class="eb-big vert">${traiteesAuj.length}</b></div>
+          ${techs.length ? `<div class="eb-techs">${techs.map(([t, n]) => `<div class="eb-tech"><span>${esc(/\set\s/i.test(t) ? t : t.replace(/^(\S+)\s+(\S).*$/, (m, a, b) => `${a[0].toUpperCase()}${a.slice(1)} ${b.toUpperCase()}.`))}</span><i><u style="width:${n / maxT * 100}%"></u></i><b>${n}</b></div>`).join("")}</div>` : `<p class="eb-dim">Pas encore de demande clôturée aujourd'hui.</p>`}
+          <div class="eb-sem">Cette semaine : <b>${semT}</b> traitées · <b>${semR}</b> reçues ${semT >= semR && semT ? "<span>💪 on avance plus vite qu'elles n'arrivent</span>" : ""}</div>
+        </section>
+        <section class="eb-bloc eb-memo">
+          <div class="eb-h"><span>📌 À NE PAS OUBLIER</span></div>
+          ${memosAuj.length ? memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("") : `<p class="eb-dim">Rien de prévu.</p>`}
+        </section>
+      </div>
+      <section class="eb-bloc eb-nouv">
+        <div class="eb-h"><span>🆕 NOUVELLES DEMANDES</span><b class="eb-big bleu">${nouv.length}</b></div>
+        ${nouv.length ? nouv.slice(0, 6).map(n => `<div class="eb-n"><b>${esc(n.site || "")}</b>${n.local ? `<span> · ${esc(n.local)}</span>` : ""}<p>${esc(String(n.descriptif || "").slice(0, 90))}</p><small>${depuis(n.importeMs)}</small></div>`).join("") : `<p class="eb-dim">Aucune nouvelle demande cette semaine.</p>`}
+      </section>
+    </div>
+    ${mesDemandes.length ? `<footer class="eb-pied">👷 ${esc(user?.nom || "Équipe")} : <b>${mesDemandes.length}</b> demande${mesDemandes.length > 1 ? "s" : ""} attribuée${mesDemandes.length > 1 ? "s" : ""} à traiter</footer>` : ""}
+  </div></div>`;
+  ajuster();
+  defilerUrgences();
+}
+
 function render() {
   if (!conteneur) return;
   const now = new Date();
@@ -126,6 +184,7 @@ function render() {
   const urgTri = [...urgences].sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
   const nouv = nouvelles.filter(n => !urgences.some(u => u.id === n.id)).sort((a, b) => (b.importeMs || 0) - (a.importeMs || 0)).slice(0, 7);
   const plein = !!document.fullscreenElement || !!window.__modeTele;
+  if (presentationV2()) return renderV2(now, actifsMemos, urgTri, nouv, plein);
   conteneur.innerHTML = `${STYLE}<div class="ea-scene ${window.__modeTele ? "tele" : ""}"><div class="ea ${plein ? "plein" : ""}">
     <header class="ea-tete">
       <div><div class="ea-titre">🛠️ Atelier — Service Maintenance</div><div class="ea-date">${now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div></div>
@@ -134,6 +193,7 @@ function render() {
         <button data-ea="son" class="${sonActif ? "on" : ""}">${sonActif ? "🔔 Son activé" : "🔕 Activer le son"}</button>
         <button data-ea="edit">${edition ? "✓ Fermer" : "✏️ Pense-bête"}</button>
         <button data-ea="plein">${plein ? "⤢ Quitter le plein écran" : "⛶ Plein écran"}</button>
+        ${CANAL_TEST ? `<button data-ea="v2">✨ Nouvelle présentation</button>` : ""}
       </div>
     </header>
     ${edition ? editionHTML() : ""}
@@ -219,6 +279,7 @@ async function surClic(e) {
     const a = b.dataset.ea;
     if (a === "son") { sonActif = !sonActif; try { localStorage.setItem("ea-son", sonActif ? "1" : "0"); } catch { /* */ } if (sonActif) bip(); render(); }
     else if (a === "edit") { edition = !edition; render(); }
+    else if (a === "v1" || a === "v2") { try { localStorage.setItem("ea-v2", a === "v2" ? "1" : "0"); } catch { /* */ } render(); }
     else if (a === "plein") {
       try { if (document.fullscreenElement) await document.exitFullscreen(); else await conteneur.requestFullscreen(); } catch { /* refusé */ }
       try { if (!wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch { /* pas de verrou */ }
@@ -296,6 +357,41 @@ export function mountEcranAtelier(container, u) {
   render();
 }
 
+const STYLE_V2 = `<style>
+  .eb{position:absolute;top:0;left:0;width:1920px;height:1080px;box-sizing:border-box;transform-origin:0 0;background:radial-gradient(1200px 600px at 20% -10%,#16233d 0,#0a101c 60%);color:#f1f5f9;padding:26px 34px 22px;font-size:24px;display:flex;flex-direction:column;font-family:Montserrat,system-ui,sans-serif}
+  .eb-tete{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:center;gap:24px;margin-bottom:22px}
+  .eb-titre{font-size:22px;font-weight:800;letter-spacing:.18em;color:#94a3b8}.eb-date{font-size:40px;font-weight:800}.eb-date::first-letter{text-transform:uppercase}
+  .eb-heure{font-size:120px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:2px}
+  .eb-ast{justify-self:end;background:#111a2e;border:1px solid #23324f;border-radius:18px;padding:12px 20px;min-width:420px}
+  .eb-ast-t{font-size:18px;font-weight:800;color:#94a3b8;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}
+  .eb-ast-l{display:flex;align-items:baseline;gap:14px;font-size:30px}.eb-ast-l span{font-size:18px;font-weight:800;background:#2563eb;border-radius:8px;padding:2px 10px}.eb-ast-l.n2 span{background:#475569}
+  .eb-ast-l b{font-weight:800}.eb-ast-l em{font-style:normal;color:#93c5fd;font-size:26px;margin-left:auto}
+  .eb-cmd{display:flex;flex-direction:column;gap:6px;opacity:.35}.eb-cmd:hover{opacity:1}
+  .eb-cmd button{width:46px;height:40px;border-radius:10px;border:1px solid #23324f;background:#111a2e;color:#fff;font-size:20px;cursor:pointer}.eb-cmd button.on{border-color:#22c55e}
+  .eb-corps{flex:1;min-height:0;display:grid;grid-template-columns:1.45fr 1fr .9fr;gap:24px}
+  .eb-urg,.eb-bloc{background:#111a2e;border:1px solid #23324f;border-radius:22px;padding:20px 22px;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+  .eb-urg{border-color:#7f1d1d;background:linear-gradient(180deg,#2a1218,#111a2e 40%)}.eb-urg.calme{border-color:#14532d;background:linear-gradient(180deg,#0f2a1d,#111a2e 40%)}
+  .eb-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.eb-h span{font-size:22px;font-weight:800;letter-spacing:.12em;color:#cbd5e1}
+  .eb-big{font-size:64px;line-height:1;font-weight:800}.eb-big.rouge{color:#f87171}.eb-big.vert{color:#4ade80}.eb-big.bleu{color:#60a5fa}
+  .eb-defil{flex:1;min-height:0}
+  .eb-u{border-radius:16px;padding:14px 18px;margin-bottom:12px;background:#3b1d12;border-left:10px solid #f97316}
+  .eb-u.crit{background:#3f1218;border-left-color:#ef4444}.eb-u.neuve{animation:ea-flash 1.6s ease-in-out infinite}
+  .eb-u-l1{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:30px}.eb-u-tag{font-size:16px;font-weight:800;letter-spacing:.1em;background:#f97316;color:#1a0b05;border-radius:8px;padding:3px 10px}
+  .eb-u.crit .eb-u-tag{background:#ef4444;color:#fff}.eb-u-loc{color:#fde68a;font-size:26px}.eb-u-dep{margin-left:auto;font-size:20px;color:#fca5a5}
+  .eb-u-txt{margin-top:8px;font-size:27px;line-height:1.3}.eb-u-act{margin-top:6px;font-size:20px;color:#fde68a}
+  .eb-ok{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-size:40px;font-weight:800;color:#86efac}.eb-ok span{font-size:120px}
+  .eb-mil{display:flex;flex-direction:column;gap:24px;min-height:0}.eb-mil .eb-memo{flex:1}
+  .eb-techs{display:grid;gap:10px}.eb-tech{display:grid;grid-template-columns:240px 1fr 50px;align-items:center;gap:14px;font-size:26px}
+  .eb-tech span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}.eb-tech i{height:18px;background:#1e293b;border-radius:99px;overflow:hidden}.eb-tech u{display:block;height:100%;background:#22c55e;border-radius:99px}
+  .eb-tech b{text-align:right;font-size:32px}
+  .eb-sem{margin-top:14px;font-size:21px;color:#94a3b8}.eb-sem b{color:#fff}.eb-sem span{display:block;color:#86efac;margin-top:4px}
+  .eb-m{display:flex;flex-direction:column;padding:10px 14px;border-radius:12px;background:#0d1526;margin-bottom:10px;border-left:6px solid #475569}
+  .eb-m span{font-size:18px;color:#94a3b8;font-weight:700}.eb-m span::first-letter{text-transform:uppercase}.eb-m b{font-size:25px;font-weight:600}
+  .eb-m.auj{border-left-color:#f97316}.eb-m.auj span{color:#fdba74}.eb-m.dem{border-left-color:#eab308}.eb-m.retard{border-left-color:#ef4444}.eb-m.imp b{color:#fde68a}
+  .eb-n{padding:10px 0;border-bottom:1px solid #1e2a44;font-size:24px}.eb-n span{color:#94a3b8}.eb-n p{margin:3px 0 0;font-size:21px;color:#cbd5e1;line-height:1.3}.eb-n small{color:#64748b;font-size:17px}
+  .eb-dim{color:#64748b;font-size:22px}
+  .eb-pied{margin-top:16px;font-size:22px;color:#cbd5e1}
+</style>`;
 const STYLE = `<style>
   .ea-scene{position:relative;overflow:hidden;margin:0 auto;border-radius:14px;background:#0b1220}
   .ea-scene.tele{position:fixed;inset:0;margin:auto;z-index:99999;border-radius:0;box-shadow:0 0 0 100vmax #0b1220}
