@@ -4865,3 +4865,4 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .pj-urg.crit{background:#fee2e2;color:#b91c1c}.pj-urg.urg{background:#ffedd5;color:#c2410c}.pj-urg.plan{background:#dbeafe;color:#1d4ed8}
 .pj-total-urg{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}.pj-groupe-d{display:flex;gap:6px;align-items:center}
 .dps-lecture-seule{background:#f1f5f9!important;color:#475569;cursor:not-allowed}
+.dps-pastille.absent{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}

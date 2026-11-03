@@ -11,6 +11,8 @@ import { watchSitesDossiers } from "./site-dossier-data.js";
 import { watchAffectationsSites, saveAffectationSite, saveAffectationsSites } from "./affectations-sites-data.js";
 import { abonnerEntreprises, saveEntreprises, entreprises, ficheEntreprise, cleEntreprise } from "./entreprises-data.js";
 import { watchPhrasesDemandes, savePhrasesDemandes, PHRASES_DEFAUT } from "./phrases-demandes-data.js";
+import { watchAbsences } from "./firestore-data.js";
+import { watchCoordonnees } from "./coordonnees-data.js";
 
 // ---------- Phrases types (commentaires / actions) ----------
 const phr = { data: PHRASES_DEFAUT, abonne: false, rerender: null };
@@ -56,6 +58,32 @@ const aff = { data: {}, abonne: false, rerender: null };
 function suivreAffectations() {
   if (aff.abonne) return; aff.abonne = true;
   watchAffectationsSites((d) => { aff.data = d || {}; aff.rerender?.(); });
+}
+// ---------- Techniciens absents aujourd'hui ----------
+// Les demandes d'un technicien absent deviennent visibles par toute l'équipe (pour les traiter pendant son absence).
+// Compte partagé (ex. « Tony et Anthony ») : absent seulement si TOUTES les personnes du compte sont absentes.
+const abs = { liste: [], coord: {}, abonne: false };
+function suivreAbsences() {
+  if (abs.abonne) return; abs.abonne = true;
+  watchAbsences((l) => { abs.liste = l || []; aff.rerender?.(); });
+  watchCoordonnees((c) => { abs.coord = c || {}; aff.rerender?.(); });
+}
+const normNom = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+function personnesDuCompte(u) {
+  if (!u) return [];
+  const liees = Object.entries(abs.coord).filter(([, c]) => c && c.uid && c.uid === u.uid).map(([n]) => n);
+  if (liees.length) return liees;
+  // Sinon : d'après le nom du compte (« Tony et Anthony » → Tony, Anthony ; « Yann Guillaumin » → Yann Guillaumin).
+  const nom = String(u.nom || u.email || "");
+  return /\s(et|&)\s/i.test(nom) ? nom.split(/\s+(?:et|&)\s+/i) : [nom];
+}
+function estAbsentAujourdhui(u) {
+  const auj = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const pers = personnesDuCompte(u).filter(Boolean);
+  if (!pers.length) return false;
+  const absentes = abs.liste.filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj).map(a => normNom(a.person));
+  const absente = (p) => { const n = normNom(p), pr = n.split(/\s+/)[0]; return absentes.some(a => a === n || a === pr || a.split(/\s+/)[0] === pr && (a.split(/\s+/).length === 1 || n.split(/\s+/).length === 1)); };
+  return pers.every(absente);
 }
 // Attributions retrouvées même si le site est écrit autrement (« RS- Le Mail » / « RS - Le Mail »).
 const cleSiteAff = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -490,10 +518,15 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   // ---------- Attribution d'une demande (technicien ou entreprise) ----------
   // Une demande attribuée ne concerne que son attributaire ; sans attribution,
   // elle suit le(s) technicien(s) du site (ancien fonctionnement).
-  const concerneMoi = (l) => l.attribueA ? l.attribueA === uid : (techsDuSite(l.site).includes(uid) || l.actionPour === uid);
+  suivreAbsences();
+  const absents = new Set(utilisateurs.filter(u => u.uid && u.uid !== uid && estAbsentAujourdhui(u)).map(u => u.uid));
+  const nomAbsent = (id) => { const u = utilisateurs.find(x => x.uid === id); return u ? (u.nom || u.email) : ""; };
+  // Reprise pendant une absence : demande d'un technicien absent (attribuée, ou site dont tous les techniciens sont absents).
+  const deTechAbsent = (l) => l.attribueA ? (l.attribueA !== "ext" && absents.has(l.attribueA)) : (() => { const t = techsDuSite(l.site); return t.length > 0 && !t.includes(uid) && t.every(id => absents.has(id)); })();
+  const concerneMoi = (l) => (l.attribueA ? l.attribueA === uid : (techsDuSite(l.site).includes(uid) || l.actionPour === uid)) || deTechAbsent(l);
   if (estTech && uid && !st.toutVoir) lignes = lignes.filter(l => concerneMoi(l) || l.actionPour === uid || (l.lieeA && toutesLignes.some(p => p.id === l.lieeA && concerneMoi(p))));
   const iconeAttrib = (l) => l.attribueA === "ext" ? "🏢" : "👷";
-  const pastilleAttribHTML = (l) => l.attribueANom ? `<span class="dps-pastille attrib ${l.attribueA === uid ? "moi" : ""}" title="Attribuée${l.attribuePar ? ` par ${esc(l.attribuePar)}` : ""}${l.attribueLe ? ` le ${fr(l.attribueLe)}` : ""}">${iconeAttrib(l)} ${l.attribueA === uid ? "Pour moi" : esc(l.attribueANom)}</span>` : "";
+  const pastilleAttribHTML = (l) => (deTechAbsent(l) ? `<span class="dps-pastille absent" title="Visible par toute l'équipe pendant son absence">🏖️ ${esc(l.attribueA ? (l.attribueANom || nomAbsent(l.attribueA)) : techsDuSite(l.site).map(nomAbsent).filter(Boolean).join(", "))} absent — à reprendre</span>` : "") + (l.attribueANom ? `<span class="dps-pastille attrib ${l.attribueA === uid ? "moi" : ""}" title="Attribuée${l.attribuePar ? ` par ${esc(l.attribuePar)}` : ""}${l.attribueLe ? ` le ${fr(l.attribueLe)}` : ""}">${iconeAttrib(l)} ${l.attribueA === uid ? "Pour moi" : esc(l.attribueANom)}</span>` : "");
   const selectAttribHTML = (l) => {
     const duSite = techsDuSite(l.site).map(nomDe).filter(Boolean);
     return `<label class="dps-attrib-sel">Attribuée à<select data-attrib="${esc(l.id)}">

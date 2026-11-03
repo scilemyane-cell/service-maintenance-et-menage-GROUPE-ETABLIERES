@@ -143,7 +143,8 @@ function meteoHTML() {
     <div class="eb-met-j">${[1, 2].map(i => { const [ic2] = METEO(m.daily.weather_code[i]); const d = new Date(m.daily.time[i] + "T12:00"); return `<div><span>${d.toLocaleDateString("fr-FR", { weekday: "long" })}</span><b>${ic2} ${Math.round(m.daily.temperature_2m_min[i])}° / ${Math.round(m.daily.temperature_2m_max[i])}°</b><small>☔ ${m.daily.precipitation_probability_max[i]} %</small></div>`; }).join("")}</div>`;
 }
 const CANAL_TEST = location.pathname.startsWith("/beta/");
-const presentationV2 = () => { if (!CANAL_TEST) return false; try { return localStorage.getItem("ea-v2") !== "0"; } catch { return true; } };
+// Validée le 03/11 : nouvelle présentation pour tout le monde (↺ pour revenir à l'ancienne sur un appareil).
+const presentationV2 = () => { try { return localStorage.getItem("ea-v2") !== "0"; } catch { return true; } };
 const urgK = (u) => { const v = sansAccent(u); return v.startsWith("crit") ? "crit" : v.startsWith("urg") ? "urg" : ""; };
 function renderV2(now, actifsMemos, urgTri, nouv, plein) {
   const auj = iso(now), lundi = new Date(now); lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7)); const lun = iso(lundi);
@@ -224,7 +225,7 @@ function render() {
         <button data-ea="son" class="${sonActif ? "on" : ""}">${sonActif ? "🔔 Son activé" : "🔕 Activer le son"}</button>
         <button data-ea="edit">${edition ? "✓ Fermer" : "✏️ Pense-bête"}</button>
         <button data-ea="plein">${plein ? "⤢ Quitter le plein écran" : "⛶ Plein écran"}</button>
-        ${CANAL_TEST ? `<button data-ea="v2">✨ Nouvelle présentation</button>` : ""}
+        <button data-ea="v2">✨ Nouvelle présentation</button>
       </div>
     </header>
     ${edition ? editionHTML() : ""}
