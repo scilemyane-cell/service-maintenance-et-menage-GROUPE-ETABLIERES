@@ -158,7 +158,7 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
   try { if (people?.n1?.length) { const a = people.astreinteActive || {}, p = { ...people, n1: people.n1.filter(n => a[n] !== false), n2: (people.n2 || []).filter(n => a[n] !== false) };
     if (p.n1.length && p.n2.length) { const { titN1, titN2 } = computeWeeklyTitulaires(p, absences); ast = { n1: resolveDayN1(now, p, absences, titN1)?.assigned, n2: resolveDayN2(now, p, absences, titN2)?.assigned }; } } } catch { /* */ }
   const tel = (n) => coord[n]?.telephone ? `<em>${esc(coord[n].telephone)}</em>` : "";
-  const memosAuj = actifsMemos.slice(0, 4);
+  const memosAuj = actifsMemos.slice(0, 12);
   chargerExtrasV2();
   const absentsAuj = [...new Set((absences || []).filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj).map(a => a.person).filter(Boolean))];
   const logAuj = logementsV2.filter(r => r.date === auj), logProch = logementsV2.filter(r => r.date > auj);
@@ -184,8 +184,8 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
         <section class="eb-bloc eb-jour">
           <div class="eb-h"><span>📋 AUJOURD'HUI</span></div>
           ${absentsAuj.length ? `<div class="eb-abs"><span class="eb-abs-t">🏖️ ABSENT${absentsAuj.length > 1 ? "S" : ""} AUJOURD'HUI</span><div class="eb-abs-l">${absentsAuj.map(a => `<b>${esc(a)}</b>`).join("")}</div></div>` : `<div class="eb-abs ok"><span class="eb-abs-t">👷 TOUTE L'ÉQUIPE EST LÀ</span></div>`}
-          ${logAuj.length || logProch.length ? `<div class="eb-ligne"><span class="eb-ic">🏠</span><div><b>Logements à préparer${logAuj.length ? ` : ${logAuj.length} aujourd'hui` : ""}</b><p>${(logAuj.length ? logAuj : logProch).slice(0, 4).map(r => `${esc(r.bat)} ${esc(String(r.numero))}${r.creneau ? ` (${r.creneau === "matin" ? "matin" : "après-midi"})` : ""}${logAuj.length ? "" : ` · ${new Date(r.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}`}${r.pour ? ` → ${esc(String(r.pour).split(" ")[0])}` : ""}`).join(" · ")}${(logAuj.length || logProch.length) > 4 ? " …" : ""}</p></div></div>` : ""}
-          ${memosAuj.length ? `<div class="eb-sep">📌 À ne pas oublier</div>${memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("")}` : ""}
+          <div class="ea-defil eb-defil"><div class="ea-piste"><div class="ea-lot">${logAuj.length || logProch.length ? `<div class="eb-ligne"><span class="eb-ic">🏠</span><div><b>Logements à préparer${logAuj.length ? ` : ${logAuj.length} aujourd'hui` : ""}</b><p>${(logAuj.length ? logAuj : logProch).slice(0, 4).map(r => `${esc(r.bat)} ${esc(String(r.numero))}${r.creneau ? ` (${r.creneau === "matin" ? "matin" : "après-midi"})` : ""}${logAuj.length ? "" : ` · ${new Date(r.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}`}${r.pour ? ` → ${esc(String(r.pour).split(" ")[0])}` : ""}`).join(" · ")}${(logAuj.length || logProch.length) > 4 ? " …" : ""}</p></div></div>` : ""}
+          ${memosAuj.length ? `<div class="eb-sep">📌 À ne pas oublier</div>${memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("")}` : ""}</div></div></div>
         </section>
       </div>
       <div class="eb-droite">
@@ -262,7 +262,11 @@ function render() {
 // défilement du début.
 const T0_DEFIL = Date.now(), VITESSE_DEFIL = 38; // px / seconde
 function defilerUrgences() {
-  const zone = conteneur?.querySelector(".ea-defil"), piste = zone?.firstElementChild, lot = piste?.firstElementChild;
+  // Toutes les zones qui débordent défilent (urgences, colonne « Aujourd'hui »…).
+  conteneur?.querySelectorAll(".ea-defil").forEach(defilerZone);
+}
+function defilerZone(zone) {
+  const piste = zone?.firstElementChild, lot = piste?.firstElementChild;
   if (!lot) return;
   const hLot = lot.offsetHeight, hZone = zone.clientHeight;
   if (hLot <= hZone + 2) { piste.style.animation = "none"; return; }
@@ -419,17 +423,18 @@ const STYLE_V2 = `<style>
   .eb-m.auj{border-left-color:#f97316}.eb-m.auj span{color:#fdba74}.eb-m.dem{border-left-color:#eab308}.eb-m.retard{border-left-color:#ef4444}.eb-m.imp b{color:#fde68a}
   .eb-n{padding:10px 0;border-bottom:1px solid #1e2a44;font-size:24px}.eb-n span{color:#94a3b8}.eb-n p{margin:3px 0 0;font-size:21px;color:#cbd5e1;line-height:1.3}.eb-n small{color:#64748b;font-size:17px}
   .eb-dim{color:#64748b;font-size:22px}
-  .eb-mil,.eb-droite{display:flex;flex-direction:column;gap:24px;min-height:0}.eb-jour{flex:1}.eb-bilan{flex:1}
+  .eb-mil,.eb-droite{display:flex;flex-direction:column;gap:24px;min-height:0}.eb-jour{flex:1}.eb-jour .eb-defil{flex:1;min-height:0}.eb-bilan{flex:1}
   .eb-ligne{display:flex;gap:14px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#0d1526;margin-bottom:10px}
   .eb-ligne.chaud{background:#2a1d0b;border:1px solid #92400e}.eb-ic{font-size:34px;line-height:1}.eb-ligne b{font-size:26px}.eb-ligne p{margin:4px 0 0;font-size:21px;color:#cbd5e1;line-height:1.3}
   .eb-sep{margin:14px 0 8px;font-size:19px;font-weight:800;letter-spacing:.08em;color:#94a3b8;text-transform:uppercase}
-  .eb-met{display:flex;align-items:center;gap:18px}.eb-met .eb-met-ic{font-size:96px;line-height:1;font-weight:400}.eb-met b{display:block;font-size:64px;line-height:1}.eb-met span{font-size:24px;font-weight:700}.eb-met small{display:block;font-size:19px;color:#94a3b8;margin-top:4px}
-  .eb-met-al{margin-top:12px;padding:10px 14px;border-radius:12px;background:#3b2a0b;color:#fde68a;font-size:20px;font-weight:700}
-  .eb-met-j{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.eb-met-j div{background:#0d1526;border-radius:12px;padding:10px 12px}.eb-met-j span{display:block;font-size:18px;color:#94a3b8}.eb-met-j span::first-letter{text-transform:uppercase}.eb-met-j b{font-size:24px}.eb-met-j small{display:block;color:#94a3b8;font-size:17px}
-  .eb-abs{border-radius:16px;padding:14px 18px;margin-bottom:12px;background:linear-gradient(135deg,#4c1d95,#6d28d9);border:2px solid #a78bfa;box-shadow:0 0 24px rgba(139,92,246,.35)}
-  .eb-abs.ok{background:#0f2a1d;border-color:#166534;box-shadow:none}.eb-abs-t{font-size:20px;font-weight:800;letter-spacing:.1em;color:#ede9fe}.eb-abs.ok .eb-abs-t{color:#86efac}
-  .eb-abs-l{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.eb-abs-l b{font-size:34px;font-weight:800;background:rgba(255,255,255,.14);border-radius:12px;padding:4px 16px}
-  .eb-bilan{position:relative}.eb-graphe h2{margin:0 0 6px;font-size:22px;letter-spacing:.06em}.eb-graphe .ea-svg{width:100%;flex:1;min-height:0}.eb-graphe .ea-bravo{font-size:19px}
+  .eb-met{display:flex;align-items:center;gap:18px}.eb-met .eb-met-ic{font-size:120px;line-height:1;font-weight:400}.eb-met b{display:block;font-size:96px;line-height:1}.eb-met span{font-size:34px;font-weight:800}.eb-met small{display:block;font-size:24px;color:#cbd5e1;margin-top:6px}
+  .eb-met-al{margin-top:10px;padding:10px 14px;border-radius:12px;background:#3b2a0b;color:#fde68a;font-size:24px;font-weight:700}
+  .eb-met-j{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.eb-met-j div{background:#0d1526;border-radius:12px;padding:10px 12px}.eb-met-j span{display:block;font-size:22px;color:#cbd5e1}.eb-met-j span::first-letter{text-transform:uppercase}.eb-met-j b{font-size:32px}.eb-met-j small{display:block;color:#cbd5e1;font-size:21px}
+  .eb-abs{flex:none;border-radius:18px;padding:16px 20px;margin-bottom:14px;background:linear-gradient(135deg,#5b21b6,#7c3aed);border:5px solid #fde047;box-shadow:0 0 0 4px rgba(253,224,71,.25),0 0 36px rgba(253,224,71,.45);animation:eb-abs 2.4s ease-in-out infinite}
+  @keyframes eb-abs{0%,100%{box-shadow:0 0 0 4px rgba(253,224,71,.25),0 0 36px rgba(253,224,71,.45)}50%{box-shadow:0 0 0 10px rgba(253,224,71,.12),0 0 60px rgba(253,224,71,.7)}}
+  .eb-abs.ok{background:#0f2a1d;border:3px solid #22c55e;box-shadow:none;animation:none}.eb-abs-t{font-size:24px;font-weight:800;letter-spacing:.1em;color:#fef9c3}.eb-abs.ok .eb-abs-t{color:#86efac}
+  .eb-abs-l{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.eb-abs-l b{font-size:42px;font-weight:800;background:rgba(255,255,255,.14);border-radius:12px;padding:4px 16px}
+  .eb-bilan{position:relative}.eb-graphe h2{margin:0 0 6px;font-size:22px;letter-spacing:.06em}.eb-graphe .ea-svg{width:100%;flex:1;min-height:0}.eb-graphe .ea-bravo{display:none}.eb-graphe .ea-sous{margin:0 0 4px}
   .eb-bilan .ea-prog{position:absolute;left:0;right:0;bottom:0}
   .eb-bilan .eb-tech{grid-template-columns:170px 1fr 44px;font-size:23px}
   .eb-pied{margin-top:16px;font-size:22px;color:#cbd5e1}
