@@ -177,6 +177,8 @@ const URL_GMAO = "https://groupe-etablieres.camileia.com/";
 const URL_SHAREPOINT = "https://etablieresfr.sharepoint.com/sites/appsmm";
 // Boîte mail Outlook : celle de la personne connectée (son adresse @etablieres.fr est proposée à la connexion
 // Microsoft), jamais une boîte commune.
+// Eurecia (congés, notes de frais…) : chacun se connecte avec ses propres identifiants Eurecia.
+const URL_EURECIA = "https://plateforme.eurecia.com/eurecia/";
 const urlMail = (u) => { const e = String(u?.email || "").trim(); return "https://outlook.cloud.microsoft/mail/" + (/@etablieres\.fr$/i.test(e) ? `?login_hint=${encodeURIComponent(e)}` : ""); };
 
 // Dégradés des tuiles (à défaut de photos) — attribués de façon stable
@@ -230,7 +232,8 @@ function planHTML(cats, info = null) {
       <span class="gh-plan-ico">${c.iconHTML || c.icon}</span><span class="gh-plan-t"><b>${esc(c.label)}</b>${c.desc ? `<small>${esc(c.desc)}</small>` : ""}</span>${c.enConstruction ? `<em>EN CONSTRUCTION</em>` : ""}${badge(c)}<span class="gh-plan-chev">→</span></button>`;
   const liens = `<a class="gh-plan-l" href="${URL_GMAO}" target="_blank" rel="noopener" data-q="gmao camileia"><span class="gh-plan-ico">🛠️</span><span class="gh-plan-t"><b>GMAO Camileia</b><small>Ouvre la GMAO dans un nouvel onglet</small></span><span class="gh-plan-chev">↗</span></a>
     <a class="gh-plan-l" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" data-q="sharepoint appsmm"><span class="gh-plan-ico">🔗</span><span class="gh-plan-t"><b>SharePoint</b><small>Site appsmm</small></span><span class="gh-plan-chev">↗</span></a>
-    <a class="gh-plan-l" href="${urlMail(mountedUser)}" target="_blank" rel="noopener" data-q="mail outlook boite courrier"><span class="gh-plan-ico">✉️</span><span class="gh-plan-t"><b>Ma boîte mail</b><small>Outlook — ta propre boîte</small></span><span class="gh-plan-chev">↗</span></a>`;
+    <a class="gh-plan-l" href="${urlMail(mountedUser)}" target="_blank" rel="noopener" data-q="mail outlook boite courrier"><span class="gh-plan-ico">✉️</span><span class="gh-plan-t"><b>Ma boîte mail</b><small>Outlook — ta propre boîte</small></span><span class="gh-plan-chev">↗</span></a>
+    <a class="gh-plan-l" href="${URL_EURECIA}" target="_blank" rel="noopener" data-q="eurecia conges absences rh"><span class="gh-plan-ico">🌴</span><span class="gh-plan-t"><b>Eurecia</b><small>Ton espace (congés, absences…)</small></span><span class="gh-plan-chev">↗</span></a>`;
   const visibles = groupes.filter(g => g.l.length);
   const v2 = window.__interfaceMode === "plan2";
   const rec = v2 ? recents().map(id => cats.find(c => c.id === id)).filter(Boolean).slice(0, 5) : [];
@@ -882,6 +885,12 @@ function render() {
             <a class="gh-tuile" href="${urlMail(mountedUser)}" target="_blank" rel="noopener" title="Ouvrir ta boîte mail Outlook" style="background:${degradePour("mail")};--acc:#0a64c2">
               <span class="gh-tuile-icone">✉️</span>
               <span class="gh-tuile-label">Ma boîte mail ↗</span>
+            </a>
+          </div>`}
+          ${modeReorganisation ? "" : `<div class="gh-tuile-wrap">
+            <a class="gh-tuile" href="${URL_EURECIA}" target="_blank" rel="noopener" title="Ouvrir ton espace Eurecia" style="background:${degradePour("eurecia")};--acc:#e8541e">
+              <span class="gh-tuile-icone">🌴</span>
+              <span class="gh-tuile-label">Eurecia ↗</span>
             </a>
           </div>`}
         </section>`}
