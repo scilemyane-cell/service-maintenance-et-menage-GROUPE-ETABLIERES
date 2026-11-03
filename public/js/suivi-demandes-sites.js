@@ -167,6 +167,10 @@ function traceHTML(l) {
   if (l.attribuePar) e.push(["👷", `Attribuée${l.attribueANom ? ` à ${l.attribueANom}` : ""}`, l.attribuePar, l.attribueLe]);
   if (l.descrCorrigePar) e.push(["✏️", "Descriptif corrigé", l.descrCorrigePar, ""]);
   if (l.urgenceCorrigeePar) e.push(["⚡", "Urgence requalifiée", l.urgenceCorrigeePar, ""]);
+  // Ordre chronologique (à date égale : attribution → commentaire → déclaration → validation / refus).
+  const rang = { "👷": 0, "✏️": 1, "⚡": 1, "💬": 2, "✓": 3, "✖": 3, "☑️": 4, "↩": 4 };
+  const iso = (v) => typeof v === "number" ? new Date(v).toISOString().slice(0, 10) : String(v || "").slice(0, 10);
+  e.sort((a, b) => (iso(a[3]) || "9999").localeCompare(iso(b[3]) || "9999") || (rang[a[0]] ?? 5) - (rang[b[0]] ?? 5));
   // « 📜 Historique » : lignes détaillées (date, heure, qui, ancienne → nouvelle valeur), chargées à l'ouverture ;
   // en dessous, le récapitulatif connu d'avant l'historique.
   return `<details class="dps-trace" data-histo="${esc(l.id)}"><summary>📜 Historique</summary><div class="dps-histo-l"><small>⏳ Chargement…</small></div>
@@ -190,7 +194,7 @@ if (!window.__dpsHistoEcoute) {
         : c.champ === "commentaireTech" ? `Commentaire ${c.avant ? "modifié" : "ajouté"} → ${val(c.apres)}`
         : `${esc(c.libelle)} ${val(c.avant)} → ${val(c.apres)}`).join(" · ")}</li>`).join("")}</ol>`
         : `<small>Aucune modification enregistrée depuis la mise en place de l'historique (03/11/2026).</small>`;
-    } catch (e) { box.innerHTML = `<small>Historique indisponible (${esc(e?.message || e)})</small>`; }
+    } catch (e) { box.innerHTML = /permission/i.test(String(e?.message || e)) ? `<small>Historique détaillé pas encore activé (autorisation Firebase à publier).</small>` : `<small>Historique indisponible (${esc(e?.message || e)})</small>`; }
   }, true);
 }
 const sa = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
