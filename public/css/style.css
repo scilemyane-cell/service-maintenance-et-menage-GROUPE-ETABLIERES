@@ -4833,3 +4833,6 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .va-res button:hover{background:#f1f5f9}.va-res small{display:block;color:#64748b;font-size:11px}
 .va-cible{position:absolute;transform:translate(-50%,-100%);font-size:30px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))}
 @media (max-width:760px){.va-recherche{left:8px;top:8px;width:calc(100% - 150px);min-width:0}}
+.dps-trace{margin:8px 0;font-size:12.5px}.dps-trace summary{cursor:pointer;font-weight:700;color:#475569}
+.dps-trace ul{list-style:none;margin:6px 0 0;padding:8px 10px;background:#f8fafc;border-radius:8px;display:grid;gap:4px}
+.dps-trace li span{display:inline-block;width:20px}.dps-trace small{color:#64748b}

@@ -153,6 +153,23 @@ const aujourdhui = () => new Date(Date.now() - new Date().getTimezoneOffset() * 
 // Jours calendaires écoulés (aujourd'hui = 0, hier = 1), quelle que soit l'heure.
 const joursDepuis = (iso) => { if (!iso) return null; const d = new Date(String(iso).slice(0, 10) + "T12:00:00"); if (isNaN(d)) return null; const auj = new Date(); auj.setHours(12, 0, 0, 0); return Math.max(0, Math.round((auj - d) / 86400000)); };
 const fr = (iso) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
+// « Qui a fait quoi » sur une demande : dernière personne pour chaque étape (commentaire, déclaration de
+// réalisation / annulation, validation ou refus, attribution, corrections).
+function traceHTML(l) {
+  const frD = (v) => { if (!v) return ""; if (typeof v === "number") return new Date(v).toLocaleDateString("fr-FR"); return fr(String(v)); };
+  const annul = /^annul/i.test(String(l.statut || "")) || l.validation === "ANNULATION";
+  const e = [];
+  const comPar = l.commentaireMajMs && l.commentaireMajPar && (!l.commentaireTechLe || new Date(l.commentaireMajMs).toISOString().slice(0, 10) >= String(l.commentaireTechLe).slice(0, 10)) ? l.commentaireMajPar : (l.commentaireTechPar || l.commentaireMajPar);
+  if (comPar) e.push(["💬", "Commentaire écrit / modifié", comPar, comPar === l.commentaireMajPar && l.commentaireMajMs ? l.commentaireMajMs : l.commentaireTechLe]);
+  if (l.declarePar) e.push([annul ? "✖" : "✓", annul ? "Annulation demandée" : "Réalisation déclarée", l.declarePar, l.declareLe]);
+  if (l.validePar) e.push(["☑️", annul ? (l.declarePar ? "Annulation acceptée" : "Annulée") : "Réalisation validée", l.validePar, l.dateValidation]);
+  if (l.refusPar) e.push(["↩", `Refusé${l.refusMotif ? ` (« ${l.refusMotif} »)` : ""}`, l.refusPar, l.refusLe]);
+  if (l.attribuePar) e.push(["👷", `Attribuée${l.attribueANom ? ` à ${l.attribueANom}` : ""}`, l.attribuePar, l.attribueLe]);
+  if (l.descrCorrigePar) e.push(["✏️", "Descriptif corrigé", l.descrCorrigePar, ""]);
+  if (l.urgenceCorrigeePar) e.push(["⚡", "Urgence requalifiée", l.urgenceCorrigeePar, ""]);
+  if (!e.length) return "";
+  return `<details class="dps-trace"><summary>🕘 Qui a fait quoi</summary><ul>${e.map(([i, quoi, qui, le]) => `<li><span>${i}</span><b>${esc(quoi)}</b> — ${esc(qui)}${frD(le) ? ` <small>le ${frD(le)}</small>` : ""}</li>`).join("")}</ul></details>`;
+}
 const sa = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 // ---------- Actions attribuées ----------
@@ -827,6 +844,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <div class="dps-lier-champs"><select data-echanger-choix><option value="">— Choisir la bonne demande —</option>${tousDuSite.filter(x => x.id !== l.id).sort((a, b) => (a.local || "").localeCompare(b.local || "", "fr", { numeric: true })).map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-echanger="${esc(l.id)}">↔️ Échanger le suivi</button></div></details>` : ""}`;
       })()}
+      ${traceHTML(l)}
       ${opts.sansAction ? "" : blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
     </article>`;
