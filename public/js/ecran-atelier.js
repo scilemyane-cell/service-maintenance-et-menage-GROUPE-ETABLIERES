@@ -289,7 +289,9 @@ function ajuster() {
   const w = plein ? window.innerWidth : conteneur.clientWidth || window.innerWidth;
   // Hors plein écran : tout doit tenir dans la fenêtre, sans défiler.
   const h = plein ? window.innerHeight : Math.max(300, window.innerHeight - Math.max(0, conteneur.getBoundingClientRect().top + window.scrollY) - 12);
-  const k = Math.min(w / 1920, h / 1080);
+  // Télé : les bords de l'image sont rognés par le téléviseur (« overscan ») → marge de sécurité de 5 %.
+  let marge = 0.95; try { const m = parseFloat(localStorage.getItem("ea-marge")); if (m >= 0.8 && m <= 1) marge = m; } catch { /* */ }
+  const k = Math.min(w / 1920, h / 1080) * (plein ? marge : 1);
   ea.style.transform = `scale(${k})`;
   scene.style.height = `${1080 * k}px`;
   scene.style.width = `${1920 * k}px`;
@@ -359,6 +361,15 @@ export function mountEcranAtelier(container, u) {
     }
     document.addEventListener("fullscreenchange", () => conteneur && document.contains(conteneur) && render());
     window.addEventListener("resize", () => conteneur && document.contains(conteneur) && ajuster());
+    // Réglage de la marge télé au clavier : « + » agrandit, « - » réduit (mémorisé sur cet appareil).
+    document.addEventListener("keydown", (e) => {
+      if (!conteneur || !document.contains(conteneur) || !(window.__modeTele || document.fullscreenElement) || e.target.closest?.("input,textarea")) return;
+      if (!["+", "-", "="].includes(e.key)) return;
+      let m = 0.95; try { m = parseFloat(localStorage.getItem("ea-marge")) || 0.95; } catch { /* */ }
+      m = Math.min(1, Math.max(0.8, Math.round((m + (e.key === "-" ? -0.01 : 0.01)) * 100) / 100));
+      try { localStorage.setItem("ea-marge", String(m)); } catch { /* */ }
+      ajuster(); window.toast?.(`Taille de l'écran : ${Math.round(m * 100)} %`);
+    });
     document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && (document.fullscreenElement || window.__modeTele) && navigator.wakeLock) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch { /* */ } } });
   }
   unsubs.push(watchUrgencesOuvertes((l) => {
