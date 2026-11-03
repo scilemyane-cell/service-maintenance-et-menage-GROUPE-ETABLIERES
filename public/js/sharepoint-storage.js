@@ -38,6 +38,7 @@ async function resolveDriveId(token) {
   const siteRes = await fetchWithTimeout(`${GRAPH_ROOT}/sites/${SHAREPOINT_HOSTNAME}:${SITE_PATH}`, {
     headers: { Authorization: `Bearer ${token}` },
   }, 15000);
+  if (siteRes.status === 403 || siteRes.status === 401) throw new Error(`Ton compte Microsoft n'a pas encore accès au site SharePoint « appsmm » (${siteRes.status}). Demande à Valentin de t'ajouter comme membre du site, puis réessaie.`);
   if (!siteRes.ok) throw new Error(`Site SharePoint "appsmm" introuvable (${siteRes.status})`);
   const site = await siteRes.json();
 
