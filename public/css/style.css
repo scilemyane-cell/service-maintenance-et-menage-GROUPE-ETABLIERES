@@ -4854,3 +4854,4 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .pj-liste{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:10px;display:grid;gap:6px}
 .pj-liste-t{display:flex;justify-content:space-between;align-items:center}
 .pj-dem{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:6px 8px;background:#f8fafc;border-radius:8px}.pj-dem small{color:#64748b}
+.pj-dates{display:inline-flex;align-items:center;gap:4px;font-size:13px}.pj-per input[type=date]{padding:5px 6px;border:1px solid #cbd5e1;border-radius:8px}

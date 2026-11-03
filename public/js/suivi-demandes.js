@@ -633,7 +633,9 @@ function renderParJour(container) {
   const auj = new Date(); auj.setHours(12, 0, 0, 0);
   const per = ui.pjPeriode || "30";
   let debut, fin = isoJ(auj);
-  if (per === "7" || per === "30") debut = isoJ(new Date(auj.getTime() - (Number(per) - 1) * 86400000));
+  if (per === "jour") { debut = fin = ui.pjJour || fin; }
+  else if (per === "dates") { debut = ui.pjDu || isoJ(new Date(auj.getTime() - 6 * 86400000)); fin = ui.pjAu || fin; if (fin < debut) [debut, fin] = [fin, debut]; }
+  else if (per === "7" || per === "30") debut = isoJ(new Date(auj.getTime() - (Number(per) - 1) * 86400000));
   else { const [a, m] = (ui.pjMois || fin.slice(0, 7)).split("-").map(Number); debut = `${a}-${String(m).padStart(2, "0")}-01`; const f = new Date(a, m, 0, 12); fin = isoJ(f) < fin ? isoJ(f) : fin; }
   const enValid = (x) => String(x.statut || "").startsWith("Réalisé –") && x.validation !== "REFUSEE";
   const traitees = toutesLesLignes().filter(x => !x.lieeA && (x.statut === "Réalisé" || x.statut === "Annulé" || enValid(x))).map(x => ({
@@ -646,13 +648,15 @@ function renderParJour(container) {
   const nb = (j, t) => traitees.filter(x => x.jour === j && (!t || x.tech === t));
   const frJ = (j) => new Date(j + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" });
   const total = traitees.length, joursOuvres = jours.filter(j => { const w = new Date(j + "T12:00").getDay(); return w && w !== 6; }).length || 1;
-  const sel = ui.pjSel; // { j, t }
+  const sel = ui.pjSel || (per === "jour" ? { j: debut, t: null } : null); // { j, t } — à la journée : liste affichée d'office
   const liste = sel ? traitees.filter(x => (!sel.j || x.jour === sel.j) && (!sel.t || x.tech === sel.t)) : [];
   const moisOpts = (() => { const o = []; for (let i = 0; i < 12; i++) { const d = new Date(auj.getFullYear(), auj.getMonth() - i, 1); o.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); } return o; })();
   container.innerHTML = `<div class="stack">${toggleVueHTML()}
     <div class="form-card pj">
       <div class="pj-tete"><h3>📅 Demandes traitées par jour</h3>
-        <div class="pj-per">${[["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"]].map(([k, l]) => `<button type="button" class="nav-btn ${per === k ? "active" : ""}" data-pj-per="${k}">${l}</button>`).join("")}
+        <div class="pj-per">${[["jour", "Jour"], ["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"], ["dates", "Entre deux dates"]].map(([k, l]) => `<button type="button" class="nav-btn ${per === k ? "active" : ""}" data-pj-per="${k}">${l}</button>`).join("")}
+        ${per === "jour" ? `<input type="date" data-pj-jour value="${debut}" max="${isoJ(auj)}">` : ""}
+        ${per === "dates" ? `<label class="pj-dates">du <input type="date" data-pj-du value="${debut}"></label><label class="pj-dates">au <input type="date" data-pj-au value="${fin}"></label>` : ""}
         ${per === "mois" ? `<select data-pj-mois>${moisOpts.map(m => `<option value="${m}" ${(ui.pjMois || moisOpts[0]) === m ? "selected" : ""}>${new Date(m + "-15").toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</option>`).join("")}</select>` : ""}</div></div>
       <p class="hint" style="margin:4px 0 12px">Réalisées + annulées (et déclarées en attente de validation), comptées le jour de l'intervention, pour la personne qui l'a réalisée. Touche un nombre pour voir les demandes.</p>
       <div class="pj-kpis"><div class="pj-kpi tot"><b>${total}</b><span>traitées · ${(total / joursOuvres).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} / jour ouvré</span></div>
@@ -666,6 +670,9 @@ function renderParJour(container) {
   attacherToggleVue(container);
   container.querySelectorAll("[data-pj-per]").forEach(b => b.onclick = () => { ui.pjPeriode = b.dataset.pjPer; ui.pjSel = null; render(container); });
   container.querySelector("[data-pj-mois]")?.addEventListener("change", (e) => { ui.pjMois = e.target.value; ui.pjSel = null; render(container); });
+  container.querySelector("[data-pj-jour]")?.addEventListener("change", (e) => { if (e.target.value) { ui.pjJour = e.target.value; ui.pjSel = null; render(container); } });
+  container.querySelector("[data-pj-du]")?.addEventListener("change", (e) => { if (e.target.value) { ui.pjDu = e.target.value; ui.pjAu = ui.pjAu || fin; ui.pjSel = null; render(container); } });
+  container.querySelector("[data-pj-au]")?.addEventListener("change", (e) => { if (e.target.value) { ui.pjAu = e.target.value; ui.pjDu = ui.pjDu || debut; ui.pjSel = null; render(container); } });
   container.querySelectorAll("[data-pj-j], .pj-kpi[data-pj-t]").forEach(b => b.onclick = () => { const v = { j: b.dataset.pjJ || null, t: b.dataset.pjT || null }; ui.pjSel = sel && sel.j === v.j && sel.t === v.t ? null : v; render(container); });
   container.querySelector("[data-pj-fermer]")?.addEventListener("click", () => { ui.pjSel = null; render(container); });
 }
