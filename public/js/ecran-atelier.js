@@ -194,12 +194,7 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
       </div>
       <div class="eb-droite">
         <section class="eb-bloc eb-meteo"><div class="eb-h"><span>🌤️ MÉTÉO</span></div>${meteoHTML()}</section>
-        ${Math.floor(Date.now() / DUREE_PANNEAU) % 2 === 1 ? `<section class="eb-bloc eb-bilan eb-graphe">${graphiqueHTML()}<div class="ea-prog"><i style="animation-duration:${DUREE_PANNEAU}ms"></i></div></section>` : `<section class="eb-bloc eb-bilan">
-          <div class="eb-h"><span>✅ TRAITÉES AUJOURD'HUI</span><b class="eb-big vert">${traiteesAuj.length}</b></div>
-          ${techs.length ? `<div class="eb-techs">${techs.map(([t, n]) => `<div class="eb-tech"><span>${esc(/\set\s/i.test(t) ? t : t.replace(/^(\S+)\s+(\S).*$/, (m, a, b) => `${a[0].toUpperCase()}${a.slice(1)} ${b.toUpperCase()}.`))}</span><i><u style="width:${n / maxT * 100}%"></u></i><b>${n}</b></div>`).join("")}</div>` : ""}
-          <div class="eb-sem">Semaine : <b>${semT}</b> traitées · <b>${semR}</b> reçues · <b>${nouv.length}</b> nouvelle${nouv.length > 1 ? "s" : ""} en 7 j</div>
-          <div class="ea-prog"><i style="animation-duration:${DUREE_PANNEAU}ms"></i></div>
-        </section>`}
+        <section class="eb-bloc eb-bilan eb-graphe">${graphiqueHTML()}</section>
       </div>
     </div>
     
@@ -448,7 +443,7 @@ const STYLE_V2 = `<style>
   .eb-abs-l{display:flex;flex-wrap:wrap;gap:10px}.eb-abs-l b{font-size:38px;font-weight:800;background:#0d1526;border:1px solid #334155;border-radius:12px;padding:4px 16px}
   .eb-abs-ok{margin:0;font-size:28px;font-weight:700;color:#86efac}
   .eb-jour .eb-defil{flex:1;min-height:0}
-  .eb-bilan{position:relative}.eb-graphe h2{margin:0 0 6px;font-size:22px;letter-spacing:.06em}.eb-graphe .ea-svg{width:100%;flex:1;min-height:0}.eb-graphe .ea-bravo{display:none}.eb-graphe .ea-sous{margin:0 0 4px}
+  .eb-bilan{position:relative}.eb-graphe h2{margin:0 0 6px;font-size:22px;letter-spacing:.06em}.eb-graphe .ea-svg{width:100%;flex:1;min-height:0}.eb-graphe .ea-bravo{font-size:19px}.eb-graphe .ea-sous{margin:0 0 4px}
   .eb-bilan .ea-prog{position:absolute;left:0;right:0;bottom:0}
   .eb-bilan .eb-tech{grid-template-columns:170px 1fr 44px;font-size:23px}
   .eb-pied{margin-top:16px;font-size:22px;color:#cbd5e1}
