@@ -233,7 +233,8 @@ function planHTML(cats, info = null) {
   const liens = `<a class="gh-plan-l" href="${URL_GMAO}" target="_blank" rel="noopener" data-q="gmao camileia"><span class="gh-plan-ico">🛠️</span><span class="gh-plan-t"><b>GMAO Camileia</b><small>Ouvre la GMAO dans un nouvel onglet</small></span><span class="gh-plan-chev">↗</span></a>
     <a class="gh-plan-l" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" data-q="sharepoint appsmm"><span class="gh-plan-ico">🔗</span><span class="gh-plan-t"><b>SharePoint</b><small>Site appsmm</small></span><span class="gh-plan-chev">↗</span></a>
     <a class="gh-plan-l" href="${urlMail(mountedUser)}" target="_blank" rel="noopener" data-q="mail outlook boite courrier"><span class="gh-plan-ico">✉️</span><span class="gh-plan-t"><b>Ma boîte mail</b><small>Outlook — ta propre boîte</small></span><span class="gh-plan-chev">↗</span></a>
-    <a class="gh-plan-l" href="${URL_EURECIA}" target="_blank" rel="noopener" data-q="eurecia conges absences rh"><span class="gh-plan-ico">🌴</span><span class="gh-plan-t"><b>Eurecia</b><small>Ton espace (congés, absences…)</small></span><span class="gh-plan-chev">↗</span></a>`;
+    <a class="gh-plan-l" href="${URL_EURECIA}" target="_blank" rel="noopener" data-q="eurecia conges absences rh"><span class="gh-plan-ico">🌴</span><span class="gh-plan-t"><b>Eurecia</b><small>Ton espace (congés, absences…)</small></span><span class="gh-plan-chev">↗</span></a>
+    ${mountedUser?.role === "super_admin" && !mountedUser?.apercu ? `<a class="gh-plan-l" href="https://claude.ai/new" target="_blank" rel="noopener" data-q="claude ia assistant"><span class="gh-plan-ico">✳️</span><span class="gh-plan-t"><b>Claude</b><small>Nouvelle conversation</small></span><span class="gh-plan-chev">↗</span></a>` : ""}`;
   const visibles = groupes.filter(g => g.l.length);
   const v2 = window.__interfaceMode === "plan2";
   const rec = v2 ? recents().map(id => cats.find(c => c.id === id)).filter(Boolean).slice(0, 5) : [];
@@ -891,6 +892,12 @@ function render() {
             <a class="gh-tuile" href="${URL_EURECIA}" target="_blank" rel="noopener" title="Ouvrir ton espace Eurecia" style="background:${degradePour("eurecia")};--acc:#e8541e">
               <span class="gh-tuile-icone">🌴</span>
               <span class="gh-tuile-label">Eurecia ↗</span>
+            </a>
+          </div>`}
+          ${modeReorganisation || mountedUser?.role !== "super_admin" || mountedUser?.apercu ? "" : `<div class="gh-tuile-wrap">
+            <a class="gh-tuile" href="https://claude.ai/new" target="_blank" rel="noopener" title="Nouvelle conversation avec Claude" style="background:linear-gradient(145deg,#d97757,#b85c3c);--acc:#d97757">
+              <span class="gh-tuile-icone">✳️</span>
+              <span class="gh-tuile-label">Claude ↗</span>
             </a>
           </div>`}
         </section>`}
