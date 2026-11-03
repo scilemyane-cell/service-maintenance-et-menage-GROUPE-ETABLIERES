@@ -119,6 +119,30 @@ function astreinteHTML() {
 }
 
 // ---- Nouvelle présentation (proposée sur la version de TEST /beta) ----
+// Données en plus : logements à préparer, compteurs à relever, météo (Open-Meteo, La Roche-sur-Yon).
+let logementsV2 = [], compteursV2 = null, meteoV2 = null, meteoLe = 0, extrasV2 = false;
+function chargerExtrasV2() {
+  if (extrasV2) return; extrasV2 = true;
+  import("./logements-data.js").then(m => unsubs.push(m.watchMesLogements("*", (l) => { logementsV2 = l || []; render(); }))).catch(() => {});
+  import("./compteurs-data.js").then(m => unsubs.push(m.watchCompteursListe((l) => { compteursV2 = { n: (l || []).filter(c => m.estEnRetard(c)).length, fen: m.fenetreReleve() }; render(); }))).catch(() => {});
+  const meteo = async () => {
+    try {
+      const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=46.67&longitude=-1.43&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Europe%2FParis&forecast_days=3");
+      if (r.ok) { meteoV2 = await r.json(); meteoLe = Date.now(); render(); }
+    } catch { /* hors ligne */ }
+  };
+  meteo(); unsubs.push((() => { const t = setInterval(meteo, 30 * 60000); return () => clearInterval(t); })());
+}
+const METEO = (c) => c === 0 ? ["☀️", "Ensoleillé"] : c <= 2 ? ["🌤️", "Éclaircies"] : c === 3 ? ["☁️", "Couvert"] : c <= 48 ? ["🌫️", "Brouillard"] : c <= 57 ? ["🌦️", "Bruine"] : c <= 67 ? ["🌧️", "Pluie"] : c <= 77 ? ["🌨️", "Neige"] : c <= 82 ? ["🌧️", "Averses"] : c <= 86 ? ["🌨️", "Averses de neige"] : ["⛈️", "Orage"];
+function meteoHTML() {
+  const m = meteoV2; if (!m?.daily) return `<p class="eb-dim">Météo indisponible.</p>`;
+  const cur = m.current || {}, [ic, lib] = METEO(cur.weather_code ?? m.daily.weather_code[0]);
+  const vent = Math.round(m.daily.wind_speed_10m_max[0]), pluie = m.daily.precipitation_probability_max[0];
+  const alerte = vent >= 60 ? `💨 Vent fort (${vent} km/h) : attention aux travaux en hauteur / extérieurs` : pluie >= 70 ? `☔ Pluie probable (${pluie} %) : prévoir les travaux en intérieur` : "";
+  return `<div class="eb-met"><span class="eb-met-ic">${ic}</span><div><b>${Math.round(cur.temperature_2m ?? m.daily.temperature_2m_max[0])}°</b><span>${lib}</span><small>${Math.round(m.daily.temperature_2m_min[0])}° / ${Math.round(m.daily.temperature_2m_max[0])}° · 💨 ${vent} km/h · ☔ ${pluie} %</small></div></div>
+    ${alerte ? `<div class="eb-met-al">${alerte}</div>` : ""}
+    <div class="eb-met-j">${[1, 2].map(i => { const [ic2] = METEO(m.daily.weather_code[i]); const d = new Date(m.daily.time[i] + "T12:00"); return `<div><span>${d.toLocaleDateString("fr-FR", { weekday: "long" })}</span><b>${ic2} ${Math.round(m.daily.temperature_2m_min[i])}° / ${Math.round(m.daily.temperature_2m_max[i])}°</b><small>☔ ${m.daily.precipitation_probability_max[i]} %</small></div>`; }).join("")}</div>`;
+}
 const CANAL_TEST = location.pathname.startsWith("/beta/");
 const presentationV2 = () => { if (!CANAL_TEST) return false; try { return localStorage.getItem("ea-v2") !== "0"; } catch { return true; } };
 const urgK = (u) => { const v = sansAccent(u); return v.startsWith("crit") ? "crit" : v.startsWith("urg") ? "urg" : ""; };
@@ -135,7 +159,10 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
   try { if (people?.n1?.length) { const a = people.astreinteActive || {}, p = { ...people, n1: people.n1.filter(n => a[n] !== false), n2: (people.n2 || []).filter(n => a[n] !== false) };
     if (p.n1.length && p.n2.length) { const { titN1, titN2 } = computeWeeklyTitulaires(p, absences); ast = { n1: resolveDayN1(now, p, absences, titN1)?.assigned, n2: resolveDayN2(now, p, absences, titN2)?.assigned }; } } } catch { /* */ }
   const tel = (n) => coord[n]?.telephone ? `<em>${esc(coord[n].telephone)}</em>` : "";
-  const memosAuj = actifsMemos.slice(0, 5);
+  const memosAuj = actifsMemos.slice(0, 4);
+  chargerExtrasV2();
+  const absentsAuj = [...new Set((absences || []).filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj).map(a => a.person).filter(Boolean))];
+  const logAuj = logementsV2.filter(r => r.date === auj), logProch = logementsV2.filter(r => r.date > auj);
   const maxT = Math.max(1, ...techs.map(x => x[1]));
   conteneur.innerHTML = `${STYLE}${STYLE_V2}<div class="ea-scene ${window.__modeTele ? "tele" : ""}"><div class="eb">
     <header class="eb-tete">
@@ -155,20 +182,22 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
           : `<div class="eb-ok"><span>✅</span>Aucune urgence en cours</div>`}
       </section>
       <div class="eb-mil">
-        <section class="eb-bloc">
-          <div class="eb-h"><span>✅ TRAITÉES AUJOURD'HUI</span><b class="eb-big vert">${traiteesAuj.length}</b></div>
-          ${techs.length ? `<div class="eb-techs">${techs.map(([t, n]) => `<div class="eb-tech"><span>${esc(/\set\s/i.test(t) ? t : t.replace(/^(\S+)\s+(\S).*$/, (m, a, b) => `${a[0].toUpperCase()}${a.slice(1)} ${b.toUpperCase()}.`))}</span><i><u style="width:${n / maxT * 100}%"></u></i><b>${n}</b></div>`).join("")}</div>` : `<p class="eb-dim">Pas encore de demande clôturée aujourd'hui.</p>`}
-          <div class="eb-sem">Cette semaine : <b>${semT}</b> traitées · <b>${semR}</b> reçues ${semT >= semR && semT ? "<span>💪 on avance plus vite qu'elles n'arrivent</span>" : ""}</div>
-        </section>
-        <section class="eb-bloc eb-memo">
-          <div class="eb-h"><span>📌 À NE PAS OUBLIER</span></div>
-          ${memosAuj.length ? memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("") : `<p class="eb-dim">Rien de prévu.</p>`}
+        <section class="eb-bloc eb-jour">
+          <div class="eb-h"><span>📋 AUJOURD'HUI</span></div>
+          ${absentsAuj.length ? `<div class="eb-ligne"><span class="eb-ic">🏖️</span><div><b>Absent${absentsAuj.length > 1 ? "s" : ""}</b><p>${absentsAuj.map(a => esc(a)).join(" · ")}</p></div></div>` : `<div class="eb-ligne"><span class="eb-ic">👷</span><div><b>Toute l'équipe est là</b></div></div>`}
+          ${logAuj.length || logProch.length ? `<div class="eb-ligne"><span class="eb-ic">🏠</span><div><b>Logements à préparer${logAuj.length ? ` : ${logAuj.length} aujourd'hui` : ""}</b><p>${(logAuj.length ? logAuj : logProch).slice(0, 4).map(r => `${esc(r.bat)} ${esc(String(r.numero))}${r.creneau ? ` (${r.creneau === "matin" ? "matin" : "après-midi"})` : ""}${logAuj.length ? "" : ` · ${new Date(r.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}`}${r.pour ? ` → ${esc(String(r.pour).split(" ")[0])}` : ""}`).join(" · ")}${(logAuj.length || logProch.length) > 4 ? " …" : ""}</p></div></div>` : ""}
+          ${compteursV2 && (compteursV2.fen.ouverte || compteursV2.n) ? `<div class="eb-ligne ${compteursV2.fen.ouverte && compteursV2.n ? "chaud" : ""}"><span class="eb-ic">🎛️</span><div><b>${compteursV2.n} compteur${compteursV2.n > 1 ? "s" : ""} ${compteursV2.fen.ouverte ? "à relever" : "en retard"}</b><p>${compteursV2.fen.ouverte ? `Période de relevé ${compteursV2.fen.libelle}` : "Relevés en retard"}</p></div></div>` : ""}
+          ${memosAuj.length ? `<div class="eb-sep">📌 À ne pas oublier</div>${memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("")}` : ""}
         </section>
       </div>
-      <section class="eb-bloc eb-nouv">
-        <div class="eb-h"><span>🆕 NOUVELLES DEMANDES</span><b class="eb-big bleu">${nouv.length}</b></div>
-        ${nouv.length ? nouv.slice(0, 6).map(n => `<div class="eb-n"><b>${esc(n.site || "")}</b>${n.local ? `<span> · ${esc(n.local)}</span>` : ""}<p>${esc(String(n.descriptif || "").slice(0, 90))}</p><small>${depuis(n.importeMs)}</small></div>`).join("") : `<p class="eb-dim">Aucune nouvelle demande cette semaine.</p>`}
-      </section>
+      <div class="eb-droite">
+        <section class="eb-bloc eb-meteo"><div class="eb-h"><span>🌤️ MÉTÉO</span></div>${meteoHTML()}</section>
+        <section class="eb-bloc eb-bilan">
+          <div class="eb-h"><span>✅ TRAITÉES AUJOURD'HUI</span><b class="eb-big vert">${traiteesAuj.length}</b></div>
+          ${techs.length ? `<div class="eb-techs">${techs.map(([t, n]) => `<div class="eb-tech"><span>${esc(/\set\s/i.test(t) ? t : t.replace(/^(\S+)\s+(\S).*$/, (m, a, b) => `${a[0].toUpperCase()}${a.slice(1)} ${b.toUpperCase()}.`))}</span><i><u style="width:${n / maxT * 100}%"></u></i><b>${n}</b></div>`).join("")}</div>` : ""}
+          <div class="eb-sem">Semaine : <b>${semT}</b> traitées · <b>${semR}</b> reçues · <b>${nouv.length}</b> nouvelle${nouv.length > 1 ? "s" : ""} en 7 j</div>
+        </section>
+      </div>
     </div>
     ${mesDemandes.length ? `<footer class="eb-pied">👷 ${esc(user?.nom || "Équipe")} : <b>${mesDemandes.length}</b> demande${mesDemandes.length > 1 ? "s" : ""} attribuée${mesDemandes.length > 1 ? "s" : ""} à traiter</footer>` : ""}
   </div></div>`;
@@ -300,6 +329,7 @@ async function surEnvoi(e) {
 
 function nettoyer() {
   unsubs.forEach(u => { try { u(); } catch { /* */ } }); unsubs = [];
+  extrasV2 = false;
   clearInterval(timer); timer = null; clearInterval(minuterieRotation); minuterieRotation = null;
   try { wakeLock?.release(); } catch { /* */ } wakeLock = null;
 }
@@ -368,7 +398,7 @@ const STYLE_V2 = `<style>
   .eb-ast-l b{font-weight:800}.eb-ast-l em{font-style:normal;color:#93c5fd;font-size:26px;margin-left:auto}
   .eb-cmd{display:flex;flex-direction:column;gap:6px;opacity:.35}.eb-cmd:hover{opacity:1}
   .eb-cmd button{width:46px;height:40px;border-radius:10px;border:1px solid #23324f;background:#111a2e;color:#fff;font-size:20px;cursor:pointer}.eb-cmd button.on{border-color:#22c55e}
-  .eb-corps{flex:1;min-height:0;display:grid;grid-template-columns:1.45fr 1fr .9fr;gap:24px}
+  .eb-corps{flex:1;min-height:0;display:grid;grid-template-columns:1.4fr 1fr .95fr;gap:24px}
   .eb-urg,.eb-bloc{background:#111a2e;border:1px solid #23324f;border-radius:22px;padding:20px 22px;min-height:0;overflow:hidden;display:flex;flex-direction:column}
   .eb-urg{border-color:#7f1d1d;background:linear-gradient(180deg,#2a1218,#111a2e 40%)}.eb-urg.calme{border-color:#14532d;background:linear-gradient(180deg,#0f2a1d,#111a2e 40%)}
   .eb-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.eb-h span{font-size:22px;font-weight:800;letter-spacing:.12em;color:#cbd5e1}
@@ -390,6 +420,14 @@ const STYLE_V2 = `<style>
   .eb-m.auj{border-left-color:#f97316}.eb-m.auj span{color:#fdba74}.eb-m.dem{border-left-color:#eab308}.eb-m.retard{border-left-color:#ef4444}.eb-m.imp b{color:#fde68a}
   .eb-n{padding:10px 0;border-bottom:1px solid #1e2a44;font-size:24px}.eb-n span{color:#94a3b8}.eb-n p{margin:3px 0 0;font-size:21px;color:#cbd5e1;line-height:1.3}.eb-n small{color:#64748b;font-size:17px}
   .eb-dim{color:#64748b;font-size:22px}
+  .eb-mil,.eb-droite{display:flex;flex-direction:column;gap:24px;min-height:0}.eb-jour{flex:1}.eb-bilan{flex:1}
+  .eb-ligne{display:flex;gap:14px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#0d1526;margin-bottom:10px}
+  .eb-ligne.chaud{background:#2a1d0b;border:1px solid #92400e}.eb-ic{font-size:34px;line-height:1}.eb-ligne b{font-size:26px}.eb-ligne p{margin:4px 0 0;font-size:21px;color:#cbd5e1;line-height:1.3}
+  .eb-sep{margin:14px 0 8px;font-size:19px;font-weight:800;letter-spacing:.08em;color:#94a3b8;text-transform:uppercase}
+  .eb-met{display:flex;align-items:center;gap:18px}.eb-met .eb-met-ic{font-size:96px;line-height:1;font-weight:400}.eb-met b{display:block;font-size:64px;line-height:1}.eb-met span{font-size:24px;font-weight:700}.eb-met small{display:block;font-size:19px;color:#94a3b8;margin-top:4px}
+  .eb-met-al{margin-top:12px;padding:10px 14px;border-radius:12px;background:#3b2a0b;color:#fde68a;font-size:20px;font-weight:700}
+  .eb-met-j{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.eb-met-j div{background:#0d1526;border-radius:12px;padding:10px 12px}.eb-met-j span{display:block;font-size:18px;color:#94a3b8}.eb-met-j span::first-letter{text-transform:uppercase}.eb-met-j b{font-size:24px}.eb-met-j small{display:block;color:#94a3b8;font-size:17px}
+  .eb-bilan .eb-tech{grid-template-columns:170px 1fr 44px;font-size:23px}
   .eb-pied{margin-top:16px;font-size:22px;color:#cbd5e1}
 </style>`;
 const STYLE = `<style>
