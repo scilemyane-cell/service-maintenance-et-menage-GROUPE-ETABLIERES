@@ -655,7 +655,11 @@ function renderParJour(container) {
   const filtre = ui.pjTech && parTech.has(ui.pjTech) ? ui.pjTech : null;
   const moisOpts = (() => { const o = []; for (let k = 0; k < 12; k++) { const d = new Date(auj.getFullYear(), auj.getMonth() - k, 1); o.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); } return o; })();
   const libPer = per === "jour" ? frJ(debut) : debut === fin ? frJ(debut) : `du ${frC(debut)} au ${frC(fin)}`;
-  const ligneDem = (x) => `<div class="pj-dem"><span class="dps-num">${esc(x.n)}</span><span><b>${esc(x.site)}</b>${x.local ? ` · ${esc(x.local)}` : ""} — ${esc(String(x.descr || "").slice(0, 140))}<br><small>${x.annulee ? "✖ Annulée" : "✓ Réalisée"}${enValid(x) ? " · en attente de validation" : x.validePar ? ` · validée par ${esc(x.validePar)}` : ""}${per !== "jour" ? ` · ${frC(x.jour)}` : ""}</small></span></div>`;
+  const urgCle = (u) => { const v = String(u || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); return v.startsWith("crit") ? "crit" : v.startsWith("urg") ? "urg" : v.includes("planif") ? "plan" : "norm"; };
+  const URG_LIB = { crit: "Critique", urg: "Urgent", plan: "À planifier", norm: "Normal" };
+  const puceUrg = (x) => { const k = urgCle(x.urgence); return `<span class="pj-urg ${k}">${k === "crit" ? "🔴" : k === "urg" ? "🟠" : k === "plan" ? "🔵" : "⚪"} ${URG_LIB[k]}</span>`; };
+  const resumeUrg = (l) => ["crit", "urg"].map(k => { const n = l.filter(x => urgCle(x.urgence) === k).length; return n ? `<span class="pj-urg ${k}">${n} ${URG_LIB[k].toLowerCase()}${n > 1 ? "s" : ""}</span>` : ""; }).join("");
+  const ligneDem = (x) => `<div class="pj-dem"><span class="dps-num">${esc(x.n)}</span>${puceUrg(x)}<span><b>${esc(x.site)}</b>${x.local ? ` · ${esc(x.local)}` : ""} — ${esc(String(x.descr || "").slice(0, 140))}<br><small>${x.annulee ? "✖ Annulée" : "✓ Réalisée"}${enValid(x) ? " · en attente de validation" : x.validePar ? ` · validée par ${esc(x.validePar)}` : ""}${per !== "jour" ? ` · ${frC(x.jour)}` : ""}</small></span></div>`;
   // Graphique par jour (plusieurs jours) : une colonne par jour, empilée par technicien.
   const maxJour = Math.max(1, ...jours.map(j => traitees.filter(x => x.jour === j).length));
   const graphe = jours.length > 1 ? `<div class="pj-graphe">${jours.map(j => { const l = traitees.filter(x => x.jour === j && (!filtre || x.tech === filtre)), w = new Date(j + "T12:00").getDay();
@@ -670,14 +674,14 @@ function renderParJour(container) {
         ${per === "dates" ? `<label>du <input type="date" data-pj-du value="${debut}"></label><label>au <input type="date" data-pj-au value="${fin}"></label>` : ""}
         ${per === "mois" ? `<select data-pj-mois>${moisOpts.map(m => `<option value="${m}" ${(ui.pjMois || moisOpts[0]) === m ? "selected" : ""}>${new Date(m + "-15").toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</option>`).join("")}</select>` : ""}
       </div>
-      <div class="pj-total"><b>${total}</b><span>demande${total > 1 ? "s" : ""} traitée${total > 1 ? "s" : ""}<br><small>${esc(libPer)}${jours.length > 1 ? ` · ${(total / ouvres).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} par jour ouvré` : ""}</small></span></div>
+      <div class="pj-total"><b>${total}</b><span>demande${total > 1 ? "s" : ""} traitée${total > 1 ? "s" : ""}<br><small>${esc(libPer)}${jours.length > 1 ? ` · ${(total / ouvres).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} par jour ouvré` : ""}</small></span><span class="pj-total-urg">${resumeUrg(traitees)}</span></div>
       ${!total ? `<p class="hint">Aucune demande réalisée ou annulée sur cette période.</p>` : `
       <h4 class="pj-h">Par technicien${filtre ? ` <button type="button" class="pj-raz" data-pj-tech="">✕ voir tout le monde</button>` : ""}</h4>
       <div class="pj-barres">${techs.map(t => { const l = parTech.get(t), a = l.filter(x => x.annulee).length;
         return `<button type="button" class="pj-barre ${filtre === t ? "on" : ""} ${filtre && filtre !== t ? "off" : ""}" data-pj-tech="${esc(t)}"><span class="pj-nom"><i style="background:${coul(t)}"></i>${esc(t)}</span><span class="pj-piste"><span style="width:${l.length / max * 100}%;background:${coul(t)}"></span></span><b>${l.length}</b><small>${a ? `dont ${a} annulée${a > 1 ? "s" : ""}` : ""}${jours.length > 1 ? `${a ? " · " : ""}${(l.length / ouvres).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}/jour` : ""}</small></button>`; }).join("")}</div>
       ${graphe ? `<h4 class="pj-h">Jour par jour <small>(touche une colonne pour voir ce jour-là)</small></h4>${graphe}` : ""}
       <h4 class="pj-h">Détail</h4>
-      ${affiches.map(t => `<div class="pj-groupe"><div class="pj-groupe-t" style="--c:${coul(t)}"><b>${esc(t)}</b><span>${parTech.get(t).length}</span></div>${parTech.get(t).sort((a, b) => b.jour.localeCompare(a.jour)).map(ligneDem).join("")}</div>`).join("")}`}
+      ${affiches.map(t => `<div class="pj-groupe"><div class="pj-groupe-t" style="--c:${coul(t)}"><b>${esc(t)}</b><span class="pj-groupe-d">${resumeUrg(parTech.get(t))}<span>${parTech.get(t).length}</span></span></div>${parTech.get(t).sort((a, b) => ["crit", "urg", "plan", "norm"].indexOf(urgCle(a.urgence)) - ["crit", "urg", "plan", "norm"].indexOf(urgCle(b.urgence)) || b.jour.localeCompare(a.jour)).map(ligneDem).join("")}</div>`).join("")}`}
     </div></div>`;
   attacherToggleVue(container);
   const re = () => render(container);
