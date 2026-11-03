@@ -220,7 +220,10 @@
     } catch { /* hors ligne : on réessaiera */ }
   }
   setTimeout(verifierVersion, 3000);
-  setInterval(verifierVersion, 5 * 60 * 1000);
+  // Vérification toutes les minutes (avant : 5 min — le bandeau « Nouvelle version » pouvait tarder), et au retour sur la fenêtre.
+  setInterval(verifierVersion, 60 * 1000);
+  window.addEventListener("focus", verifierVersion);
+  window.addEventListener("online", verifierVersion);
   // Tablettes laissées ouvertes des jours entiers (agents) : au retour sur l'appli après plus de 3 h en arrière-plan,
   // on recharge — sinon elles restaient sur une ancienne semaine, une ancienne version et des listes figées.
   let cacheeDepuis = 0;
