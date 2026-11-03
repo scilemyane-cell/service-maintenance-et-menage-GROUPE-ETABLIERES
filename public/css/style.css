@@ -4838,3 +4838,19 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .dps-trace li span{display:inline-block;width:20px}.dps-trace small{color:#64748b}
 .dps-histo{margin:6px 0 0;padding:8px 10px 8px 28px;background:#f8fafc;border-radius:8px;display:grid;gap:5px;line-height:1.4}
 .dps-histo small,.dps-histo-l>small{color:#64748b}.dps-histo-st{margin:10px 0 0;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+/* Demandes traitées par jour */
+.pj-tete{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}.pj-tete h3{margin:0}
+.pj-per{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pj-per .active{background:#1e293b;color:#fff}
+.pj-kpis{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.pj-kpi{display:flex;flex-direction:column;min-width:110px;padding:8px 12px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;text-align:left;cursor:pointer}
+.pj-kpi b{font-size:22px;line-height:1.1}.pj-kpi span{font-size:12px;color:#475569}.pj-kpi small{display:block;color:#94a3b8}
+.pj-kpi.tot{background:#1e293b;color:#fff;cursor:default}.pj-kpi.tot span{color:#cbd5e1}.pj-kpi.on{outline:2px solid #2563eb}
+.pj-tab{overflow-x:auto}.pj-tab table{border-collapse:collapse;width:100%;font-size:13px}
+.pj-tab th,.pj-tab td{padding:5px 8px;border-bottom:1px solid #eef0f3;text-align:center;white-space:nowrap}
+.pj-tab th:first-child,.pj-tab td:first-child{text-align:left}.pj-tab tr.we td{background:#f8fafc;color:#94a3b8}
+.pj-tab tfoot td{border-top:2px solid #cbd5e1}
+.pj-n{min-width:30px;padding:3px 8px;border-radius:7px;border:0;background:rgba(37,99,235,var(--a,.3));color:#0f172a;font-weight:800;cursor:pointer}
+.pj-n.tot{background:#e2e8f0}.pj-n.on{outline:2px solid #1e293b}.pj-0{color:#cbd5e1}
+.pj-liste{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:10px;display:grid;gap:6px}
+.pj-liste-t{display:flex;justify-content:space-between;align-items:center}
+.pj-dem{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:6px 8px;background:#f8fafc;border-radius:8px}.pj-dem small{color:#64748b}

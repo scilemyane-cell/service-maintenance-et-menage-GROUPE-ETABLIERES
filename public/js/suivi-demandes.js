@@ -523,6 +523,7 @@ function renderVue(container) {
     restaurerSaisies(container, saisies);
     return;
   }
+  if (ui.vue === "parjour") return renderParJour(container);
   if (ui.vue === "pause") return renderEnPause(container);
   if (ui.vue === "supprimees") return renderSupprimees(container);
   if (ui.vue === "tableau") return renderTableau(container);
@@ -596,6 +597,7 @@ function toggleVueHTML() {
       <button type="button" class="demandes-vue-btn ${ui.vue === "sites" ? "active" : ""}" data-vue="sites">🏠 Par site</button>
       <button type="button" class="demandes-vue-btn ${ui.vue === "tableau" ? "active" : ""}" data-vue="tableau">📋 Tableau des demandes</button>
       <button type="button" class="demandes-vue-btn ${ui.vue === "stats" ? "active" : ""}" data-vue="stats">📊 Statistiques</button>
+      ${permsUtilisateur().isEditor || mountedUser?.role === "direction" ? `<button type="button" class="demandes-vue-btn ${ui.vue === "parjour" ? "active" : ""}" data-vue="parjour">📅 Traitées par jour</button>` : ""}
       ${btnActions}
       ${permsUtilisateur().isEditor ? `<button type="button" class="demandes-vue-btn ${ui.vue === "prestataires" ? "active" : ""}" data-vue="prestataires">🏢 Prestataires</button>` : ""}
       ${(n => n ? `<button type="button" class="demandes-vue-btn ${ui.vue === "pause" ? "active" : ""}" data-vue="pause" title="Demandes en « Arbitrage budgétaire » : hors statistiques et compteurs">⏸️ En pause <span class="vue-badge" style="background:#8a8f98">${n}</span></button>` : "")((state.demandes || []).filter(d => estEnPause(d) && !d.lieeA && !estSupprimee(d)).length)}
@@ -621,6 +623,51 @@ function renderSupprimees(container) {
     try { await updateDemande(b.dataset.restaurerDem, { supprimeeLe: null, supprimeePar: null, supprimeeMotif: null }); window.toast?.("✓ Demande restaurée"); }
     catch (e) { alert("Impossible : " + (e?.message || e)); b.disabled = false; }
   }));
+}
+
+// ---- Onglet « 📅 Traitées par jour » : nombre de demandes traitées, jour par jour et par technicien ----
+// Traitée = réalisée ou annulée (y compris déclarée par le technicien et en attente de validation).
+// Jour = date d'intervention (sinon date de déclaration / validation / statut). Technicien = « réalisé par ».
+function renderParJour(container) {
+  const isoJ = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const auj = new Date(); auj.setHours(12, 0, 0, 0);
+  const per = ui.pjPeriode || "30";
+  let debut, fin = isoJ(auj);
+  if (per === "7" || per === "30") debut = isoJ(new Date(auj.getTime() - (Number(per) - 1) * 86400000));
+  else { const [a, m] = (ui.pjMois || fin.slice(0, 7)).split("-").map(Number); debut = `${a}-${String(m).padStart(2, "0")}-01`; const f = new Date(a, m, 0, 12); fin = isoJ(f) < fin ? isoJ(f) : fin; }
+  const enValid = (x) => String(x.statut || "").startsWith("Réalisé –") && x.validation !== "REFUSEE";
+  const traitees = toutesLesLignes().filter(x => !x.lieeA && (x.statut === "Réalisé" || x.statut === "Annulé" || enValid(x))).map(x => ({
+    ...x, jour: String(x.dateIntervention || x.declareLe || x.dateValidation || x.dateStatut || "").slice(0, 10),
+    tech: x.declarePar || (x.categorieIntervenant && /externe/i.test(x.categorieIntervenant) ? "Entreprise extérieure" : "") || x.attribueANom || "Non renseigné",
+    annulee: x.statut === "Annulé" || x.validation === "ANNULATION",
+  })).filter(x => x.jour >= debut && x.jour <= fin);
+  const techs = [...new Set(traitees.map(x => x.tech))].sort((a, b) => (traitees.filter(x => x.tech === b).length - traitees.filter(x => x.tech === a).length) || a.localeCompare(b, "fr"));
+  const jours = []; for (let d = new Date(fin + "T12:00"); isoJ(d) >= debut; d = new Date(d.getTime() - 86400000)) jours.push(isoJ(d));
+  const nb = (j, t) => traitees.filter(x => x.jour === j && (!t || x.tech === t));
+  const frJ = (j) => new Date(j + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" });
+  const total = traitees.length, joursOuvres = jours.filter(j => { const w = new Date(j + "T12:00").getDay(); return w && w !== 6; }).length || 1;
+  const sel = ui.pjSel; // { j, t }
+  const liste = sel ? traitees.filter(x => (!sel.j || x.jour === sel.j) && (!sel.t || x.tech === sel.t)) : [];
+  const moisOpts = (() => { const o = []; for (let i = 0; i < 12; i++) { const d = new Date(auj.getFullYear(), auj.getMonth() - i, 1); o.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); } return o; })();
+  container.innerHTML = `<div class="stack">${toggleVueHTML()}
+    <div class="form-card pj">
+      <div class="pj-tete"><h3>📅 Demandes traitées par jour</h3>
+        <div class="pj-per">${[["7", "7 jours"], ["30", "30 jours"], ["mois", "Mois"]].map(([k, l]) => `<button type="button" class="nav-btn ${per === k ? "active" : ""}" data-pj-per="${k}">${l}</button>`).join("")}
+        ${per === "mois" ? `<select data-pj-mois>${moisOpts.map(m => `<option value="${m}" ${(ui.pjMois || moisOpts[0]) === m ? "selected" : ""}>${new Date(m + "-15").toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</option>`).join("")}</select>` : ""}</div></div>
+      <p class="hint" style="margin:4px 0 12px">Réalisées + annulées (et déclarées en attente de validation), comptées le jour de l'intervention, pour la personne qui l'a réalisée. Touche un nombre pour voir les demandes.</p>
+      <div class="pj-kpis"><div class="pj-kpi tot"><b>${total}</b><span>traitées · ${(total / joursOuvres).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} / jour ouvré</span></div>
+        ${techs.map(t => { const l = traitees.filter(x => x.tech === t); return `<button type="button" class="pj-kpi ${sel && sel.t === t && !sel.j ? "on" : ""}" data-pj-t="${esc(t)}"><b>${l.length}</b><span>${esc(t)}${l.some(x => x.annulee) ? ` <small>dont ${l.filter(x => x.annulee).length} annulée${l.filter(x => x.annulee).length > 1 ? "s" : ""}</small>` : ""}</span></button>`; }).join("")}</div>
+      ${!total ? `<p class="hint">Aucune demande traitée sur la période.</p>` : `<div class="pj-tab"><table><thead><tr><th>Jour</th>${techs.map(t => `<th>${esc(t)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+        ${jours.map(j => { const w = new Date(j + "T12:00").getDay(), tj = nb(j).length; return `<tr class="${!w || w === 6 ? "we" : ""}"><td>${frJ(j)}</td>${techs.map(t => { const n = nb(j, t).length; return `<td>${n ? `<button type="button" class="pj-n ${sel && sel.j === j && sel.t === t ? "on" : ""}" data-pj-j="${j}" data-pj-t="${esc(t)}" style="--a:${Math.min(1, .15 + n / 8)}">${n}</button>` : `<span class="pj-0">·</span>`}</td>`; }).join("")}<td>${tj ? `<button type="button" class="pj-n tot ${sel && sel.j === j && !sel.t ? "on" : ""}" data-pj-j="${j}">${tj}</button>` : `<span class="pj-0">·</span>`}</td></tr>`; }).join("")}
+      </tbody><tfoot><tr><td>Total</td>${techs.map(t => `<td><b>${traitees.filter(x => x.tech === t).length}</b></td>`).join("")}<td><b>${total}</b></td></tr></tfoot></table></div>`}
+      ${sel ? `<div class="pj-liste"><div class="pj-liste-t"><b>${liste.length} demande${liste.length > 1 ? "s" : ""}${sel.t ? ` · ${esc(sel.t)}` : ""}${sel.j ? ` · ${frJ(sel.j)}` : ""}</b><button type="button" class="nav-btn" data-pj-fermer>✕</button></div>
+        ${liste.map(x => `<div class="pj-dem"><span class="dps-num">${esc(x.n)}</span><span><b>${esc(x.site)}</b>${x.local ? ` · ${esc(x.local)}` : ""} — ${esc(String(x.descr || "").slice(0, 120))}<br><small>${x.annulee ? "✖ Annulée" : "✓ Réalisée"}${enValid(x) ? " (à valider)" : ""} · ${esc(x.tech)} · ${frJ(x.jour)}${x.validePar ? ` · validée par ${esc(x.validePar)}` : ""}</small></span></div>`).join("")}</div>` : ""}
+    </div></div>`;
+  attacherToggleVue(container);
+  container.querySelectorAll("[data-pj-per]").forEach(b => b.onclick = () => { ui.pjPeriode = b.dataset.pjPer; ui.pjSel = null; render(container); });
+  container.querySelector("[data-pj-mois]")?.addEventListener("change", (e) => { ui.pjMois = e.target.value; ui.pjSel = null; render(container); });
+  container.querySelectorAll("[data-pj-j], .pj-kpi[data-pj-t]").forEach(b => b.onclick = () => { const v = { j: b.dataset.pjJ || null, t: b.dataset.pjT || null }; ui.pjSel = sel && sel.j === v.j && sel.t === v.t ? null : v; render(container); });
+  container.querySelector("[data-pj-fermer]")?.addEventListener("click", () => { ui.pjSel = null; render(container); });
 }
 
 // ---- Onglet « ⏸️ En pause » : demandes en « Arbitrage budgétaire » ----
