@@ -173,6 +173,14 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['actionFil', 'actionReponseNonLue', 'actionNonLuPour', 'dateMaj']));
     }
 
+    // ---- Historique des demandes : une ligne par modification (qui / quand / ancienne → nouvelle valeur).
+    // Chacun ajoute ses propres lignes ; lisible par tous les connectés ; jamais modifiable (sauf Super Admin).
+    match /demandes-historique/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.parUid == request.auth.uid;
+      allow update, delete: if isSuperAdmin();
+    }
+
     // ---- Interventions ----
     // Tout le monde peut lire. Un éditeur (admin/n1) peut tout écrire.
     // Un technicien peut créer une intervention et supprimer UNIQUEMENT

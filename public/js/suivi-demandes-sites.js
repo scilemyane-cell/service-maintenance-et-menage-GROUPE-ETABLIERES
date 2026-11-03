@@ -167,8 +167,31 @@ function traceHTML(l) {
   if (l.attribuePar) e.push(["👷", `Attribuée${l.attribueANom ? ` à ${l.attribueANom}` : ""}`, l.attribuePar, l.attribueLe]);
   if (l.descrCorrigePar) e.push(["✏️", "Descriptif corrigé", l.descrCorrigePar, ""]);
   if (l.urgenceCorrigeePar) e.push(["⚡", "Urgence requalifiée", l.urgenceCorrigeePar, ""]);
-  if (!e.length) return "";
-  return `<details class="dps-trace"><summary>🕘 Qui a fait quoi</summary><ul>${e.map(([i, quoi, qui, le]) => `<li><span>${i}</span><b>${esc(quoi)}</b> — ${esc(qui)}${frD(le) ? ` <small>le ${frD(le)}</small>` : ""}</li>`).join("")}</ul></details>`;
+  // « 📜 Historique » : lignes détaillées (date, heure, qui, ancienne → nouvelle valeur), chargées à l'ouverture ;
+  // en dessous, le récapitulatif connu d'avant l'historique.
+  return `<details class="dps-trace" data-histo="${esc(l.id)}"><summary>📜 Historique</summary><div class="dps-histo-l"><small>⏳ Chargement…</small></div>
+    ${e.length ? `<p class="dps-histo-st">Dernières étapes connues</p><ul>${e.map(([i, quoi, qui, le]) => `<li><span>${i}</span><b>${esc(quoi)}</b> — ${esc(qui)}${frD(le) ? ` <small>le ${frD(le)}</small>` : ""}</li>`).join("")}</ul>` : ""}</details>`;
+}
+// Chargement de l'historique détaillé à l'ouverture du bloc (écoute unique pour tout le document).
+if (!window.__dpsHistoEcoute) {
+  window.__dpsHistoEcoute = true;
+  document.addEventListener("toggle", async (ev) => {
+    const d = ev.target; if (!d?.matches?.("details.dps-trace[data-histo]") || !d.open) return;
+    const box = d.querySelector(".dps-histo-l");
+    try {
+      const { lireHistoriqueDemande } = await import("./firestore-data.js");
+      const l = await lireHistoriqueDemande(d.dataset.histo);
+      const h = (ms) => { const x = new Date(ms); return `${x.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} ${x.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`; };
+      const val = (v) => v ? `« ${esc(v.length > 80 ? v.slice(0, 78) + "…" : v)} »` : "<i>vide</i>";
+      box.innerHTML = l.length ? `<ol class="dps-histo">${l.map(x => `<li><small>${h(x.le)}</small> — <b>${esc(x.par || "?")}</b> : ${(x.changements || []).map(c =>
+        c.champ === "validation" && c.apres === "ANNULATION" ? "Annulation demandée"
+        : c.champ === "validation" && c.apres === "OUI" ? "Validé"
+        : c.champ === "validation" && c.apres === "REFUSEE" ? "Refusé"
+        : c.champ === "commentaireTech" ? `Commentaire ${c.avant ? "modifié" : "ajouté"} → ${val(c.apres)}`
+        : `${esc(c.libelle)} ${val(c.avant)} → ${val(c.apres)}`).join(" · ")}</li>`).join("")}</ol>`
+        : `<small>Aucune modification enregistrée depuis la mise en place de l'historique (03/11/2026).</small>`;
+    } catch (e) { box.innerHTML = `<small>Historique indisponible (${esc(e?.message || e)})</small>`; }
+  }, true);
 }
 const sa = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 

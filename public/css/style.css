@@ -4836,3 +4836,5 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .dps-trace{margin:8px 0;font-size:12.5px}.dps-trace summary{cursor:pointer;font-weight:700;color:#475569}
 .dps-trace ul{list-style:none;margin:6px 0 0;padding:8px 10px;background:#f8fafc;border-radius:8px;display:grid;gap:4px}
 .dps-trace li span{display:inline-block;width:20px}.dps-trace small{color:#64748b}
+.dps-histo{margin:6px 0 0;padding:8px 10px 8px 28px;background:#f8fafc;border-radius:8px;display:grid;gap:5px;line-height:1.4}
+.dps-histo small,.dps-histo-l>small{color:#64748b}.dps-histo-st{margin:10px 0 0;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em}

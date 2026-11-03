@@ -214,7 +214,41 @@ export function watchActionsImmediates(uid, callback) {
 export function watchMesActionsDemandes(uid, callback) {
   return deriverDemandes(`mes-actions:${uid}`, (liste) => liste.filter(x => (x.actionPour === uid && !x.actionFaiteLe && !demandeClose(x)) || (x.actionParUid === uid && x.actionReponseNonLue)).length, callback);
 }
+// ---- Historique des demandes (qui a modifié quoi, quand, ancienne → nouvelle valeur) ----
+// Une ligne par enregistrement dans la collection « demandes-historique » (jamais modifiable).
+// L'écriture ne bloque jamais l'enregistrement de la demande (si elle échoue, tant pis pour la ligne).
+const CHAMPS_HISTO = {
+  statut: "Statut", commentaireTech: "Commentaire", intervenant: "Contact / entreprise", categorieIntervenant: "Intervenant",
+  dateIntervention: "Date d'intervention", urgenceCorrigee: "Urgence", siteCorrige: "Site", descriptifCorrige: "Descriptif",
+  localCorrige: "Local", attribueANom: "Attribuée à", validation: "Validation", refusMotif: "Motif du refus",
+  supprimeeLe: "Suppression", supprimeeMotif: "Motif de suppression", actionTexte: "Action demandée", actionPourNom: "Action pour",
+  actionFaitePar: "Action faite par", lieeANumero: "Reliée à",
+};
+const texteHisto = (v) => { if (v == null || v === "") return ""; if (typeof v === "object") { if (typeof v.toMillis === "function") return new Date(v.toMillis()).toLocaleDateString("fr-FR"); return ""; } return String(v).slice(0, 300); };
+function journaliserDemande(id, avant, fields) {
+  try {
+    const changements = [];
+    Object.keys(CHAMPS_HISTO).forEach(k => {
+      if (!(k in fields)) return;
+      const a = texteHisto(avant?.[k]), n = texteHisto(fields[k]);
+      if (k === "supprimeeLe") { if (!!avant?.[k] !== !!fields[k]) changements.push({ champ: k, libelle: CHAMPS_HISTO[k], avant: avant?.[k] ? "supprimée" : "", apres: fields[k] ? "supprimée" : "restaurée" }); return; }
+      if (a !== n) changements.push({ champ: k, libelle: CHAMPS_HISTO[k], avant: a, apres: n });
+    });
+    if (!changements.length || !auth.currentUser) return;
+    addDoc(collection(db, "demandes-historique"), {
+      demandeId: id, numero: avant?.numero || "", le: Date.now(), parUid: auth.currentUser.uid,
+      par: window.__smmNom || auth.currentUser.email || "", changements,
+    }).catch(e => console.warn("Historique demande non enregistré :", e?.message || e));
+  } catch (e) { console.warn("Historique demande :", e); }
+}
+export async function lireHistoriqueDemande(id) {
+  const snap = await getDocs(query(collection(db, "demandes-historique"), where("demandeId", "==", id)));
+  const l = []; snap.forEach(d => l.push({ id: d.id, ...d.data() }));
+  return l.sort((a, b) => (a.le || 0) - (b.le || 0));
+}
+
 export async function updateDemande(id, fields) {
+  const avantModif = docLocal("demandes", id);
   // Demande clôturée (réalisée / annulée, même en attente de validation) :
   // l'action qui y était attribuée est close en même temps.
   if (fields && fields.statut && demandeClose(fields) && !("actionFaiteLe" in fields)) {
@@ -223,6 +257,7 @@ export async function updateDemande(id, fields) {
   }
   majLocale("demandes", id, { ...fields, dateMaj: Timestamp.now() }); // affichage immédiat, même hors ligne
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
+  journaliserDemande(id, avantModif ? { ...avantModif } : null, fields);
 }
 export async function ajouterDemande(record) {
   await addDoc(collection(db, "demandes"), { ...record, dateMaj: serverTimestamp() });

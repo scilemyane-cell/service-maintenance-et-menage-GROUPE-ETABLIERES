@@ -1,0 +1,20 @@
+# Publication automatique des règles Firestore (firestore.rules) dès qu'elles changent sur main.
+name: Publier les règles Firestore
+on:
+  push:
+    branches: [main]
+    paths: [firestore.rules]
+  workflow_dispatch:
+jobs:
+  regles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publier firestore.rules
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SERVICE_MAINTENANCE_ET_MENAGE }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          printf '{"firestore":{"rules":"firestore.rules"}}' > firebase.rules.json
+          npx --yes firebase-tools@13 deploy --only firestore:rules --project service-maintenance-et-menage --config firebase.rules.json --non-interactive

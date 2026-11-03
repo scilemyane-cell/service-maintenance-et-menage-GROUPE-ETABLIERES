@@ -531,6 +531,7 @@
     // utilisateurs sont renvoyés vers la version validée (même lien, même QR).
     if (CANAL_TEST && user.role !== "super_admin") { window.location.replace("/app.html" + window.location.search + window.location.hash); return; }
     currentUser = user;
+    window.__smmNom = user?.nom || user?.email || "";
     import("./geoloc-partage.js").then(m => m.initPartagePosition(user, modulesConstruction)).catch(() => {});
     suivreMembresAstreinte(() => { try { render(); } catch (e) { /* écran pas encore prêt */ } });
     // Télé de l'atelier : .../app.html?ecran=atelier ouvre directement l'écran,
