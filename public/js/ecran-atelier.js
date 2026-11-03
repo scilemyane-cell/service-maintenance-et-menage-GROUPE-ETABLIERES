@@ -124,7 +124,6 @@ let logementsV2 = [], compteursV2 = null, meteoV2 = null, meteoLe = 0, extrasV2 
 function chargerExtrasV2() {
   if (extrasV2) return; extrasV2 = true;
   import("./logements-data.js").then(m => unsubs.push(m.watchMesLogements("*", (l) => { logementsV2 = l || []; render(); }))).catch(() => {});
-  import("./compteurs-data.js").then(m => unsubs.push(m.watchCompteursListe((l) => { compteursV2 = { n: (l || []).filter(c => m.estEnRetard(c)).length, fen: m.fenetreReleve() }; render(); }))).catch(() => {});
   const meteo = async () => {
     try {
       const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=46.67&longitude=-1.43&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Europe%2FParis&forecast_days=3");
@@ -184,19 +183,19 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
       <div class="eb-mil">
         <section class="eb-bloc eb-jour">
           <div class="eb-h"><span>📋 AUJOURD'HUI</span></div>
-          ${absentsAuj.length ? `<div class="eb-ligne"><span class="eb-ic">🏖️</span><div><b>Absent${absentsAuj.length > 1 ? "s" : ""}</b><p>${absentsAuj.map(a => esc(a)).join(" · ")}</p></div></div>` : `<div class="eb-ligne"><span class="eb-ic">👷</span><div><b>Toute l'équipe est là</b></div></div>`}
+          ${absentsAuj.length ? `<div class="eb-abs"><span class="eb-abs-t">🏖️ ABSENT${absentsAuj.length > 1 ? "S" : ""} AUJOURD'HUI</span><div class="eb-abs-l">${absentsAuj.map(a => `<b>${esc(a)}</b>`).join("")}</div></div>` : `<div class="eb-abs ok"><span class="eb-abs-t">👷 TOUTE L'ÉQUIPE EST LÀ</span></div>`}
           ${logAuj.length || logProch.length ? `<div class="eb-ligne"><span class="eb-ic">🏠</span><div><b>Logements à préparer${logAuj.length ? ` : ${logAuj.length} aujourd'hui` : ""}</b><p>${(logAuj.length ? logAuj : logProch).slice(0, 4).map(r => `${esc(r.bat)} ${esc(String(r.numero))}${r.creneau ? ` (${r.creneau === "matin" ? "matin" : "après-midi"})` : ""}${logAuj.length ? "" : ` · ${new Date(r.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}`}${r.pour ? ` → ${esc(String(r.pour).split(" ")[0])}` : ""}`).join(" · ")}${(logAuj.length || logProch.length) > 4 ? " …" : ""}</p></div></div>` : ""}
-          ${compteursV2 && (compteursV2.fen.ouverte || compteursV2.n) ? `<div class="eb-ligne ${compteursV2.fen.ouverte && compteursV2.n ? "chaud" : ""}"><span class="eb-ic">🎛️</span><div><b>${compteursV2.n} compteur${compteursV2.n > 1 ? "s" : ""} ${compteursV2.fen.ouverte ? "à relever" : "en retard"}</b><p>${compteursV2.fen.ouverte ? `Période de relevé ${compteursV2.fen.libelle}` : "Relevés en retard"}</p></div></div>` : ""}
           ${memosAuj.length ? `<div class="eb-sep">📌 À ne pas oublier</div>${memosAuj.map(m => { const q = quand(m.date); return `<div class="eb-m ${q.cls} ${m.important ? "imp" : ""}"><span>${m.important ? "⭐ " : ""}${esc(q.txt)}</span><b>${esc(m.texte || "")}</b></div>`; }).join("")}` : ""}
         </section>
       </div>
       <div class="eb-droite">
         <section class="eb-bloc eb-meteo"><div class="eb-h"><span>🌤️ MÉTÉO</span></div>${meteoHTML()}</section>
-        <section class="eb-bloc eb-bilan">
+        ${Math.floor(Date.now() / DUREE_PANNEAU) % 2 === 1 ? `<section class="eb-bloc eb-bilan eb-graphe">${graphiqueHTML()}<div class="ea-prog"><i style="animation-duration:${DUREE_PANNEAU}ms"></i></div></section>` : `<section class="eb-bloc eb-bilan">
           <div class="eb-h"><span>✅ TRAITÉES AUJOURD'HUI</span><b class="eb-big vert">${traiteesAuj.length}</b></div>
           ${techs.length ? `<div class="eb-techs">${techs.map(([t, n]) => `<div class="eb-tech"><span>${esc(/\set\s/i.test(t) ? t : t.replace(/^(\S+)\s+(\S).*$/, (m, a, b) => `${a[0].toUpperCase()}${a.slice(1)} ${b.toUpperCase()}.`))}</span><i><u style="width:${n / maxT * 100}%"></u></i><b>${n}</b></div>`).join("")}</div>` : ""}
           <div class="eb-sem">Semaine : <b>${semT}</b> traitées · <b>${semR}</b> reçues · <b>${nouv.length}</b> nouvelle${nouv.length > 1 ? "s" : ""} en 7 j</div>
-        </section>
+          <div class="ea-prog"><i style="animation-duration:${DUREE_PANNEAU}ms"></i></div>
+        </section>`}
       </div>
     </div>
     ${mesDemandes.length ? `<footer class="eb-pied">👷 ${esc(user?.nom || "Équipe")} : <b>${mesDemandes.length}</b> demande${mesDemandes.length > 1 ? "s" : ""} attribuée${mesDemandes.length > 1 ? "s" : ""} à traiter</footer>` : ""}
@@ -427,6 +426,11 @@ const STYLE_V2 = `<style>
   .eb-met{display:flex;align-items:center;gap:18px}.eb-met .eb-met-ic{font-size:96px;line-height:1;font-weight:400}.eb-met b{display:block;font-size:64px;line-height:1}.eb-met span{font-size:24px;font-weight:700}.eb-met small{display:block;font-size:19px;color:#94a3b8;margin-top:4px}
   .eb-met-al{margin-top:12px;padding:10px 14px;border-radius:12px;background:#3b2a0b;color:#fde68a;font-size:20px;font-weight:700}
   .eb-met-j{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.eb-met-j div{background:#0d1526;border-radius:12px;padding:10px 12px}.eb-met-j span{display:block;font-size:18px;color:#94a3b8}.eb-met-j span::first-letter{text-transform:uppercase}.eb-met-j b{font-size:24px}.eb-met-j small{display:block;color:#94a3b8;font-size:17px}
+  .eb-abs{border-radius:16px;padding:14px 18px;margin-bottom:12px;background:linear-gradient(135deg,#4c1d95,#6d28d9);border:2px solid #a78bfa;box-shadow:0 0 24px rgba(139,92,246,.35)}
+  .eb-abs.ok{background:#0f2a1d;border-color:#166534;box-shadow:none}.eb-abs-t{font-size:20px;font-weight:800;letter-spacing:.1em;color:#ede9fe}.eb-abs.ok .eb-abs-t{color:#86efac}
+  .eb-abs-l{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.eb-abs-l b{font-size:34px;font-weight:800;background:rgba(255,255,255,.14);border-radius:12px;padding:4px 16px}
+  .eb-bilan{position:relative}.eb-graphe h2{margin:0 0 6px;font-size:22px;letter-spacing:.06em}.eb-graphe .ea-svg{width:100%;flex:1;min-height:0}.eb-graphe .ea-bravo{font-size:19px}
+  .eb-bilan .ea-prog{position:absolute;left:0;right:0;bottom:0}
   .eb-bilan .eb-tech{grid-template-columns:170px 1fr 44px;font-size:23px}
   .eb-pied{margin-top:16px;font-size:22px;color:#cbd5e1}
 </style>`;
