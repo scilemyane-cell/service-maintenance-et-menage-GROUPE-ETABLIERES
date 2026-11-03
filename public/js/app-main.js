@@ -53,6 +53,7 @@
   const mountTransfertsTab = aLaDemande(charger_planning, "mountTransfertsTab");
   const mountCoordonneesTab = aLaDemande(charger_planning, "mountCoordonneesTab");
   const mountEquipeAujourdhui = aLaDemande(() => import("./equipe-aujourdhui.js"), "mountEquipeAujourdhui");
+  const mountVueEquipeTab = aLaDemande(charger_planning, "mountVueEquipeTab");
   const mountArchiveRelevesTab = aLaDemande(charger_planning, "mountArchiveRelevesTab");
   const mountPlanningIndividuelTab = aLaDemande(charger_planning, "mountPlanningIndividuelTab");
   const mountMonPlanningTab = aLaDemande(charger_planning, "mountMonPlanningTab");
@@ -374,6 +375,7 @@
         subtabs: [
           { id: "aujourdhui",  label: "Aujourd'hui", icon: "☀️", roles: ALL, mount: mountEquipeAujourdhui },
           { id: "absences",    label: "Absences",    icon: "🏖️", roles: GESTION, mount: mountAbsencesTab },
+          { id: "vue-equipe",  label: "Vue équipe (binômes)", icon: "🎨", roles: [...GESTION, "direction"], mount: mountVueEquipeTab },
           { id: "coordonnees", label: "Coordonnées", icon: "📞", roles: ALL, mount: mountCoordonneesTab },
         ],
       },

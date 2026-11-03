@@ -343,7 +343,9 @@ function renderMonPlanning(container) {
   // (« Aperçu en tant que… ») peut modifier son planning en cliquant sur un jour.
   return renderPlanningIndividuel(container, { canManageAbsences: !!mountedUser.apercu });
 }
-export function mountPlanningIndividuelTab(container, user) { startListeners(container, user, "planning-individuel"); }
+export function mountPlanningIndividuelTab(container, user) { ui.planningVueMulti = false; startListeners(container, user, "planning-individuel"); }
+// Tuile « Équipe & absences » : vue d'ensemble de l'équipe (binômes) directement.
+export function mountVueEquipeTab(container, user) { startListeners(container, user, "vue-equipe"); }
 
 function renderAll() {
   if (!mountedContainer || !mountedUser) return;
@@ -369,6 +371,7 @@ function renderOnglet(perms) {
   else if (ui.subtab === "coordonnees") renderCoordonnees(mountedContainer, perms);
   else if (ui.subtab === "archive-releves") renderArchiveReleves(mountedContainer, mountedUser);
   else if (ui.subtab === "planning-individuel") renderPlanningIndividuel(mountedContainer, perms);
+  else if (ui.subtab === "vue-equipe") { ui.planningVueMulti = true; renderPlanningIndividuel(mountedContainer, perms); }
   else if (ui.subtab === "mon-planning") renderMonPlanning(mountedContainer);
   ajouterBandeauAstreinte();
 }
@@ -1408,7 +1411,7 @@ function renderVueMultiPersonnes(container, allPeople) {
     <div class="stack">
       <p class="hint">Vue combinée de plusieurs agendas ${vueAnnee ? "sur l'année scolaire complète" : "sur un même mois"} — pour voir en un coup d'œil qui est présent, absent ou déjà en intervention ce jour-là.</p>
       <div class="toolbar">
-        <button type="button" class="nav-btn" id="pm-retour">← Planning d'une personne</button>
+        ${ui.subtab === "vue-equipe" ? "" : `<button type="button" class="nav-btn" id="pm-retour">← Planning d'une personne</button>`}
         <label>Année scolaire
           <select id="pm-annee">${[year - 1, year, year + 1].map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}-${y + 1}</option>`).join("")}</select>
         </label>
@@ -1481,7 +1484,7 @@ function renderVueMultiPersonnes(container, allPeople) {
     </div>
   `;
 
-  document.getElementById("pm-retour").addEventListener("click", () => { ui.planningVueMulti = false; renderAll(); });
+  document.getElementById("pm-retour")?.addEventListener("click", () => { ui.planningVueMulti = false; renderAll(); });
   document.getElementById("pm-annee").addEventListener("change", (e) => { ui.planningIndivYear = Number(e.target.value); renderAll(); });
   document.getElementById("pm-mois").addEventListener("change", (e) => { ui.planningMultiMoisIdx = Number(e.target.value); renderAll(); });
   container.querySelectorAll("[data-multi-personne]").forEach(chk => chk.addEventListener("change", () => {
