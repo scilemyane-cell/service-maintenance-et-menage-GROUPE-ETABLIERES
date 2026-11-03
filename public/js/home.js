@@ -870,37 +870,14 @@ function render() {
                 </div>` : ""}
             </div>`;
           }).join("")}
-          ${window.__espacesTuiles && !modeReorganisation && ["menage", "travaux"].includes(espaceChoisi(mountedUser?.role)) && (espaceChoisi(mountedUser?.role) !== "travaux" || catsRef.some(x => x.enConstruction)) ? "" : `<div class="gh-tuile-wrap">
-            <a class="gh-tuile gh-tuile-gmao" style="--acc:#E4104B" href="${URL_GMAO}" target="_blank" rel="noopener" title="Ouvrir la GMAO Camileia dans un nouvel onglet">
-              <span class="gh-tuile-icone">🛠️</span>
-              <span class="gh-tuile-label">GMAO Camileia ↗</span>
-            </a>
-          </div>`}
-          ${window.__espacesTuiles && !modeReorganisation && espaceChoisi(mountedUser?.role) === "travaux" && catsRef.some(x => x.enConstruction) ? "" : `<div class="gh-tuile-wrap">
-            <a class="gh-tuile" href="${URL_SHAREPOINT}" target="_blank" rel="noopener" title="Ouvrir le site SharePoint appsmm" style="background:${degradePour("sharepoint")};--acc:#0f7cbf">
-              <span class="gh-tuile-icone">🔗</span>
-              <span class="gh-tuile-label">SharePoint ↗</span>
-            </a>
-          </div>`}
-          ${modeReorganisation ? "" : `<div class="gh-tuile-wrap">
-            <a class="gh-tuile" href="${urlMail(mountedUser)}" target="_blank" rel="noopener" title="Ouvrir ta boîte mail Outlook" style="background:${degradePour("mail")};--acc:#0a64c2">
-              <span class="gh-tuile-icone">✉️</span>
-              <span class="gh-tuile-label">Ma boîte mail ↗</span>
-            </a>
-          </div>`}
-          ${modeReorganisation ? "" : `<div class="gh-tuile-wrap">
-            <a class="gh-tuile" href="${URL_EURECIA}" target="_blank" rel="noopener" title="Ouvrir ton espace Eurecia" style="background:${degradePour("eurecia")};--acc:#e8541e">
-              <span class="gh-tuile-icone">🌴</span>
-              <span class="gh-tuile-label">Eurecia ↗</span>
-            </a>
-          </div>`}
-          ${modeReorganisation || mountedUser?.role !== "super_admin" || mountedUser?.apercu ? "" : `<div class="gh-tuile-wrap">
-            <a class="gh-tuile" href="https://claude.ai/new" target="_blank" rel="noopener" title="Nouvelle conversation avec Claude" style="background:linear-gradient(145deg,#d97757,#b85c3c);--acc:#d97757">
-              <span class="gh-tuile-icone">✳️</span>
-              <span class="gh-tuile-label">Claude ↗</span>
-            </a>
-          </div>`}
         </section>`}
+        ${modeReorganisation ? "" : `<nav class="gh-raccourcis" aria-label="Raccourcis">
+          <a href="${URL_GMAO}" target="_blank" rel="noopener" style="--c:#E4104B"><span>🛠️</span>GMAO</a>
+          <a href="${URL_SHAREPOINT}" target="_blank" rel="noopener" style="--c:#0f7cbf"><span>🔗</span>SharePoint</a>
+          <a href="${urlMail(mountedUser)}" target="_blank" rel="noopener" style="--c:#0a64c2"><span>✉️</span>Ma boîte mail</a>
+          <a href="${URL_EURECIA}" target="_blank" rel="noopener" style="--c:#e8541e"><span>🌴</span>Eurecia</a>
+          ${mountedUser?.role === "super_admin" && !mountedUser?.apercu ? `<a href="https://claude.ai/new" target="_blank" rel="noopener" style="--c:#d97757"><span>✳️</span>Claude</a>` : ""}
+        </nav>`}
 
         <section class="gh-notifs gh-rouge">
           <h3>${notifs.length} Notification${notifs.length > 1 ? "s" : ""}</h3>
