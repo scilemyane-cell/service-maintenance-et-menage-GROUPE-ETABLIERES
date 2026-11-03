@@ -207,7 +207,11 @@
         // Télé : recharge seule, UNE fois par nouvelle version et au plus toutes les 10 min (sinon, si le PC garde
         // l'ancienne page en mémoire, l'écran se rechargeait en boucle). Sinon bandeau « Mettre à jour ».
         let deja = null; try { deja = JSON.parse(localStorage.getItem("etablieres-tele-recharge") || "null"); } catch { /* */ }
-        const ok = window.__modeTele && !(deja && (deja.v === String(versionEnLigne.version) || Date.now() - deja.t < 600000));
+        // Techniciens / agents : mise à jour imposée (sans clic), sauf s'ils sont en train d'écrire — les blocages
+        // ajoutés (ex. intervenant non modifiable) s'appliquent tout de suite, même sur un téléphone resté ouvert.
+        const terrain = ["technicien", "menage", "mi_temps"].includes(currentUser?.role);
+        const saisie = (() => { const a = document.activeElement; return a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !["button", "checkbox", "radio"].includes(a.type))); })();
+        const ok = (window.__modeTele || (terrain && !saisie)) && !(deja && (deja.v === String(versionEnLigne.version) || Date.now() - deja.t < 600000));
         if (ok) { try { localStorage.setItem("etablieres-tele-recharge", JSON.stringify({ v: String(versionEnLigne.version), t: Date.now() })); } catch { /* */ } location.reload(); }
         else bandeauNouvelleVersion(versionEnLigne);
       }
