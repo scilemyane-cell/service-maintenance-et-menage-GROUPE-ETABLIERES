@@ -144,7 +144,7 @@ function meteoHTML() {
 }
 const CANAL_TEST = location.pathname.startsWith("/beta/");
 // Validée le 03/11 : nouvelle présentation pour tout le monde (↺ pour revenir à l'ancienne sur un appareil).
-const presentationV2 = () => { try { return localStorage.getItem("ea-v2") !== "0"; } catch { return true; } };
+const presentationV2 = () => true; // ancienne présentation abandonnée (03/11)
 const urgK = (u) => { const v = sansAccent(u); return v.startsWith("crit") ? "crit" : v.startsWith("urg") ? "urg" : ""; };
 function renderV2(now, actifsMemos, urgTri, nouv, plein) {
   const auj = iso(now), lundi = new Date(now); lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7)); const lun = iso(lundi);
@@ -169,7 +169,7 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
       <div class="eb-id"><div class="eb-titre">ATELIER · SERVICE MAINTENANCE</div><div class="eb-date">${now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div></div>
       <div class="eb-heure">${now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
       <div class="eb-ast">${ast ? `<div class="eb-ast-t">📞 Astreinte</div><div class="eb-ast-l"><span>N1</span><b>${esc(ast.n1 || "—")}</b>${tel(ast.n1)}</div><div class="eb-ast-l n2"><span>N2</span><b>${esc(ast.n2 || "—")}</b>${tel(ast.n2)}</div>` : ""}</div>
-      <div class="eb-cmd"><button data-ea="son" class="${sonActif ? "on" : ""}" title="Son des nouvelles urgences">${sonActif ? "🔔" : "🔕"}</button><button data-ea="edit" title="Pense-bête">✏️</button><button data-ea="plein" title="Plein écran">${plein ? "⤢" : "⛶"}</button><button data-ea="v1" title="Revenir à l'ancienne présentation">↺</button></div>
+      <div class="eb-cmd"><button data-ea="son" class="${sonActif ? "on" : ""}" title="Son des nouvelles urgences">${sonActif ? "🔔" : "🔕"}</button><button data-ea="edit" title="Pense-bête">✏️</button><button data-ea="plein" title="Plein écran">${plein ? "⤢" : "⛶"}</button></div>
     </header>
     ${edition ? editionHTML() : ""}
     <div class="eb-corps">
@@ -225,7 +225,6 @@ function render() {
         <button data-ea="son" class="${sonActif ? "on" : ""}">${sonActif ? "🔔 Son activé" : "🔕 Activer le son"}</button>
         <button data-ea="edit">${edition ? "✓ Fermer" : "✏️ Pense-bête"}</button>
         <button data-ea="plein">${plein ? "⤢ Quitter le plein écran" : "⛶ Plein écran"}</button>
-        <button data-ea="v2">✨ Nouvelle présentation</button>
       </div>
     </header>
     ${edition ? editionHTML() : ""}
