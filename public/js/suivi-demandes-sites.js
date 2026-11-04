@@ -209,7 +209,7 @@ function traceHTML(l) {
 function photosBlocHTML(l) {
   return `<details class="dps-photos" data-photos="${esc(l.id)}"><summary>📷 Photos${l.nbPhotos ? ` <b>${l.nbPhotos}</b>` : ""}</summary>
     <div class="dps-photos-l"><small>⏳ Chargement…</small></div>
-    <label class="dps-photo-ajout">➕ Ajouter des photos<input type="file" accept="image/*" multiple hidden data-photos-ajout="${esc(l.id)}"></label></details>`;
+    <div class="ndm-photo-btns"><label class="dps-photo-ajout">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-photos-ajout="${esc(l.id)}"></label><label class="dps-photo-ajout">🖼️ Choisir des photos<input type="file" accept="image/*" multiple hidden data-photos-ajout="${esc(l.id)}"></label></div></details>`;
 }
 async function chargerPhotos(d) {
   const box = d.querySelector(".dps-photos-l");

@@ -53,7 +53,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       <label>Demandeur<input name="demandeur" value="${esc(utilisateur)}"></label>
       <label>Logement occupé<select name="logementOccupe"><option value="">—</option><option>OUI</option><option>NON</option></select></label>
     </div>
-    <div class="ndm-photos"><label class="ndm-photo-btn">📷 Ajouter des photos<input type="file" accept="image/*" multiple data-ndm-photos hidden></label><div class="ndm-vignettes" data-ndm-vign></div></div>
+    <div class="ndm-photos"><div class="ndm-photo-btns"><label class="ndm-photo-btn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" data-ndm-photos hidden></label><label class="ndm-photo-btn">🖼️ Choisir des photos<input type="file" accept="image/*" multiple data-ndm-photos hidden></label></div><div class="ndm-vignettes" data-ndm-vign></div></div>
     <div class="ndm-etat" aria-live="polite"></div>
     <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Annuler</button><button type="submit" class="dps-enregistrer">➕ Créer la demande</button></div>
   </form>`;
@@ -74,11 +74,11 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   const photos = [];
   const dessinerVign = () => { const z = fond.querySelector("[data-ndm-vign]"); z.innerHTML = photos.map((p, i) => `<span class="ndm-vign"><img src="${p}" alt=""><button type="button" data-ndm-retirer="${i}" aria-label="Retirer">✕</button></span>`).join("");
     z.querySelectorAll("[data-ndm-retirer]").forEach(b => b.onclick = () => { photos.splice(+b.dataset.ndmRetirer, 1); dessinerVign(); }); };
-  fond.querySelector("[data-ndm-photos]").addEventListener("change", async (e) => {
+  fond.querySelectorAll("[data-ndm-photos]").forEach(inp => inp.addEventListener("change", async (e) => {
     const { compresserImage } = await import("./demandes-photos.js");
     for (const fi of [...e.target.files].slice(0, 6 - photos.length)) { try { photos.push(await compresserImage(fi)); } catch { /* image illisible */ } }
     e.target.value = ""; dessinerVign();
-  });
+  }));
   fond.querySelector("[data-ndm-ia]").addEventListener("click", async (e) => {
     const t = f.descriptif.value.trim(); if (!t) { f.descriptif.focus(); return; }
     const b = e.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = "⏳ IA…";
