@@ -66,13 +66,15 @@ function texture(img, z, style) {
 
 export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat }) {
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
+  const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
+  const codes = [...new Set(reperes.map(r => r.c))].sort(triCode), couleurCle = (c) => PALETTE[codes.indexOf(c) % PALETTE.length];
   const st = { g: 0, rx: 50, rz: -28, zoom: 1, zoom0: 1, ecart: 230, auto: true, focus: null, filtre, sel: null };
   const fond = document.createElement("div"); fond.className = "p3";
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">Maquette 3D · glisse pour tourner · molette pour zoomer</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <select data-f></select><button data-dessus>⬆ Vue de dessus</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="60" max="480" value="${st.ecart}" data-ecart></label><button data-x>✕ Fermer la 3D</button></div></header>
-    <aside class="p3-niv"></aside>
+<button data-dessus>⬆ Vue de dessus</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="60" max="480" value="${st.ecart}" data-ecart></label><button data-x>✕ Fermer la 3D</button></div></header>
+    <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
     <div class="p3-vue"><div class="p3-stage"></div><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
   document.body.appendChild(fond);
@@ -106,17 +108,18 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
       e.el.classList.toggle("terne", st.focus !== null && st.focus !== e.n); e.el.classList.toggle("focus", st.focus === e.n); });
     void base;
   }
+  // Légende : une couleur par numéro de clé ; un clic n'affiche que cette clé.
   function filtreOptions() {
     const m = {}; const ns = new Set(groupes[st.g].etages.map(e => e.n));
     reperes.filter(r => ns.has(r.p)).forEach(r => { m[r.c] = (m[r.c] || 0) + 1; });
-    $("[data-f]").innerHTML = `<option value="">🔑 Toutes les clés</option>${Object.keys(m).sort(triCode).map(c => `<option value="${esc(c)}" ${c === st.filtre ? "selected" : ""}>${esc(c)} — ${m[c]} porte${m[c] > 1 ? "s" : ""}</option>`).join("")}`;
     if (st.filtre && !m[st.filtre]) st.filtre = "";
+    $(".p3-leg").innerHTML = `<h4>🔑 Clés <small>clique pour isoler</small></h4>${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
   }
   function dessinerEpingles() {
     etages.forEach(e => {
       const l = reperes.filter(r => r.p === e.n).map(r => ({ ...r, fx: (r.x - e.z.x) / e.z.w, fy: (r.y - e.z.y) / e.z.h })).filter(r => r.fx >= 0 && r.fx <= 1 && r.fy >= 0 && r.fy <= 1);
       e.pins.innerHTML = l.map(r => { const on = st.filtre && r.c === st.filtre, off = st.filtre && r.c !== st.filtre;
-        return `<div class="p3-pin ${on ? "on" : ""} ${off ? "off" : ""}" data-r="${r.id}" style="left:${r.fx * 100}%;top:${r.fy * 100}%;--k:${COULEURS[r.col] || COULEURS.rouge}"><span>${esc(r.c)}</span><i></i></div>`; }).join("");
+        return `<div class="p3-pt ${on ? "on" : ""} ${off ? "off" : ""}" data-r="${r.id}" style="left:${r.fx * 100}%;top:${r.fy * 100}%;--k:${couleurCle(r.c)}" title="${esc(r.c)}">${on ? `<span>${esc(r.c)}</span>` : ""}</div>`; }).join("");
       const nb = st.filtre ? l.filter(r => r.c === st.filtre).length : l.length;
       fond.querySelector(`[data-niv="${e.n}"] em`)?.replaceChildren(document.createTextNode(nb ? `${nb} 🔑` : ""));
     });
@@ -124,7 +127,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   async function construire() {
     $(".p3-load").hidden = false; stage.innerHTML = ""; etages = []; st.focus = null; st.sel = null; $(".p3-info").hidden = true;
     const g = groupes[st.g]; filtreOptions();
-    $(".p3-niv").innerHTML = [...g.etages].reverse().map(e => `<button data-niv="${e.n}"><b>${nomNiveau(e.niv)}</b><em></em></button>`).join("") + `<button data-tous class="p3-tous">Tous les niveaux</button>`;
+    $(".p3-niv").innerHTML = `<small>Ouvrir un étage</small>` + [...g.etages].reverse().map(e => `<button data-niv="${e.n}"><b>${nomNiveau(e.niv)}</b><em></em></button>`).join("");
     const imgs = await Promise.all(g.etages.map(e => charger(e.n).then(src => src ? chargerImg(src) : null).catch(() => null)));
     if (!vivant) return;
     // Même cadrage pour tous les niveaux (plans superposables).
@@ -146,34 +149,32 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const r = reperes.find(x => x.id === id); const box = $(".p3-info"); if (!r) { box.hidden = true; return; }
     const e = groupes[st.g].etages.find(x => x.n === r.p), tous = reperes.filter(x => x.c === r.c);
     box.hidden = false;
-    box.innerHTML = `<b style="color:${COULEURS[r.col] || COULEURS.rouge}">🔑 ${esc(r.c)}</b>${r.note ? `<span>${esc(r.note)}</span>` : ""}<span>${e ? nomNiveau(e.niv) + " · " : ""}${tous.length} porte${tous.length > 1 ? "s" : ""} avec cette clé</span>
+    box.innerHTML = `<b style="color:${couleurCle(r.c)}">🔑 ${esc(r.c)}</b>${r.note ? `<span>${esc(r.note)}</span>` : ""}<span>${e ? nomNiveau(e.niv) + " · " : ""}${tous.length} porte${tous.length > 1 ? "s" : ""} avec cette clé</span>
       <div><button data-allumer>Allumer toutes ses portes</button><button data-plat>Voir à plat ›</button><button data-fi>✕</button></div>`;
-    box.querySelector("[data-allumer]").onclick = () => { st.filtre = r.c; filtreOptions(); dessinerEpingles(); };
+    box.querySelector("[data-allumer]").onclick = () => { st.filtre = r.c; filtreOptions(); dessinerEpingles(); box.hidden = true; };
     box.querySelector("[data-plat]").onclick = () => { fermer(); onPlat?.(r.p, st.filtre); };
     box.querySelector("[data-fi]").onclick = () => { box.hidden = true; };
   }
 
   // Interactions
   $("[data-g]").onchange = (e) => { st.g = +e.target.value; construire(); };
-  $("[data-f]").onchange = (e) => { st.filtre = e.target.value; dessinerEpingles(); };
   $("[data-dessus]").onclick = () => { st.auto = false; $("[data-auto]").textContent = "▶ Rotation"; camera(0, 0); };
   $("[data-auto]").onclick = (e) => { st.auto = !st.auto; e.target.textContent = st.auto ? "⏸ Rotation" : "▶ Rotation"; };
   $("[data-ecart]").oninput = (e) => { st.ecart = +e.target.value; placerEtages(); };
+  $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; filtreOptions(); dessinerEpingles(); });
   $(".p3-niv").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.tous !== undefined) { focaliser(null); return; }
-    const n = +b.dataset.niv; if (st.focus === n) { fermer(); onPlat?.(n, st.filtre); return; }
-    focaliser(n); window.toast?.("Clique encore sur l'étage (à gauche) pour l'ouvrir à plat");
+    fermer(); onPlat?.(+b.dataset.niv, st.filtre);
   });
   const pts = new Map(); let g0 = null;
   vue.addEventListener("pointerdown", (e) => { vue.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); st.auto = false; $("[data-auto]").textContent = "▶ Rotation";
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; g0 = { pinch: Math.hypot(a.x - b.x, a.y - b.y) }; } else g0 = { x: e.clientX, y: e.clientY, rx: st.rx, rz: st.rz, bouge: false, pin: e.target.closest(".p3-pin")?.dataset.r }; });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; g0 = { pinch: Math.hypot(a.x - b.x, a.y - b.y) }; } else g0 = { x: e.clientX, y: e.clientY, rx: st.rx, rz: st.rz, bouge: false, pin: e.target.closest(".p3-pt")?.dataset.r }; });
   vue.addEventListener("pointermove", (e) => { if (!pts.has(e.pointerId) || !g0) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (g0.pinch && pts.size === 2) { const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y); st.zoom = Math.max(0.3, Math.min(3, st.zoom * d / g0.pinch)); g0.pinch = d; appliquer(); return; }
     const dx = e.clientX - g0.x, dy = e.clientY - g0.y; if (Math.abs(dx) + Math.abs(dy) > 4) g0.bouge = true;
     st.rz = g0.rz + dx * 0.35; st.rx = Math.max(0, Math.min(82, g0.rx - dy * 0.25)); appliquer(); });
   const finPt = (e) => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); const g = g0; if (pts.size) return; g0 = null;
-    if (g && !g.pinch && !g.bouge) { if (g.pin) infoPin(g.pin); else { const et = e.target.closest(".p3-etage"); if (et) { const n = +et.dataset.n; focaliser(st.focus === n ? null : n); } } } };
+    if (g && !g.pinch && !g.bouge) { if (g.pin) infoPin(g.pin); else { const et = e.target.closest(".p3-etage"); if (et) { fermer(); onPlat?.(+et.dataset.n, st.filtre); } } } };
   vue.addEventListener("pointerup", finPt); vue.addEventListener("pointercancel", finPt);
   vue.addEventListener("wheel", (e) => { e.preventDefault(); st.zoom = Math.max(0.3, Math.min(3, st.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1))); appliquer(); }, { passive: false });
   const ajusterZoom = () => { const r = vue.getBoundingClientRect(); st.zoom = st.zoom0 = Math.min(1.2, Math.max(0.35, Math.min(r.width / 1500, r.height / 1150))); appliquer(); };
@@ -200,6 +201,17 @@ const STYLE = `<style id="p3-style">
 .p3-etage.plein{background:#f7fafd;border:2px solid #4da3ff;box-shadow:0 0 50px rgba(77,163,255,.45)}.p3-etage.plein img{filter:none}.p3-etage.plein .p3-pin span{background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}.p3-etage.plein .p3-pin.on span{background:var(--k);color:#fff}.p3-etage.focus{border-color:#7fe8ff;box-shadow:0 0 60px rgba(80,210,255,.45),inset 0 0 60px rgba(80,210,255,.15)}
 .p3-nom{position:absolute;left:-8px;top:-8px;transform:translate(-100%,-100%);font-size:34px;font-weight:800;color:rgba(160,235,255,.9);text-shadow:0 0 14px rgba(80,200,255,.8);white-space:nowrap}
 .p3-pins{position:absolute;inset:0;transform-style:preserve-3d}
+.p3-pt{position:absolute;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:var(--k);box-shadow:0 0 8px var(--k),0 0 0 2px rgba(5,11,20,.7);cursor:pointer;transform-style:preserve-3d;transition:opacity .3s,transform .3s}
+.p3-pt.off{opacity:.08}.p3-pt.on{transform:scale(1.6);z-index:2}.p3-pt.on::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--k);animation:p3-onde 1.6s infinite}
+@keyframes p3-onde{from{transform:scale(.6);opacity:1}to{transform:scale(2.6);opacity:0}}
+.p3-pt span{position:absolute;left:50%;bottom:100%;transform-origin:50% 100%;transform:translateX(-50%) rotateZ(calc(var(--rz) * -1)) rotateX(calc(var(--rx) * -1)) translateY(-6px);background:rgba(6,14,24,.9);color:#fff;border:1.5px solid var(--k);border-radius:5px;padding:0 5px;font:800 10px/1.4 system-ui;white-space:nowrap}
+.p3-etage:hover{border-color:#9ff0ff;box-shadow:0 0 50px rgba(80,210,255,.4)}.p3-etage{cursor:pointer}
+.p3-leg{position:absolute;right:16px;top:64px;bottom:16px;z-index:3;width:170px;overflow:auto;display:flex;flex-direction:column;gap:4px;scrollbar-width:thin}
+.p3-leg h4{margin:0 0 4px;font-size:13px;color:#bfe9ff}.p3-leg h4 small{display:block;font-weight:400;color:#7fb3cc;font-size:11px}
+.p3-leg button{display:flex;align-items:center;gap:8px;background:rgba(10,30,50,.55);border:1px solid rgba(120,225,255,.18);border-radius:8px;padding:5px 9px;color:#dff6ff;font:inherit;font-size:13px;cursor:pointer;text-align:left}
+.p3-leg button i{width:11px;height:11px;border-radius:50%;flex:none}.p3-leg button span{margin-left:auto;color:#8fc0d6;font-size:12px}.p3-leg button.on{background:rgba(80,190,255,.3);border-color:#7fe8ff}.p3-leg button.off{opacity:.45}
+.p3-niv small{font-size:11px;color:#7fb3cc}
+
 .p3-pin{position:absolute;width:80px;height:64px;margin-left:-40px;margin-top:-64px;transform-origin:50% 100%;transform:rotateZ(calc(var(--rz) * -1)) rotateX(calc(var(--rx) * -1));display:flex;flex-direction:column;align-items:center;justify-content:flex-end;cursor:pointer;transform-style:preserve-3d}
 .p3-pin span{background:rgba(6,14,24,.85);color:var(--k);border:1.5px solid var(--k);border-radius:5px;padding:1px 6px;font:800 15px/1.2 system-ui;white-space:nowrap;box-shadow:0 0 10px color-mix(in srgb,var(--k) 60%,transparent)}
 .p3-pin i{width:2px;flex:1;background:linear-gradient(var(--k),transparent);box-shadow:0 0 6px var(--k)}
@@ -207,5 +219,5 @@ const STYLE = `<style id="p3-style">
 .p3-load{position:absolute;inset:0;display:grid;place-items:center;font-size:16px;color:#9fd3ea}.p3-load[hidden]{display:none}
 .p3-info{position:absolute;right:16px;bottom:16px;z-index:4;background:rgba(6,16,28,.88);border:1px solid rgba(120,225,255,.4);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:240px;box-shadow:0 0 30px rgba(80,200,255,.2);font-size:13.5px}
 .p3-info[hidden]{display:none}.p3-info span{color:#9fc7da}.p3-info div{display:flex;gap:6px;flex-wrap:wrap}
-@media (max-width:700px){.p3-niv{top:auto;bottom:12px;transform:none;flex-direction:row;flex-wrap:wrap;right:12px}.p3-niv button{min-width:0}.p3-sous{display:none}}
+@media (max-width:700px){.p3-leg{top:auto;bottom:70px;height:160px;width:140px}.p3-niv{top:auto;bottom:12px;transform:none;flex-direction:row;flex-wrap:wrap;right:12px}.p3-niv button{min-width:0}.p3-sous{display:none}}
 </style>`;
