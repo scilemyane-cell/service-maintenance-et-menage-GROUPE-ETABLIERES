@@ -224,7 +224,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
       const v = new THREE.Vector3(), proches = [];
       etages.forEach(e => e.points.forEach(p => { const visible = p.mesh.material.opacity > 0.5 && !(st.filtre && p.r.c === st.filtre);
         if (!visible) { if (p.petite) p.petite.visible = false; return; }
-        p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); if (d < 170) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
+        p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); const ndc = v.clone().project(camera); const ecran = Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && ndc.z < 1; if (d < 170 && ecran) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
       proches.sort((a, b) => a[0] - b[0]).forEach(([, p, e], i) => {
         if (i >= 50) { if (p.petite) p.petite.visible = false; return; }
         if (!p.petite) { p.petite = etiquette(THREE, p.r.c, couleurCle(p.r.c), 0.42); p.petite.position.set(p.mesh.position.x, 1.1, p.mesh.position.z); e.groupe.add(p.petite); }
