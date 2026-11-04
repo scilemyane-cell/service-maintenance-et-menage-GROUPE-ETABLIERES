@@ -3747,12 +3747,15 @@ function renderSynthese(container) {
 
   const hPic = parHeure.indexOf(Math.max(...parHeure));
   const jPic = parJour.indexOf(Math.max(...parJour));
+  // Un « plus chargé » n'a de sens que s'il se détache : au moins 2 et strictement devant le suivant.
+  const seDetache = (vals) => { const t = [...vals].sort((a, b) => b - a); return t[0] >= 2 && t[0] > (t[1] || 0); };
+  const siteDetache = parSite[0] && parSite[0][0] !== "—" && seDetache(parSite.filter(([k]) => k !== "—").map(([, l]) => l.length));
   const insights = [
     appels.length && `<b>${pct(parTel.length, appels.length)} %</b> des appels ont été réglés par téléphone, sans déplacement.`,
-    avecHeure && `Créneau le plus chargé : <b>${hPic}h – ${hPic + 1}h</b> (${parHeure[hPic]} appel${parHeure[hPic] > 1 ? "s" : ""}).`,
-    appels.length && `Jour le plus chargé : <b>${["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"][jPic]}</b> · ${pct(weCount, appels.length)} % des appels tombent le week-end.`,
+    avecHeure && seDetache(parHeure) && `Créneau le plus chargé : <b>${hPic}h – ${hPic + 1}h</b> (${parHeure[hPic]} appel${parHeure[hPic] > 1 ? "s" : ""}).`,
+    appels.length && (seDetache(parJour) ? `Jour le plus chargé : <b>${["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"][jPic]}</b> · ${pct(weCount, appels.length)} % des appels tombent le week-end.` : `<b>${pct(weCount, appels.length)} %</b> des appels tombent le week-end.`),
     avecHeure && `<b>${pct(nuitCount, avecHeure)} %</b> des appels arrivent la nuit (21h – 6h).`,
-    parSite[0] && parSite[0][0] !== "—" && `Site le plus sollicité : <b>${esc(parSite[0][0])}</b> (${parSite[0][1].length} appel${parSite[0][1].length > 1 ? "s" : ""}).`,
+    siteDetache && `Site le plus sollicité : <b>${esc(parSite[0][0])}</b> (${parSite[0][1].length} appel${parSite[0][1].length > 1 ? "s" : ""}).`,
     delaiMoy != null && `Délai moyen entre l'appel et le départ du technicien : <b>${delaiMoy} min</b>.`,
     minTel > 0 && `Temps passé au téléphone par le N1 : <b>${Math.floor(minTel / 60)} h ${String(Math.round(minTel % 60)).padStart(2, "0")}</b>.`,
     aCompleter && `⚠️ ${aCompleter} déplacement${aCompleter > 1 ? "s" : ""} sans horaires : chiffres d'heures incomplets.`,

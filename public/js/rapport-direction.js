@@ -52,7 +52,7 @@ function pointsAttention(s, ctx) {
     if (s.interv.length) L.push(["info", `Astreinte : <b>${s.interv.length}</b> intervention(s), <b>${fmtNb(s.heuresTot, 1)} h</b> dont ${fmtNb(s.heuresNuit, 1)} h de nuit.`]);
     const vh = variation(s.heuresTot, s.heuresPrev);
     if (vh !== null && Math.abs(vh) >= 20) L.push([vh > 0 ? "alerte" : "ok", `Heures d'astreinte ${vh > 0 ? "en hausse" : "en baisse"} de <b>${Math.abs(vh)} %</b> ${ctx.comp}.`]);
-    if (s.parSiteInterv[0] && s.interv.length >= 3) L.push(["info", `Site le plus sollicité en astreinte : <b>${esc(s.parSiteInterv[0][0])}</b> (${s.parSiteInterv[0][1]} intervention(s)).`]);
+    if (s.parSiteInterv[0] && s.interv.length >= 3 && s.parSiteInterv[0][1] >= 2 && s.parSiteInterv[0][1] > (s.parSiteInterv[1]?.[1] || 0)) L.push(["info", `Site le plus sollicité en astreinte : <b>${esc(s.parSiteInterv[0][0])}</b> (${s.parSiteInterv[0][1]} intervention(s)).`]);
   }
   if (v("compteurs") && s.compteursEnRetard.length) L.push(["alerte", `<b>${s.compteursEnRetard.length}</b> compteur(s) sur ${s.compteurs.length} sans relevé depuis plus de ${ctx.seuilReleve} jours.`]);
   if ((v("stock") || v("stock-menage")) && s.sousSeuilMaint.length + s.sousSeuilMenage.length) L.push(["alerte", `<b>${s.sousSeuilMaint.length + s.sousSeuilMenage.length}</b> produit(s) actuellement sous le seuil minimum de stock.`]);
