@@ -9,6 +9,7 @@ import { db } from "./firebase-init.js";
 import { doc, getDoc, setDoc, deleteDoc, onSnapshot } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
 import { PDFJS, PDFJS_WORKER } from "./fiches-poste-import.js";
+import { groupesEtages } from "./plan-3d.js";
 
 const refMeta = (id) => doc(db, "config", `plancles-${id}`);
 const refPage = (id, n) => doc(db, "config", `plancles-${id}-p${n}`);
@@ -128,6 +129,7 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
       <div class="pc-outils">
         <select data-filtre><option value="">🔑 Toutes les clés (${reperes().length})</option>${codes.map(c => `<option value="${esc(c)}" ${c === st.filtre ? "selected" : ""}>${esc(c)} — ${tous[c]} porte${tous[c] > 1 ? "s" : ""}</option>`).join("")}</select>
         <button class="pc-btn" data-liste>${st.liste ? "✕ Liste" : "📋 Liste des clés"}</button>
+        ${groupesEtages(st.meta.pages).length ? `<button class="pc-btn p3-lance" data-3d>🧊 Vue 3D</button>` : ""}
         <button class="pc-btn" data-ajuster>⤢ Ajuster</button>
         <button class="pc-btn" data-telecharger title="Image de la page avec ses repères">⬇️ Image</button>
         ${editeur ? `<button class="pc-btn ${st.edition ? "edit" : ""}" data-edition>${st.edition ? "✓ Terminer les modifications" : "✏️ Modifier les repères"}</button>` : ""}
@@ -138,6 +140,11 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     b.querySelector("[data-filtre]").onchange = (e) => { st.filtre = e.target.value; dessinerReperes(); dessinerBarre(); dessinerListe(); };
     b.querySelector("[data-liste]").onclick = () => { st.liste = !st.liste; dessinerBarre(); dessinerListe(); };
     b.querySelector("[data-ajuster]").onclick = ajuster;
+    b.querySelector("[data-3d]")?.addEventListener("click", async () => {
+      const { ouvrirVue3D } = await import("./plan-3d.js");
+      ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), filtre: st.filtre, charger: imagePage,
+        onPlat: (n, f) => { st.filtre = f || ""; allerPage(n); dessinerListe(); } });
+    });
     b.querySelector("[data-telecharger]").onclick = telecharger;
     b.querySelector("[data-edition]")?.addEventListener("click", () => { st.edition = !st.edition; st.sel = null; fond.classList.toggle("pc-edit", st.edition); dessinerBarre(); dessinerReperes(); });
     b.querySelector("[data-code]")?.addEventListener("input", (e) => { st.dernierCode = e.target.value.trim(); });
@@ -161,10 +168,15 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     img.style.width = p.w + "px"; img.style.height = p.h + "px"; scene.style.width = p.w + "px"; scene.style.height = p.h + "px";
     const cle = `${dossier.id}-${n}`;
     if (!cacheImages.has(cle)) { msg.hidden = false; msg.textContent = "⏳ Chargement de la page…"; img.removeAttribute("src");
-      try { const s = await getDoc(refPage(dossier.id, n)); cacheImages.set(cle, s.exists() ? s.data().data : ""); } catch (e) { msg.textContent = "Page indisponible : " + (e?.message || e); return; } }
+      try { await imagePage(n); } catch (e) { msg.textContent = "Page indisponible : " + (e?.message || e); return; } }
     if (st.page !== n) return;
     img.src = cacheImages.get(cle) || ""; msg.hidden = true;
     ajuster(); dessinerReperes();
+  }
+  async function imagePage(n) {
+    const cle = `${dossier.id}-${n}`;
+    if (!cacheImages.has(cle)) { const s = await getDoc(refPage(dossier.id, n)); cacheImages.set(cle, s.exists() ? s.data().data : ""); }
+    return cacheImages.get(cle);
   }
   function appliquer() { scene.style.transform = `translate(${st.tx}px,${st.ty}px) scale(${st.s})`; scene.style.setProperty("--inv", String(Math.max(1, 9.5 / (17 * st.s)))); }
   function ajuster() {
@@ -270,7 +282,7 @@ body.pc-ouvert{overflow:hidden}
 .pc{flex:1;margin:10px;background:var(--panel,#fff);color:var(--text,#111);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .pc-h{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border,#ddd);flex-wrap:wrap}.pc-h b{font-size:16px}.pc-maj{font-size:12px;color:var(--text-dim,#666)}.pc-hb{margin-left:auto;display:flex;gap:6px}
 .pc-btn{display:inline-flex;align-items:center;gap:5px;background:var(--panel-alt,#f2f4f7);color:var(--text,#111);border:1px solid var(--border,#ccc);border-radius:9px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
-.pc-btn:hover{filter:brightness(1.06)}.pc-btn.edit{background:#1565d8;color:#fff;border-color:#1565d8}.pc-btn.rouge{color:#d11f1f}.pc-btn.grand{font-size:15px;padding:10px 16px;margin-top:10px}
+.pc-btn:hover{filter:brightness(1.06)}.pc-btn.p3-lance{background:linear-gradient(135deg,#0b3a5c,#0f6a8f);color:#dff6ff;border-color:#2fa8d8;box-shadow:0 0 12px rgba(47,168,216,.45)}.pc-btn.edit{background:#1565d8;color:#fff;border-color:#1565d8}.pc-btn.rouge{color:#d11f1f}.pc-btn.grand{font-size:15px;padding:10px 16px;margin-top:10px}
 .pc-barre{padding:8px 14px;border-bottom:1px solid var(--border,#ddd);display:flex;flex-direction:column;gap:7px}
 .pc-pages{display:flex;gap:5px;overflow-x:auto;padding-bottom:3px;scrollbar-width:thin}
 .pc-pg{flex:none;background:none;border:1px solid var(--border,#ccc);border-radius:99px;padding:4px 11px;font:inherit;font-size:12.5px;color:var(--text,#111);cursor:pointer;display:flex;align-items:center;gap:6px}
