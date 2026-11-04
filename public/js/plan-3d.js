@@ -147,8 +147,8 @@ const CAT_PIECE = [[/sanit|wc|douche/i, [94, 196, 196]], [/circul|couloir|coursi
   [/local|rangt|r[ée]serve|archive|stock|tech|entretien|office/i, [190, 160, 130]]];
 const PASTELS = [[150, 190, 225], [170, 210, 190], [215, 195, 160], [195, 175, 215], [225, 180, 180], [175, 205, 215]];
 const couleurPiece = (nom, id = 0) => (CAT_PIECE.find(([rx]) => rx.test(nom || "")) || [0, PASTELS[id % PASTELS.length]])[1];
-function geometrieMurs(THREE, murs, W, H, L, P, h) {
-  const c = Math.max(1, Math.round(W / 1000)), GW = Math.ceil(W / c), GH = Math.ceil(H / c), g = new Uint8Array(GW * GH);
+function geometrieMurs(THREE, murs, W, H, L, P, h, couleurs = null, pas = 0) {
+  const c = pas || Math.max(1, Math.round(W / 1000)), GW = Math.ceil(W / c), GH = Math.ceil(H / c), g = new Uint8Array(GW * GH);
   for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { let n = 0, t = 0; for (let yy = y * c; yy < Math.min(H, y * c + c); yy++) for (let xx = x * c; xx < Math.min(W, x * c + c); xx++) { t++; n += murs[yy * W + xx]; } g[y * GW + x] = n * 2 >= t ? 1 : 0; }
   const boites = [], ouverts = new Map();
   for (let y = 0; y <= GH; y++) {
@@ -160,7 +160,7 @@ function geometrieMurs(THREE, murs, W, H, L, P, h) {
   }
   const pos = [], nor = [], col = [], X = (gx) => (gx * c / W - 0.5) * L, Z = (gy) => (gy * c / H - 0.5) * P;
   const face = (pts, n, cc) => { [0, 1, 2, 0, 2, 3].forEach(i => { pos.push(...pts[i]); nor.push(...n); col.push(...cc); }); };
-  const cote = [0.86, 0.9, 0.95], dessus = [0.97, 0.98, 1];
+  const [cote, dessus] = couleurs || [[0.86, 0.9, 0.95], [0.97, 0.98, 1]];
   boites.forEach(([a, b, e, f]) => { const x0 = X(a), x1 = X(e), z0 = Z(b), z1 = Z(f);
     face([[x0, h, z0], [x0, h, z1], [x1, h, z1], [x1, h, z0]], [0, 1, 0], dessus);
     face([[x0, 0, z1], [x1, 0, z1], [x1, h, z1], [x0, h, z1]], [0, 0, 1], cote);
@@ -197,7 +197,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   try { [THREE, { OrbitControls }] = await Promise.all([import(/* @vite-ignore */ THREE_URL), import(/* @vite-ignore */ ORBIT_URL)]); }
   catch (e) { $(".p3-load").textContent = "La 3D n'a pas pu se charger (connexion ?)."; return; }
   if (!vivant) return;
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.outputColorSpace = THREE.SRGBColorSpace;
   vue.appendChild(renderer.domElement);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 0.5, 2000);
@@ -240,12 +240,20 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
       if (id) (cles[id] = cles[id] || []).push(p.r.c); });
     const sol = document.createElement("canvas"); sol.width = W; sol.height = H;
     const tex = new THREE.CanvasTexture(sol); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = aniso;
-    const mSol = new THREE.Mesh(new THREE.PlaneGeometry(L, P), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    const mSol = new THREE.Mesh(new THREE.PlaneGeometry(L, P), new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false })); mSol.receiveShadow = true;
     mSol.rotation.x = -Math.PI / 2; mSol.position.y = 0.01; mSol.renderOrder = 1; mSol.userData.sol = et.n; et.groupe.add(mSol);
-    if (!lumieres) { lumieres = true; scene.add(new THREE.AmbientLight(0xffffff, 0.75)); const dl = new THREE.DirectionalLight(0xffffff, 0.9); dl.position.set(50, 120, 70); scene.add(dl); }
+    if (!lumieres) { lumieres = true; scene.add(new THREE.HemisphereLight(0xeaf4ff, 0x40454f, 0.85)); const dl = new THREE.DirectionalLight(0xfff6e8, 1.6); dl.position.set(45, 110, 60);
+      dl.castShadow = true; dl.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048); Object.assign(dl.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 400 }); dl.shadow.bias = -0.0006; dl.shadow.camera.updateProjectionMatrix(); scene.add(dl); }
     const murs = new THREE.Mesh(geometrieMurs(THREE, A.murs, W, H, L, P, HMUR), new THREE.MeshLambertMaterial({ vertexColors: true }));
-    murs.renderOrder = 4; et.groupe.add(murs);
-    et.maq = { A, noms, cles, sol, tex, mSol, murs, sel: 0 };
+    murs.renderOrder = 4; murs.castShadow = murs.receiveShadow = true; et.groupe.add(murs);
+    // Socle du bâtiment (dalle épaisse) : emprise des pièces + murs.
+    const emprise = new Uint8Array(W * H); for (let p = 0; p < W * H; p++) emprise[p] = lab[p] || A.murs[p] ? 1 : 0;
+    const socle = new THREE.Mesh(geometrieMurs(THREE, emprise, W, H, L, P, 0.7, [[0.32, 0.36, 0.42], [0.55, 0.58, 0.63]], Math.max(2, Math.round(W / 400))), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    socle.position.y = -0.72; socle.receiveShadow = true; et.groupe.add(socle);
+    // Une étiquette par pièce nommée, au centre de la pièce.
+    const som = {}; for (let p = 0; p < W * H; p += 3) { const id = lab[p]; if (!id || !noms[id]) continue; const t = som[id] || (som[id] = [0, 0, 0]); t[0] += p % W; t[1] += (p / W) | 0; t[2]++; }
+    const etiq = Object.entries(som).filter(([, t]) => t[2] > 12).map(([id, t]) => ({ t: noms[id], pos: new THREE.Vector3((t[0] / t[2] / W - 0.5) * L, HMUR + 0.4, (t[1] / t[2] / H - 0.5) * P), sp: null, aire: t[2] }));
+    et.maq = { A, noms, cles, sol, tex, mSol, murs, socle, etiq, sel: 0 };
     dessinerSol(et);
   }
   function dessinerSol(et) {
@@ -253,18 +261,19 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const coul = (id) => { if (cache[id]) return cache[id]; const ks = m.cles[id] || [], aCle = st.filtre && ks.includes(st.filtre);
       let c = couleurPiece(m.noms[id], id); if (st.filtre) c = aCle ? [255, 200, 60] : c.map(v => v * 0.35); if (id === m.sel) c = [255, 255, 255];
       return (cache[id] = [c[0], c[1], c[2], st.filtre && !aCle && id !== m.sel ? 170 : 250]); };
-    for (let p = 0, k = 0; p < W * H; p++, k += 4) { const id = lab[p]; if (!id || murs[p]) continue; const c = coul(id); d[k] = c[0]; d[k + 1] = c[1]; d[k + 2] = c[2]; d[k + 3] = c[3]; }
+    if (!m.ao) m.ao = dilater(murs, W, H, Math.max(2, Math.round(W / 300)));
+    for (let p = 0, k = 0; p < W * H; p++, k += 4) { const id = lab[p]; if (!id || murs[p]) continue; const c = coul(id), f = m.ao[p] ? 0.8 : 1; d[k] = c[0] * f; d[k + 1] = c[1] * f; d[k + 2] = c[2] * f; d[k + 3] = c[3]; }
     x.putImageData(img, 0, 0); m.tex.needsUpdate = true;
   }
   async function majMaquette() {
     $("[data-maq]").classList.toggle("on", st.maq);
-    etages.forEach(e => { if (e.maq) { e.maq.mSol.visible = e.maq.murs.visible = st.maq; } if (e.plan) { e.plan.material.opacity = st.maq ? 0.45 : 1; } });
+    etages.forEach(e => { if (e.maq) { e.maq.mSol.visible = e.maq.murs.visible = e.maq.socle.visible = st.maq; } if (e.plan) e.plan.visible = !st.maq; [...e.pieces, ...(e.maq?.etiq || [])].forEach(q => { if (q.sp) q.sp.visible = false; }); });
     if (!st.maq) return;
     if (!hd) { window.toast?.("Fais d'abord « ✨ Rendre net + noms des pièces (PDF) »."); st.maq = false; $("[data-maq]").classList.remove("on"); return; }
     const etat = $(".p3-etat"); etat.hidden = false;
     const liste = etages.filter(e => st.seul == null || e.n === st.seul);
     for (const [i, e] of liste.entries()) { etat.textContent = `🏠 Construction de la maquette… ${i + 1} / ${liste.length}`;
-      try { await construireMaquette(e); } catch (err) { console.warn("maquette", err); } if (e.maq) { e.maq.mSol.visible = e.maq.murs.visible = st.maq; } }
+      try { await construireMaquette(e); } catch (err) { console.warn("maquette", err); } if (e.maq) { e.maq.mSol.visible = e.maq.murs.visible = e.maq.socle.visible = st.maq; } if (e.plan) e.plan.visible = !(st.maq && e.maq); }
     etat.hidden = true;
   }
   function infoPiece(et, id) {
@@ -430,7 +439,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
       const v = new THREE.Vector3(), proches = [];
       etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.material.opacity > 0.5 && !(st.filtre && p.r.c === st.filtre);
         if (!visible) { if (p.petite) p.petite.visible = false; return; }
-        p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); const ndc = v.clone().project(camera); const ecran = Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && ndc.z < 1; if (d < 170 && ecran) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
+        p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); const ndc = v.clone().project(camera); const ecran = Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && ndc.z < 1; if (d < (st.maq ? 70 : 170) && ecran) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
       proches.sort((a, b) => a[0] - b[0]).forEach(([, p, e], i) => {
         if (i >= 50) { if (p.petite) p.petite.visible = false; return; }
         if (!p.petite) { p.petite = etiquette(THREE, p.r.c, couleurCle(p.r.c), 0.42); p.petite.position.set(p.mesh.position.x, 1.1, p.mesh.position.z); e.groupe.add(p.petite); }
@@ -439,12 +448,13 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     // Noms des pièces : affichés nets autour de l'endroit regardé (les 90 plus proches à l'écran).
     if (boucle.n % 8 === 4) {
       const v = new THREE.Vector3(), proches = [];
-      etages.forEach(e => e.pieces.forEach(q => { if (!e.groupe.visible) { if (q.sp) q.sp.visible = false; return; } v.copy(q.pos).add(e.groupe.position); const d = v.distanceTo(camera.position), ndc = v.clone().project(camera);
+      etages.forEach(e => (st.maq && e.maq ? e.pieces : e.maq?.etiq || []).forEach(q => { if (q.sp) q.sp.visible = false; }));
+      etages.forEach(e => (st.maq && e.maq ? e.maq.etiq : e.pieces).forEach(q => { if (!e.groupe.visible) { if (q.sp) q.sp.visible = false; return; } v.copy(q.pos).add(e.groupe.position); const d = v.distanceTo(camera.position), ndc = v.clone().project(camera);
         if (d < 150 && Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1) proches.push([d, q, e]); else if (q.sp) q.sp.visible = false; }));
       // Pas de chevauchement : rectangles à l'écran (taille fixe des étiquettes).
       const rv = renderer.domElement.getBoundingClientRect(), k5 = camera.projectionMatrix.elements[5] / 2 * rv.height, rects = []; let nb = 0;
       proches.sort((a, b) => a[0] - b[0]).forEach(([, q, e]) => {
-        if (nb >= 50) { if (q.sp) q.sp.visible = false; return; }
+        if (nb >= (st.maq ? 28 : 50)) { if (q.sp) q.sp.visible = false; return; }
         if (!q.sp) { q.sp = nomPiece(THREE, q.t); q.sp.position.copy(q.pos); q.sp.visible = false; e.groupe.add(q.sp); }
         v.copy(q.pos).add(e.groupe.position); const ndc = v.project(camera), cx = (ndc.x + 1) / 2 * rv.width, cy = (1 - ndc.y) / 2 * rv.height;
         const w = q.sp.scale.x * k5 + 6, h = q.sp.scale.y * k5 + 4, r0 = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
