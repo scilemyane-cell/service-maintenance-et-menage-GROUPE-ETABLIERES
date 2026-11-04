@@ -132,7 +132,7 @@ function brancher() {
   const q = (s) => conteneur.querySelector(s);
   q("#pm-edit")?.addEventListener("click", () => { st.edit = true; st.brouillon = JSON.parse(JSON.stringify(st.plannings[dispositif] || PLANNING_DEFAUT_MENAGE[dispositif] || { agent: "", lignes: [] })); render(); });
   q("#pm-annuler")?.addEventListener("click", () => { st.edit = false; st.brouillon = null; render(); });
-  q("#pm-print")?.addEventListener("click", () => window.print());
+  q("#pm-print")?.addEventListener("click", imprimerPlanning);
   q("#pm-agent")?.addEventListener("input", (e) => { st.brouillon.agent = e.target.value; });
   conteneur.querySelectorAll("[data-pm]").forEach(el => el.addEventListener("change", () => {
     const [i, k] = el.dataset.pm.split("|"), l = st.brouillon.lignes[+i];
@@ -150,6 +150,43 @@ function brancher() {
     try { await setDoc(REF(), { [dispositif]: st.brouillon }, { merge: true }); st.edit = false; st.brouillon = null; window.toast?.("Planning enregistré ✓"); }
     catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
   });
+}
+
+// Impression : page A4 PAYSAGE à part (fond blanc), le planning + les totaux, dans un cadre invisible.
+function imprimerPlanning() {
+  const p = st.plannings?.[dispositif] || PLANNING_DEFAUT_MENAGE[dispositif]; if (!p) return;
+  const k = calculs(p), L = p.lignes || [], hh = (t) => t.replace(":", "h");
+  const span = {}; JOURS.forEach(j => { for (let i = 0; i < L.length;) { const v = L[i].jours?.[j] || ""; let n = 1; while (i + n < L.length && (L[i + n].jours?.[j] || "") === v && L[i + n].debut === L[i + n - 1].fin) n++; span[`${i}|${j}`] = n; for (let x = 1; x < n; x++) span[`${i + x}|${j}`] = 0; i += n; } });
+  const totalMin = minutes(L[L.length - 1]?.fin || "17:00") - minutes(L[0]?.debut || "08:00");
+  const hRow = (l) => Math.max(4.5, duree(l) / totalMin * 112); // mm : ~112 mm de grille, tout tient sur une page
+  const lignes = L.map((l, i) => `<tr style="height:${hRow(l).toFixed(1)}mm"><th>${hh(l.debut)} – ${hh(l.fin)}</th>${JOURS.map(j => {
+    const n = span[`${i}|${j}`]; if (n === 0) return ""; const v = l.jours?.[j] || "", fin = L[i + n - 1].fin, d = minutes(fin) - minutes(l.debut);
+    return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<div class="c ${SPECIAUX[v] ? "spe" : ""}" style="--c:${couleur(v)}"><b>${esc(libelle(v))}</b>${d >= 20 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}</div>` : ""}</td>`; }).join("")}</tr>`).join("");
+  const sites = Object.entries(k.parSite).sort((a, b) => b[1] - a[1]);
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Planning — ${esc(p.agent || dispositif)}</title><style>
+    @page{size:A4 landscape;margin:8mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-family:Montserrat,Arial,sans-serif;color:#111827;margin:0;font-size:10pt}
+    .t{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3mm}.t h1{font-size:15pt;margin:0}.t span{color:#4b5563}
+    table.g{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+    table.g thead th{background:#f3f4f6;padding:1.5mm;font-size:10pt;border-bottom:.3mm solid #d1d5db}table.g thead th small{display:block;font-weight:600;color:#6b7280;font-size:8pt}
+    table.g tbody th{width:24mm;font-size:7.5pt;color:#6b7280;font-weight:600;border-bottom:.2mm solid #eef0f3;text-align:center}
+    table.g td{position:relative;padding:0;border-bottom:.2mm solid #eef0f3}
+    .c{position:absolute;inset:.5mm .8mm;border-radius:2mm;background:var(--c);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;line-height:1.15}
+    .c b{font-size:9pt}.c small{font-size:7pt;opacity:.9}.c.spe{background:#fff;color:var(--c);border:.3mm dashed var(--c)}.c.spe b{font-size:7.5pt}
+    .bas{display:grid;grid-template-columns:1fr 1.6fr;gap:6mm;margin-top:4mm}.bas h2{font-size:10pt;margin:0 0 1.5mm}
+    .bas table{width:100%;border-collapse:collapse;font-size:9pt}.bas td{padding:.8mm 1mm;border-bottom:.2mm solid #eef0f3}.bas td:last-child{text-align:right;font-weight:700}.bas tr.tot td{font-weight:800;border-top:.4mm solid #111827}
+    .p{display:inline-block;width:3mm;height:3mm;border-radius:50%;background:var(--c);margin-right:1.5mm;vertical-align:middle}
+  </style></head><body>
+    <div class="t"><h1>Planning hebdomadaire — ${esc(p.agent || "")}</h1><span>${esc(dispositif)} · ${fmtH(k.total)} par semaine</span></div>
+    <table class="g"><thead><tr><th style="width:24mm">Heure</th>${JOURS.map(j => `<th>${NOMS[j]}<small>${fmtH(k.parJour[j])}</small></th>`).join("")}</tr></thead><tbody>${lignes}</tbody></table>
+    <div class="bas"><div><h2>Heures travaillées</h2><table>${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table></div>
+      <div><h2>Charge par site</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / sem. · ${k.total ? Math.round(m / k.total * 100) : 0} %</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / sem.</td></tr>` : ""}</table></div></div>
+  </body></html>`;
+  const f = document.createElement("iframe");
+  f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  document.body.appendChild(f);
+  const d = f.contentDocument; d.open(); d.write(html); d.close();
+  setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { alert("Impression impossible : " + (e?.message || e)); } setTimeout(() => f.remove(), 60000); }, 400);
 }
 
 // Heures par site (planning) : sert à mettre à jour le modèle de répartition.
