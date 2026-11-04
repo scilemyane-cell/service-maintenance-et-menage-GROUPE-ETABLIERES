@@ -826,6 +826,7 @@ function renderView(d) {
             </div>
           </details>
           ${d.compteursActifs ? `<button class="nav-btn va-lanceur" id="sd-plan-compteurs">🛰️ Plan des compteurs</button>` : ""}
+          <button class="nav-btn va-lanceur" id="sd-plan-cles" ${isEditorUser(mountedUser) ? "" : "hidden"}>🔑 Plan des clés</button>
           ${isEditorUser(mountedUser) ? `<button class="add-btn sdv-modifier" id="sd-edit">✏️ Modifier le dossier</button>` : ""}
         </div>
       </div>
@@ -923,6 +924,14 @@ function renderView(d) {
     cible.scrollIntoView({ behavior: "smooth", block: "start" });
     cible.classList.remove("sdv-flash"); void cible.offsetWidth; cible.classList.add("sdv-flash");
   }));
+  {
+    const bc = document.getElementById("sd-plan-cles");
+    if (bc && bc.hidden) import("./plan-cles.js").then(m => m.planClesExiste(d.id)).then(ok => { if (ok) bc.hidden = false; }).catch(() => {});
+    bc?.addEventListener("click", async () => {
+      try { const { ouvrirPlanCles } = await import("./plan-cles.js"); ouvrirPlanCles({ dossier: { id: d.id, nom: d.nom }, user: mountedUser, editeur: isEditorUser(mountedUser) && !mountedUser?.lectureSeule }); }
+      catch (e) { window.toast?.("Plan des clés indisponible : " + (e?.message || e)); }
+    });
+  }
   document.getElementById("sd-plan-compteurs")?.addEventListener("click", async (ev) => {
     const b = ev.currentTarget, txt = b.textContent; b.disabled = true; b.textContent = "⏳ Plan…";
     try {
