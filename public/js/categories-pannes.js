@@ -21,8 +21,10 @@ const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toL
 
 // Classement automatique : la catégorie qui a le plus de mots trouvés ; à égalité, l'ordre de la liste.
 export function categorieAuto(texte) {
-  const t = norm(texte);
+  let t = norm(texte);
   if (!t.trim()) return "autre";
+  // « souris » d'ordinateur (avec clavier, écran, PC…) : ce n'est pas un nuisible.
+  if (/(^|[^a-z])(clavier|ecrans?|ordinateurs?|pc|informatique|imprimantes?|usb|video.?surveillance)($|[^a-z])/.test(t)) t = t.replace(/(^|[^a-z])souris($|[^a-z])/g, "$1$2");
   let meilleur = "autre", score = 0;
   // Poids : un mot de métier précis (toiture, chauffage, serrure…) compte plus qu'un mot général (mur, sol, eau…).
   const POIDS = { equipements: 1.5, plomberie: 1.2, menuiserie: 1, exterieur: 1, peinture: 0.7 };
