@@ -80,6 +80,19 @@ function etiquette(THREE, texte, couleur, taille = 1) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
   const h = 2.2 * taille; sp.scale.set(h * w / c.height, h, 1); sp.renderOrder = 20; return sp;
 }
+// Nom de pièce : texte net (dessiné en vectoriel), toujours face à la caméra.
+function nomPiece(THREE, texte) {
+  const c = document.createElement("canvas"), x = c.getContext("2d"), fs = 40, mots = texte.split(" "), lignes = [];
+  x.font = `700 ${fs}px system-ui,sans-serif`;
+  mots.forEach(m => { const l = lignes[lignes.length - 1]; if (l && x.measureText(l + " " + m).width < 340) lignes[lignes.length - 1] = l + " " + m; else lignes.push(m); });
+  const w = Math.ceil(Math.max(...lignes.map(l => x.measureText(l).width))) + 20, h = lignes.length * (fs + 6) + 12;
+  c.width = w; c.height = h; x.font = `700 ${fs}px system-ui,sans-serif`; x.textAlign = "center"; x.textBaseline = "top";
+  x.fillStyle = "rgba(4,12,22,.72)"; x.beginPath(); x.roundRect(0, 0, w, h, 10); x.fill();
+  x.fillStyle = "#eafaff"; lignes.forEach((l, i) => x.fillText(l, w / 2, 8 + i * (fs + 6)));
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  // Taille fixe à l'écran (ne grossit pas en s'approchant).
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, sizeAttenuation: false })); const k = 0.00042; sp.scale.set(k * w, k * h, 1); sp.renderOrder = 12; return sp;
+}
 function texteNiveau(THREE, texte) {
   const c = document.createElement("canvas"), x = c.getContext("2d"); c.width = 640; c.height = 160;
   x.font = "800 120px system-ui,sans-serif"; x.fillStyle = "rgba(170,235,255,.95)"; x.shadowColor = "rgba(80,200,255,.9)"; x.shadowBlur = 24; x.textBaseline = "middle"; x.fillText(texte, 10, 84);
@@ -87,7 +100,7 @@ function texteNiveau(THREE, texte) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(20, 5, 1); sp.renderOrder = 15; return sp;
 }
 
-export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null }) {
+export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null }) {
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
   const codes = [...new Set(reperes.map(r => r.c))].sort(triCode), couleurCle = (c) => PALETTE[codes.indexOf(c) % PALETTE.length];
@@ -96,7 +109,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">Glisse pour tourner · molette / pincer pour zoomer · clic droit ou 2 doigts pour déplacer</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
+      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
     <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
     <div class="p3-vue"><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
@@ -150,7 +163,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     monde.clear(); etages = [];
     const g = groupes[st.g]; filtreOptions();
     $(".p3-niv").innerHTML = `<small>Ouvrir un étage à plat</small>` + [...g.etages].reverse().map(e => `<button data-niv="${e.n}"><b>${nomNiveau(e.niv)}</b><em></em></button>`).join("");
-    const imgs = await Promise.all(g.etages.map(e => charger(e.n).then(src => src ? chargerImg(src) : null).catch(() => null)));
+    const [imgs, lesTextes] = await Promise.all([Promise.all(g.etages.map(e => charger(e.n).then(src => src ? chargerImg(src) : null).catch(() => null))), textes ? textes().catch(() => null) : null]);
     if (!vivant) return;
     const zs = imgs.map(i => i ? zoneUtile(i) : null).filter(Boolean);
     const z = zs.length ? { x: Math.min(...zs.map(a => a.x)), y: Math.min(...zs.map(a => a.y)) } : { x: 0, y: 0 };
@@ -177,7 +190,9 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         halo.rotation.x = -Math.PI / 2; halo.position.copy(mesh.position); halo.visible = false; groupe.add(halo);
         return { r, mesh, halo };
       });
-      etages.push({ n: e.n, niv: e.niv, groupe, points, cibleY: 0, plan: groupe.children.find(c => c.material?.map) });
+      const pieces = ((lesTextes || {})[e.n] || []).map(([fx0, fy0, t]) => ({ fx: (fx0 - z.x) / z.w, fy: (fy0 - z.y) / z.h, t })).filter(q => q.fx >= 0 && q.fx <= 1 && q.fy >= 0 && q.fy <= 1)
+        .map(q => ({ t: q.t, pos: new THREE.Vector3((q.fx - 0.5) * L, 0.5, (q.fy - 0.5) * P), sp: null }));
+      etages.push({ n: e.n, niv: e.niv, groupe, points, pieces, cibleY: 0, plan: groupe.children.find(c => c.material?.map) });
     });
     placer(); etages.forEach(e => { e.groupe.position.y = 0; }); dessinerPoints();
     const d = Math.max(L, P) * 1.25; allerCamera([d * 0.55, d * 0.75, d * 0.8], [0, 0, 0]);
@@ -221,7 +236,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const h = ray.intersectObjects(plans)[0]; if (h) { fermer(); onPlat?.(h.object.userData.n, st.filtre); }
   });
   $("[data-hd]")?.addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (!f) return; const lab = e.target.closest("label"); lab.textContent = "⏳ Enregistrement du PDF…";
-    try { hd = await ajouterPdf(f); lab.remove(); construire(); } catch (err) { alert("Impossible : " + (err?.message || err)); lab.textContent = "✨ Rendre net (PDF)"; } });
+    try { hd = await ajouterPdf(f); lab.remove(); construire(); } catch (err) { alert("Impossible : " + (err?.message || err)); lab.textContent = "✨ Rendre net + noms des pièces (PDF)"; } });
   $("[data-g]").onchange = (e) => { st.g = +e.target.value; construire(); };
   $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; filtreOptions(); dessinerPoints(); });
   $(".p3-niv").addEventListener("click", (e) => { const b = e.target.closest("[data-niv]"); if (b) { fermer(); onPlat?.(+b.dataset.niv, st.filtre); } });
@@ -246,6 +261,20 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         if (i >= 50) { if (p.petite) p.petite.visible = false; return; }
         if (!p.petite) { p.petite = etiquette(THREE, p.r.c, couleurCle(p.r.c), 0.42); p.petite.position.set(p.mesh.position.x, 1.1, p.mesh.position.z); e.groupe.add(p.petite); }
         p.petite.visible = true; });
+    }
+    // Noms des pièces : affichés nets autour de l'endroit regardé (les 90 plus proches à l'écran).
+    if (boucle.n % 8 === 4) {
+      const v = new THREE.Vector3(), proches = [];
+      etages.forEach(e => e.pieces.forEach(q => { v.copy(q.pos).add(e.groupe.position); const d = v.distanceTo(camera.position), ndc = v.clone().project(camera);
+        if (d < 110 && Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1) proches.push([d, q, e]); else if (q.sp) q.sp.visible = false; }));
+      // Une étiquette par case d'écran : pas de chevauchement.
+      const pris = new Set(); let nb = 0;
+      proches.sort((a, b) => a[0] - b[0]).forEach(([, q, e]) => {
+        v.copy(q.pos).add(e.groupe.position); const ndc = v.project(camera), cle = `${Math.round(ndc.x / 0.14)}|${Math.round(ndc.y / 0.06)}`;
+        if (nb >= 70 || pris.has(cle)) { if (q.sp) q.sp.visible = false; return; }
+        pris.add(cle); nb++;
+        if (!q.sp) { q.sp = nomPiece(THREE, q.t); q.sp.position.copy(q.pos); e.groupe.add(q.sp); }
+        q.sp.visible = true; });
     }
     const t = performance.now() / 1000; etages.forEach(e => e.points.forEach(p => { if (p.halo.visible) { const s = 1 + (t * 1.2 % 1) * 1.4; p.halo.scale.setScalar(s); p.halo.material.opacity = 0.9 * (1 - (t * 1.2 % 1)); } }));
     controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(boucle);

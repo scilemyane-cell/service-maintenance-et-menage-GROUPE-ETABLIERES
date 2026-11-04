@@ -21,6 +21,39 @@ const triCode = (a, b) => String(a).localeCompare(String(b), "fr", { numeric: tr
 // ---------- PDF d'origine (pour la 3D en haute définition) ----------
 const refPdf = (id, k) => doc(db, "config", `plancles-${id}-pdf${k}`);
 const pdfCache = new Map();
+// Noms des pièces : textes du PDF (position + texte), regroupés par étiquette (« salle » + « informatique 2 »).
+const refTextes = (id) => doc(db, "config", `plancles-${id}-textes`);
+const horsCartouche = (x, y) => !((x < 0.3 && y > 0.7) || (x > 0.75 && y < 0.16) || y > 0.86 || y < 0.06);
+const PARASITES = /^(\d*up|is|vh|vb|hsp|pl|td|pc|ss|\d+(?:[.,]\d+)?\s*(?:m²|m2|m|cm|ml)?)$/i;
+export async function extraireTextes(pdf) {
+  const pages = {};
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n), vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent().catch(() => ({ items: [] }));
+    const items = [];
+    tc.items.forEach(it => {
+      const t = String(it.str || "").trim(); if (!t) return;
+      const [a, b, c, d, e, f] = it.transform, la = Math.hypot(a, b) || 1, lh = Math.hypot(c, d) || 1, w = it.width || 0, h = it.height || lh;
+      const [x0, y0] = vp.convertToViewportPoint(e + c / lh * h / 2, f + d / lh * h / 2), [x1, y1] = vp.convertToViewportPoint(e + a / la * w + c / lh * h / 2, f + b / la * w + d / lh * h / 2);
+      const fx = (x0 + x1) / 2 / vp.width, fy = (y0 + y1) / 2 / vp.height, H = h / Math.max(vp.width, vp.height);
+      if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !horsCartouche(fx, fy)) return;
+      items.push({ x: fx, y: fy, xa: Math.min(x0, x1) / vp.width, xb: Math.max(x0, x1) / vp.width, h: H, t });
+    });
+    // 1) Mots d'une même ligne (« Ch » + « 101 »).
+    items.sort((p, q) => p.y - q.y || p.xa - q.xa);
+    const lignes = [];
+    items.forEach(it => { const l = lignes.find(l => Math.abs(l.y - it.y) < it.h * 0.6 && it.xa - l.xb < it.h * 1.6 && it.xa - l.xb > -it.h);
+      if (l) { l.t += " " + it.t; l.xb = Math.max(l.xb, it.xb); l.x = (l.xa + l.xb) / 2; } else lignes.push({ ...it }); });
+    // 2) Lignes empilées d'une même étiquette (« salle » / « informatique 2 »).
+    const blocs = [];
+    lignes.sort((p, q) => p.y - q.y).forEach(it => { const b = blocs.find(b => Math.abs(b.x - it.x) < Math.max(0.012, it.h * 4) && it.y - b.yb > -it.h * 0.3 && it.y - b.yb < it.h * 2.4 && b.n < 3);
+      if (b) { b.t += " " + it.t; b.y = (b.y * b.n + it.y) / (b.n + 1); b.yb = it.y; b.n++; } else blocs.push({ x: it.x, y: it.y, yb: it.y, n: 1, t: it.t }); });
+    const propres = blocs.map(b => ({ ...b, t: b.t.split(/\s+/).filter(m => !PARASITES.test(m) || /^ch$/i.test(b.t.split(/\s+/)[0])).join(" ") }))
+      .filter(b => /[a-zà-ü]{2,}/i.test(b.t) && !/^(ch|wc)$/i.test(b.t) || /^ch\s*\d/i.test(b.t));
+    if (propres.length) pages[n] = propres.slice(0, 600).map(b => [+b.x.toFixed(4), +b.y.toFixed(4), b.t.slice(0, 40)]);
+  }
+  return pages;
+}
+export async function lireTextes(dossierId) { try { const s = await getDoc(refTextes(dossierId)); return s.exists() ? s.data().pages || {} : null; } catch { return null; } }
 export async function sauverPdfPlan(dossierId, fichier) {
   const buf = new Uint8Array(await fichier.arrayBuffer()); let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
   const b64 = btoa(bin), T = 900000, n = Math.ceil(b64.length / T);
@@ -28,6 +61,8 @@ export async function sauverPdfPlan(dossierId, fichier) {
   for (let k = 0; k < n; k++) await setDoc(refPdf(dossierId, k), { d: b64.slice(k * T, (k + 1) * T) });
   await setDoc(refMeta(dossierId), { pdf: { morceaux: n, nom: fichier.name, le: Date.now() } }, { merge: true });
   pdfCache.delete(dossierId);
+  try { const { pdf } = await documentPdf(dossierId, n); const pages = await extraireTextes(pdf); await setDoc(refTextes(dossierId), { pages, le: Date.now() }); }
+  catch (e) { console.warn("Noms des pièces non extraits", e); }
 }
 async function documentPdf(dossierId, morceaux) {
   if (!pdfCache.has(dossierId)) pdfCache.set(dossierId, (async () => {
@@ -179,7 +214,7 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
       const { ouvrirVue3D } = await import("./plan-3d.js");
       const m = st.meta.pdf?.morceaux;
       ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), filtre: st.filtre, charger: imagePage,
-        hd: m ? rendeurHD(dossier.id, m) : null, aPdf: !!m,
+        hd: m ? rendeurHD(dossier.id, m) : null, aPdf: !!m, textes: () => lireTextes(dossier.id),
         ajouterPdf: editeur ? async (f) => { await sauverPdfPlan(dossier.id, f); const s2 = await getDoc(refMeta(dossier.id)); return rendeurHD(dossier.id, s2.data()?.pdf?.morceaux || 1); } : null,
         onPlat: (n, f) => { st.filtre = f || ""; allerPage(n); dessinerListe(); } });
     });
