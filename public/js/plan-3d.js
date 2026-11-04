@@ -43,9 +43,9 @@ function zoneUtile(img) {
 }
 // Texture d'un étage : « clair » (traits foncés, fond blanc) ou « holo » (traits lumineux, fond transparent).
 // Les traits sont épaissis d'un pixel pour rester lisibles en perspective.
-function texture(img, z, style) {
-  const sx = z.x * img.width, sy = z.y * img.height, sw = z.w * img.width, sh = z.h * img.height;
-  const W = Math.min(2600, Math.round(sw)), H = Math.round(sh * W / sw);
+function texture(img, z, style, maxW = 2600, dejaRogne = false) {
+  const sx = dejaRogne ? 0 : z.x * img.width, sy = dejaRogne ? 0 : z.y * img.height, sw = dejaRogne ? img.width : z.w * img.width, sh = dejaRogne ? img.height : z.h * img.height;
+  const W = Math.min(maxW, Math.round(sw)), H = Math.round(sh * W / sw);
   const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d", { willReadFrequently: true });
   x.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
   const id = x.getImageData(0, 0, W, H), d = id.data, a0 = new Uint8ClampedArray(W * H);
@@ -57,6 +57,7 @@ function texture(img, z, style) {
   const [R, G, B] = style === "holo" ? [95, 200, 240] : [12, 38, 66];
   for (let y = 0; y < H; y++) for (let xx = 0; xx < W; xx++) {
     const p = y * W + xx; let a = a0[p];
+    if (W > 3000) { const k = p * 4; d[k] = R; d[k + 1] = G; d[k + 2] = B; d[k + 3] = a; continue; }
     if (xx > 0 && a0[p - 1] > a) a = a0[p - 1]; if (xx < W - 1 && a0[p + 1] > a) a = a0[p + 1];
     if (y > 0 && a0[p - W] > a) a = a0[p - W]; if (y < H - 1 && a0[p + W] > a) a = a0[p + W];
     const k = p * 4; d[k] = R; d[k + 1] = G; d[k + 2] = B; d[k + 3] = a;
@@ -86,7 +87,7 @@ function texteNiveau(THREE, texte) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(20, 5, 1); sp.renderOrder = 15; return sp;
 }
 
-export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat }) {
+export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null }) {
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
   const codes = [...new Set(reperes.map(r => r.c))].sort(triCode), couleurCle = (c) => PALETTE[codes.indexOf(c) % PALETTE.length];
@@ -95,7 +96,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">Glisse pour tourner · molette / pincer pour zoomer · clic droit ou 2 doigts pour déplacer</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label><button data-x>✕ Fermer la 3D</button></div></header>
+      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
     <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
     <div class="p3-vue"><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
@@ -176,11 +177,25 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         halo.rotation.x = -Math.PI / 2; halo.position.copy(mesh.position); halo.visible = false; groupe.add(halo);
         return { r, mesh, halo };
       });
-      etages.push({ n: e.n, niv: e.niv, groupe, points, cibleY: 0 });
+      etages.push({ n: e.n, niv: e.niv, groupe, points, cibleY: 0, plan: groupe.children.find(c => c.material?.map) });
     });
     placer(); etages.forEach(e => { e.groupe.position.y = 0; }); dessinerPoints();
     const d = Math.max(L, P) * 1.25; allerCamera([d * 0.55, d * 0.75, d * 0.8], [0, 0, 0]);
     $(".p3-load").hidden = true;
+    // Haute définition : les étages sont redessinés depuis le PDF (traits vectoriels → texture 4096 px).
+    if (hd) {
+      const jeton = (construire.jeton = (construire.jeton || 0) + 1), etat = $(".p3-etat");
+      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, matchMedia("(max-width:700px)").matches ? 2048 : 4096);
+      for (const [i, et] of etages.entries()) {
+        if (!vivant || jeton !== construire.jeton) return;
+        etat.hidden = false; etat.textContent = `✨ Haute définition… ${i + 1} / ${etages.length}`;
+        try { const cv = await hd(et.n, larg, z); if (!cv || !vivant || jeton !== construire.jeton || !et.plan) continue;
+          const t = new THREE.CanvasTexture(texture(cv, z, "holo", larg, true)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+          const ancien = et.plan.material.map; et.plan.material.map = t; et.plan.material.needsUpdate = true; ancien?.dispose(); }
+        catch (e) { console.warn("HD", e); }
+      }
+      etat.hidden = true;
+    }
   }
   function infoPin(id) {
     const r = reperes.find(x => x.id === id); const box = $(".p3-info"); if (!r) { box.hidden = true; return; }
@@ -205,6 +220,8 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const plans = etages.flatMap(et => et.groupe.children.filter(c => c.userData.n !== undefined));
     const h = ray.intersectObjects(plans)[0]; if (h) { fermer(); onPlat?.(h.object.userData.n, st.filtre); }
   });
+  $("[data-hd]")?.addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (!f) return; const lab = e.target.closest("label"); lab.textContent = "⏳ Enregistrement du PDF…";
+    try { hd = await ajouterPdf(f); lab.remove(); construire(); } catch (err) { alert("Impossible : " + (err?.message || err)); lab.textContent = "✨ Rendre net (PDF)"; } });
   $("[data-g]").onchange = (e) => { st.g = +e.target.value; construire(); };
   $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; filtreOptions(); dessinerPoints(); });
   $(".p3-niv").addEventListener("click", (e) => { const b = e.target.closest("[data-niv]"); if (b) { fermer(); onPlat?.(+b.dataset.niv, st.filtre); } });
@@ -253,6 +270,8 @@ const STYLE = `<style id="p3-style">
 .p3-leg h4{margin:0 0 4px;font-size:13px;color:#bfe9ff}.p3-leg h4 small{display:block;font-weight:400;color:#7fb3cc;font-size:11px}
 .p3-leg button{display:flex;align-items:center;gap:8px;background:rgba(10,30,50,.55);border:1px solid rgba(120,225,255,.18);border-radius:8px;padding:5px 9px;color:#dff6ff;font:inherit;font-size:13px;cursor:pointer;text-align:left}
 .p3-leg button i{width:11px;height:11px;border-radius:50%;flex:none}.p3-leg button span{margin-left:auto;color:#8fc0d6;font-size:12px}.p3-leg button.on{background:rgba(80,190,255,.3);border-color:#7fe8ff}.p3-leg button.off{opacity:.45}
+.p3-hd{background:linear-gradient(135deg,#0f6a8f,#1aa3c8);color:#fff;border:1px solid #5fd4ff;border-radius:9px;padding:6px 11px;font-size:13px;cursor:pointer;box-shadow:0 0 14px rgba(95,212,255,.5)}
+.p3-etat{position:absolute;left:50%;top:60px;transform:translateX(-50%);z-index:4;background:rgba(6,16,28,.85);border:1px solid rgba(120,225,255,.4);border-radius:99px;padding:5px 14px;font-size:12.5px;color:#bfe9ff}.p3-etat[hidden]{display:none}
 .p3-load{position:absolute;inset:0;display:grid;place-items:center;font-size:16px;color:#9fd3ea;pointer-events:none}.p3-load[hidden]{display:none}
 .p3-info{position:absolute;right:200px;bottom:16px;z-index:4;background:rgba(6,16,28,.9);border:1px solid rgba(120,225,255,.4);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:240px;box-shadow:0 0 30px rgba(80,200,255,.2);font-size:13.5px}
 .p3-info[hidden]{display:none}.p3-info span{color:#9fc7da}.p3-info div{display:flex;gap:6px;flex-wrap:wrap}

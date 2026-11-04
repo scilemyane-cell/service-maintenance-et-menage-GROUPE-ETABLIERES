@@ -18,6 +18,39 @@ const COULEURS = { rouge: "#d11f1f", bleu: "#1565d8", vert: "#15803d", orange: "
 const uid = () => Math.random().toString(36).slice(2, 10);
 const triCode = (a, b) => String(a).localeCompare(String(b), "fr", { numeric: true });
 
+// ---------- PDF d'origine (pour la 3D en haute définition) ----------
+const refPdf = (id, k) => doc(db, "config", `plancles-${id}-pdf${k}`);
+const pdfCache = new Map();
+export async function sauverPdfPlan(dossierId, fichier) {
+  const buf = new Uint8Array(await fichier.arrayBuffer()); let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  const b64 = btoa(bin), T = 900000, n = Math.ceil(b64.length / T);
+  if (n > 40) throw new Error("PDF trop lourd (max ≈ 25 Mo)");
+  for (let k = 0; k < n; k++) await setDoc(refPdf(dossierId, k), { d: b64.slice(k * T, (k + 1) * T) });
+  await setDoc(refMeta(dossierId), { pdf: { morceaux: n, nom: fichier.name, le: Date.now() } }, { merge: true });
+  pdfCache.delete(dossierId);
+}
+async function documentPdf(dossierId, morceaux) {
+  if (!pdfCache.has(dossierId)) pdfCache.set(dossierId, (async () => {
+    const parts = await Promise.all(Array.from({ length: morceaux }, (_, k) => getDoc(refPdf(dossierId, k)).then(s => s.data()?.d || "")));
+    const bin = atob(parts.join("")), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    const pdfjs = await import(/* @vite-ignore */ PDFJS); pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    return { pdfjs, pdf: await pdfjs.getDocument({ data: u }).promise };
+  })().catch(e => { pdfCache.delete(dossierId); throw e; }));
+  return pdfCache.get(dossierId);
+}
+// Rendu net d'une zone d'une page (z en fractions de page), largeur « larg » pixels.
+export function rendeurHD(dossierId, morceaux) {
+  return async (n, larg, z) => {
+    const { pdfjs, pdf } = await documentPdf(dossierId, morceaux);
+    const page = await pdf.getPage(n), v1 = page.getViewport({ scale: 1 });
+    const scale = larg / (z.w * v1.width), vp = page.getViewport({ scale, offsetX: -z.x * v1.width * scale, offsetY: -z.y * v1.height * scale });
+    const cv = document.createElement("canvas"); cv.width = Math.round(larg); cv.height = Math.round(z.h * v1.height * scale);
+    const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height);
+    await page.render({ canvasContext: cx, viewport: vp, annotationMode: pdfjs.AnnotationMode.DISABLE }).promise;
+    return cv;
+  };
+}
+
 export async function planClesExiste(dossierId) {
   try { const s = await getDoc(refMeta(dossierId)); return s.exists() && (s.data().pages || []).length > 0; } catch { return false; }
 }
@@ -77,6 +110,8 @@ export async function importerPlanPdf(dossier, fichier, par, progres = () => {})
   }
   for (let n = pdf.numPages + 1; n <= ancienNb; n++) await deleteDoc(refPage(dossier.id, n)).catch(() => {});
   await setDoc(refMeta(dossier.id), { dossierId: dossier.id, dossierNom: dossier.nom || "", fichier: fichier.name, importeLe: Date.now(), importePar: par, pages, reperes, majLe: Date.now(), majPar: par });
+  progres("Enregistrement du PDF (3D nette)…");
+  try { await sauverPdfPlan(dossier.id, fichier); } catch (e) { console.warn("PDF HD non enregistré", e); }
   return { pages: pages.length, reperes: reperes.length };
 }
 
@@ -142,7 +177,10 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     b.querySelector("[data-ajuster]").onclick = ajuster;
     b.querySelector("[data-3d]")?.addEventListener("click", async () => {
       const { ouvrirVue3D } = await import("./plan-3d.js");
+      const m = st.meta.pdf?.morceaux;
       ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), filtre: st.filtre, charger: imagePage,
+        hd: m ? rendeurHD(dossier.id, m) : null, aPdf: !!m,
+        ajouterPdf: editeur ? async (f) => { await sauverPdfPlan(dossier.id, f); const s2 = await getDoc(refMeta(dossier.id)); return rendeurHD(dossier.id, s2.data()?.pdf?.morceaux || 1); } : null,
         onPlat: (n, f) => { st.filtre = f || ""; allerPage(n); dessinerListe(); } });
     });
     b.querySelector("[data-telecharger]").onclick = telecharger;
