@@ -108,7 +108,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">${matchMedia("(pointer:coarse)").matches ? "1 doigt : déplacer · 2 doigts : zoomer et tourner · double-tap : zoomer ici" : "Glisse pour tourner · molette pour zoomer · clic droit pour déplacer · double-clic : zoomer ici"}</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-murs>🧱 Murs en relief</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
+      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
     <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
     <div class="p3-vue"><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
@@ -311,7 +311,6 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     if (e.target.closest("[data-tous]")) { seulNiveau(null); return; } const b = e.target.closest("[data-niv]"); if (b) seulNiveau(st.seul === +b.dataset.niv ? null : +b.dataset.niv); });
   $("[data-auto]").onclick = (e) => { st.auto = !st.auto; controls.autoRotate = st.auto; e.target.textContent = st.auto ? "⏸ Rotation" : "▶ Rotation"; };
   $("[data-ecart]").oninput = (e) => { st.ecart = +e.target.value; placer(); };
-  $("[data-murs]").onclick = () => { st.murs = !st.murs; majMurs(); };
   $("[data-dessus]").onclick = () => { arreterAuto(); allerCamera([0, 150, 0.01], [0, 0, 0]); };
   $("[data-face]").onclick = () => { allerCamera([70, 95, 100], [0, 0, 0]); };
 
