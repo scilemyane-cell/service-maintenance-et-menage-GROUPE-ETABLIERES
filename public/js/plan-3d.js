@@ -57,7 +57,6 @@ function texture(img, z, style, maxW = 2600, dejaRogne = false) {
   const [R, G, B] = style === "holo" ? [95, 200, 240] : [12, 38, 66];
   for (let y = 0; y < H; y++) for (let xx = 0; xx < W; xx++) {
     const p = y * W + xx; let a = a0[p];
-    if (W > 3000) { const k = p * 4; d[k] = R; d[k + 1] = G; d[k + 2] = B; d[k + 3] = a; continue; }
     if (xx > 0 && a0[p - 1] > a) a = a0[p - 1]; if (xx < W - 1 && a0[p + 1] > a) a = a0[p + 1];
     if (y > 0 && a0[p - W] > a) a = a0[p - W]; if (y < H - 1 && a0[p + W] > a) a = a0[p + W];
     const k = p * 4; d[k] = R; d[k + 1] = G; d[k + 2] = B; d[k + 3] = a;
@@ -146,7 +145,10 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     if (st.filtre && !m[st.filtre]) st.filtre = "";
     $(".p3-leg").innerHTML = `<h4>🔑 Clés <small>clique pour isoler</small></h4>${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
   }
-  function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = (i - (n - 1) / 2) * st.ecart; }); }
+  function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
+    fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
+  // Un seul niveau en 3D (les autres sont masqués), ou tous empilés.
+  function seulNiveau(n) { st.seul = n; placer(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); } else allerCamera([70, 95, 100], [0, 0, 0]); }
   function dessinerPoints() {
     etages.forEach(e => {
       e.points.forEach(p => { const on = st.filtre && p.r.c === st.filtre, off = st.filtre && !on;
@@ -162,7 +164,8 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     $(".p3-load").hidden = false; $(".p3-info").hidden = true;
     monde.clear(); etages = [];
     const g = groupes[st.g]; filtreOptions();
-    $(".p3-niv").innerHTML = `<small>Ouvrir un étage à plat</small>` + [...g.etages].reverse().map(e => `<button data-niv="${e.n}"><b>${nomNiveau(e.niv)}</b><em></em></button>`).join("");
+    st.seul = null;
+    $(".p3-niv").innerHTML = `<small>Voir un niveau en 3D</small><button data-tous class="on"><b>Tous</b><em></em></button>` + [...g.etages].reverse().map(e => `<div class="p3-nl"><button data-niv="${e.n}"><b>${nomNiveau(e.niv)}</b><em></em></button><button data-plat2="${e.n}" title="Ouvrir ce niveau à plat (pour modifier)">▭</button></div>`).join("");
     const [imgs, lesTextes] = await Promise.all([Promise.all(g.etages.map(e => charger(e.n).then(src => src ? chargerImg(src) : null).catch(() => null))), textes ? textes().catch(() => null) : null]);
     if (!vivant) return;
     const zs = imgs.map(i => i ? zoneUtile(i) : null).filter(Boolean);
@@ -230,16 +233,17 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     if (!down || Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 5) { down = null; return; } down = null;
     const r = renderer.domElement.getBoundingClientRect(); souris.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(souris, camera);
-    const pts = etages.flatMap(et => et.points.filter(p => p.mesh.material.opacity > 0.5).map(p => p.mesh));
+    const pts = etages.filter(et => et.groupe.visible).flatMap(et => et.points.filter(p => p.mesh.material.opacity > 0.5).map(p => p.mesh));
     const hp = ray.intersectObjects(pts)[0]; if (hp) { infoPin(hp.object.userData.r); return; }
     const plans = etages.flatMap(et => et.groupe.children.filter(c => c.userData.n !== undefined));
-    const h = ray.intersectObjects(plans)[0]; if (h) { fermer(); onPlat?.(h.object.userData.n, st.filtre); }
+    const h = ray.intersectObjects(plans.filter(o => o.parent.visible))[0]; if (h && st.seul == null) seulNiveau(h.object.userData.n);
   });
   $("[data-hd]")?.addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (!f) return; const lab = e.target.closest("label"); lab.textContent = "⏳ Enregistrement du PDF…";
     try { hd = await ajouterPdf(f); lab.remove(); construire(); } catch (err) { alert("Impossible : " + (err?.message || err)); lab.textContent = "✨ Rendre net + noms des pièces (PDF)"; } });
   $("[data-g]").onchange = (e) => { st.g = +e.target.value; construire(); };
   $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; filtreOptions(); dessinerPoints(); });
-  $(".p3-niv").addEventListener("click", (e) => { const b = e.target.closest("[data-niv]"); if (b) { fermer(); onPlat?.(+b.dataset.niv, st.filtre); } });
+  $(".p3-niv").addEventListener("click", (e) => { const pl = e.target.closest("[data-plat2]"); if (pl) { fermer(); onPlat?.(+pl.dataset.plat2, st.filtre); return; }
+    if (e.target.closest("[data-tous]")) { seulNiveau(null); return; } const b = e.target.closest("[data-niv]"); if (b) seulNiveau(st.seul === +b.dataset.niv ? null : +b.dataset.niv); });
   $("[data-auto]").onclick = (e) => { st.auto = !st.auto; controls.autoRotate = st.auto; e.target.textContent = st.auto ? "⏸ Rotation" : "▶ Rotation"; };
   $("[data-ecart]").oninput = (e) => { st.ecart = +e.target.value; placer(); };
   $("[data-dessus]").onclick = () => { arreterAuto(); allerCamera([0, 150, 0.01], [0, 0, 0]); };
@@ -254,7 +258,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     boucle.n = (boucle.n || 0) + 1;
     if (boucle.n % 8 === 0) {
       const v = new THREE.Vector3(), proches = [];
-      etages.forEach(e => e.points.forEach(p => { const visible = p.mesh.material.opacity > 0.5 && !(st.filtre && p.r.c === st.filtre);
+      etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.material.opacity > 0.5 && !(st.filtre && p.r.c === st.filtre);
         if (!visible) { if (p.petite) p.petite.visible = false; return; }
         p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); const ndc = v.clone().project(camera); const ecran = Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && ndc.z < 1; if (d < 170 && ecran) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
       proches.sort((a, b) => a[0] - b[0]).forEach(([, p, e], i) => {
@@ -265,15 +269,17 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     // Noms des pièces : affichés nets autour de l'endroit regardé (les 90 plus proches à l'écran).
     if (boucle.n % 8 === 4) {
       const v = new THREE.Vector3(), proches = [];
-      etages.forEach(e => e.pieces.forEach(q => { v.copy(q.pos).add(e.groupe.position); const d = v.distanceTo(camera.position), ndc = v.clone().project(camera);
-        if (d < 110 && Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1) proches.push([d, q, e]); else if (q.sp) q.sp.visible = false; }));
-      // Une étiquette par case d'écran : pas de chevauchement.
-      const pris = new Set(); let nb = 0;
+      etages.forEach(e => e.pieces.forEach(q => { if (!e.groupe.visible) { if (q.sp) q.sp.visible = false; return; } v.copy(q.pos).add(e.groupe.position); const d = v.distanceTo(camera.position), ndc = v.clone().project(camera);
+        if (d < 150 && Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1) proches.push([d, q, e]); else if (q.sp) q.sp.visible = false; }));
+      // Pas de chevauchement : rectangles à l'écran (taille fixe des étiquettes).
+      const rv = renderer.domElement.getBoundingClientRect(), k5 = camera.projectionMatrix.elements[5] / 2 * rv.height, rects = []; let nb = 0;
       proches.sort((a, b) => a[0] - b[0]).forEach(([, q, e]) => {
-        v.copy(q.pos).add(e.groupe.position); const ndc = v.project(camera), cle = `${Math.round(ndc.x / 0.14)}|${Math.round(ndc.y / 0.06)}`;
-        if (nb >= 70 || pris.has(cle)) { if (q.sp) q.sp.visible = false; return; }
-        pris.add(cle); nb++;
-        if (!q.sp) { q.sp = nomPiece(THREE, q.t); q.sp.position.copy(q.pos); e.groupe.add(q.sp); }
+        if (nb >= 50) { if (q.sp) q.sp.visible = false; return; }
+        if (!q.sp) { q.sp = nomPiece(THREE, q.t); q.sp.position.copy(q.pos); q.sp.visible = false; e.groupe.add(q.sp); }
+        v.copy(q.pos).add(e.groupe.position); const ndc = v.project(camera), cx = (ndc.x + 1) / 2 * rv.width, cy = (1 - ndc.y) / 2 * rv.height;
+        const w = q.sp.scale.x * k5 + 6, h = q.sp.scale.y * k5 + 4, r0 = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+        if (rects.some(r => r0[0] < r[2] && r0[2] > r[0] && r0[1] < r[3] && r0[3] > r[1])) { q.sp.visible = false; return; }
+        rects.push(r0); nb++;
         q.sp.visible = true; });
     }
     const t = performance.now() / 1000; etages.forEach(e => e.points.forEach(p => { if (p.halo.visible) { const s = 1 + (t * 1.2 % 1) * 1.4; p.halo.scale.setScalar(s); p.halo.material.opacity = 0.9 * (1 - (t * 1.2 % 1)); } }));
@@ -292,7 +298,7 @@ const STYLE = `<style id="p3-style">
 .p3-hb select,.p3-hb button,.p3-niv button,.p3-info button{background:rgba(40,120,170,.18);color:#dff6ff;border:1px solid rgba(120,225,255,.35);border-radius:9px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;backdrop-filter:blur(6px)}
 .p3-hb select option{background:#0b1a2a}.p3-hb button:hover,.p3-niv button:hover,.p3-info button:hover{background:rgba(80,190,255,.3)}
 .p3-ec{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#9fd3ea}.p3-ec input{accent-color:#5fd4ff;width:110px}
-.p3-niv{position:absolute;left:16px;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;gap:8px}.p3-niv small{font-size:11px;color:#7fb3cc}
+.p3-niv{position:absolute;left:16px;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;gap:8px}.p3-niv small{font-size:11px;color:#7fb3cc}.p3-nl{display:flex;gap:4px}.p3-nl [data-plat2]{min-width:0;padding:4px 9px;justify-content:center;font-size:16px}.p3-niv button.on{background:rgba(80,190,255,.35);border-color:#7fe8ff}
 .p3-niv button{display:flex;flex-direction:column;align-items:flex-start;min-width:96px;padding:8px 12px}.p3-niv b{font-size:15px}.p3-niv em{font-style:normal;font-size:11.5px;color:#ffb3bb;min-height:14px}
 .p3-vue{flex:1;position:relative;min-height:0}.p3-vue canvas{display:block;touch-action:none;cursor:grab}.p3-vue canvas:active{cursor:grabbing}
 .p3-leg{position:absolute;right:16px;top:64px;bottom:16px;z-index:3;width:170px;overflow:auto;display:flex;flex-direction:column;gap:4px;scrollbar-width:thin}
