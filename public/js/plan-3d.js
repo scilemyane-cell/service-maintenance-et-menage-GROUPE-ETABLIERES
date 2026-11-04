@@ -99,6 +99,79 @@ function texteNiveau(THREE, texte) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(20, 5, 1); sp.renderOrder = 15; return sp;
 }
 
+// ---------- Maquette : pièces détectées automatiquement (zones fermées du plan) ----------
+function dilater(m, W, H, r) {
+  const t = new Uint8Array(W * H), o = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) { let c = 0; const b = y * W;
+    for (let x = -r; x < W; x++) { if (x + r < W) c += m[b + x + r]; if (x - r - 1 >= 0) c -= m[b + x - r - 1]; if (x >= 0) t[b + x] = c > 0 ? 1 : 0; } }
+  for (let x = 0; x < W; x++) { let c = 0;
+    for (let y = -r; y < H; y++) { if (y + r < H) c += t[(y + r) * W + x]; if (y - r - 1 >= 0) c -= t[(y - r - 1) * W + x]; if (y >= 0) o[y * W + x] = c > 0 ? 1 : 0; } }
+  return o;
+}
+function composantes(m, W, H, valeur) { // étiquettes 4-connexes des pixels m == valeur
+  const lab = new Int32Array(W * H), q = new Int32Array(W * H), info = [null]; let nb = 0;
+  for (let s = 0; s < W * H; s++) {
+    if (m[s] !== valeur || lab[s]) continue;
+    nb++; let h = 0, t = 0, n = 0, bord = false, x0 = W, x1 = 0, y0 = H, y1 = 0; q[t++] = s; lab[s] = nb;
+    while (h < t) { const p = q[h++], x = p % W, y = (p / W) | 0; n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1) bord = true;
+      if (x > 0 && m[p - 1] === valeur && !lab[p - 1]) { lab[p - 1] = nb; q[t++] = p - 1; }
+      if (x < W - 1 && m[p + 1] === valeur && !lab[p + 1]) { lab[p + 1] = nb; q[t++] = p + 1; }
+      if (y > 0 && m[p - W] === valeur && !lab[p - W]) { lab[p - W] = nb; q[t++] = p - W; }
+      if (y < H - 1 && m[p + W] === valeur && !lab[p + W]) { lab[p + W] = nb; q[t++] = p + W; } }
+    info.push({ n, bord, x0, x1, y0, y1 });
+  }
+  return { lab, info, nb };
+}
+function analyserPieces(cv) {
+  const W = cv.width, H = cv.height, d = cv.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+  const noir = new Uint8Array(W * H); for (let p = 0, k = 0; p < W * H; p++, k += 4) noir[p] = (d[k] * 0.3 + d[k + 1] * 0.59 + d[k + 2] * 0.11) < 170 ? 1 : 0;
+  const r = Math.max(2, Math.round(W / 650)), dil = dilater(noir, W, H, r);
+  const vide = composantes(dil, W, H, 0), ok = vide.info.map((c, i) => i && c && !c.bord && c.n > W * H * 0.00005 && c.n < W * H * 0.2);
+  const lab = new Int32Array(W * H); for (let p = 0; p < W * H; p++) if (ok[vide.lab[p]]) lab[p] = vide.lab[p];
+  // Murs = traits épaissis qui bordent une pièce ; îlots isolés (textes, meubles) retirés.
+  const piece = new Uint8Array(W * H); for (let p = 0; p < W * H; p++) piece[p] = lab[p] ? 1 : 0;
+  const pres = dilater(piece, W, H, r + 2), murs = new Uint8Array(W * H);
+  const fin = dilater(noir, W, H, 1); for (let p = 0; p < W * H; p++) murs[p] = fin[p] && pres[p] ? 1 : 0;
+  const cm = composantes(murs, W, H, 1);
+  for (let p = 0; p < W * H; p++) if (murs[p]) { const c = cm.info[cm.lab[p]]; if (Math.max(c.x1 - c.x0, c.y1 - c.y0) < W * 0.025) murs[p] = 0; }
+  // Les îlots retirés rejoignent la pièce qui les entoure.
+  for (let it = 0; it < 2 * r + 3; it++) { let chg = 0;
+    for (let p = W; p < W * H - W; p++) if (!lab[p] && !murs[p] && pres[p]) { const v = lab[p - 1] || lab[p + 1] || lab[p - W] || lab[p + W]; if (v) { lab[p] = v; chg++; } }
+    if (!chg) break; }
+  return { W, H, lab, murs };
+}
+const CAT_PIECE = [[/sanit|wc|douche/i, [94, 196, 196]], [/circul|couloir|coursive|degt|d[ée]gag|hall|sas|escal|cage|asc/i, [168, 178, 190]], [/^ch\b|chambre/i, [170, 140, 220]],
+  [/salle de cours|sec|td|tp|informatique|cdi|amphi/i, [112, 160, 235]], [/labo|pr[ée]pa/i, [110, 200, 140]], [/bureau|accueil|direct|secr|vie scol|r[ée]union|infirm/i, [236, 186, 100]],
+  [/local|rangt|r[ée]serve|archive|stock|tech|entretien|office/i, [190, 160, 130]]];
+const PASTELS = [[150, 190, 225], [170, 210, 190], [215, 195, 160], [195, 175, 215], [225, 180, 180], [175, 205, 215]];
+const couleurPiece = (nom, id = 0) => (CAT_PIECE.find(([rx]) => rx.test(nom || "")) || [0, PASTELS[id % PASTELS.length]])[1];
+function geometrieMurs(THREE, murs, W, H, L, P, h) {
+  const c = Math.max(1, Math.round(W / 1000)), GW = Math.ceil(W / c), GH = Math.ceil(H / c), g = new Uint8Array(GW * GH);
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { let n = 0, t = 0; for (let yy = y * c; yy < Math.min(H, y * c + c); yy++) for (let xx = x * c; xx < Math.min(W, x * c + c); xx++) { t++; n += murs[yy * W + xx]; } g[y * GW + x] = n * 2 >= t ? 1 : 0; }
+  const boites = [], ouverts = new Map();
+  for (let y = 0; y <= GH; y++) {
+    const runs = []; if (y < GH) { let x = 0; while (x < GW) { if (g[y * GW + x]) { const x0 = x; while (x < GW && g[y * GW + x]) x++; runs.push(x0 + "," + x); } else x++; } }
+    const suiv = new Map();
+    runs.forEach(k => { if (ouverts.has(k)) { suiv.set(k, ouverts.get(k)); ouverts.delete(k); } else suiv.set(k, y); });
+    ouverts.forEach((y0, k) => { const [a, b] = k.split(",").map(Number); boites.push([a, y0, b, y]); });
+    ouverts.clear(); suiv.forEach((v, k) => ouverts.set(k, v));
+  }
+  const pos = [], nor = [], col = [], X = (gx) => (gx * c / W - 0.5) * L, Z = (gy) => (gy * c / H - 0.5) * P;
+  const face = (pts, n, cc) => { [0, 1, 2, 0, 2, 3].forEach(i => { pos.push(...pts[i]); nor.push(...n); col.push(...cc); }); };
+  const cote = [0.86, 0.9, 0.95], dessus = [0.97, 0.98, 1];
+  boites.forEach(([a, b, e, f]) => { const x0 = X(a), x1 = X(e), z0 = Z(b), z1 = Z(f);
+    face([[x0, h, z0], [x0, h, z1], [x1, h, z1], [x1, h, z0]], [0, 1, 0], dessus);
+    face([[x0, 0, z1], [x1, 0, z1], [x1, h, z1], [x0, h, z1]], [0, 0, 1], cote);
+    face([[x1, 0, z0], [x0, 0, z0], [x0, h, z0], [x1, h, z0]], [0, 0, -1], cote);
+    face([[x1, 0, z1], [x1, 0, z0], [x1, h, z0], [x1, h, z1]], [1, 0, 0], cote);
+    face([[x0, 0, z0], [x0, 0, z1], [x0, h, z1], [x0, h, z0]], [-1, 0, 0], cote); });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  return geo;
+}
+
 export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null }) {
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
@@ -108,7 +181,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">${matchMedia("(pointer:coarse)").matches ? "1 doigt : déplacer · 2 doigts : zoomer et tourner · double-tap : zoomer ici" : "Glisse pour tourner · molette pour zoomer · clic droit pour déplacer · double-clic : zoomer ici"}</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
+      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-maq>🏠 Maquette</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
     <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
     <div class="p3-vue"><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
@@ -151,34 +224,63 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
   // Un seul niveau en 3D (les autres sont masqués), ou tous empilés.
-  // Murs en relief : chaque trait droit du plan devient une paroi verticale lumineuse (les arcs de portes restent ouverts).
-  const HMUR = 1.6;
-  async function construireMurs(et) {
-    if (et.murs || !hd?.murs || !st.z) return;
-    const seg = await hd.murs(et.n); if (!vivant) return;
-    const z = st.z, L = 100, P = et.P, pos = [], col = [];
-    const bas = [0.16, 0.42, 0.58], haut = [0.01, 0.05, 0.09];
-    for (let i = 0; i < seg.length; i += 4) {
-      const fx1 = (seg[i] - z.x) / z.w, fy1 = (seg[i + 1] - z.y) / z.h, fx2 = (seg[i + 2] - z.x) / z.w, fy2 = (seg[i + 3] - z.y) / z.h;
-      if (fx1 < 0 || fx1 > 1 || fy1 < 0 || fy1 > 1 || fx2 < 0 || fx2 > 1 || fy2 < 0 || fy2 > 1) continue;
-      const x1 = (fx1 - 0.5) * L, z1 = (fy1 - 0.5) * P, x2 = (fx2 - 0.5) * L, z2 = (fy2 - 0.5) * P;
-      pos.push(x1, 0, z1, x2, 0, z2, x2, HMUR, z2, x1, 0, z1, x2, HMUR, z2, x1, HMUR, z1);
-      col.push(...bas, ...bas, ...haut, ...bas, ...haut, ...haut);
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
-    m.position.y = 0.03; m.renderOrder = 3; et.murs = m; m.visible = st.murs; et.groupe.add(m);
+  // Maquette : sols colorés par pièce + vrais murs (bords des pièces) en volume, éclairés.
+  const HMUR = 1.3; let lumieres = false;
+  async function construireMaquette(et) {
+    if (et.maq || !hd || !st.z) return;
+    const cv = await hd(et.n, mobile ? 1300 : 1700, st.z); if (!vivant) return;
+    const A = analyserPieces(cv), { W, H, lab } = A, L = 100, P = et.P;
+    // Nom et clés de chaque pièce.
+    const noms = {}, cles = {};
+    const proche = (fx, fy, R) => { const px = Math.round(fx * W), py = Math.round(fy * H);
+      for (let rr = 0; rr <= R; rr += 2) for (let dy = -rr; dy <= rr; dy += 2) for (const dx of (Math.abs(dy) === rr ? Array.from({ length: rr + 1 }, (_, i) => -rr + 2 * i) : [-rr, rr])) {
+        const x = px + dx, y = py + dy; if (x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x]) return lab[y * W + x]; } return 0; };
+    et.pieces.forEach(q => { const id = proche(q.fx, q.fy, Math.round(W / 60)); if (id && (!noms[id] || q.t.length > noms[id].length) && !/^b[aâ]timent/i.test(q.t)) noms[id] = q.t; });
+    et.points.forEach(p => { const id = proche(p.fx, p.fy, Math.round(W / 80));
+      if (id) (cles[id] = cles[id] || []).push(p.r.c); });
+    const sol = document.createElement("canvas"); sol.width = W; sol.height = H;
+    const tex = new THREE.CanvasTexture(sol); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = aniso;
+    const mSol = new THREE.Mesh(new THREE.PlaneGeometry(L, P), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    mSol.rotation.x = -Math.PI / 2; mSol.position.y = 0.01; mSol.renderOrder = 1; mSol.userData.sol = et.n; et.groupe.add(mSol);
+    if (!lumieres) { lumieres = true; scene.add(new THREE.AmbientLight(0xffffff, 0.75)); const dl = new THREE.DirectionalLight(0xffffff, 0.9); dl.position.set(50, 120, 70); scene.add(dl); }
+    const murs = new THREE.Mesh(geometrieMurs(THREE, A.murs, W, H, L, P, HMUR), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    murs.renderOrder = 4; et.groupe.add(murs);
+    et.maq = { A, noms, cles, sol, tex, mSol, murs, sel: 0 };
+    dessinerSol(et);
   }
-  async function majMurs() {
-    const b = $("[data-murs]"); b.classList.toggle("on", st.murs);
-    if (!st.murs) { etages.forEach(e => { if (e.murs) e.murs.visible = false; }); return; }
-    if (!hd?.murs) { window.toast?.("Fais d'abord « ✨ Rendre net + noms des pièces (PDF) »."); st.murs = false; b.classList.remove("on"); return; }
+  function dessinerSol(et) {
+    const m = et.maq; if (!m) return; const { W, H, lab, murs } = m.A, x = m.sol.getContext("2d"), img = x.createImageData(W, H), d = img.data, cache = {};
+    const coul = (id) => { if (cache[id]) return cache[id]; const ks = m.cles[id] || [], aCle = st.filtre && ks.includes(st.filtre);
+      let c = couleurPiece(m.noms[id], id); if (st.filtre) c = aCle ? [255, 200, 60] : c.map(v => v * 0.35); if (id === m.sel) c = [255, 255, 255];
+      return (cache[id] = [c[0], c[1], c[2], st.filtre && !aCle && id !== m.sel ? 170 : 250]); };
+    for (let p = 0, k = 0; p < W * H; p++, k += 4) { const id = lab[p]; if (!id || murs[p]) continue; const c = coul(id); d[k] = c[0]; d[k + 1] = c[1]; d[k + 2] = c[2]; d[k + 3] = c[3]; }
+    x.putImageData(img, 0, 0); m.tex.needsUpdate = true;
+  }
+  async function majMaquette() {
+    $("[data-maq]").classList.toggle("on", st.maq);
+    etages.forEach(e => { if (e.maq) { e.maq.mSol.visible = e.maq.murs.visible = st.maq; } if (e.plan) { e.plan.material.opacity = st.maq ? 0.45 : 1; } });
+    if (!st.maq) return;
+    if (!hd) { window.toast?.("Fais d'abord « ✨ Rendre net + noms des pièces (PDF) »."); st.maq = false; $("[data-maq]").classList.remove("on"); return; }
     const etat = $(".p3-etat"); etat.hidden = false;
-    for (const [i, e] of etages.entries()) { if (st.seul != null && e.n !== st.seul) continue; etat.textContent = `🧱 Montée des murs… ${i + 1} / ${etages.length}`;
-      try { await construireMurs(e); } catch (err) { console.warn("murs", err); } if (e.murs) e.murs.visible = st.murs; }
+    const liste = etages.filter(e => st.seul == null || e.n === st.seul);
+    for (const [i, e] of liste.entries()) { etat.textContent = `🏠 Construction de la maquette… ${i + 1} / ${liste.length}`;
+      try { await construireMaquette(e); } catch (err) { console.warn("maquette", err); } if (e.maq) { e.maq.mSol.visible = e.maq.murs.visible = st.maq; } }
     etat.hidden = true;
   }
-  function seulNiveau(n) { st.seul = n; placer(); if (st.murs) majMurs(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); ultraHD(n); } else allerCamera([70, 95, 100], [0, 0, 0]); }
+  function infoPiece(et, id) {
+    const m = et.maq, box = $(".p3-info"); m.sel = id; dessinerSol(et);
+    const ks = [...new Set(m.cles[id] || [])].sort(triCode), nb = (c) => (m.cles[id] || []).filter(x => x === c).length;
+    box.hidden = false;
+    box.innerHTML = `<b>🚪 ${esc(m.noms[id] || "Pièce sans nom sur le plan")}</b><span>${nomNiveau(et.niv)}</span>
+      <span>${ks.length ? "Clés de cette pièce :" : "Aucune clé repérée dans cette pièce."}</span>
+      ${ks.length ? `<div>${ks.map(c => `<button data-k="${esc(c)}" style="border-color:${couleurCle(c)}">🔑 ${esc(c)}${nb(c) > 1 ? ` ×${nb(c)}` : ""}</button>`).join("")}</div>` : ""}
+      <div><button data-plat>Voir à plat ›</button><button data-fi>✕</button></div>`;
+    box.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { st.filtre = b.dataset.k; filtreOptions(); dessinerPoints(); majSols(); });
+    box.querySelector("[data-plat]").onclick = () => { fermer(); onPlat?.(et.n, st.filtre); };
+    box.querySelector("[data-fi]").onclick = () => { box.hidden = true; m.sel = 0; dessinerSol(et); };
+  }
+  const majSols = () => etages.forEach(e => { if (e.maq) dessinerSol(e); });
+  function seulNiveau(n) { st.seul = n; placer(); if (st.maq) majMaquette(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); ultraHD(n); } else allerCamera([70, 95, 100], [0, 0, 0]); }
   // Niveau seul : redessiné encore plus fin (jusqu'à 6144 px sur ordinateur, 4096 sur téléphone).
   async function ultraHD(n) {
     const et = etages.find(e => e.n === n); if (!hd || !et?.plan || !st.z || et.ultra) return;
@@ -231,16 +333,16 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         mesh.rotation.x = -Math.PI / 2; mesh.position.set((fx - 0.5) * L, 0.12, (fy - 0.5) * P); mesh.userData.r = r.id; mesh.renderOrder = 5; groupe.add(mesh);
         const halo = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.5, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
         halo.rotation.x = -Math.PI / 2; halo.position.copy(mesh.position); halo.visible = false; groupe.add(halo);
-        return { r, mesh, halo };
+        return { r, mesh, halo, fx, fy };
       });
       const pieces = ((lesTextes || {})[e.n] || []).map(([fx0, fy0, t]) => ({ fx: (fx0 - z.x) / z.w, fy: (fy0 - z.y) / z.h, t })).filter(q => q.fx >= 0 && q.fx <= 1 && q.fy >= 0 && q.fy <= 1)
-        .map(q => ({ t: q.t, pos: new THREE.Vector3((q.fx - 0.5) * L, 0.5, (q.fy - 0.5) * P), sp: null }));
+        .map(q => ({ t: q.t, fx: q.fx, fy: q.fy, pos: new THREE.Vector3((q.fx - 0.5) * L, 0.5, (q.fy - 0.5) * P), sp: null }));
       etages.push({ n: e.n, niv: e.niv, P, groupe, points, pieces, cibleY: 0, plan: groupe.children.find(c => c.material?.map) });
     });
     placer(); etages.forEach(e => { e.groupe.position.y = 0; }); dessinerPoints();
     const d = Math.max(L, P) * 1.25; allerCamera([d * 0.55, d * 0.75, d * 0.8], [0, 0, 0]);
     $(".p3-load").hidden = true;
-    if (st.murs) majMurs();
+    if (st.maq) majMaquette();
     // Haute définition : les étages sont redessinés depuis le PDF (traits vectoriels → texture 4096 px).
     if (hd) {
       const jeton = (construire.jeton = (construire.jeton || 0) + 1), etat = $(".p3-etat");
@@ -280,6 +382,8 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     viser(e);
     const pts = etages.filter(et => et.groupe.visible).flatMap(et => et.points.filter(p => p.mesh.material.opacity > 0.5).map(p => p.mesh));
     const hp = ray.intersectObjects(pts)[0]; if (hp) { infoPin(hp.object.userData.r); return; }
+    if (st.maq) { const sols = etages.filter(et => et.groupe.visible && et.maq?.mSol.visible).map(et => et.maq.mSol), hs = ray.intersectObjects(sols)[0];
+      if (hs?.uv) { const et = etages.find(x => x.n === hs.object.userData.sol), { W, H, lab } = et.maq.A; const id = lab[Math.min(H - 1, Math.round((1 - hs.uv.y) * H)) * W + Math.min(W - 1, Math.round(hs.uv.x * W))]; if (id) { infoPiece(et, id); return; } } }
     const h = planVise(); if (h && st.seul == null) seulNiveau(h.object.userData.n);
   }
   function zoomIci(e) {
@@ -306,11 +410,12 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   $(".p3-leg").addEventListener("click", (e) => { if (e.target.closest("[data-plier]")) { $(".p3-leg").classList.toggle("plie"); return; }
     if (matchMedia("(max-width:700px)").matches && e.target.closest("[data-cle]")) setTimeout(() => $(".p3-leg").classList.add("plie"), 250);
   });
-  $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; filtreOptions(); dessinerPoints(); });
+  $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; majSols(); filtreOptions(); dessinerPoints(); });
   $(".p3-niv").addEventListener("click", (e) => { const pl = e.target.closest("[data-plat2]"); if (pl) { fermer(); onPlat?.(+pl.dataset.plat2, st.filtre); return; }
     if (e.target.closest("[data-tous]")) { seulNiveau(null); return; } const b = e.target.closest("[data-niv]"); if (b) seulNiveau(st.seul === +b.dataset.niv ? null : +b.dataset.niv); });
   $("[data-auto]").onclick = (e) => { st.auto = !st.auto; controls.autoRotate = st.auto; e.target.textContent = st.auto ? "⏸ Rotation" : "▶ Rotation"; };
   $("[data-ecart]").oninput = (e) => { st.ecart = +e.target.value; placer(); };
+  $("[data-maq]").onclick = () => { st.maq = !st.maq; majMaquette(); };
   $("[data-dessus]").onclick = () => { arreterAuto(); allerCamera([0, 150, 0.01], [0, 0, 0]); };
   $("[data-face]").onclick = () => { allerCamera([70, 95, 100], [0, 0, 0]); };
 
