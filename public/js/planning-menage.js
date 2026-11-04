@@ -24,29 +24,29 @@ const SPECIAUX = {
 // Planning de Marie (PDF « planning hebdomadaire ») — amorcé une seule fois.
 const tous = (v) => Object.fromEntries(JOURS.map(j => [j, v]));
 const lmv = (v) => ({ LUN: v, MAR: "", MER: v, JEU: "", VEN: v });
-// v2 (04/11/2026) : 36 h / semaine — trajets SVDP → Moutonnerie → Ferme (5 min chacun), réassort (chargement
-// à l'atelier le mardi, livraison sur les sites le mercredi : 15 min chacun), fiches de traçabilité 5 min / jour ;
-// Douanier Rousseau, AGA et Saint Vincent de Paul ramenés à 1 h 50 (1 h 40 à SVDP le mardi).
+// v3 (04/11/2026) : 36 h / semaine, début à 8 h — trajets SVDP → Moutonnerie → Ferme (5 min chacun),
+// réassort le mardi (30 min : passage à l'atelier, véhicule, retour ; la livraison dans les maisons est prise sur le
+// temps de ménage), fiches de traçabilité 5 min / jour ; Douanier Rousseau, AGA et Saint Vincent de Paul à 1 h 50
+// (1 h 40 à SVDP le mardi).
 const j5 = (L, Ma, Me, J, V) => ({ LUN: L, MAR: Ma, MER: Me, JEU: J, VEN: V });
 export const PLANNING_DEFAUT_MENAGE = {
   "Dispositif MNA": {
-    v: 2,
+    v: 3,
     agent: "Marie NICOLAIZEAU",
     lignes: [
-      { debut: "08:15", fin: "10:05", jours: tous("dr") },
-      { debut: "10:05", fin: "10:20", jours: tous("trajet") },
-      { debut: "10:20", fin: "12:10", jours: tous("aga") },
-      { debut: "12:10", fin: "13:10", jours: tous("pause") },
-      { debut: "13:10", fin: "14:50", jours: tous("svdp") },
-      { debut: "14:50", fin: "15:00", jours: j5("svdp", "reassort", "svdp", "svdp", "svdp") },
-      { debut: "15:00", fin: "15:05", jours: j5("trajet", "reassort", "trajet", "tracabilite", "trajet") },
+      { debut: "08:00", fin: "09:50", jours: tous("dr") },
+      { debut: "09:50", fin: "10:05", jours: tous("trajet") },
+      { debut: "10:05", fin: "11:55", jours: tous("aga") },
+      { debut: "11:55", fin: "12:55", jours: tous("pause") },
+      { debut: "12:55", fin: "14:35", jours: tous("svdp") },
+      { debut: "14:35", fin: "14:45", jours: j5("svdp", "reassort", "svdp", "svdp", "svdp") },
+      { debut: "14:45", fin: "14:50", jours: j5("trajet", "reassort", "trajet", "tracabilite", "trajet") },
+      { debut: "14:50", fin: "15:05", jours: j5("moutonnerie", "reassort", "moutonnerie", "", "moutonnerie") },
       { debut: "15:05", fin: "15:10", jours: j5("moutonnerie", "tracabilite", "moutonnerie", "", "moutonnerie") },
-      { debut: "15:10", fin: "16:05", jours: lmv("moutonnerie") },
-      { debut: "16:05", fin: "16:10", jours: lmv("trajet") },
-      { debut: "16:10", fin: "17:10", jours: lmv("la-ferme") },
-      { debut: "17:10", fin: "17:15", jours: j5("tracabilite", "", "reassort", "", "tracabilite") },
-      { debut: "17:15", fin: "17:25", jours: j5("", "", "reassort", "", "") },
-      { debut: "17:25", fin: "17:30", jours: j5("", "", "tracabilite", "", "") },
+      { debut: "15:10", fin: "15:50", jours: lmv("moutonnerie") },
+      { debut: "15:50", fin: "15:55", jours: lmv("trajet") },
+      { debut: "15:55", fin: "16:55", jours: lmv("la-ferme") },
+      { debut: "16:55", fin: "17:00", jours: lmv("tracabilite") },
     ],
   },
 };
@@ -104,12 +104,19 @@ function render() {
     </div>
     <div class="table-wrap pm-wrap"><table class="pm-t">
       <thead><tr><th>Heure</th>${JOURS.map(j => `<th>${NOMS[j]}<small>${fmtH(k.parJour[j])}</small></th>`).join("")}${ed ? "<th></th>" : ""}</tr></thead>
-      <tbody>${(p.lignes || []).map((l, i) => `<tr>
-        <th>${ed ? `<input type="time" data-pm="${i}|debut" value="${esc(l.debut)}"> – <input type="time" data-pm="${i}|fin" value="${esc(l.fin)}">` : `${esc(l.debut.replace(":", "h"))} – ${esc(l.fin.replace(":", "h"))}`}</th>
-        ${JOURS.map(j => { const v = l.jours?.[j] || ""; return ed ? `<td><select data-pm="${i}|${j}" style="--c:${couleur(v)}">${options(v)}</select></td>`
-          : `<td>${v ? `<span class="pm-case ${SPECIAUX[v] ? "spe" : ""}" style="--c:${couleur(v)}">${esc(libelle(v))}</span>` : ""}</td>`; }).join("")}
+      <tbody>${(() => {
+        const L = p.lignes || [];
+        // Lecture : une même maison sur plusieurs créneaux qui se suivent = un seul grand rectangle (fusion verticale).
+        const span = {}; if (!ed) JOURS.forEach(j => { for (let i = 0; i < L.length;) { const v = L[i].jours?.[j] || ""; let n = 1; while (i + n < L.length && (L[i + n].jours?.[j] || "") === v && L[i + n].debut === L[i + n - 1].fin) n++; span[`${i}|${j}`] = n; for (let k = 1; k < n; k++) span[`${i + k}|${j}`] = 0; i += n; } });
+        const hh = (t) => t.replace(":", "h");
+        return L.map((l, i) => `<tr style="height:${ed ? "auto" : Math.max(26, Math.round(duree(l) * 0.75)) + "px"}">
+        <th>${ed ? `<input type="time" data-pm="${i}|debut" value="${esc(l.debut)}"> – <input type="time" data-pm="${i}|fin" value="${esc(l.fin)}">` : `${esc(hh(l.debut))} – ${esc(hh(l.fin))}`}</th>
+        ${JOURS.map(j => { const v = l.jours?.[j] || ""; if (ed) return `<td><select data-pm="${i}|${j}" style="--c:${couleur(v)}">${options(v)}</select></td>`;
+          const n = span[`${i}|${j}`]; if (n === 0) return "";
+          const fin = L[i + n - 1].fin, dureeBloc = minutes(fin) - minutes(l.debut);
+          return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<span class="pm-case ${SPECIAUX[v] ? "spe" : ""} ${dureeBloc < 30 ? "mini" : ""}" style="--c:${couleur(v)}" title="${esc(libelle(v))} · ${hh(l.debut)} – ${hh(fin)}">${esc(libelle(v))}${dureeBloc >= 30 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}</span>` : ""}</td>`; }).join("")}
         ${ed ? `<td><button class="del-btn" data-pm-del="${i}">🗑️</button></td>` : ""}
-      </tr>`).join("")}</tbody>
+      </tr>`).join(""); })()}</tbody>
     </table></div>
     ${ed ? `<button class="nav-btn" id="pm-add">➕ Ajouter un créneau</button>` : ""}
     <div class="pm-bas">

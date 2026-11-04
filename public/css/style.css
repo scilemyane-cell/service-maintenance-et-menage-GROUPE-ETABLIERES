@@ -4884,3 +4884,9 @@ body:has(.gh-raccourcis) #app{padding-bottom:84px}
 @media (max-width:600px){.gh-raccourcis{bottom:8px;gap:4px}.gh-raccourcis a{padding:7px 10px;font-size:12px}}
 .dst-cat-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}.dst-cat-g h4{margin:0 0 8px}
 body:has(.gh-raccourcis) .maj-bandeau{bottom:84px}
+/* Planning ménage : créneaux fusionnés (un seul rectangle par maison), hauteur selon la durée */
+table.pm-t td{padding:0;position:relative}
+table.pm-t td .pm-case{position:absolute;inset:2px 3px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;overflow:hidden;padding:2px 4px}
+table.pm-t td .pm-case small{font-weight:600;font-size:11px;opacity:.85}
+table.pm-t td .pm-case.mini{padding:2px 4px;font-size:10.5px;font-weight:700}
+table.pm-t tbody th{font-size:11.5px;color:var(--text-dim)}
