@@ -218,6 +218,18 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     etages.forEach(e => { e.groupe.position.y += (e.cibleY - e.groupe.position.y) * 0.08; });
     if (cible) { cible.t = Math.min(1, cible.t + 0.035); const k = 1 - Math.pow(1 - cible.t, 3);
       camera.position.lerpVectors(cible.p0, cible.pos, k); controls.target.lerpVectors(cible.g0, cible.tgt, k); if (cible.t >= 1) cible = null; }
+    // De près : chaque point affiche son numéro de clé (les 60 plus proches).
+    boucle.n = (boucle.n || 0) + 1;
+    if (boucle.n % 8 === 0) {
+      const v = new THREE.Vector3(), proches = [];
+      etages.forEach(e => e.points.forEach(p => { const visible = p.mesh.material.opacity > 0.5 && !(st.filtre && p.r.c === st.filtre);
+        if (!visible) { if (p.petite) p.petite.visible = false; return; }
+        p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); if (d < 170) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
+      proches.sort((a, b) => a[0] - b[0]).forEach(([, p, e], i) => {
+        if (i >= 50) { if (p.petite) p.petite.visible = false; return; }
+        if (!p.petite) { p.petite = etiquette(THREE, p.r.c, couleurCle(p.r.c), 0.42); p.petite.position.set(p.mesh.position.x, 1.1, p.mesh.position.z); e.groupe.add(p.petite); }
+        p.petite.visible = true; });
+    }
     const t = performance.now() / 1000; etages.forEach(e => e.points.forEach(p => { if (p.halo.visible) { const s = 1 + (t * 1.2 % 1) * 1.4; p.halo.scale.setScalar(s); p.halo.material.opacity = 0.9 * (1 - (t * 1.2 % 1)); } }));
     controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(boucle);
   };
