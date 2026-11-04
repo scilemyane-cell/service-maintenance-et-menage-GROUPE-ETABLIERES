@@ -108,7 +108,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">${matchMedia("(pointer:coarse)").matches ? "1 doigt : déplacer · 2 doigts : zoomer et tourner · double-tap : zoomer ici" : "Glisse pour tourner · molette pour zoomer · clic droit pour déplacer · double-clic : zoomer ici"}</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
+      <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-murs>🧱 Murs en relief</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
     <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
     <div class="p3-vue"><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
@@ -151,7 +151,34 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
   // Un seul niveau en 3D (les autres sont masqués), ou tous empilés.
-  function seulNiveau(n) { st.seul = n; placer(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); ultraHD(n); } else allerCamera([70, 95, 100], [0, 0, 0]); }
+  // Murs en relief : chaque trait droit du plan devient une paroi verticale lumineuse (les arcs de portes restent ouverts).
+  const HMUR = 1.6;
+  async function construireMurs(et) {
+    if (et.murs || !hd?.murs || !st.z) return;
+    const seg = await hd.murs(et.n); if (!vivant) return;
+    const z = st.z, L = 100, P = et.P, pos = [], col = [];
+    const bas = [0.16, 0.42, 0.58], haut = [0.01, 0.05, 0.09];
+    for (let i = 0; i < seg.length; i += 4) {
+      const fx1 = (seg[i] - z.x) / z.w, fy1 = (seg[i + 1] - z.y) / z.h, fx2 = (seg[i + 2] - z.x) / z.w, fy2 = (seg[i + 3] - z.y) / z.h;
+      if (fx1 < 0 || fx1 > 1 || fy1 < 0 || fy1 > 1 || fx2 < 0 || fx2 > 1 || fy2 < 0 || fy2 > 1) continue;
+      const x1 = (fx1 - 0.5) * L, z1 = (fy1 - 0.5) * P, x2 = (fx2 - 0.5) * L, z2 = (fy2 - 0.5) * P;
+      pos.push(x1, 0, z1, x2, 0, z2, x2, HMUR, z2, x1, 0, z1, x2, HMUR, z2, x1, HMUR, z1);
+      col.push(...bas, ...bas, ...haut, ...bas, ...haut, ...haut);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.position.y = 0.03; m.renderOrder = 3; et.murs = m; m.visible = st.murs; et.groupe.add(m);
+  }
+  async function majMurs() {
+    const b = $("[data-murs]"); b.classList.toggle("on", st.murs);
+    if (!st.murs) { etages.forEach(e => { if (e.murs) e.murs.visible = false; }); return; }
+    if (!hd?.murs) { window.toast?.("Fais d'abord « ✨ Rendre net + noms des pièces (PDF) »."); st.murs = false; b.classList.remove("on"); return; }
+    const etat = $(".p3-etat"); etat.hidden = false;
+    for (const [i, e] of etages.entries()) { if (st.seul != null && e.n !== st.seul) continue; etat.textContent = `🧱 Montée des murs… ${i + 1} / ${etages.length}`;
+      try { await construireMurs(e); } catch (err) { console.warn("murs", err); } if (e.murs) e.murs.visible = st.murs; }
+    etat.hidden = true;
+  }
+  function seulNiveau(n) { st.seul = n; placer(); if (st.murs) majMurs(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); ultraHD(n); } else allerCamera([70, 95, 100], [0, 0, 0]); }
   // Niveau seul : redessiné encore plus fin (jusqu'à 6144 px sur ordinateur, 4096 sur téléphone).
   async function ultraHD(n) {
     const et = etages.find(e => e.n === n); if (!hd || !et?.plan || !st.z || et.ultra) return;
@@ -208,11 +235,12 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
       });
       const pieces = ((lesTextes || {})[e.n] || []).map(([fx0, fy0, t]) => ({ fx: (fx0 - z.x) / z.w, fy: (fy0 - z.y) / z.h, t })).filter(q => q.fx >= 0 && q.fx <= 1 && q.fy >= 0 && q.fy <= 1)
         .map(q => ({ t: q.t, pos: new THREE.Vector3((q.fx - 0.5) * L, 0.5, (q.fy - 0.5) * P), sp: null }));
-      etages.push({ n: e.n, niv: e.niv, groupe, points, pieces, cibleY: 0, plan: groupe.children.find(c => c.material?.map) });
+      etages.push({ n: e.n, niv: e.niv, P, groupe, points, pieces, cibleY: 0, plan: groupe.children.find(c => c.material?.map) });
     });
     placer(); etages.forEach(e => { e.groupe.position.y = 0; }); dessinerPoints();
     const d = Math.max(L, P) * 1.25; allerCamera([d * 0.55, d * 0.75, d * 0.8], [0, 0, 0]);
     $(".p3-load").hidden = true;
+    if (st.murs) majMurs();
     // Haute définition : les étages sont redessinés depuis le PDF (traits vectoriels → texture 4096 px).
     if (hd) {
       const jeton = (construire.jeton = (construire.jeton || 0) + 1), etat = $(".p3-etat");
@@ -283,6 +311,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     if (e.target.closest("[data-tous]")) { seulNiveau(null); return; } const b = e.target.closest("[data-niv]"); if (b) seulNiveau(st.seul === +b.dataset.niv ? null : +b.dataset.niv); });
   $("[data-auto]").onclick = (e) => { st.auto = !st.auto; controls.autoRotate = st.auto; e.target.textContent = st.auto ? "⏸ Rotation" : "▶ Rotation"; };
   $("[data-ecart]").oninput = (e) => { st.ecart = +e.target.value; placer(); };
+  $("[data-murs]").onclick = () => { st.murs = !st.murs; majMurs(); };
   $("[data-dessus]").onclick = () => { arreterAuto(); allerCamera([0, 150, 0.01], [0, 0, 0]); };
   $("[data-face]").onclick = () => { allerCamera([70, 95, 100], [0, 0, 0]); };
 
@@ -335,7 +364,7 @@ const STYLE = `<style id="p3-style">
 .p3-hb select,.p3-hb button,.p3-niv button,.p3-info button{background:rgba(40,120,170,.18);color:#dff6ff;border:1px solid rgba(120,225,255,.35);border-radius:9px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;backdrop-filter:blur(6px)}
 .p3-hb select option{background:#0b1a2a}.p3-hb button:hover,.p3-niv button:hover,.p3-info button:hover{background:rgba(80,190,255,.3)}
 .p3-ec{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#9fd3ea}.p3-ec input{accent-color:#5fd4ff;width:110px}
-.p3-niv{position:absolute;left:16px;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;gap:8px}.p3-niv small{font-size:11px;color:#7fb3cc}.p3-nl{display:flex;gap:4px}.p3-nl [data-plat2]{min-width:0;padding:4px 9px;justify-content:center;font-size:16px}.p3-niv button.on{background:rgba(80,190,255,.35);border-color:#7fe8ff}
+.p3-niv{position:absolute;left:16px;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;gap:8px}.p3-niv small{font-size:11px;color:#7fb3cc}.p3-nl{display:flex;gap:4px}.p3-nl [data-plat2]{min-width:0;padding:4px 9px;justify-content:center;font-size:16px}.p3-hb button.on{background:rgba(80,190,255,.4);border-color:#7fe8ff;box-shadow:0 0 12px rgba(80,200,255,.5)}.p3-niv button.on{background:rgba(80,190,255,.35);border-color:#7fe8ff}
 .p3-niv button{display:flex;flex-direction:column;align-items:flex-start;min-width:96px;padding:8px 12px}.p3-niv b{font-size:15px}.p3-niv em{font-style:normal;font-size:11.5px;color:#ffb3bb;min-height:14px}
 .p3-vue{flex:1;position:relative;min-height:0}.p3-vue canvas{display:block;touch-action:none;cursor:grab}.p3-vue canvas:active{cursor:grabbing}
 .p3-leg{position:absolute;right:16px;top:64px;bottom:16px;z-index:3;width:170px;overflow:auto;display:flex;flex-direction:column;gap:4px;scrollbar-width:thin}

@@ -74,8 +74,48 @@ async function documentPdf(dossierId, morceaux) {
   return pdfCache.get(dossierId);
 }
 // Rendu net d'une zone d'une page (z en fractions de page), largeur « larg » pixels.
+// Traits du plan (vectoriels) : segments en fractions de page, pour monter les murs en 3D.
+// Les courbes (arcs de portes) sont ignorées → les portes restent des ouvertures.
+const segCache = new Map();
+async function segmentsPage(dossierId, morceaux, n) {
+  const cle = `${dossierId}-${n}`; if (segCache.has(cle)) return segCache.get(cle);
+  const { pdfjs, pdf } = await documentPdf(dossierId, morceaux);
+  const page = await pdf.getPage(n), vp = page.getViewport({ scale: 1 }), ol = await page.getOperatorList(), O = pdfjs.OPS;
+  const mul = (m, t) => [m[0] * t[0] + m[2] * t[1], m[1] * t[0] + m[3] * t[1], m[0] * t[2] + m[2] * t[3], m[1] * t[2] + m[3] * t[3], m[0] * t[4] + m[2] * t[5] + m[4], m[1] * t[4] + m[3] * t[5] + m[5]];
+  let ctm = [1, 0, 0, 1, 0, 0], couleur = [0, 0, 0]; const pile = [], out = [];
+  let attente = [];
+  const pt = (x, y) => { const X = ctm[0] * x + ctm[2] * y + ctm[4], Y = ctm[1] * x + ctm[3] * y + ctm[5]; const [a, b] = vp.convertToViewportPoint(X, Y); return [a / vp.width, b / vp.height]; };
+  const STROKES = new Set([O.stroke, O.closeStroke, O.fillStroke, O.eoFillStroke, O.closeFillStroke, O.closeEOFillStroke]);
+  for (let i = 0; i < ol.fnArray.length && out.length < 4 * 70000; i++) {
+    const fn = ol.fnArray[i], a = ol.argsArray[i];
+    if (fn === O.save) pile.push([ctm, couleur]);
+    else if (fn === O.restore) { const v = pile.pop(); if (v) [ctm, couleur] = v; }
+    else if (fn === O.transform) ctm = mul(ctm, a);
+    else if (fn === O.paintFormXObjectBegin) { pile.push([ctm, couleur]); if (Array.isArray(a?.[0]) && a[0].length === 6) ctm = mul(ctm, a[0]); }
+    else if (fn === O.paintFormXObjectEnd) { const v = pile.pop(); if (v) [ctm, couleur] = v; }
+    else if (fn === O.setStrokeRGBColor) couleur = [a[0], a[1], a[2]];
+    else if (fn === O.setStrokeGray) couleur = [a[0] * 255, a[0] * 255, a[0] * 255];
+    else if (fn === O.constructPath) {
+      const ops = a[0], ar = a[1]; let j = 0, cx = 0, cy = 0, sx = 0, sy = 0;
+      for (const op of ops) {
+        if (op === O.moveTo) { cx = ar[j++]; cy = ar[j++]; sx = cx; sy = cy; }
+        else if (op === O.lineTo) { const x = ar[j++], y = ar[j++]; attente.push([cx, cy, x, y]); cx = x; cy = y; }
+        else if (op === O.rectangle) { const x = ar[j++], y = ar[j++], w = ar[j++], h = ar[j++]; attente.push([x, y, x + w, y], [x + w, y, x + w, y + h], [x + w, y + h, x, y + h], [x, y + h, x, y]); cx = x; cy = y; }
+        else if (op === O.curveTo) { cx = ar[j + 4]; cy = ar[j + 5]; j += 6; }
+        else if (op === O.curveTo2 || op === O.curveTo3) { cx = ar[j + 2]; cy = ar[j + 3]; j += 4; }
+        else if (op === O.closePath) { if (cx !== sx || cy !== sy) attente.push([cx, cy, sx, sy]); cx = sx; cy = sy; }
+      }
+    } else if (STROKES.has(fn)) {
+      const [r, g, b] = couleur, colore = Math.max(r, g, b) - Math.min(r, g, b) > 60;
+      if (!colore) attente.forEach(([x1, y1, x2, y2]) => { const [a1, b1] = pt(x1, y1), [a2, b2] = pt(x2, y2);
+        if (Math.hypot(a2 - a1, b2 - b1) > 0.0012) out.push(+a1.toFixed(5), +b1.toFixed(5), +a2.toFixed(5), +b2.toFixed(5)); });
+      attente = [];
+    } else if (fn === O.fill || fn === O.eoFill || fn === O.endPath) attente = [];
+  }
+  const res = new Float32Array(out); segCache.set(cle, res); return res;
+}
 export function rendeurHD(dossierId, morceaux) {
-  return async (n, larg, z) => {
+  const f = async (n, larg, z) => {
     const { pdfjs, pdf } = await documentPdf(dossierId, morceaux);
     const page = await pdf.getPage(n), v1 = page.getViewport({ scale: 1 });
     const scale = larg / (z.w * v1.width), vp = page.getViewport({ scale, offsetX: -z.x * v1.width * scale, offsetY: -z.y * v1.height * scale });
@@ -84,6 +124,8 @@ export function rendeurHD(dossierId, morceaux) {
     await page.render({ canvasContext: cx, viewport: vp, annotationMode: pdfjs.AnnotationMode.DISABLE }).promise;
     return cv;
   };
+  f.murs = (n) => segmentsPage(dossierId, morceaux, n);
+  return f;
 }
 
 export async function planClesExiste(dossierId) {
