@@ -188,6 +188,8 @@ export function mountSuiviDemandesTab(container, user) {
   }
   const ouvrir = window.__suiviOuvrir; window.__suiviOuvrir = null;
   if (ouvrir?.id) ouvrirDemandeSeule(ouvrir.id, ouvrir.site);
+  const siteVoulu = window.__suiviSite; window.__suiviSite = null;
+  if (siteVoulu) ouvrirSite(siteVoulu);
   render(container);
   // Quota : copie des demandes gardée sur l'appareil, seules les demandes
   // modifiées depuis la dernière visite sont relues (cache-delta.js).

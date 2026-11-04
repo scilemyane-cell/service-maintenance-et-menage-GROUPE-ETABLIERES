@@ -989,15 +989,28 @@
         watchStockAlertCount((counts) => { stockAlertCount = counts; if (currentCategory === null) render(); });
       }
       setTimeout(prechargerModules, 600);
-      mountDashboard(content, currentUser, cats, (catId, dossierIdAOuvrir) => {
+      const ouvrirCategorie = (catId, dossierIdAOuvrir) => {
         currentCategory = catId;
         const cat = allCategories(currentUser).find(c => c.id === catId);
         const subs = categorySubtabsFor(cat, currentUser);
         const voulu = window.ouvrirSousOnglet; window.ouvrirSousOnglet = null;
         currentSubtab = (voulu && subs.some(s => s.id === voulu) ? voulu : subs[0]?.id) || null;
         if (dossierIdAOuvrir) window.siteDossierDeepLinkId = dossierIdAOuvrir;
-        render();
-      }, (catId, sens) => {
+        render(); window.scrollTo(0, 0);
+      };
+      // Version TEST : nouvel accueil (refonte) ; « Ancien accueil » pour revenir.
+      const enTest = location.pathname.startsWith("/beta");
+      let refonteOff = false; try { refonteOff = localStorage.getItem("refonte-off") === "1"; } catch { /* */ }
+      if (enTest && !refonteOff) {
+        content.innerHTML = `<div class="hint">Chargement…</div>`;
+        import("./refonte.js").then(m => { if (currentCategory === null) m.mountRefonte(content, currentUser, cats, ouvrirCategorie); })
+          .catch(e => { console.error(e); content.innerHTML = `<div class="hint">Nouvel accueil indisponible : ${e?.message || e}</div>`; });
+        return;
+      }
+      if (enTest) setTimeout(() => { if (currentCategory !== null || document.getElementById("rf-essai")) return; const b = document.createElement("button"); b.id = "rf-essai"; b.className = "nav-btn"; b.textContent = "✨ Essayer le nouvel accueil";
+        b.style.cssText = "position:fixed;right:16px;bottom:96px;z-index:900;box-shadow:0 6px 20px rgba(0,0,0,.25)"; b.onclick = () => { try { localStorage.removeItem("refonte-off"); } catch { /* */ } b.remove(); render(); }; document.body.appendChild(b);
+        const nettoyer = setInterval(() => { if (currentCategory !== null) { b.remove(); clearInterval(nettoyer); } }, 500); }, 300);
+      mountDashboard(content, currentUser, cats, ouvrirCategorie, (catId, sens) => {
         // Glisser-déposer : reçoit directement le nouvel ordre complet.
         if (Array.isArray(catId)) { saveHomeOrder(catId).catch(err => { console.error("saveHomeOrder:", err); alert("Ordre des tuiles non enregistré : " + (err?.message || err)); }); return; }
         // Échange la position de cette catégorie avec sa voisine dans
