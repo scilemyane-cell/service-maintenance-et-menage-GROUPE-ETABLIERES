@@ -80,10 +80,10 @@ function etiquette(THREE, texte, couleur, taille = 1) {
   const h = 2.2 * taille; sp.scale.set(h * w / c.height, h, 1); sp.renderOrder = 20; return sp;
 }
 function texteNiveau(THREE, texte) {
-  const c = document.createElement("canvas"), x = c.getContext("2d"); c.width = 512; c.height = 160;
+  const c = document.createElement("canvas"), x = c.getContext("2d"); c.width = 640; c.height = 160;
   x.font = "800 120px system-ui,sans-serif"; x.fillStyle = "rgba(170,235,255,.95)"; x.shadowColor = "rgba(80,200,255,.9)"; x.shadowBlur = 24; x.textBaseline = "middle"; x.fillText(texte, 10, 84);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(16, 5, 1); sp.renderOrder = 15; return sp;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(20, 5, 1); sp.renderOrder = 15; return sp;
 }
 
 export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat }) {
