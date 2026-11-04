@@ -10,9 +10,8 @@ import { esc } from "./astreinte-logic.js";
 const URGENCES = ["Normal", "Urgent", "À planifier", "Critique"];
 const aujourdhui = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-export async function creerDemande(champs) {
+export async function creerDemande(champs, refNouvelle = doc(collection(db, "demandes"))) {
   const refCompteur = doc(db, "config", "compteur-demandes-app");
-  const refNouvelle = doc(collection(db, "demandes"));
   return runTransaction(db, async (tx) => {
     const s = await tx.get(refCompteur);
     const n = (s.exists() ? (s.data().dernier || 0) : 0) + 1;
@@ -54,6 +53,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       <label>Demandeur<input name="demandeur" value="${esc(utilisateur)}"></label>
       <label>Logement occupé<select name="logementOccupe"><option value="">—</option><option>OUI</option><option>NON</option></select></label>
     </div>
+    <div class="ndm-photos"><label class="ndm-photo-btn">📷 Ajouter des photos<input type="file" accept="image/*" multiple data-ndm-photos hidden></label><div class="ndm-vignettes" data-ndm-vign></div></div>
     <div class="ndm-etat" aria-live="polite"></div>
     <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Annuler</button><button type="submit" class="dps-enregistrer">➕ Créer la demande</button></div>
   </form>`;
@@ -70,6 +70,15 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   };
   f.siteChoix.addEventListener("change", () => { majSite(); if (f.siteChoix.value === "__autre") f.siteAutre.focus(); });
   f.siteAutre.addEventListener("input", majSite);
+  // Photos : compressées tout de suite (aperçu), envoyées après la création de la demande.
+  const photos = [];
+  const dessinerVign = () => { const z = fond.querySelector("[data-ndm-vign]"); z.innerHTML = photos.map((p, i) => `<span class="ndm-vign"><img src="${p}" alt=""><button type="button" data-ndm-retirer="${i}" aria-label="Retirer">✕</button></span>`).join("");
+    z.querySelectorAll("[data-ndm-retirer]").forEach(b => b.onclick = () => { photos.splice(+b.dataset.ndmRetirer, 1); dessinerVign(); }); };
+  fond.querySelector("[data-ndm-photos]").addEventListener("change", async (e) => {
+    const { compresserImage } = await import("./demandes-photos.js");
+    for (const fi of [...e.target.files].slice(0, 6 - photos.length)) { try { photos.push(await compresserImage(fi)); } catch { /* image illisible */ } }
+    e.target.value = ""; dessinerVign();
+  });
   fond.querySelector("[data-ndm-ia]").addEventListener("click", async (e) => {
     const t = f.descriptif.value.trim(); if (!t) { f.descriptif.focus(); return; }
     const b = e.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = "⏳ IA…";
@@ -85,11 +94,18 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
     if (!v.descriptif.trim()) return;
     const bouton = f.querySelector('[type="submit"]'); bouton.disabled = true; etat.textContent = "⏳ Création…";
     try {
+      const ref = doc(collection(db, "demandes"));
       const numero = await creerDemande({
         dateDemande: aujourdhui(), site: v.site.trim(), association: v.association, local: v.local.trim(), type: v.type.trim(),
         urgence: v.urgence, descriptif: v.descriptif.trim(), demandeur: v.demandeur.trim(), logementOccupe: v.logementOccupe,
-        statut: "Pris en compte", dateStatut: aujourdhui(), creePar: utilisateur,
-      });
+        statut: "Pris en compte", dateStatut: aujourdhui(), creePar: utilisateur, ...(photos.length ? { nbPhotos: photos.length } : {}),
+      }, ref);
+      if (photos.length) {
+        etat.textContent = "⏳ Envoi des photos…";
+        const { ajouterPhotoDemande } = await import("./demandes-photos.js");
+        let ko = 0; for (const p of photos) { try { await ajouterPhotoDemande(ref.id, p, utilisateur); } catch (er) { ko++; console.warn("Photo demande :", er); } }
+        if (ko) window.toast?.(`⚠️ ${ko} photo(s) non envoyée(s)`, "error");
+      }
       window.toast?.(`✓ Demande ${numero} créée — elle sera ajoutée au fichier Excel.`);
       fermer(); onCree(numero, v.site.trim());
     } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); bouton.disabled = false; }

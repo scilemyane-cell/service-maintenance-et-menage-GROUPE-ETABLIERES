@@ -205,6 +205,35 @@ function traceHTML(l) {
   return `<details class="dps-trace" data-histo="${esc(l.id)}"><summary>📜 Historique</summary><div class="dps-histo-l"><small>⏳ Chargement…</small></div>
     ${e.length ? `<p class="dps-histo-st">Dernières étapes connues</p><ul>${e.map(([i, quoi, qui, le]) => `<li><span>${i}</span><b>${esc(quoi)}</b> — ${esc(qui)}${frD(le) ? ` <small>le ${frD(le)}</small>` : ""}</li>`).join("")}</ul>` : ""}</details>`;
 }
+// ---------- Photos d'une demande (jointes à la création, ou ajoutées ensuite par n'importe qui de l'équipe) ----------
+function photosBlocHTML(l) {
+  return `<details class="dps-photos" data-photos="${esc(l.id)}"><summary>📷 Photos${l.nbPhotos ? ` <b>${l.nbPhotos}</b>` : ""}</summary>
+    <div class="dps-photos-l"><small>⏳ Chargement…</small></div>
+    <label class="dps-photo-ajout">➕ Ajouter des photos<input type="file" accept="image/*" multiple hidden data-photos-ajout="${esc(l.id)}"></label></details>`;
+}
+async function chargerPhotos(d) {
+  const box = d.querySelector(".dps-photos-l");
+  try {
+    const m = await import("./demandes-photos.js"), l = await m.photosDemande(d.dataset.photos);
+    box.innerHTML = l.length ? l.map((p, i) => `<img src="${p.data}" alt="" data-ph-i="${i}" title="${esc(p.par || "")}${p.le ? ` · ${new Date(p.le).toLocaleDateString("fr-FR")}` : ""}">`).join("") : `<small>Aucune photo pour l'instant.</small>`;
+    box.querySelectorAll("[data-ph-i]").forEach(im => im.onclick = () => m.voirPhotos(l, +im.dataset.phI));
+  } catch (e) { box.innerHTML = `<small>Photos indisponibles (${esc(e?.message || e)})</small>`; }
+}
+if (!window.__dpsPhotosEcoute) {
+  window.__dpsPhotosEcoute = true;
+  document.addEventListener("toggle", (ev) => { const d = ev.target; if (d?.matches?.("details.dps-photos[data-photos]") && d.open) chargerPhotos(d); }, true);
+  document.addEventListener("change", async (ev) => {
+    const inp = ev.target; if (!inp?.matches?.("[data-photos-ajout]") || !inp.files?.length) return;
+    const d = inp.closest("details.dps-photos"), box = d?.querySelector(".dps-photos-l"); if (box) box.innerHTML = "<small>⏳ Envoi des photos…</small>";
+    try {
+      const m = await import("./demandes-photos.js");
+      for (const f of [...inp.files].slice(0, 6)) await m.ajouterPhotoDemande(inp.dataset.photosAjout, await m.compresserImage(f), window.__smmNom || "");
+      window.toast?.("📷 Photo(s) ajoutée(s)", "success");
+    } catch (e) { alert("Photo non envoyée : " + (e?.message || e)); }
+    inp.value = ""; if (d) chargerPhotos(d);
+  }, true);
+}
+
 // Chargement de l'historique détaillé à l'ouverture du bloc (écoute unique pour tout le document).
 if (!window.__dpsHistoEcoute) {
   window.__dpsHistoEcoute = true;
@@ -908,6 +937,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
           <div class="dps-lier-champs"><select data-echanger-choix><option value="">— Choisir la bonne demande —</option>${tousDuSite.filter(x => x.id !== l.id).sort((a, b) => (a.local || "").localeCompare(b.local || "", "fr", { numeric: true })).map(x => `<option value="${esc(x.id)}">${esc(x.n)} · ${x.date ? fr(x.date) : "?"}${x.local ? ` · ${esc(x.local)}` : ""} — ${esc((x.descr || "").slice(0, 60))}</option>`).join("")}</select>
           <button type="button" class="dps-action-ok" data-echanger="${esc(l.id)}">↔️ Échanger le suivi</button></div></details>` : ""}`;
       })()}
+      ${photosBlocHTML(l)}
       ${traceHTML(l)}
       ${opts.sansAction ? "" : blocActionHTML(l, { perms, uid, utilisateurs })}
       <div class="dps-etat" aria-live="polite"></div>
