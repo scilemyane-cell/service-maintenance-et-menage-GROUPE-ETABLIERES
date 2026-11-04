@@ -109,7 +109,7 @@ function render() {
         // Lecture : une même maison sur plusieurs créneaux qui se suivent = un seul grand rectangle (fusion verticale).
         const span = {}; if (!ed) JOURS.forEach(j => { for (let i = 0; i < L.length;) { const v = L[i].jours?.[j] || ""; let n = 1; while (i + n < L.length && (L[i + n].jours?.[j] || "") === v && L[i + n].debut === L[i + n - 1].fin) n++; span[`${i}|${j}`] = n; for (let k = 1; k < n; k++) span[`${i + k}|${j}`] = 0; i += n; } });
         const hh = (t) => t.replace(":", "h");
-        return L.map((l, i) => `<tr style="height:${ed ? "auto" : Math.max(26, Math.round(duree(l) * 0.75)) + "px"}">
+        return L.map((l, i) => `<tr style="height:${ed ? "auto" : Math.max(26, Math.round(duree(l) * 1.05)) + "px"}">
         <th>${ed ? `<input type="time" data-pm="${i}|debut" value="${esc(l.debut)}"> – <input type="time" data-pm="${i}|fin" value="${esc(l.fin)}">` : `${esc(hh(l.debut))} – ${esc(hh(l.fin))}`}</th>
         ${JOURS.map(j => { const v = l.jours?.[j] || ""; if (ed) return `<td><select data-pm="${i}|${j}" style="--c:${couleur(v)}">${options(v)}</select></td>`;
           const n = span[`${i}|${j}`]; if (n === 0) return "";
@@ -122,8 +122,8 @@ function render() {
     <div class="pm-bas">
       <div class="form-card"><h3>⏱️ Heures travaillées</h3>
         <table class="pm-r">${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table>
-        ${k.trajet ? `<p class="hint">Dont trajets : ${fmtH(k.trajet)} par semaine.</p>` : ""}${k.fiches ? `<p class="hint">📝 Fiches de traçabilité : ${p.ficheParSite} min par maison, comprises dans le temps de ménage (${fmtH(k.fiches)} par semaine).</p>` : ""}</div>
-      <div class="form-card"><h3>🏠 Charge par site</h3>
+        ${k.trajet ? `<p class="hint">Dont trajets : ${fmtH(k.trajet)} par semaine (comptés à part, pas dans le temps des maisons).</p>` : ""}${k.fiches ? `<p class="hint">📝 Fiches de traçabilité : ${p.ficheParSite} min par maison, comprises dans le temps de ménage (${fmtH(k.fiches)} par semaine).</p>` : ""}</div>
+      <div class="form-card"><h3>🏠 Temps passé par maison <small style="font-weight:600;color:var(--text-dim)">(sur place, hors trajets)</small></h3>
         ${Object.entries(k.parSite).sort((a, b) => b[1] - a[1]).map(([id, m]) => `<div class="pm-site"><span class="pm-pastille" style="--c:${couleur(id)}"></span><b>${esc(libelle(id))}</b><span class="pm-barre"><i style="width:${k.total ? m / k.total * 100 : 0}%;background:${couleur(id)}"></i></span><span class="pm-site-h">${fmtH(m)} / semaine · <b>${k.total ? Math.round(m / k.total * 100) : 0} %</b> du temps</span></div>`).join("") || `<p class="hint">Aucun site planifié.</p>`}</div>
     </div>
   </div>`;
@@ -183,7 +183,7 @@ function imprimerPlanning() {
     <div class="t"><h1>Planning hebdomadaire — ${esc(p.agent || "")}</h1><span>${esc(dispositif)} · ${fmtH(k.total)} par semaine</span></div>
     <table class="g"><thead><tr><th style="width:24mm">Heure</th>${JOURS.map(j => `<th>${NOMS[j]}<small>${fmtH(k.parJour[j])}</small></th>`).join("")}</tr></thead><tbody>${lignes}</tbody></table>
     <div class="bas"><div><h2>Heures travaillées par jour</h2><table>${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table></div>
-      <div><h2>Temps passé par maison (par semaine)</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / semaine (${k.total ? Math.round(m / k.total * 100) : 0} % du temps)</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / semaine</td></tr>` : ""}${k.fiches ? `<tr><td>Dont fiches de traçabilité (${p.ficheParSite} min par maison, dans le temps de ménage)</td><td>${fmtH(k.fiches)} / semaine</td></tr>` : ""}</table></div></div>
+      <div><h2>Temps passé par maison, sur place (hors trajets)</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / semaine (${k.total ? Math.round(m / k.total * 100) : 0} % du temps)</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / semaine</td></tr>` : ""}${k.fiches ? `<tr><td>Dont fiches de traçabilité (${p.ficheParSite} min par maison, dans le temps de ménage)</td><td>${fmtH(k.fiches)} / semaine</td></tr>` : ""}</table></div></div>
   </body></html>`;
   const f = document.createElement("iframe");
   // Cadre hors écran mais à la taille d'une page A4 paysage : sur téléphone, la mise en page n'est plus écrasée.
