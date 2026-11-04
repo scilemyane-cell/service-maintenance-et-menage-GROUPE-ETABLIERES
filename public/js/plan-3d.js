@@ -41,29 +41,37 @@ function zoneUtile(img) {
   if (x1 <= x0 || y1 <= y0) return { x: 0, y: 0, w: 1, h: 1 };
   const m = 0.012; return { x: Math.max(0, x0 / w - m), y: Math.max(0, y0 / h - m), w: Math.min(1, (x1 - x0) / w + 2 * m), h: Math.min(1, (y1 - y0) / h + 2 * m) };
 }
-function hologramme(img, z) {
+// Texture d'un étage : « clair » (traits foncés, fond blanc) ou « holo » (traits lumineux, fond transparent).
+// Les traits sont épaissis d'un pixel pour rester lisibles en perspective.
+function texture(img, z, style) {
   const sx = z.x * img.width, sy = z.y * img.height, sw = z.w * img.width, sh = z.h * img.height;
-  const W = Math.min(1700, Math.round(sw)), H = Math.round(sh * W / sw);
+  const W = Math.min(2400, Math.round(sw)), H = Math.round(sh * W / sw);
   const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d", { willReadFrequently: true });
   x.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
-  const id = x.getImageData(0, 0, W, H), d = id.data;
-  for (let k = 0; k < d.length; k += 4) {
-    const px = (k / 4) % W, py = Math.floor(k / 4 / W), fx = z.x + px / W * z.w, fy = z.y + py / H * z.h;
-    const cartouche = (fx < 0.3 && fy > 0.7) || (fx > 0.75 && fy < 0.16) || fy > 0.86;
-    const l = (d[k] * 0.3 + d[k + 1] * 0.59 + d[k + 2] * 0.11), a = cartouche ? 0 : Math.max(0, Math.min(255, (235 - l) * 1.6));
-    d[k] = 120; d[k + 1] = 225; d[k + 2] = 255; d[k + 3] = a;
+  const id = x.getImageData(0, 0, W, H), d = id.data, a0 = new Uint8ClampedArray(W * H);
+  for (let p = 0, k = 0; p < W * H; p++, k += 4) {
+    const px = p % W, py = (p / W) | 0, fx = z.x + px / W * z.w, fy = z.y + py / H * z.h;
+    if ((fx < 0.3 && fy > 0.7) || (fx > 0.75 && fy < 0.16) || fy > 0.86) continue;
+    const l = d[k] * 0.3 + d[k + 1] * 0.59 + d[k + 2] * 0.11; a0[p] = Math.max(0, Math.min(255, (240 - l) * 1.9));
+  }
+  const [R, G, B] = style === "holo" ? [140, 235, 255] : [12, 38, 66];
+  for (let y = 0; y < H; y++) for (let xx = 0; xx < W; xx++) {
+    const p = y * W + xx; let a = a0[p];
+    if (xx > 0 && a0[p - 1] > a) a = a0[p - 1]; if (xx < W - 1 && a0[p + 1] > a) a = a0[p + 1];
+    if (y > 0 && a0[p - W] > a) a = a0[p - W]; if (y < H - 1 && a0[p + W] > a) a = a0[p + W];
+    const k = p * 4; d[k] = R; d[k + 1] = G; d[k + 2] = B; d[k + 3] = a;
   }
   x.putImageData(id, 0, 0); return c.toDataURL("image/png");
 }
 
 export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat }) {
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
-  const st = { g: 0, rx: 58, rz: -28, zoom: 1, ecart: 230, auto: true, focus: null, filtre, sel: null };
+  const st = { g: 0, rx: 50, rz: -28, zoom: 1, zoom0: 1, ecart: 230, auto: true, focus: null, filtre, sel: null };
   const fond = document.createElement("div"); fond.className = "p3";
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">Maquette 3D · glisse pour tourner · molette pour zoomer</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
-      <select data-f></select><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="60" max="480" value="${st.ecart}" data-ecart></label><button data-x>✕ Fermer la 3D</button></div></header>
+      <select data-f></select><button data-dessus>⬆ Vue de dessus</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="60" max="480" value="${st.ecart}" data-ecart></label><button data-x>✕ Fermer la 3D</button></div></header>
     <aside class="p3-niv"></aside>
     <div class="p3-vue"><div class="p3-stage"></div><div class="p3-load">⏳ Construction de la maquette…</div></div>
     <div class="p3-info" hidden></div>`;
@@ -79,6 +87,18 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   function appliquer() {
     stage.style.transform = `scale(${st.zoom}) rotateX(${st.rx}deg) rotateZ(${st.rz}deg)`;
     stage.style.setProperty("--rx", st.rx + "deg"); stage.style.setProperty("--rz", st.rz + "deg");
+  }
+  function camera(rx, rz, zoom) {
+    stage.classList.add("anim"); st.rx = rx; st.rz = rz; if (zoom) st.zoom = zoom; appliquer();
+    clearTimeout(camera.t); camera.t = setTimeout(() => stage.classList.remove("anim"), 900);
+  }
+  function focaliser(n) {
+    st.focus = n; st.auto = false; $("[data-auto]").textContent = "▶ Rotation"; placerEtages();
+    // Étage mis en avant : version « plan papier » (fond blanc, traits foncés) pour une lecture nette.
+    etages.forEach(et => { const im = et.el.querySelector("img"); if (!im || !et.img) return; const plein = et.n === n;
+      if (plein && !et.clair) et.clair = texture(et.img, et.z, "clair"); if (!et.holo) et.holo = im.src;
+      im.src = plein ? et.clair : et.holo; et.el.classList.toggle("plein", plein); });
+    if (n === null) camera(50, -28, st.zoom0); else camera(14, 0, st.zoom0 * 1.35);
   }
   function placerEtages() {
     const n = etages.length, base = etages[0]?.niv ?? 0;
@@ -114,9 +134,9 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const ratio = imgs[0] ? (z.h * imgs[0].height) / (z.w * imgs[0].width) : 0.7, H = Math.round(W * ratio);
     g.etages.forEach((e, i) => {
       const el = document.createElement("div"); el.className = "p3-etage"; el.style.width = W + "px"; el.style.height = H + "px";
-      el.innerHTML = `${imgs[i] ? `<img src="${hologramme(imgs[i], z)}" alt="">` : ""}<div class="p3-nom">${nomNiveau(e.niv)}</div><div class="p3-pins"></div>`;
+      el.innerHTML = `${imgs[i] ? `<img src="${texture(imgs[i], z, "holo")}" alt="">` : ""}<div class="p3-nom">${nomNiveau(e.niv)}</div><div class="p3-pins"></div>`;
       el.dataset.n = e.n; stage.appendChild(el);
-      etages.push({ n: e.n, niv: e.niv, el, pins: el.querySelector(".p3-pins"), z });
+      etages.push({ n: e.n, niv: e.niv, el, pins: el.querySelector(".p3-pins"), z, img: imgs[i] });
     });
     placerEtages(); dessinerEpingles(); appliquer(); $(".p3-load").hidden = true;
     // Entrée : les étages s'écartent.
@@ -136,13 +156,14 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   // Interactions
   $("[data-g]").onchange = (e) => { st.g = +e.target.value; construire(); };
   $("[data-f]").onchange = (e) => { st.filtre = e.target.value; dessinerEpingles(); };
+  $("[data-dessus]").onclick = () => { st.auto = false; $("[data-auto]").textContent = "▶ Rotation"; camera(0, 0); };
   $("[data-auto]").onclick = (e) => { st.auto = !st.auto; e.target.textContent = st.auto ? "⏸ Rotation" : "▶ Rotation"; };
   $("[data-ecart]").oninput = (e) => { st.ecart = +e.target.value; placerEtages(); };
   $(".p3-niv").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.tous !== undefined) { st.focus = null; placerEtages(); return; }
+    if (b.dataset.tous !== undefined) { focaliser(null); return; }
     const n = +b.dataset.niv; if (st.focus === n) { fermer(); onPlat?.(n, st.filtre); return; }
-    st.focus = n; placerEtages(); window.toast?.("Clique encore sur l'étage pour l'ouvrir à plat");
+    focaliser(n); window.toast?.("Clique encore sur l'étage (à gauche) pour l'ouvrir à plat");
   });
   const pts = new Map(); let g0 = null;
   vue.addEventListener("pointerdown", (e) => { vue.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); st.auto = false; $("[data-auto]").textContent = "▶ Rotation";
@@ -152,10 +173,10 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const dx = e.clientX - g0.x, dy = e.clientY - g0.y; if (Math.abs(dx) + Math.abs(dy) > 4) g0.bouge = true;
     st.rz = g0.rz + dx * 0.35; st.rx = Math.max(0, Math.min(82, g0.rx - dy * 0.25)); appliquer(); });
   const finPt = (e) => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); const g = g0; if (pts.size) return; g0 = null;
-    if (g && !g.pinch && !g.bouge) { if (g.pin) infoPin(g.pin); else { const et = e.target.closest(".p3-etage"); if (et) { const n = +et.dataset.n; st.focus = st.focus === n ? null : n; placerEtages(); } } } };
+    if (g && !g.pinch && !g.bouge) { if (g.pin) infoPin(g.pin); else { const et = e.target.closest(".p3-etage"); if (et) { const n = +et.dataset.n; focaliser(st.focus === n ? null : n); } } } };
   vue.addEventListener("pointerup", finPt); vue.addEventListener("pointercancel", finPt);
   vue.addEventListener("wheel", (e) => { e.preventDefault(); st.zoom = Math.max(0.3, Math.min(3, st.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1))); appliquer(); }, { passive: false });
-  const ajusterZoom = () => { const r = vue.getBoundingClientRect(); st.zoom = Math.min(1.2, Math.max(0.35, Math.min(r.width / 1500, r.height / 1150))); appliquer(); };
+  const ajusterZoom = () => { const r = vue.getBoundingClientRect(); st.zoom = st.zoom0 = Math.min(1.2, Math.max(0.35, Math.min(r.width / 1500, r.height / 1150))); appliquer(); };
   const boucle = () => { if (!vivant) return; if (st.auto) { st.rz += 0.06; appliquer(); } raf = requestAnimationFrame(boucle); };
   ajusterZoom(); boucle(); await construire();
 }
@@ -164,7 +185,7 @@ const STYLE = `<style id="p3-style">
 .p3{position:fixed;inset:0;z-index:6500;background:radial-gradient(ellipse at 50% 60%,#0d2238 0%,#050b14 70%);color:#dff6ff;display:flex;flex-direction:column;font-family:system-ui,sans-serif;overflow:hidden}
 .p3-ciel{position:absolute;inset:0;background-image:linear-gradient(rgba(80,200,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(80,200,255,.06) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(ellipse at 50% 70%,#000 20%,transparent 75%);pointer-events:none}
 .p3-h{position:relative;z-index:3;display:flex;align-items:center;gap:12px;padding:10px 16px;flex-wrap:wrap;background:linear-gradient(#050b14,transparent)}
-.p3-h b{font-size:17px;letter-spacing:.02em;text-shadow:0 0 12px rgba(120,225,255,.6)}.p3-sous{font-size:12px;color:#7fb3cc}
+.p3-h b{max-width:38vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px;letter-spacing:.02em;text-shadow:0 0 12px rgba(120,225,255,.6)}.p3-sous{font-size:12px;color:#7fb3cc}
 .p3-hb{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .p3-hb select,.p3-hb button,.p3-niv button,.p3-info button{background:rgba(40,120,170,.18);color:#dff6ff;border:1px solid rgba(120,225,255,.35);border-radius:9px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;backdrop-filter:blur(6px)}
 .p3-hb select option{background:#0b1a2a}.p3-hb button:hover,.p3-niv button:hover,.p3-info button:hover{background:rgba(80,190,255,.3)}
@@ -175,10 +196,11 @@ const STYLE = `<style id="p3-style">
 .p3-stage{position:absolute;left:50%;top:52%;width:0;height:0;transform-style:preserve-3d;--rx:58deg;--rz:-28deg}
 .p3-etage{position:absolute;left:0;top:0;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.2,.8,.2,1),opacity .4s;border:1.5px solid rgba(120,225,255,.55);background:linear-gradient(135deg,rgba(30,110,170,.16),rgba(10,40,70,.08));box-shadow:0 0 30px rgba(80,200,255,.18),inset 0 0 40px rgba(80,200,255,.08);border-radius:6px}
 .p3-etage img{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 0 2px rgba(120,225,255,.9));pointer-events:none}
-.p3-etage.terne{opacity:.12}.p3-etage.focus{border-color:#7fe8ff;box-shadow:0 0 60px rgba(80,210,255,.45),inset 0 0 60px rgba(80,210,255,.15)}
+.p3-etage.terne{opacity:0;pointer-events:none}.p3-stage.anim{transition:transform .85s cubic-bezier(.2,.8,.2,1)}
+.p3-etage.plein{background:#f7fafd;border:2px solid #4da3ff;box-shadow:0 0 50px rgba(77,163,255,.45)}.p3-etage.plein img{filter:none}.p3-etage.plein .p3-pin span{background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}.p3-etage.plein .p3-pin.on span{background:var(--k);color:#fff}.p3-etage.focus{border-color:#7fe8ff;box-shadow:0 0 60px rgba(80,210,255,.45),inset 0 0 60px rgba(80,210,255,.15)}
 .p3-nom{position:absolute;left:-8px;top:-8px;transform:translate(-100%,-100%);font-size:34px;font-weight:800;color:rgba(160,235,255,.9);text-shadow:0 0 14px rgba(80,200,255,.8);white-space:nowrap}
 .p3-pins{position:absolute;inset:0;transform-style:preserve-3d}
-.p3-pin{position:absolute;width:80px;height:64px;margin-left:-40px;margin-top:-64px;transform-origin:50% 100%;transform:rotateZ(calc(var(--rz) * -1)) rotateX(-90deg);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;cursor:pointer;transform-style:preserve-3d}
+.p3-pin{position:absolute;width:80px;height:64px;margin-left:-40px;margin-top:-64px;transform-origin:50% 100%;transform:rotateZ(calc(var(--rz) * -1)) rotateX(calc(var(--rx) * -1));display:flex;flex-direction:column;align-items:center;justify-content:flex-end;cursor:pointer;transform-style:preserve-3d}
 .p3-pin span{background:rgba(6,14,24,.85);color:var(--k);border:1.5px solid var(--k);border-radius:5px;padding:1px 6px;font:800 15px/1.2 system-ui;white-space:nowrap;box-shadow:0 0 10px color-mix(in srgb,var(--k) 60%,transparent)}
 .p3-pin i{width:2px;flex:1;background:linear-gradient(var(--k),transparent);box-shadow:0 0 6px var(--k)}
 .p3-pin.off{opacity:.1}.p3-pin.on span{background:var(--k);color:#fff;transform:scale(1.35);box-shadow:0 0 22px var(--k)}.p3-pin.on i{width:3px}
