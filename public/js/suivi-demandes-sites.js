@@ -207,7 +207,8 @@ function traceHTML(l) {
 }
 // ---------- Photos d'une demande (jointes à la création, ou ajoutées ensuite par n'importe qui de l'équipe) ----------
 function photosBlocHTML(l) {
-  return `<details class="dps-photos" data-photos="${esc(l.id)}"><summary>📷 Photos${l.nbPhotos ? ` <b>${l.nbPhotos}</b>` : ""}</summary>
+  // Des photos sont jointes : bloc ouvert d'office, les vignettes s'affichent sans avoir à chercher.
+  return `<details class="dps-photos" data-photos="${esc(l.id)}" ${l.nbPhotos ? "open" : ""}><summary>📷 Photos${l.nbPhotos ? ` <b>${l.nbPhotos}</b>` : ""}</summary>
     <div class="dps-photos-l"><small>⏳ Chargement…</small></div>
     <div class="ndm-photo-btns"><label class="dps-photo-ajout">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-photos-ajout="${esc(l.id)}"></label><label class="dps-photo-ajout">🖼️ Choisir des photos<input type="file" accept="image/*" multiple hidden data-photos-ajout="${esc(l.id)}"></label></div></details>`;
 }
@@ -227,7 +228,9 @@ if (!window.__dpsPhotosEcoute) {
     const d = inp.closest("details.dps-photos"), box = d?.querySelector(".dps-photos-l"); if (box) box.innerHTML = "<small>⏳ Envoi des photos…</small>";
     try {
       const m = await import("./demandes-photos.js");
-      for (const f of [...inp.files].slice(0, 6)) await m.ajouterPhotoDemande(inp.dataset.photosAjout, await m.compresserImage(f), window.__smmNom || "");
+      let n = 0; for (const f of [...inp.files].slice(0, 6)) { await m.ajouterPhotoDemande(inp.dataset.photosAjout, await m.compresserImage(f), window.__smmNom || ""); n++; }
+      // Compteur de photos sur la demande (pastille 📷) : mis à jour par un superviseur (règles des techniciens).
+      if (n && ["super_admin", "admin", "n1"].includes(window.__smmRole)) { try { const fd = await import("./firestore-data.js"); const { docLocal } = await import("./cache-delta.js"); const cur = docLocal("demandes", inp.dataset.photosAjout)?.nbPhotos || 0; await fd.updateDemande(inp.dataset.photosAjout, { nbPhotos: cur + n }); } catch { /* */ } }
       window.toast?.("📷 Photo(s) ajoutée(s)", "success");
     } catch (e) { alert("Photo non envoyée : " + (e?.message || e)); }
     inp.value = ""; if (d) chargerPhotos(d);
@@ -859,7 +862,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     return `
     <article class="dps-carte ${TRAITE(l.statut) ? "traitee" : ""} ${lieesDe(l.id).length ? "a-liees" : ""} u-${sa(l.urgence).replace(/[^a-z]/g, "")}" data-id="${esc(l.id)}">
       <div class="dps-carte-tete">
-        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${comNouveau(l, st.vuAvant, utilisateur) ? `<span class="dps-pastille com-nouv">💬 Nouveau commentaire</span>` : ""}${pastilleAttribHTML(l)}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
+        <span class="dps-num">${esc(l.n)}</span>${l.n !== "—" && tousDuSite.some(x => x.id !== l.id && x.n === l.n && x.lieeA !== l.id && l.lieeA !== x.id) ? `<span class="dps-pastille numdouble" title="Plusieurs demandes portent ce N° dans le fichier Excel : vérifie que le commentaire et l'action sont sur la bonne (outil « ↔️ Échanger » en bas de la carte)">⚠️ N° en double</span>` : ""}${lieesDe(l.id).length ? `<span class="dps-pastille lien">🔗 + ${lieesDe(l.id).map(x => esc(x.n)).join(", ")}</span>` : ""}${(p => p ? `<span class="dps-pastille sugg">⚠️ doublon possible de ${esc(p.n)}</span>` : "")(tousDuSite.find(y => y.id !== l.id && doublonsPossibles(y).some(x => x.id === l.id)))}${estNouvelle(l, st.vuAvant) ? `<span class="dps-pastille nouv">🆕 Nouvelle</span>` : ""}${comNouveau(l, st.vuAvant, utilisateur) ? `<span class="dps-pastille com-nouv">💬 Nouveau commentaire</span>` : ""}${pastilleAttribHTML(l)}${l.nbPhotos ? `<span class="dps-pastille photo" title="Photos jointes à la demande">📷 ${l.nbPhotos} photo${l.nbPhotos > 1 ? "s" : ""}</span>` : ""}${pastilleActionHTML(l)}${badgeUrg(l.urgence)}${badgeAge(TRAITE(l.statut) ? null : j)}
         ${l.local ? `<span class="dps-local">📍 ${esc(l.local)}</span>` : ""}
         ${perms.peutTraiter && !TRAITE(l.statut) ? `<button type="button" class="dps-tk-copie" data-ticket-copie="${esc(l.id)}" title="Copie le ticket prestataire en image : colle-le ensuite dans ton mail (Ctrl+V ou appui long › Coller)">📋 Ticket pour mail</button>` : ""}
         ${l.logementOccupe && sa(l.logementOccupe).startsWith("oui") ? `<span class="dps-occ">🏠 Logement occupé</span>` : ""}
