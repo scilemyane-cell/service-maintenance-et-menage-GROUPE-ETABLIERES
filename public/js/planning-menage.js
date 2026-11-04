@@ -122,7 +122,7 @@ function render() {
         <table class="pm-r">${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table>
         ${k.trajet ? `<p class="hint">Dont trajets : ${fmtH(k.trajet)} par semaine (réassort et fiches de traçabilité compris dans le total).</p>` : ""}</div>
       <div class="form-card"><h3>🏠 Charge par site</h3>
-        ${Object.entries(k.parSite).sort((a, b) => b[1] - a[1]).map(([id, m]) => `<div class="pm-site"><span class="pm-pastille" style="--c:${couleur(id)}"></span><b>${esc(libelle(id))}</b><span class="pm-barre"><i style="width:${k.total ? m / k.total * 100 : 0}%;background:${couleur(id)}"></i></span><span>${fmtH(m)} / sem.</span><small>${k.total ? Math.round(m / k.total * 100) : 0} %</small></div>`).join("") || `<p class="hint">Aucun site planifié.</p>`}</div>
+        ${Object.entries(k.parSite).sort((a, b) => b[1] - a[1]).map(([id, m]) => `<div class="pm-site"><span class="pm-pastille" style="--c:${couleur(id)}"></span><b>${esc(libelle(id))}</b><span class="pm-barre"><i style="width:${k.total ? m / k.total * 100 : 0}%;background:${couleur(id)}"></i></span><span class="pm-site-h">${fmtH(m)} / semaine · <b>${k.total ? Math.round(m / k.total * 100) : 0} %</b> du temps</span></div>`).join("") || `<p class="hint">Aucun site planifié.</p>`}</div>
     </div>
   </div>`;
   brancher();
@@ -180,7 +180,7 @@ function imprimerPlanning() {
     <div class="t"><h1>Planning hebdomadaire — ${esc(p.agent || "")}</h1><span>${esc(dispositif)} · ${fmtH(k.total)} par semaine</span></div>
     <table class="g"><thead><tr><th style="width:24mm">Heure</th>${JOURS.map(j => `<th>${NOMS[j]}<small>${fmtH(k.parJour[j])}</small></th>`).join("")}</tr></thead><tbody>${lignes}</tbody></table>
     <div class="bas"><div><h2>Heures travaillées</h2><table>${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table></div>
-      <div><h2>Charge par site</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / sem. · ${k.total ? Math.round(m / k.total * 100) : 0} %</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / sem.</td></tr>` : ""}</table></div></div>
+      <div><h2>Charge par site</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / semaine (${k.total ? Math.round(m / k.total * 100) : 0} % du temps)</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / semaine</td></tr>` : ""}</table></div></div>
   </body></html>`;
   const f = document.createElement("iframe");
   f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
