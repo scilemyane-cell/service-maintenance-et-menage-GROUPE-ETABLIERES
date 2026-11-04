@@ -24,22 +24,20 @@ const SPECIAUX = {
 // Planning de Marie (PDF « planning hebdomadaire ») — amorcé une seule fois.
 const tous = (v) => Object.fromEntries(JOURS.map(j => [j, v]));
 const lmv = (v) => ({ LUN: v, MAR: "", MER: v, JEU: "", VEN: v });
-// v3 (04/11/2026) : 36 h / semaine, début à 8 h — trajets SVDP → Moutonnerie → Ferme (5 min chacun),
-// réassort le mardi (30 min : passage à l'atelier, véhicule, retour ; la livraison dans les maisons est prise sur le
-// temps de ménage), fiches de traçabilité 5 min / jour ; Douanier Rousseau, AGA et Saint Vincent de Paul à 1 h 50
-// (1 h 40 à SVDP le mardi).
+// v4 (04/11/2026) : 36 h / semaine, horaires ronds, pause 12 h – 13 h — Douanier Rousseau 8 h – 10 h 15,
+// AGA 10 h 30 – 12 h, Saint Vincent de Paul 13 h – 14 h 45 ; lundi / mercredi / vendredi : Moutonnerie puis Ferme
+// (trajets de 5 min) ; mardi : réassort 20 min (atelier, véhicule, retour) ; fiches de traçabilité 5 min / jour.
 const j5 = (L, Ma, Me, J, V) => ({ LUN: L, MAR: Ma, MER: Me, JEU: J, VEN: V });
 export const PLANNING_DEFAUT_MENAGE = {
   "Dispositif MNA": {
-    v: 3,
+    v: 4,
     agent: "Marie NICOLAIZEAU",
     lignes: [
-      { debut: "08:00", fin: "09:50", jours: tous("dr") },
-      { debut: "09:50", fin: "10:05", jours: tous("trajet") },
-      { debut: "10:05", fin: "11:55", jours: tous("aga") },
-      { debut: "11:55", fin: "12:55", jours: tous("pause") },
-      { debut: "12:55", fin: "14:35", jours: tous("svdp") },
-      { debut: "14:35", fin: "14:45", jours: j5("svdp", "reassort", "svdp", "svdp", "svdp") },
+      { debut: "08:00", fin: "10:15", jours: tous("dr") },
+      { debut: "10:15", fin: "10:30", jours: tous("trajet") },
+      { debut: "10:30", fin: "12:00", jours: tous("aga") },
+      { debut: "12:00", fin: "13:00", jours: tous("pause") },
+      { debut: "13:00", fin: "14:45", jours: tous("svdp") },
       { debut: "14:45", fin: "14:50", jours: j5("trajet", "reassort", "trajet", "tracabilite", "trajet") },
       { debut: "14:50", fin: "15:05", jours: j5("moutonnerie", "reassort", "moutonnerie", "", "moutonnerie") },
       { debut: "15:05", fin: "15:10", jours: j5("moutonnerie", "tracabilite", "moutonnerie", "", "moutonnerie") },
@@ -114,7 +112,7 @@ function render() {
         ${JOURS.map(j => { const v = l.jours?.[j] || ""; if (ed) return `<td><select data-pm="${i}|${j}" style="--c:${couleur(v)}">${options(v)}</select></td>`;
           const n = span[`${i}|${j}`]; if (n === 0) return "";
           const fin = L[i + n - 1].fin, dureeBloc = minutes(fin) - minutes(l.debut);
-          return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<span class="pm-case ${SPECIAUX[v] ? "spe" : ""} ${dureeBloc < 30 ? "mini" : ""}" style="--c:${couleur(v)}" title="${esc(libelle(v))} · ${hh(l.debut)} – ${hh(fin)}">${esc(libelle(v))}${dureeBloc >= 30 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}</span>` : ""}</td>`; }).join("")}
+          return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<span class="pm-case ${SPECIAUX[v] ? "spe" : ""} ${dureeBloc < 20 ? "mini" : ""}" style="--c:${couleur(v)}" title="${esc(libelle(v))} · ${hh(l.debut)} – ${hh(fin)}">${esc(libelle(v))}${dureeBloc >= 20 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}</span>` : ""}</td>`; }).join("")}
         ${ed ? `<td><button class="del-btn" data-pm-del="${i}">🗑️</button></td>` : ""}
       </tr>`).join(""); })()}</tbody>
     </table></div>
