@@ -73,7 +73,10 @@ export function effectifEtClotures(data, p, demandesToutes) {
   // importées, elles remplacent les absences saisies dans l'astreinte (qui restent un prévisionnel).
   const eur = data.eurecia || null;
   const nomEur = Object.fromEntries(techs.map(t => { const n = norm(t); const tn = n.split(/[\s-]+/).filter(Boolean); const k = Object.keys(eur?.jours || {}).find(x => { const mots = norm(x).split(/[\s-]+/); return tn.every(w => mots.some(m => proche(m, w))); }); return [t, k || null]; }));
-  const couvertEur = (iso) => (eur?.periodes || []).some(p => iso >= p.debut && iso <= p.fin);
+  // Mois en cours : présence prise À L'INSTANT dans les absences de l'appli (mêmes données que
+  // « Équipe & absences » et l'astreinte) ; l'import Eurecia ne sert qu'aux mois terminés.
+  const debutMoisCourant = String(p.aujourdhui || "").slice(0, 7) + "-01";
+  const couvertEur = (iso) => iso < debutMoisCourant && (eur?.periodes || []).some(p => iso >= p.debut && iso <= p.fin);
   // Part de présence d'un jour (1, ½ ou 0) et type d'absence.
   const jour = (t, iso) => {
     if (avantDebut(t, iso) || apresFin(t, iso)) return { f: 0, type: "H" };

@@ -4,19 +4,22 @@
 import { esc } from "./astreinte-logic.js";
 import { db } from "./firebase-init.js";
 import { doc, getDoc, getDocs, collection } from "./firestore-compte.js";
+import { watchAbsences, watchPeople } from "./firestore-data.js";
 import { effectifEtClotures, effectifHTML, douzeMois, brancherEffectif } from "./effectif-stats.js";
 import { CATEGORIES_PANNES, categorieDe } from "./categories-pannes.js";
 
 // Techniciens (config/people) et absences : lus une fois, pour l'analyse
 // « interventions clôturées / techniciens présents ».
-let effData = null, effChargement = null;
+let effData = null, effChargement = null, effRerender = null;
 function chargerEffectif(rerender) {
+  effRerender = rerender;
   if (effData || effChargement) return;
-  effChargement = Promise.all([getDoc(doc(db, "config", "people")), getDocs(collection(db, "absences")), getDoc(doc(db, "config", "stats-effectif")).catch(() => null), getDoc(doc(db, "config", "absences-eurecia")).catch(() => null)]).then(([pp, abs, ch, eu]) => {
+  effChargement = Promise.all([getDoc(doc(db, "config", "people")), getDoc(doc(db, "config", "stats-effectif")).catch(() => null), getDoc(doc(db, "config", "absences-eurecia")).catch(() => null)]).then(([pp, ch, eu]) => {
     const p = pp.exists() ? pp.data() : {};
-    const absences = []; abs.forEach(d => absences.push({ id: d.id, ...d.data() }));
-    effData = { techniciensChoisis: ch?.exists?.() ? ch.data().techniciens || [] : [], aliasTechniciens: ch?.exists?.() ? ch.data().alias || {} : {}, arrivees: ch?.exists?.() ? ch.data().arrivees || {} : {}, n1: p.n1 || [], techniciens: p.n2 || [], astreinteActive: p.astreinteActive || {}, datesDebut: p.datesDebut || {}, datesFin: p.datesFin || {}, binomes: p.binomes || {}, absences, eurecia: eu?.exists?.() ? eu.data() : null };
-    rerender();
+    effData = { techniciensChoisis: ch?.exists?.() ? ch.data().techniciens || [] : [], aliasTechniciens: ch?.exists?.() ? ch.data().alias || {} : {}, arrivees: ch?.exists?.() ? ch.data().arrivees || {} : {}, n1: p.n1 || [], techniciens: p.n2 || [], astreinteActive: p.astreinteActive || {}, datesDebut: p.datesDebut || {}, datesFin: p.datesFin || {}, binomes: p.binomes || {}, absences: null, eurecia: eu?.exists?.() ? eu.data() : null };
+    // Absences EN DIRECT (même écoute que « Équipe & absences ») : un arrêt saisi apparaît tout de suite.
+    watchAbsences((a) => { if (!effData) return; effData.absences = a || []; effRerender?.(); });
+    watchPeople((p2) => { if (!effData || !p2) return; Object.assign(effData, { n1: p2.n1 || [], techniciens: p2.n2 || [], astreinteActive: p2.astreinteActive || {}, datesDebut: p2.datesDebut || {}, datesFin: p2.datesFin || {}, binomes: p2.binomes || {} }); effRerender?.(); });
   }).catch(e => { console.error("Effectif techniciens :", e); effData = { techniciens: [], absences: [] }; });
 }
 
@@ -465,7 +468,7 @@ export function renderStatsDemandes(container, toutes, { toggleHTML, onToggle, o
       <div class="dst-cat-g"><div><h4>${esc(D.ms.label)}</h4>${bloc(D.categoriesM, "demandes")}</div><div><h4>${esc(libPeriode.replace(/^./, c => c.toUpperCase()))}</h4>${bloc(D.categoriesP, "demandes")}</div></div>
     </section>`; })()}
 
-    ${(() => { if (!effData) return `<section class="dst-carte"><p class="dst-note">⏳ Chargement de l'analyse « interventions clôturées / techniciens présents »…</p></section>`;
+    ${(() => { if (!effData || !effData.absences) return `<section class="dst-carte"><p class="dst-note">⏳ Chargement de l'analyse « interventions clôturées / techniciens présents »…</p></section>`;
       const auj = new Date(), iso = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : null;
       const dem = toutes.filter(l => !st.association || l.association === st.association).map(l => ({ ...l, _dateInterv: l.statut === "Réalisé" ? iso(dateTraitement(l)) : null }));
       const deb = debutPeriode(), moisP = douzeMois(auj).filter(m => !deb || m.cle >= cleMois(deb));
