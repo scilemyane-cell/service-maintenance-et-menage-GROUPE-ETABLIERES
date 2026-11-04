@@ -103,7 +103,7 @@ function render() {
     <text x="70" y="68" text-anchor="middle" class="td-dn">${ouvertes.length}</text><text x="70" y="86" text-anchor="middle" class="td-dl">ouvertes</text></svg>`;
 
   // Fil d'activité.
-  const activite = st.demandes.filter(d => !d.supprimeeLe && !d.lieeA).map(d => ({ d, t: Math.max(ms(d.dateMaj), ms(d.importeLe)) })).filter(x => x.t).sort((a, b) => b.t - a.t).slice(0, 6);
+  const activite = st.demandes.filter(d => !d.supprimeeLe && !d.lieeA).map(d => ({ d, t: Math.max(ms(d.dateMaj), ms(d.importeLe)) })).filter(x => x.t).sort((a, b) => b.t - a.t).slice(0, estPlein() ? 14 : 6);
   const qui = (d) => d.commentaireMajPar || d.validePar || d.declarePar || d.attribuePar || d.commentaireTechPar || "";
   const coulStatut = (s) => { const v = sa(s); return v.startsWith("realis") ? "#10b981" : v.startsWith("annul") ? "#94a3b8" : v.startsWith("planif") ? "#8b5cf6" : v.includes("commande") || v.includes("devis") ? "#f59e0b" : "#3b82f6"; };
 
@@ -131,54 +131,58 @@ function render() {
   const agents = Object.entries(parAgent).filter(([, a]) => a.sem || a.auj).sort((a, b) => b[1].der - a[1].der);
 
   const kpi = (v, lib, c, go, spark, sous) => `<button type="button" class="td-k" style="--c:${c}" data-go="${go}"><span class="td-kl"><i></i>${lib}</span><b>${v}</b>${spark || `<small>${sous || "&nbsp;"}</small>`}</button>`;
-  conteneur.innerHTML = `<div class="td">
-    <header class="td-h">
+  const plein = estPlein();
+  const nbUrg = plein ? 12 : 6;
+  const H_ = `<header class="td-h">
       <div><p><span class="td-live"><i></i>En direct</span> ${maintenant.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · ${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p></div>
       ${ast ? `<div class="td-astr"><span>Astreinte</span>${[["N1", ast.n1], ["N2", ast.n2]].filter(x => x[1]).map(([n, p]) => `<a ${tel(p) ? `href="tel:${esc(tel(p).replace(/[^\d+]/g, ""))}"` : ""} title="${esc(tel(p))}">${avatar(p)}<b>${n}</b> ${esc(p)}</a>`).join("")}</div>` : ""}
-    </header>
-    <section class="td-ks">
+      <button type="button" class="td-pl" data-plein>${plein ? "✕ Quitter le plein écran" : "⛶ Plein écran"}</button>
+    </header>`;
+  const K_ = `<section class="td-ks">
       ${kpi(ouvertes.length, "Ouvertes", "#3b82f6", "a-traiter", "", vieilles ? `dont ${vieilles} depuis + de 30 j` : "aucune de + de 30 j")}
       ${kpi(urg.length, "Urgentes", "#ef4444", "urgentes", "", (n => n ? `dont ${pl(n, "critique")}` : "aucune critique")(urg.filter(d => urgence(d) === "Critique").length))}
       ${kpi(aAttribuer.length, "À attribuer", "#f59e0b", "suivi", "", aAttribuer.length ? "en attente de choix" : "tout est attribué")}
       ${kpi(nbValider, "À valider", "#8b5cf6", "valider", "", nbValider ? "réalisées par les techniciens" : "rien en attente")}
       ${kpi(recuesAuj, "Reçues aujourd'hui", "#0ea5e9", "suivi", sparkline(j7.map(x => x.r), "#0ea5e9"))}
       ${kpi(traiteesAuj, "Réalisées aujourd'hui", "#10b981", "suivi", sparkline(j7.map(x => x.t), "#10b981"))}
-    </section>
-    <div class="td-main">
-      <div class="td-col">
-        <section class="td-c">
+    </section>`;
+  const S = { graph: `<section class="td-c">
           <div class="td-ct"><h3>Demandes reçues et réalisées</h3><span class="td-sub">${NJ} derniers jours</span>
             <div class="td-leg"><span><i style="background:#3b82f6"></i>Reçues <b>${totR}</b></span><span><i style="background:#10b981"></i>Réalisées <b>${totT}</b></span></div></div>
           ${graph}
-        </section>
-        <div class="td-duo">
-          <section class="td-c"><div class="td-ct"><h3>Charge en cours</h3><span class="td-sub">demandes ouvertes · <i class="td-pu"></i> dont urgentes</span></div>
+        </section>`, charge: `<section class="td-c"><div class="td-ct"><h3>Charge en cours</h3><span class="td-sub">demandes ouvertes · <i class="td-pu"></i> dont urgentes</span></div>
             <div class="td-charge">${lignesCharge.map(([k, c]) => `<div class="td-cr">${k ? avatar(k, c.ext) : `<span class="td-av vide">?</span>`}<span class="td-cn">${k ? esc(k) : "<em>Non attribuées</em>"}</span>
               <div class="td-cb"><i style="width:${(c.n - c.u) / maxC * 100}%"></i><i class="u" style="width:${c.u / maxC * 100}%"></i></div><b>${c.n}</b></div>`).join("") || `<p class="td-vide">Aucune demande ouverte 🎉</p>`}</div>
-          </section>
-          <section class="td-c"><div class="td-ct"><h3>Types de pannes</h3><span class="td-sub">demandes ouvertes</span></div>
+          </section>`, pannes: `<section class="td-c"><div class="td-ct"><h3>Types de pannes</h3><span class="td-sub">demandes ouvertes</span></div>
             <div class="td-dw">${donut}<ul class="td-dleg">${parts.map(p => `<li><i style="background:${p.c}"></i><span>${esc(p.lib)}</span><b>${p.n}</b></li>`).join("")}</ul></div>
-          </section>
-        </div>
-        <section class="td-c"><div class="td-ct"><h3>Fil d'activité</h3></div>
+          </section>`, fil: `<section class="td-c"><div class="td-ct"><h3>Fil d'activité</h3></div>
           <div class="td-fil">${activite.map(({ d, t }) => `<button type="button" data-dem="${esc(d.id)}" data-site="${esc(d.site || "")}"><i style="--c:${coulStatut(d.statut)}"></i><div><b>${esc(d.numero || "")} · ${esc(d.site || "")}</b><span>${esc(d.statut || "Nouvelle")}${qui(d) ? ` · ${esc(qui(d))}` : ""}</span></div><em>${depuis(t)}</em></button>`).join("")}</div>
-        </section>
-      </div>
-      <div class="td-col">
-        <section class="td-c"><div class="td-ct"><h3>À surveiller</h3></div>
+        </section>`,
+    surv: `<section class="td-c"><div class="td-ct"><h3>À surveiller</h3></div>
           ${alertes.length ? `<div class="td-al">${alertes.map(([c, n, t, s, go]) => `<button type="button" data-go="${go}" style="--c:${c}"><b>${n}</b><span>${esc(t)}${s ? `<small>${esc(s)}</small>` : ""}</span><em>›</em></button>`).join("")}</div>` : `<p class="td-vide">👌 Rien à signaler</p>`}
-        </section>
-        <section class="td-c"><div class="td-ct"><h3>Urgences</h3>${urg.length ? `<span class="td-badge">${urg.length}</span>` : ""}${urg.length > 6 ? `<button type="button" class="td-tout" data-go="urgentes">Tout voir ›</button>` : ""}</div>
-          ${urg.length ? `<div class="td-li">${urg.slice(0, 6).map(d => `<button type="button" data-dem="${esc(d.id)}" data-site="${esc(d.site || "")}"><i class="${urgence(d) === "Critique" ? "crit" : ""}"></i><div><b>${esc(d.site || "")}</b><span>${esc(String(d.descriptifCorrige || d.descriptif || ""))}</span></div><em>${age(d) ?? "?"} j<small>${d.attribueANom ? esc(d.attribueANom) : `<u>à attribuer</u>`}</small></em></button>`).join("")}</div>` : `<p class="td-vide">👌 Aucune urgence ouverte</p>`}
-        </section>
-        <section class="td-c"><div class="td-ct"><h3>Équipe</h3><span class="td-sub">${absents.length ? pl(absents.length, "absent") : "tout le monde est là"}</span><button type="button" class="td-tout" data-go="equipe">Détail ›</button></div>
+        </section>`, urg: `<section class="td-c"><div class="td-ct"><h3>Urgences</h3>${urg.length ? `<span class="td-badge">${urg.length}</span>` : ""}${urg.length > nbUrg ? `<button type="button" class="td-tout" data-go="urgentes">Tout voir ›</button>` : ""}</div>
+          ${urg.length ? `<div class="td-li">${urg.slice(0, nbUrg).map(d => `<button type="button" data-dem="${esc(d.id)}" data-site="${esc(d.site || "")}"><i class="${urgence(d) === "Critique" ? "crit" : ""}"></i><div><b>${esc(d.site || "")}</b><span>${esc(String(d.descriptifCorrige || d.descriptif || ""))}</span></div><em>${age(d) ?? "?"} j<small>${d.attribueANom ? esc(d.attribueANom) : `<u>à attribuer</u>`}</small></em></button>`).join("")}</div>` : `<p class="td-vide">👌 Aucune urgence ouverte</p>`}
+        </section>`, equipe: `<section class="td-c"><div class="td-ct"><h3>Équipe</h3><span class="td-sub">${absents.length ? pl(absents.length, "absent") : "tout le monde est là"}</span><button type="button" class="td-tout" data-go="equipe">Détail ›</button></div>
           ${absents.length ? `<div class="td-abs">${absents.map(a => `<div>${avatar(a.person)}<span><b>${esc(a.person || "")}</b><small>${TYP[a.type] || TYP.conge} · retour le ${new Date(new Date(String(a.end || a.start).slice(0, 10) + "T12:00").getTime() + 864e5).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</small></span></div>`).join("")}</div>` : ""}
-        </section>
-        ${agents.length ? `<section class="td-c"><div class="td-ct"><h3>Ménage</h3><span class="td-sub">fiches de traçabilité</span></div>
-          ${agents.map(([n, a]) => `<div class="td-men">${avatar(n)}<span><b>${esc(n)}</b><small>${a.auj} aujourd'hui · ${a.sem} cette semaine</small></span><em>${depuis(a.der)}</em></div>`).join("")}</section>` : ""}
-      </div>
-    </div>
-  </div>`;
+        </section>`, men: `${agents.length ? `<section class="td-c"><div class="td-ct"><h3>Ménage</h3><span class="td-sub">fiches de traçabilité</span></div>
+          ${agents.map(([n, a]) => `<div class="td-men">${avatar(n)}<span><b>${esc(n)}</b><small>${a.auj} aujourd'hui · ${a.sem} cette semaine</small></span><em>${depuis(a.der)}</em></div>`).join("")}</section>` : ""}` };
+  conteneur.innerHTML = plein
+    ? `<div class="td plein">${H_}${K_}<div class="td-main3">
+        <div class="td-col c1">${S.graph}<div class="td-duo">${S.charge}${S.pannes}</div></div>
+        <div class="td-col c2">${S.surv}${S.urg}</div>
+        <div class="td-col c3">${S.equipe}${S.fil}${S.men}</div></div></div>`
+    : `<div class="td">${H_}${K_}<div class="td-main">
+        <div class="td-col">${S.graph}<div class="td-duo">${S.charge}${S.pannes}</div>${S.fil}</div>
+        <div class="td-col">${S.surv}${S.urg}${S.equipe}${S.men}</div></div></div>`;
+}
+
+const estPlein = () => { try { return localStorage.getItem("td-plein") === "1"; } catch { return false; } };
+function basculerPlein() {
+  const v = !estPlein();
+  try { localStorage.setItem("td-plein", v ? "1" : "0"); } catch { /* */ }
+  try { if (v && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch { /* */ }
+  document.body.classList.toggle("td-plein-actif", v);
+  render();
 }
 
 function aller(go, el) {
@@ -194,7 +198,9 @@ export function mountTableauDirect(container) {
   clearInterval(minuterie);
   conteneur = container;
   if (!document.getElementById("td-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
-  container.addEventListener("click", (e) => { const b = e.target.closest("[data-go],[data-dem]"); if (b && container.contains(b)) aller(b.dataset.go, b); });
+  container.addEventListener("click", (e) => { if (e.target.closest("[data-plein]")) { basculerPlein(); return; } const b = e.target.closest("[data-go],[data-dem]"); if (b && container.contains(b)) aller(b.dataset.go, b); });
+  document.body.classList.toggle("td-plein-actif", estPlein());
+  if (!window.__tdEchap) { window.__tdEchap = true; document.addEventListener("keydown", (e) => { if (e.key === "Escape" && estPlein() && conteneur && document.contains(conteneur)) basculerPlein(); }); }
   render();
   unsubs.push(watchDemandes((l) => { st.demandes = l || []; planifier(); }));
   unsubs.push(watchPeople((p) => { st.people = p; planifier(); }));
@@ -207,7 +213,7 @@ export function mountTableauDirect(container) {
     st.compteurs = { n: actifs.filter(m.estEnRetard).length, mot: m.motRetard() }; planifier(); })); }).catch(() => {});
   import("./stock-alerts-data.js").then(m => { if (conteneur === container) unsubs.push(m.watchStockAlertCount((c) => { st.stock = c; planifier(); })); }).catch(() => {});
   // L'heure, les « il y a … » et le jour se rafraîchissent toutes les minutes.
-  minuterie = setInterval(() => { if (!document.contains(container)) { clearInterval(minuterie); unsubs.forEach(u => { try { u(); } catch { /* */ } }); unsubs = []; return; } render(); }, 60000);
+  minuterie = setInterval(() => { if (!document.contains(container)) { clearInterval(minuterie); document.body.classList.remove("td-plein-actif"); unsubs.forEach(u => { try { u(); } catch { /* */ } }); unsubs = []; return; } render(); }, 60000);
 }
 
 const STYLE = `<style id="td-style">
@@ -250,6 +256,18 @@ const STYLE = `<style id="td-style">
 .td-abs{display:flex;flex-direction:column;gap:8px}.td-abs>div,.td-men{display:flex;align-items:center;gap:10px}.td-abs span:not(.td-av),.td-men span:not(.td-av){display:flex;flex-direction:column;font-size:13.5px;flex:1}.td-abs small,.td-men small{color:var(--text-dim);font-size:12px}
 .td-abs .td-av{box-shadow:0 0 0 2px var(--panel),0 0 0 4px #f59e0b}.td-men em{font-style:normal;font-size:12px;color:#10b981}
 .td-vide{margin:2px 0;color:var(--text-dim);font-size:13.5px}
+.td-pl{all:unset;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:99px;padding:6px 14px}.td-pl:hover{background:var(--panel-alt)}
+.td-h{align-items:center}.td-h>div:first-child{margin-right:auto}
+body.td-plein-actif{overflow:hidden}
+.td.plein{position:fixed;inset:0;z-index:5000;max-width:none;border-radius:0;height:100vh;height:100dvh;box-sizing:border-box;padding:14px 18px;gap:12px;display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden}
+.td-main3{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr) minmax(0,1fr);gap:12px;min-height:0}
+.td.plein .td-col{gap:12px;min-height:0}
+.td.plein .td-c{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:14px 16px}
+.td.plein .td-c>:not(.td-ct){min-height:0;overflow:auto;scrollbar-width:thin}
+.td.plein .c1>.td-c{flex:0 0 auto}.td.plein .c1 .td-duo{flex:1;min-height:0;gap:12px}
+.td.plein .c2>.td-c:last-child,.td.plein .c3>.td-c:nth-child(2){flex:1}
+.td.plein .td-k b{font-size:38px}
+@media (max-width:900px){.td-main3{grid-template-columns:1fr;overflow:auto}.td.plein{overflow:auto;display:flex}}
 @media (max-width:1100px){.td-main{display:flex;flex-direction:column}.td-main>.td-col:last-child{order:-1}.td-ks{grid-template-columns:repeat(3,1fr)}.td-k:nth-child(4){border-left:0}.td-k:nth-child(n+4){border-top:1px solid var(--border)}}
 @media (max-width:640px){.td{padding:12px;border-radius:14px}.td-ks{grid-template-columns:repeat(2,1fr)}.td-k:nth-child(n){border-left:1px solid var(--border);border-top:1px solid var(--border)}.td-k:nth-child(odd){border-left:0}.td-k:nth-child(-n+2){border-top:0}.td-k{padding:12px 14px}.td-k b{font-size:28px}.td-duo{grid-template-columns:1fr}.td-c{padding:14px}.td-leg{margin-left:0;width:100%}}
 </style>`;
