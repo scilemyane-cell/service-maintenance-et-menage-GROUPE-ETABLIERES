@@ -90,7 +90,7 @@ function nomPiece(THREE, texte) {
   x.fillStyle = "#eafaff"; lignes.forEach((l, i) => x.fillText(l, w / 2, 8 + i * (fs + 6)));
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   // Taille fixe à l'écran (ne grossit pas en s'approchant).
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, sizeAttenuation: false })); const k = 0.00042; sp.scale.set(k * w, k * h, 1); sp.renderOrder = 12; return sp;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, sizeAttenuation: false })); const k = matchMedia("(max-width:700px)").matches ? 0.00024 : 0.00042; sp.scale.set(k * w, k * h, 1); sp.renderOrder = 12; return sp;
 }
 function texteNiveau(THREE, texte) {
   const c = document.createElement("canvas"), x = c.getContext("2d"); c.width = 640; c.height = 160;
@@ -106,7 +106,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   const st = { g: 0, ecart: 22, filtre, auto: true };
   const fond = document.createElement("div"); fond.className = "p3";
   fond.innerHTML = `<div class="p3-ciel"></div>
-    <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">Glisse pour tourner · molette / pincer pour zoomer · clic droit ou 2 doigts pour déplacer</span>
+    <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">${matchMedia("(pointer:coarse)").matches ? "1 doigt : déplacer · 2 doigts : zoomer et tourner · double-tap : zoomer ici" : "Glisse pour tourner · molette pour zoomer · clic droit pour déplacer · double-clic : zoomer ici"}</span>
       <div class="p3-hb"><select data-g>${groupes.map((g, i) => `<option value="${i}">${esc(g.nom)} (${g.etages.length} niveaux)</option>`).join("")}</select>
       <button data-dessus>⬆ Vue de dessus</button><button data-face>↺ Vue 3D</button><button data-auto>⏸ Rotation</button><label class="p3-ec">Éclater <input type="range" min="4" max="45" value="${st.ecart}" data-ecart></label>${!aPdf && ajouterPdf ? `<label class="p3-hd">✨ Rendre net + noms des pièces (PDF)<input type="file" accept="application/pdf" hidden data-hd></label>` : ""}<button data-x>✕ Fermer la 3D</button></div></header><div class="p3-etat" hidden></div>
     <aside class="p3-niv"></aside><aside class="p3-leg"></aside>
@@ -130,6 +130,9 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 0.5, 2000);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.08; controls.autoRotate = true; controls.autoRotateSpeed = 0.6; controls.maxPolarAngle = Math.PI * 0.49; controls.minDistance = 8; controls.maxDistance = 400;
+  // Doigts « comme une carte » : 1 doigt déplace le plan, 2 doigts zooment (pincer) et tournent / inclinent.
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.screenSpacePanning = false; controls.zoomToCursor = true; controls.panSpeed = 1.1; controls.rotateSpeed = 0.55; controls.zoomSpeed = 1.1;
   const aniso = renderer.capabilities.getMaxAnisotropy();
   const taille = () => { const r = vue.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); renderer.domElement.style.width = r.width + "px"; renderer.domElement.style.height = r.height + "px"; camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
   ro = new ResizeObserver(taille); ro.observe(vue); taille();
@@ -143,7 +146,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const m = {}; const ns = new Set(groupes[st.g].etages.map(e => e.n));
     reperes.filter(r => ns.has(r.p)).forEach(r => { m[r.c] = (m[r.c] || 0) + 1; });
     if (st.filtre && !m[st.filtre]) st.filtre = "";
-    $(".p3-leg").innerHTML = `<h4>🔑 Clés <small>clique pour isoler</small></h4>${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
+    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Clés${st.filtre ? ` : ${esc(st.filtre)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4>${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
   }
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
@@ -228,19 +231,43 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
 
   // Clic : un point → infos ; un étage → plan à plat.
   const ray = new THREE.Raycaster(), souris = new THREE.Vector2(); let down = null;
-  renderer.domElement.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; arreterAuto(); });
-  renderer.domElement.addEventListener("pointerup", (e) => {
-    if (!down || Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 5) { down = null; return; } down = null;
-    const r = renderer.domElement.getBoundingClientRect(); souris.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(souris, camera);
+  // Tap = sélection (point de clé / niveau) ; double-tap = zoom sur l'endroit touché ; plusieurs doigts = geste, pas de tap.
+  let doigts = 0, multi = false, dernierTap = null, tapAttente = 0;
+  renderer.domElement.addEventListener("pointerdown", (e) => { doigts++; if (doigts > 1) multi = true; if (doigts === 1) { multi = false; down = { x: e.clientX, y: e.clientY }; } arreterAuto(); });
+  const lever = () => { doigts = Math.max(0, doigts - 1); };
+  renderer.domElement.addEventListener("pointercancel", lever);
+  const viser = (e) => { const r = renderer.domElement.getBoundingClientRect(); souris.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(souris, camera); };
+  const planVise = () => ray.intersectObjects(etages.flatMap(et => et.groupe.children.filter(c => c.userData.n !== undefined)).filter(o => o.parent.visible))[0];
+  function tapSimple(e) {
+    viser(e);
     const pts = etages.filter(et => et.groupe.visible).flatMap(et => et.points.filter(p => p.mesh.material.opacity > 0.5).map(p => p.mesh));
     const hp = ray.intersectObjects(pts)[0]; if (hp) { infoPin(hp.object.userData.r); return; }
-    const plans = etages.flatMap(et => et.groupe.children.filter(c => c.userData.n !== undefined));
-    const h = ray.intersectObjects(plans.filter(o => o.parent.visible))[0]; if (h && st.seul == null) seulNiveau(h.object.userData.n);
+    const h = planVise(); if (h && st.seul == null) seulNiveau(h.object.userData.n);
+  }
+  function zoomIci(e) {
+    viser(e); const h = planVise(); if (!h) return;
+    const off = camera.position.clone().sub(controls.target).multiplyScalar(0.45);
+    if (off.length() < controls.minDistance * 1.2) off.setLength(controls.minDistance * 1.2);
+    allerCamera(h.point.clone().add(off).toArray(), h.point.toArray());
+  }
+  renderer.domElement.addEventListener("pointerup", (e) => {
+    lever();
+    const geste = multi || !down || Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > (e.pointerType === "touch" ? 12 : 5);
+    if (doigts === 0) { down = null; } if (geste) { if (doigts === 0) multi = false; return; }
+    const ev = { clientX: e.clientX, clientY: e.clientY }, maintenant = Date.now();
+    if (dernierTap && maintenant - dernierTap.t < 320 && Math.hypot(ev.clientX - dernierTap.x, ev.clientY - dernierTap.y) < 40) { clearTimeout(tapAttente); dernierTap = null; zoomIci(ev); return; }
+    dernierTap = { t: maintenant, x: ev.clientX, y: ev.clientY };
+    clearTimeout(tapAttente); tapAttente = setTimeout(() => { dernierTap = null; tapSimple(ev); }, 300);
   });
+  renderer.domElement.addEventListener("dblclick", (e) => e.preventDefault());
   $("[data-hd]")?.addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (!f) return; const lab = e.target.closest("label"); lab.textContent = "⏳ Enregistrement du PDF…";
     try { hd = await ajouterPdf(f); lab.remove(); construire(); } catch (err) { alert("Impossible : " + (err?.message || err)); lab.textContent = "✨ Rendre net + noms des pièces (PDF)"; } });
   $("[data-g]").onchange = (e) => { st.g = +e.target.value; construire(); };
+  // Sur téléphone, la légende se replie (un tap sur « 🔑 Clés » l'ouvre / la ferme).
+  if (matchMedia("(max-width:700px)").matches) $(".p3-leg").classList.add("plie");
+  $(".p3-leg").addEventListener("click", (e) => { if (e.target.closest("[data-plier]")) { $(".p3-leg").classList.toggle("plie"); return; }
+    if (matchMedia("(max-width:700px)").matches && e.target.closest("[data-cle]")) setTimeout(() => $(".p3-leg").classList.add("plie"), 250);
+  });
   $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; filtreOptions(); dessinerPoints(); });
   $(".p3-niv").addEventListener("click", (e) => { const pl = e.target.closest("[data-plat2]"); if (pl) { fermer(); onPlat?.(+pl.dataset.plat2, st.filtre); return; }
     if (e.target.closest("[data-tous]")) { seulNiveau(null); return; } const b = e.target.closest("[data-niv]"); if (b) seulNiveau(st.seul === +b.dataset.niv ? null : +b.dataset.niv); });
@@ -302,7 +329,7 @@ const STYLE = `<style id="p3-style">
 .p3-niv button{display:flex;flex-direction:column;align-items:flex-start;min-width:96px;padding:8px 12px}.p3-niv b{font-size:15px}.p3-niv em{font-style:normal;font-size:11.5px;color:#ffb3bb;min-height:14px}
 .p3-vue{flex:1;position:relative;min-height:0}.p3-vue canvas{display:block;touch-action:none;cursor:grab}.p3-vue canvas:active{cursor:grabbing}
 .p3-leg{position:absolute;right:16px;top:64px;bottom:16px;z-index:3;width:170px;overflow:auto;display:flex;flex-direction:column;gap:4px;scrollbar-width:thin}
-.p3-leg h4{margin:0 0 4px;font-size:13px;color:#bfe9ff}.p3-leg h4 small{display:block;font-weight:400;color:#7fb3cc;font-size:11px}
+.p3-leg h4{margin:0 0 4px;font-size:13px;color:#bfe9ff}.p3-pli{display:none}.p3-leg h4 small{display:block;font-weight:400;color:#7fb3cc;font-size:11px}
 .p3-leg button{display:flex;align-items:center;gap:8px;background:rgba(10,30,50,.55);border:1px solid rgba(120,225,255,.18);border-radius:8px;padding:5px 9px;color:#dff6ff;font:inherit;font-size:13px;cursor:pointer;text-align:left}
 .p3-leg button i{width:11px;height:11px;border-radius:50%;flex:none}.p3-leg button span{margin-left:auto;color:#8fc0d6;font-size:12px}.p3-leg button.on{background:rgba(80,190,255,.3);border-color:#7fe8ff}.p3-leg button.off{opacity:.45}
 .p3-hd{background:linear-gradient(135deg,#0f6a8f,#1aa3c8);color:#fff;border:1px solid #5fd4ff;border-radius:9px;padding:6px 11px;font-size:13px;cursor:pointer;box-shadow:0 0 14px rgba(95,212,255,.5)}
@@ -310,5 +337,5 @@ const STYLE = `<style id="p3-style">
 .p3-load{position:absolute;inset:0;display:grid;place-items:center;font-size:16px;color:#9fd3ea;pointer-events:none}.p3-load[hidden]{display:none}
 .p3-info{position:absolute;right:200px;bottom:16px;z-index:4;background:rgba(6,16,28,.9);border:1px solid rgba(120,225,255,.4);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:240px;box-shadow:0 0 30px rgba(80,200,255,.2);font-size:13.5px}
 .p3-info[hidden]{display:none}.p3-info span{color:#9fc7da}.p3-info div{display:flex;gap:6px;flex-wrap:wrap}
-@media (max-width:700px){.p3-niv{top:auto;bottom:12px;transform:none;flex-direction:row;flex-wrap:wrap;left:12px;right:160px}.p3-niv button{min-width:0}.p3-sous{display:none}.p3-leg{top:auto;bottom:12px;height:200px;width:140px}.p3-info{right:12px;bottom:230px}}
+@media (max-width:700px){.p3-niv{top:auto;bottom:12px;transform:none;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;left:8px;right:170px;gap:5px}.p3-niv small,.p3-nl [data-plat2]{display:none}.p3-niv>button,.p3-nl{flex:none}.p3-leg h4 small{display:none}.p3-niv button{padding:5px 8px}.p3-niv b{font-size:13px}.p3-niv em{font-size:10px}.p3-niv button{min-width:0}.p3-sous{display:none}.p3-leg{top:auto;bottom:12px;max-height:55vh;height:auto;width:150px;background:rgba(5,11,20,.85);border-radius:12px;padding:8px}.p3-leg.plie{max-height:none}.p3-leg.plie button{display:none}.p3-leg h4{cursor:pointer;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.p3-pli{display:inline;font-style:normal;margin-left:auto}.p3-leg.plie .p3-pli{transform:rotate(180deg)}.p3-h{padding:8px 10px;gap:6px}.p3-h b{font-size:15px;max-width:60vw}.p3-hb{gap:5px}.p3-hb button,.p3-hb select{padding:5px 8px;font-size:12px}.p3-ec{display:none}.p3-info{right:12px;bottom:230px}}
 </style>`;
