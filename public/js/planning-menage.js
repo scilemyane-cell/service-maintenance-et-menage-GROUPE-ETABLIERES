@@ -24,27 +24,27 @@ const SPECIAUX = {
 // Planning de Marie (PDF « planning hebdomadaire ») — amorcé une seule fois.
 const tous = (v) => Object.fromEntries(JOURS.map(j => [j, v]));
 const lmv = (v) => ({ LUN: v, MAR: "", MER: v, JEU: "", VEN: v });
-// v4 (04/11/2026) : 36 h / semaine, horaires ronds, pause 12 h – 13 h — Douanier Rousseau 8 h – 10 h 15,
-// AGA 10 h 30 – 12 h, Saint Vincent de Paul 13 h – 14 h 45 ; lundi / mercredi / vendredi : Moutonnerie puis Ferme
-// (trajets de 5 min) ; mardi : réassort 20 min (atelier, véhicule, retour) ; fiches de traçabilité 5 min / jour.
+// v5 (04/11/2026) : 36 h / semaine — Douanier Rousseau 8 h – 10 h 15, AGA 10 h 30 – 12 h, pause 12 h – 13 h,
+// Saint Vincent de Paul 13 h – 14 h 50 ; lundi / mercredi / vendredi : Moutonnerie puis Ferme (trajets de 5 min) ;
+// mardi : réassort 20 min. La fiche de traçabilité (5 min par maison) est COMPRISE dans le temps de chaque maison
+// (ficheParSite), affichée sur chaque bloc.
 const j5 = (L, Ma, Me, J, V) => ({ LUN: L, MAR: Ma, MER: Me, JEU: J, VEN: V });
 export const PLANNING_DEFAUT_MENAGE = {
   "Dispositif MNA": {
-    v: 4,
+    v: 5,
     agent: "Marie NICOLAIZEAU",
+    ficheParSite: 5,
     lignes: [
       { debut: "08:00", fin: "10:15", jours: tous("dr") },
       { debut: "10:15", fin: "10:30", jours: tous("trajet") },
       { debut: "10:30", fin: "12:00", jours: tous("aga") },
       { debut: "12:00", fin: "13:00", jours: tous("pause") },
-      { debut: "13:00", fin: "14:45", jours: tous("svdp") },
-      { debut: "14:45", fin: "14:50", jours: j5("trajet", "reassort", "trajet", "tracabilite", "trajet") },
-      { debut: "14:50", fin: "15:05", jours: j5("moutonnerie", "reassort", "moutonnerie", "", "moutonnerie") },
-      { debut: "15:05", fin: "15:10", jours: j5("moutonnerie", "tracabilite", "moutonnerie", "", "moutonnerie") },
-      { debut: "15:10", fin: "15:50", jours: lmv("moutonnerie") },
-      { debut: "15:50", fin: "15:55", jours: lmv("trajet") },
-      { debut: "15:55", fin: "16:55", jours: lmv("la-ferme") },
-      { debut: "16:55", fin: "17:00", jours: lmv("tracabilite") },
+      { debut: "13:00", fin: "14:50", jours: tous("svdp") },
+      { debut: "14:50", fin: "14:55", jours: j5("trajet", "reassort", "trajet", "", "trajet") },
+      { debut: "14:55", fin: "15:10", jours: j5("moutonnerie", "reassort", "moutonnerie", "", "moutonnerie") },
+      { debut: "15:10", fin: "15:55", jours: lmv("moutonnerie") },
+      { debut: "15:55", fin: "16:00", jours: lmv("trajet") },
+      { debut: "16:00", fin: "17:00", jours: lmv("la-ferme") },
     ],
   },
 };
@@ -85,7 +85,9 @@ function calculs(p) {
   const parJour = Object.fromEntries(JOURS.map(j => [j, 0])), parSite = {};
   (p.lignes || []).forEach(l => JOURS.forEach(j => { const v = l.jours?.[j]; if (travaille(v)) parJour[j] += duree(l); if (estSite(v)) parSite[v] = (parSite[v] || 0) + duree(l); }));
   const trajet = (p.lignes || []).reduce((t, l) => t + JOURS.filter(j => l.jours?.[j] === "trajet").length * duree(l), 0);
-  return { parJour, parSite, total: Object.values(parJour).reduce((a, b) => a + b, 0), trajet };
+  // Fiches de traçabilité comprises : ficheParSite minutes par passage dans une maison (bloc continu).
+  let passages = 0; if (p.ficheParSite) JOURS.forEach(j => { let prec = ""; (p.lignes || []).forEach(l => { const v = l.jours?.[j] || ""; if (estSite(v) && v !== prec) passages++; prec = v; }); });
+  return { parJour, parSite, total: Object.values(parJour).reduce((a, b) => a + b, 0), trajet, fiches: passages * (p.ficheParSite || 0) };
 }
 
 function render() {
@@ -112,7 +114,7 @@ function render() {
         ${JOURS.map(j => { const v = l.jours?.[j] || ""; if (ed) return `<td><select data-pm="${i}|${j}" style="--c:${couleur(v)}">${options(v)}</select></td>`;
           const n = span[`${i}|${j}`]; if (n === 0) return "";
           const fin = L[i + n - 1].fin, dureeBloc = minutes(fin) - minutes(l.debut);
-          return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<span class="pm-case ${SPECIAUX[v] ? "spe" : ""} ${dureeBloc < 20 ? "mini" : ""}" style="--c:${couleur(v)}" title="${esc(libelle(v))} · ${hh(l.debut)} – ${hh(fin)}">${esc(libelle(v))}${dureeBloc >= 20 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}</span>` : ""}</td>`; }).join("")}
+          return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<span class="pm-case ${SPECIAUX[v] ? "spe" : ""} ${dureeBloc < 20 ? "mini" : ""}" style="--c:${couleur(v)}" title="${esc(libelle(v))} · ${hh(l.debut)} – ${hh(fin)}">${esc(libelle(v))}${dureeBloc >= 20 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}${p.ficheParSite && estSite(v) && dureeBloc >= 30 ? `<em class="pm-fiche">📝 dont ${p.ficheParSite} min de fiche</em>` : ""}</span>` : ""}</td>`; }).join("")}
         ${ed ? `<td><button class="del-btn" data-pm-del="${i}">🗑️</button></td>` : ""}
       </tr>`).join(""); })()}</tbody>
     </table></div>
@@ -120,7 +122,7 @@ function render() {
     <div class="pm-bas">
       <div class="form-card"><h3>⏱️ Heures travaillées</h3>
         <table class="pm-r">${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table>
-        ${k.trajet ? `<p class="hint">Dont trajets : ${fmtH(k.trajet)} par semaine (réassort et fiches de traçabilité compris dans le total).</p>` : ""}</div>
+        ${k.trajet ? `<p class="hint">Dont trajets : ${fmtH(k.trajet)} par semaine.</p>` : ""}${k.fiches ? `<p class="hint">📝 Fiches de traçabilité : ${p.ficheParSite} min par maison, comprises dans le temps de ménage (${fmtH(k.fiches)} par semaine).</p>` : ""}</div>
       <div class="form-card"><h3>🏠 Charge par site</h3>
         ${Object.entries(k.parSite).sort((a, b) => b[1] - a[1]).map(([id, m]) => `<div class="pm-site"><span class="pm-pastille" style="--c:${couleur(id)}"></span><b>${esc(libelle(id))}</b><span class="pm-barre"><i style="width:${k.total ? m / k.total * 100 : 0}%;background:${couleur(id)}"></i></span><span class="pm-site-h">${fmtH(m)} / semaine · <b>${k.total ? Math.round(m / k.total * 100) : 0} %</b> du temps</span></div>`).join("") || `<p class="hint">Aucun site planifié.</p>`}</div>
     </div>
@@ -161,7 +163,7 @@ function imprimerPlanning() {
   const hRow = (l) => Math.max(4.5, duree(l) / totalMin * 100); // mm : ~112 mm de grille, tout tient sur une page
   const lignes = L.map((l, i) => `<tr style="height:${hRow(l).toFixed(1)}mm"><th>${hh(l.debut)} – ${hh(l.fin)}</th>${JOURS.map(j => {
     const n = span[`${i}|${j}`]; if (n === 0) return ""; const v = l.jours?.[j] || "", fin = L[i + n - 1].fin, d = minutes(fin) - minutes(l.debut);
-    return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<div class="c ${SPECIAUX[v] ? "spe" : ""}" style="--c:${couleur(v)}"><b>${esc(libelle(v))}</b>${d >= 20 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}</div>` : ""}</td>`; }).join("")}</tr>`).join("");
+    return `<td ${n > 1 ? `rowspan="${n}"` : ""}>${v ? `<div class="c ${SPECIAUX[v] ? "spe" : ""}" style="--c:${couleur(v)}"><b>${esc(libelle(v))}</b>${d >= 20 ? `<small>${hh(l.debut)} – ${hh(fin)}</small>` : ""}${p.ficheParSite && !SPECIAUX[v] && d >= 30 ? `<i>dont ${p.ficheParSite} min de fiche</i>` : ""}</div>` : ""}</td>`; }).join("")}</tr>`).join("");
   const sites = Object.entries(k.parSite).sort((a, b) => b[1] - a[1]);
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Planning — ${esc(p.agent || dispositif)}</title><style>
     @page{size:A4 landscape;margin:8mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -172,7 +174,7 @@ function imprimerPlanning() {
     table.g tbody th{width:24mm;font-size:7.5pt;color:#6b7280;font-weight:600;border-bottom:.2mm solid #eef0f3;text-align:center}
     table.g td{position:relative;padding:0;border-bottom:.2mm solid #eef0f3}
     .c{position:absolute;inset:.5mm .8mm;border-radius:2mm;background:var(--c);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;line-height:1.15}
-    .c b{font-size:9pt}.c small{font-size:7pt;opacity:.9}.c.spe{background:#fff;color:var(--c);border:.3mm dashed var(--c)}.c.spe b{font-size:7.5pt}
+    .c b{font-size:9pt}.c small{font-size:7pt;opacity:.9}.c i{font-size:6.5pt;font-style:normal;opacity:.95;margin-top:.4mm;background:rgba(255,255,255,.22);border-radius:1mm;padding:0 1.2mm}.c.spe{background:#fff;color:var(--c);border:.3mm dashed var(--c)}.c.spe b{font-size:7.5pt}
     .bas{display:grid;grid-template-columns:1fr 1.6fr;gap:6mm;margin-top:4mm}.bas>div{border:.4mm solid #9ca3af;border-radius:2.5mm;padding:2.5mm 3.5mm}
     .bas h2{font-size:10pt;margin:0 0 1.5mm;padding-bottom:1.2mm;border-bottom:.4mm solid #111827}
     .bas table{width:100%;border-collapse:collapse;font-size:9pt}.bas td{padding:.8mm 1mm;border-bottom:.2mm solid #eef0f3}.bas td:last-child{text-align:right;font-weight:700}.bas tr.tot td{font-weight:800;border-top:.4mm solid #111827}
@@ -181,7 +183,7 @@ function imprimerPlanning() {
     <div class="t"><h1>Planning hebdomadaire — ${esc(p.agent || "")}</h1><span>${esc(dispositif)} · ${fmtH(k.total)} par semaine</span></div>
     <table class="g"><thead><tr><th style="width:24mm">Heure</th>${JOURS.map(j => `<th>${NOMS[j]}<small>${fmtH(k.parJour[j])}</small></th>`).join("")}</tr></thead><tbody>${lignes}</tbody></table>
     <div class="bas"><div><h2>Heures travaillées par jour</h2><table>${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table></div>
-      <div><h2>Temps passé par maison (par semaine)</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / semaine (${k.total ? Math.round(m / k.total * 100) : 0} % du temps)</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / semaine</td></tr>` : ""}</table></div></div>
+      <div><h2>Temps passé par maison (par semaine)</h2><table>${sites.map(([id, m]) => `<tr><td><span class="p" style="--c:${couleur(id)}"></span>${esc(libelle(id))}</td><td>${fmtH(m)} / semaine (${k.total ? Math.round(m / k.total * 100) : 0} % du temps)</td></tr>`).join("")}${k.trajet ? `<tr><td>Dont trajets</td><td>${fmtH(k.trajet)} / semaine</td></tr>` : ""}${k.fiches ? `<tr><td>Dont fiches de traçabilité (${p.ficheParSite} min par maison, dans le temps de ménage)</td><td>${fmtH(k.fiches)} / semaine</td></tr>` : ""}</table></div></div>
   </body></html>`;
   const f = document.createElement("iframe");
   // Cadre hors écran mais à la taille d'une page A4 paysage : sur téléphone, la mise en page n'est plus écrasée.
