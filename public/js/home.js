@@ -764,7 +764,7 @@ function render() {
   const voitAlertesStock = ["super_admin", "admin", "n1"].includes(mountedUser.role);
   if (!voitAlertesStock) catsRef = catsRef.map(c => (c.badgeAtelier || c.badgeSites) ? { ...c, badgeAtelier: null, badgeSites: null } : c);
   // Mon ordre à moi (sauf quand un admin range l'ordre commun) ; les nouvelles tuiles gardent leur place commune, à la suite.
-  if (ordrePerso && modeReorganisation !== "tous") { const rang = (id) => { const i = ordrePerso.indexOf(id); return i < 0 ? 1000 + catsRef.findIndex(c => c.id === id) : i; }; catsRef = [...catsRef].sort((a, b) => rang(a.id) - rang(b.id)); }
+  if (ordrePerso && modeReorganisation !== "tous") { const rang = (id) => { const i = ordrePerso.indexOf(id); return i < 0 && id === "direct" ? -1 : i < 0 ? 1000 + catsRef.findIndex(c => c.id === id) : i; }; catsRef = [...catsRef].sort((a, b) => rang(a.id) - rang(b.id)); }
   catsRef.forEach(c => {
     if (c.badgeAtelier) notifs.push({ cat: c.id, icone: "🔧", texte: `${c.badgeAtelier} alerte(s) stock atelier`, niveau: "rouge" });
     if (c.badgeSites) notifs.push({ cat: c.id, icone: "🏢", texte: `${c.badgeSites} alerte(s) stock déporté (sites)`, niveau: "orange" });

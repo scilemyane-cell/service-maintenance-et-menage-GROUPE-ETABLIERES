@@ -53,6 +53,7 @@
   const mountTransfertsTab = aLaDemande(charger_planning, "mountTransfertsTab");
   const mountCoordonneesTab = aLaDemande(charger_planning, "mountCoordonneesTab");
   const mountEquipeAujourdhui = aLaDemande(() => import("./equipe-aujourdhui.js"), "mountEquipeAujourdhui");
+  const mountTableauDirect = aLaDemande(() => import("./tableau-direct.js"), "mountTableauDirect");
   const mountVueEquipeTab = aLaDemande(charger_planning, "mountVueEquipeTab");
   const mountArchiveRelevesTab = aLaDemande(charger_planning, "mountArchiveRelevesTab");
   const mountPlanningIndividuelTab = aLaDemande(charger_planning, "mountPlanningIndividuelTab");
@@ -356,6 +357,12 @@
 
   function staticCategories() {
     return [
+      {
+        id: "direct", label: "Tableau de bord direct", icon: "🛰️", desc: "Tout voir d'un coup d'œil, en direct : urgences, charge, équipe, alertes",
+        subtabs: [
+          { id: "vue", label: "En direct", icon: "🛰️", roles: [...GESTION,"direction"], mount: mountTableauDirect },
+        ],
+      },
       {
         id: "statistiques", label: "Statistiques", icon: "📊", desc: "Tableau de bord — vue d'ensemble de l'activité",
         subtabs: [
@@ -760,7 +767,8 @@
     const classees = ordre.map(id => parId.get(id)).filter(Boolean);
     const idsClasses = new Set(classees.map(c => c.id));
     const nouvelles = visibles.filter(c => !idsClasses.has(c.id));
-    return [...classees, ...nouvelles];
+    // Le tableau de bord direct, tant qu'il n'a pas de place choisie, passe en premier.
+    return [...nouvelles.filter(c => c.id === "direct"), ...classees, ...nouvelles.filter(c => c.id !== "direct")];
   }
 
   function render() {
