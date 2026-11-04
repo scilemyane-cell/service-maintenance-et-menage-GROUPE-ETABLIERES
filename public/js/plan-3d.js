@@ -133,7 +133,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   // Doigts « comme une carte » : 1 doigt déplace le plan, 2 doigts zooment (pincer) et tournent / inclinent.
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.screenSpacePanning = false; controls.zoomToCursor = true; controls.panSpeed = 1.1; controls.rotateSpeed = 0.55; controls.zoomSpeed = 1.1;
-  const aniso = renderer.capabilities.getMaxAnisotropy();
+  const aniso = renderer.capabilities.getMaxAnisotropy(), mobile = matchMedia("(max-width:700px), (pointer:coarse)").matches;
   const taille = () => { const r = vue.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); renderer.domElement.style.width = r.width + "px"; renderer.domElement.style.height = r.height + "px"; camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
   ro = new ResizeObserver(taille); ro.observe(vue); taille();
 
@@ -151,7 +151,17 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
   // Un seul niveau en 3D (les autres sont masqués), ou tous empilés.
-  function seulNiveau(n) { st.seul = n; placer(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); } else allerCamera([70, 95, 100], [0, 0, 0]); }
+  function seulNiveau(n) { st.seul = n; placer(); if (n != null) { arreterAuto(); allerCamera([30, 62, 62], [0, 0, 0]); ultraHD(n); } else allerCamera([70, 95, 100], [0, 0, 0]); }
+  // Niveau seul : redessiné encore plus fin (jusqu'à 6144 px sur ordinateur, 4096 sur téléphone).
+  async function ultraHD(n) {
+    const et = etages.find(e => e.n === n); if (!hd || !et?.plan || !st.z || et.ultra) return;
+    const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 4096 : 6144); if (larg <= (et.larg || 0)) return;
+    const etat = $(".p3-etat"); etat.hidden = false; etat.textContent = "✨ Détails du niveau…";
+    try { const cv = await hd(n, larg, st.z); if (!cv || !vivant) return;
+      const t = new THREE.CanvasTexture(texture(cv, st.z, "holo", larg, true)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+      const ancien = et.plan.material.map; et.plan.material.map = t; et.plan.material.needsUpdate = true; ancien?.dispose(); et.ultra = true; et.larg = larg; }
+    catch (e) { console.warn("Ultra HD", e); } finally { etat.hidden = true; }
+  }
   function dessinerPoints() {
     etages.forEach(e => {
       e.points.forEach(p => { const on = st.filtre && p.r.c === st.filtre, off = st.filtre && !on;
@@ -173,7 +183,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     if (!vivant) return;
     const zs = imgs.map(i => i ? zoneUtile(i) : null).filter(Boolean);
     const z = zs.length ? { x: Math.min(...zs.map(a => a.x)), y: Math.min(...zs.map(a => a.y)) } : { x: 0, y: 0 };
-    z.w = zs.length ? Math.max(...zs.map(a => a.x + a.w)) - z.x : 1; z.h = zs.length ? Math.max(...zs.map(a => a.y + a.h)) - z.y : 1;
+    z.w = zs.length ? Math.max(...zs.map(a => a.x + a.w)) - z.x : 1; z.h = zs.length ? Math.max(...zs.map(a => a.y + a.h)) - z.y : 1; st.z = z;
     const ratio = imgs[0] ? (z.h * imgs[0].height) / (z.w * imgs[0].width) : 0.7, L = 100, P = L * ratio;
     g.etages.forEach((e, i) => {
       const groupe = new THREE.Group(); monde.add(groupe);
@@ -206,13 +216,13 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     // Haute définition : les étages sont redessinés depuis le PDF (traits vectoriels → texture 4096 px).
     if (hd) {
       const jeton = (construire.jeton = (construire.jeton || 0) + 1), etat = $(".p3-etat");
-      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, matchMedia("(max-width:700px)").matches ? 2048 : 4096);
+      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 3072 : 4096);
       for (const [i, et] of etages.entries()) {
         if (!vivant || jeton !== construire.jeton) return;
         etat.hidden = false; etat.textContent = `✨ Haute définition… ${i + 1} / ${etages.length}`;
-        try { const cv = await hd(et.n, larg, z); if (!cv || !vivant || jeton !== construire.jeton || !et.plan) continue;
+        try { const cv = await hd(et.n, larg, z); if (!cv || !vivant || jeton !== construire.jeton || !et.plan || et.ultra) continue;
           const t = new THREE.CanvasTexture(texture(cv, z, "holo", larg, true)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
-          const ancien = et.plan.material.map; et.plan.material.map = t; et.plan.material.needsUpdate = true; ancien?.dispose(); }
+          const ancien = et.plan.material.map; et.plan.material.map = t; et.plan.material.needsUpdate = true; ancien?.dispose(); et.larg = larg; }
         catch (e) { console.warn("HD", e); }
       }
       etat.hidden = true;
