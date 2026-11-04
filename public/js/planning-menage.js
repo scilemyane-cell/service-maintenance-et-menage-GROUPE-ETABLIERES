@@ -13,22 +13,40 @@ const NOMS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "
 const COUL_SITES = ["#2f6fd6", "#8a4fd1", "#d9772b", "#139c8f", "#c9407a", "#5a7d1a"];
 const COUL_FIXES = { aga: "#2f6fd6", dr: "#8a4fd1", svdp: "#d9772b", moutonnerie: "#139c8f", "la-ferme": "#5a7d1a" };
 const coul = (id) => { if (COUL_FIXES[id]) return COUL_FIXES[id]; let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COUL_SITES[h % COUL_SITES.length]; };
-const SPECIAUX = { trajet: { label: "Trajet", c: "#8b96a6" }, pause: { label: "Pause déjeuner", c: "#d9b24c" } };
+// compte : temps de travail (trajets, réassort, fiches) ou non (pause).
+const SPECIAUX = {
+  trajet: { label: "Trajet", c: "#8b96a6", compte: true },
+  reassort: { label: "Réassort", c: "#b45309", compte: true },
+  tracabilite: { label: "Fiches de traçabilité", c: "#0d9488", compte: true },
+  pause: { label: "Pause déjeuner", c: "#d9b24c", compte: false },
+};
 
 // Planning de Marie (PDF « planning hebdomadaire ») — amorcé une seule fois.
 const tous = (v) => Object.fromEntries(JOURS.map(j => [j, v]));
 const lmv = (v) => ({ LUN: v, MAR: "", MER: v, JEU: "", VEN: v });
+// v2 (04/11/2026) : 36 h / semaine — trajets SVDP → Moutonnerie → Ferme (5 min chacun), réassort (chargement
+// à l'atelier le mardi, livraison sur les sites le mercredi : 15 min chacun), fiches de traçabilité 5 min / jour ;
+// Douanier Rousseau, AGA et Saint Vincent de Paul ramenés à 1 h 50 (1 h 40 à SVDP le mardi).
+const j5 = (L, Ma, Me, J, V) => ({ LUN: L, MAR: Ma, MER: Me, JEU: J, VEN: V });
 export const PLANNING_DEFAUT_MENAGE = {
   "Dispositif MNA": {
+    v: 2,
     agent: "Marie NICOLAIZEAU",
     lignes: [
-      { debut: "08:15", fin: "10:15", jours: tous("dr") },
-      { debut: "10:15", fin: "10:30", jours: tous("trajet") },
-      { debut: "10:30", fin: "12:30", jours: tous("aga") },
-      { debut: "12:30", fin: "13:30", jours: tous("pause") },
-      { debut: "13:30", fin: "15:30", jours: tous("svdp") },
-      { debut: "15:30", fin: "16:30", jours: lmv("moutonnerie") },
-      { debut: "16:30", fin: "17:30", jours: lmv("la-ferme") },
+      { debut: "08:15", fin: "10:05", jours: tous("dr") },
+      { debut: "10:05", fin: "10:20", jours: tous("trajet") },
+      { debut: "10:20", fin: "12:10", jours: tous("aga") },
+      { debut: "12:10", fin: "13:10", jours: tous("pause") },
+      { debut: "13:10", fin: "14:50", jours: tous("svdp") },
+      { debut: "14:50", fin: "15:00", jours: j5("svdp", "reassort", "svdp", "svdp", "svdp") },
+      { debut: "15:00", fin: "15:05", jours: j5("trajet", "reassort", "trajet", "tracabilite", "trajet") },
+      { debut: "15:05", fin: "15:10", jours: j5("moutonnerie", "tracabilite", "moutonnerie", "", "moutonnerie") },
+      { debut: "15:10", fin: "16:05", jours: lmv("moutonnerie") },
+      { debut: "16:05", fin: "16:10", jours: lmv("trajet") },
+      { debut: "16:10", fin: "17:10", jours: lmv("la-ferme") },
+      { debut: "17:10", fin: "17:15", jours: j5("tracabilite", "", "reassort", "", "tracabilite") },
+      { debut: "17:15", fin: "17:25", jours: j5("", "", "reassort", "", "") },
+      { debut: "17:25", fin: "17:30", jours: j5("", "", "tracabilite", "", "") },
     ],
   },
 };
@@ -49,7 +67,9 @@ export function mountPlanningMenage(container, u, disp) {
   unsubs.push(onSnapshot(REF(), (snap) => {
     const d = snap.exists() ? snap.data() : {};
     st.plannings = d;
-    if (!d[dispositif] && PLANNING_DEFAUT_MENAGE[dispositif] && estEditeur(user)) setDoc(REF(), { [dispositif]: PLANNING_DEFAUT_MENAGE[dispositif] }, { merge: true }).catch(() => {});
+    // Planning absent, ou d'une version plus ancienne que celle du code : remplacé une fois par la version à jour.
+    const defaut = PLANNING_DEFAUT_MENAGE[dispositif];
+    if (defaut && estEditeur(user) && (!d[dispositif] || (d[dispositif].v || 1) < (defaut.v || 1))) { d[dispositif] = defaut; setDoc(REF(), { [dispositif]: defaut }, { merge: true }).catch(() => {}); }
     render();
   }, () => { st.plannings = {}; render(); }));
 }
@@ -60,11 +80,12 @@ function libelle(v) {
   const s = st.sites.find(x => x.id === v); return s ? court(s.name) : v;
 }
 function couleur(v) { return SPECIAUX[v]?.c || (st.sites.some(x => x.id === v) ? coul(v) : "#5a6372"); }
-const travaille = (v) => v && !SPECIAUX[v];
+const travaille = (v) => v && (!SPECIAUX[v] || SPECIAUX[v].compte);
+const estSite = (v) => v && !SPECIAUX[v];
 
 function calculs(p) {
   const parJour = Object.fromEntries(JOURS.map(j => [j, 0])), parSite = {};
-  (p.lignes || []).forEach(l => JOURS.forEach(j => { const v = l.jours?.[j]; if (travaille(v)) { parJour[j] += duree(l); parSite[v] = (parSite[v] || 0) + duree(l); } }));
+  (p.lignes || []).forEach(l => JOURS.forEach(j => { const v = l.jours?.[j]; if (travaille(v)) parJour[j] += duree(l); if (estSite(v)) parSite[v] = (parSite[v] || 0) + duree(l); }));
   const trajet = (p.lignes || []).reduce((t, l) => t + JOURS.filter(j => l.jours?.[j] === "trajet").length * duree(l), 0);
   return { parJour, parSite, total: Object.values(parJour).reduce((a, b) => a + b, 0), trajet };
 }
@@ -75,7 +96,7 @@ function render() {
   const p = st.edit ? st.brouillon : (st.plannings[dispositif] || PLANNING_DEFAUT_MENAGE[dispositif] || { agent: "", lignes: [] });
   const ed = st.edit, k = calculs(p);
   const sitesDisp = st.sites.filter(s => (s.dispositif || "Dispositif MNA") === dispositif);
-  const options = (v) => `<option value="">—</option>${sitesDisp.map(s => `<option value="${esc(s.id)}" ${v === s.id ? "selected" : ""}>${esc(court(s.name))}</option>`).join("")}<option value="trajet" ${v === "trajet" ? "selected" : ""}>Trajet</option><option value="pause" ${v === "pause" ? "selected" : ""}>Pause déjeuner</option>`;
+  const options = (v) => `<option value="">—</option>${sitesDisp.map(s => `<option value="${esc(s.id)}" ${v === s.id ? "selected" : ""}>${esc(court(s.name))}</option>`).join("")}${Object.entries(SPECIAUX).map(([k, x]) => `<option value="${k}" ${v === k ? "selected" : ""}>${x.label}</option>`).join("")}`;
   conteneur.innerHTML = `<div class="stack pm">
     <div class="pm-tete">
       <div><h2>📅 Planning hebdomadaire</h2>${ed ? `<label class="pm-agent">Agent <input id="pm-agent" value="${esc(p.agent || "")}"></label>` : `<p class="hint" style="margin:2px 0 0">${p.agent ? `<b>${esc(p.agent)}</b> · ` : ""}${fmtH(k.total)} par semaine</p>`}</div>
@@ -94,7 +115,7 @@ function render() {
     <div class="pm-bas">
       <div class="form-card"><h3>⏱️ Heures travaillées</h3>
         <table class="pm-r">${JOURS.map(j => `<tr><td>${NOMS[j]}</td><td>${fmtH(k.parJour[j])}</td></tr>`).join("")}<tr class="tot"><td>Total</td><td>${fmtH(k.total)}</td></tr></table>
-        ${k.trajet ? `<p class="hint">Trajets (non comptés) : ${fmtH(k.trajet)} par semaine.</p>` : ""}</div>
+        ${k.trajet ? `<p class="hint">Dont trajets : ${fmtH(k.trajet)} par semaine (réassort et fiches de traçabilité compris dans le total).</p>` : ""}</div>
       <div class="form-card"><h3>🏠 Charge par site</h3>
         ${Object.entries(k.parSite).sort((a, b) => b[1] - a[1]).map(([id, m]) => `<div class="pm-site"><span class="pm-pastille" style="--c:${couleur(id)}"></span><b>${esc(libelle(id))}</b><span class="pm-barre"><i style="width:${k.total ? m / k.total * 100 : 0}%;background:${couleur(id)}"></i></span><span>${fmtH(m)} / sem.</span><small>${k.total ? Math.round(m / k.total * 100) : 0} %</small></div>`).join("") || `<p class="hint">Aucun site planifié.</p>`}</div>
     </div>
