@@ -103,7 +103,7 @@ function render() {
     <text x="70" y="68" text-anchor="middle" class="td-dn">${ouvertes.length}</text><text x="70" y="86" text-anchor="middle" class="td-dl">ouvertes</text></svg>`;
 
   // Fil d'activité.
-  const activite = st.demandes.filter(d => !d.supprimeeLe && !d.lieeA).map(d => ({ d, t: Math.max(ms(d.dateMaj), ms(d.importeLe)) })).filter(x => x.t).sort((a, b) => b.t - a.t).slice(0, estPlein() ? 14 : 6);
+  const activite = st.demandes.filter(d => !d.supprimeeLe && !d.lieeA).map(d => ({ d, t: Math.max(ms(d.dateMaj), ms(d.importeLe)) })).filter(x => x.t).sort((a, b) => b.t - a.t).slice(0, paysage() ? 14 : 6);
   const qui = (d) => d.commentaireMajPar || d.validePar || d.declarePar || d.attribuePar || d.commentaireTechPar || "";
   const coulStatut = (s) => { const v = sa(s); return v.startsWith("realis") ? "#10b981" : v.startsWith("annul") ? "#94a3b8" : v.startsWith("planif") ? "#8b5cf6" : v.includes("commande") || v.includes("devis") ? "#f59e0b" : "#3b82f6"; };
 
@@ -131,12 +131,12 @@ function render() {
   const agents = Object.entries(parAgent).filter(([, a]) => a.sem || a.auj).sort((a, b) => b[1].der - a[1].der);
 
   const kpi = (v, lib, c, go, spark, sous) => `<button type="button" class="td-k" style="--c:${c}" data-go="${go}"><span class="td-kl"><i></i>${lib}</span><b>${v}</b>${spark || `<small>${sous || "&nbsp;"}</small>`}</button>`;
-  const plein = estPlein();
+  const plein = paysage();
   const nbUrg = plein ? 12 : 6;
   const H_ = `<header class="td-h">
       <div><p><span class="td-live"><i></i>En direct</span> ${maintenant.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · ${maintenant.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p></div>
       ${ast ? `<div class="td-astr"><span>Astreinte</span>${[["N1", ast.n1], ["N2", ast.n2]].filter(x => x[1]).map(([n, p]) => `<a ${tel(p) ? `href="tel:${esc(tel(p).replace(/[^\d+]/g, ""))}"` : ""} title="${esc(tel(p))}">${avatar(p)}<b>${n}</b> ${esc(p)}</a>`).join("")}</div>` : ""}
-      <button type="button" class="td-pl" data-plein>${plein ? "✕ Quitter le plein écran" : "⛶ Plein écran"}</button>
+      <div class="td-rech"><input type="search" data-td-q placeholder="🔍 Rechercher une demande (n°, site, panne, technicien…)" value="${esc(st.q || "")}" autocomplete="off"><div class="td-res" data-td-res></div></div>
     </header>`;
   const K_ = `<section class="td-ks">
       ${kpi(ouvertes.length, "Ouvertes", "#3b82f6", "a-traiter", "", vieilles ? `dont ${vieilles} depuis + de 30 j` : "aucune de + de 30 j")}
@@ -166,23 +166,41 @@ function render() {
           ${absents.length ? `<div class="td-abs">${absents.map(a => `<div>${avatar(a.person)}<span><b>${esc(a.person || "")}</b><small>${TYP[a.type] || TYP.conge} · retour le ${new Date(new Date(String(a.end || a.start).slice(0, 10) + "T12:00").getTime() + 864e5).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</small></span></div>`).join("")}</div>` : ""}
         </section>`, men: `${agents.length ? `<section class="td-c"><div class="td-ct"><h3>Ménage</h3><span class="td-sub">fiches de traçabilité</span></div>
           ${agents.map(([n, a]) => `<div class="td-men">${avatar(n)}<span><b>${esc(n)}</b><small>${a.auj} aujourd'hui · ${a.sem} cette semaine</small></span><em>${depuis(a.der)}</em></div>`).join("")}</section>` : ""}` };
+  const focus = document.activeElement?.matches?.("[data-td-q]"), pos = focus ? document.activeElement.selectionStart : 0;
   conteneur.innerHTML = plein
-    ? `<div class="td plein">${H_}${K_}<div class="td-main3">
+    ? `<div class="td paysage">${H_}${K_}<div class="td-main3">
         <div class="td-col c1">${S.graph}<div class="td-duo">${S.charge}${S.pannes}</div></div>
         <div class="td-col c2">${S.surv}${S.urg}</div>
         <div class="td-col c3">${S.equipe}${S.fil}${S.men}</div></div></div>`
     : `<div class="td">${H_}${K_}<div class="td-main">
         <div class="td-col">${S.graph}<div class="td-duo">${S.charge}${S.pannes}</div>${S.fil}</div>
         <div class="td-col">${S.surv}${S.urg}${S.equipe}${S.men}</div></div></div>`;
+  ajuster();
+  if (st.q) chercher();
+  if (focus) { const q = conteneur.querySelector("[data-td-q]"); q?.focus(); try { q?.setSelectionRange(pos, pos); } catch { /* */ } }
 }
 
-const estPlein = () => { try { return localStorage.getItem("td-plein") === "1"; } catch { return false; } };
-function basculerPlein() {
-  const v = !estPlein();
-  try { localStorage.setItem("td-plein", v ? "1" : "0"); } catch { /* */ }
-  try { if (v && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch { /* */ }
-  document.body.classList.toggle("td-plein-actif", v);
-  render();
+const paysage = () => window.innerWidth >= 1100;
+// Paysage : le tableau prend toute la largeur et la hauteur de la fenêtre, menus de l'appli conservés.
+function ajuster() {
+  const td = conteneur?.querySelector(".td"); if (!td) return;
+  td.style.marginLeft = td.style.width = td.style.height = "";
+  if (!td.classList.contains("paysage")) return;
+  const r = conteneur.getBoundingClientRect(), large = document.documentElement.clientWidth;
+  td.style.marginLeft = `${12 - r.left}px`; td.style.width = `${large - 24}px`;
+  const haut = td.getBoundingClientRect().top + window.scrollY;
+  td.style.height = `${Math.max(640, window.innerHeight - haut - 10)}px`;
+}
+// Recherche rapide : demandes (n°, site, local, descriptif, technicien) → clic = ouvre la demande.
+function chercher() {
+  const box = conteneur?.querySelector("[data-td-res]"); if (!box) return;
+  const mots = sa(st.q).split(/\s+/).filter(Boolean);
+  if (!mots.length) { box.innerHTML = ""; box.hidden = true; return; }
+  const res = (st.demandes || []).filter(d => !d.supprimeeLe).map(d => ({ d, t: sa(`${d.numero} ${d.site} ${d.local} ${d.descriptifCorrige || d.descriptif} ${d.attribueANom} ${d.intervenant} ${d.statut} ${d.demandeur || ""}`) }))
+    .filter(x => mots.every(m => x.t.includes(m))).sort((a, b) => (ferme(a.d) - ferme(b.d)) || Math.max(ms(b.d.dateMaj), ms(b.d.importeLe)) - Math.max(ms(a.d.dateMaj), ms(a.d.importeLe))).slice(0, 10);
+  box.hidden = false;
+  box.innerHTML = res.length ? res.map(({ d }) => `<button type="button" data-dem="${esc(d.id)}" data-site="${esc(d.site || "")}"><b>${esc(d.numero || "")} · ${esc(d.site || "")}</b><span>${esc(String(d.descriptifCorrige || d.descriptif || ""))}</span><em style="color:${ferme(d) ? "var(--text-dim)" : estUrg(d) ? "#ef4444" : "#3b82f6"}">${esc(d.statut || "Nouvelle")}</em></button>`).join("")
+    : `<p>Aucune demande trouvée.</p>`;
 }
 
 function aller(go, el) {
@@ -198,9 +216,12 @@ export function mountTableauDirect(container) {
   clearInterval(minuterie);
   conteneur = container;
   if (!document.getElementById("td-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
-  container.addEventListener("click", (e) => { if (e.target.closest("[data-plein]")) { basculerPlein(); return; } const b = e.target.closest("[data-go],[data-dem]"); if (b && container.contains(b)) aller(b.dataset.go, b); });
-  document.body.classList.toggle("td-plein-actif", estPlein());
-  if (!window.__tdEchap) { window.__tdEchap = true; document.addEventListener("keydown", (e) => { if (e.key === "Escape" && estPlein() && conteneur && document.contains(conteneur)) basculerPlein(); }); }
+  container.addEventListener("click", (e) => { const b = e.target.closest("[data-go],[data-dem]"); if (b && container.contains(b)) aller(b.dataset.go, b); });
+  st.q = "";
+  container.addEventListener("input", (e) => { if (e.target.matches("[data-td-q]")) { st.q = e.target.value; chercher(); } });
+  container.addEventListener("keydown", (e) => { if (e.target.matches("[data-td-q]") && e.key === "Escape") { e.target.value = st.q = ""; chercher(); } });
+  document.addEventListener("click", function fermer(e) { if (!document.contains(container)) { document.removeEventListener("click", fermer); return; } if (!e.target.closest(".td-rech")) { const b = container.querySelector("[data-td-res]"); if (b) b.hidden = true; } });
+  if (!window.__tdResize) { window.__tdResize = true; let t = 0; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { if (conteneur && document.contains(conteneur)) render(); }, 200); }); }
   render();
   unsubs.push(watchDemandes((l) => { st.demandes = l || []; planifier(); }));
   unsubs.push(watchPeople((p) => { st.people = p; planifier(); }));
@@ -213,7 +234,7 @@ export function mountTableauDirect(container) {
     st.compteurs = { n: actifs.filter(m.estEnRetard).length, mot: m.motRetard() }; planifier(); })); }).catch(() => {});
   import("./stock-alerts-data.js").then(m => { if (conteneur === container) unsubs.push(m.watchStockAlertCount((c) => { st.stock = c; planifier(); })); }).catch(() => {});
   // L'heure, les « il y a … » et le jour se rafraîchissent toutes les minutes.
-  minuterie = setInterval(() => { if (!document.contains(container)) { clearInterval(minuterie); document.body.classList.remove("td-plein-actif"); unsubs.forEach(u => { try { u(); } catch { /* */ } }); unsubs = []; return; } render(); }, 60000);
+  minuterie = setInterval(() => { if (!document.contains(container)) { clearInterval(minuterie);  unsubs.forEach(u => { try { u(); } catch { /* */ } }); unsubs = []; return; } render(); }, 60000);
 }
 
 const STYLE = `<style id="td-style">
@@ -256,18 +277,18 @@ const STYLE = `<style id="td-style">
 .td-abs{display:flex;flex-direction:column;gap:8px}.td-abs>div,.td-men{display:flex;align-items:center;gap:10px}.td-abs span:not(.td-av),.td-men span:not(.td-av){display:flex;flex-direction:column;font-size:13.5px;flex:1}.td-abs small,.td-men small{color:var(--text-dim);font-size:12px}
 .td-abs .td-av{box-shadow:0 0 0 2px var(--panel),0 0 0 4px #f59e0b}.td-men em{font-style:normal;font-size:12px;color:#10b981}
 .td-vide{margin:2px 0;color:var(--text-dim);font-size:13.5px}
-.td-pl{all:unset;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:99px;padding:6px 14px}.td-pl:hover{background:var(--panel-alt)}
+.td-rech{position:relative;flex:0 1 420px;min-width:220px}.td-rech input{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--border);border-radius:99px;padding:8px 16px;color:var(--text);font:inherit;font-size:13.5px;outline:none}.td-rech input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.25)}
+.td-res{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:50;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,.45);max-height:60vh;overflow:auto;padding:6px}.td-res:empty{display:none}.td-res p{margin:8px 10px;color:var(--text-dim);font-size:13px}
+.td-res button{all:unset;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:1px 10px;padding:8px 10px;border-radius:9px;width:100%;box-sizing:border-box}.td-res button:hover{background:var(--panel-alt)}.td-res b{font-size:13.5px}.td-res span{grid-row:2;font-size:12.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.td-res em{grid-row:1/3;grid-column:2;align-self:center;font-style:normal;font-size:12px;font-weight:600}
 .td-h{align-items:center}.td-h>div:first-child{margin-right:auto}
-body.td-plein-actif{overflow:hidden}
-.td.plein{position:fixed;inset:0;z-index:5000;max-width:none;border-radius:0;height:100vh;height:100dvh;box-sizing:border-box;padding:14px 18px;gap:12px;display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden}
+.td.paysage{max-width:none;box-sizing:border-box;padding:14px 18px;gap:12px;display:grid;grid-template-rows:auto auto minmax(0,1fr)}
 .td-main3{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr) minmax(0,1fr);gap:12px;min-height:0}
-.td.plein .td-col{gap:12px;min-height:0}
-.td.plein .td-c{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:14px 16px}
-.td.plein .td-c>:not(.td-ct){min-height:0;overflow:auto;scrollbar-width:thin}
-.td.plein .c1>.td-c{flex:0 0 auto}.td.plein .c1 .td-duo{flex:1;min-height:0;gap:12px}
-.td.plein .c2>.td-c:last-child,.td.plein .c3>.td-c:nth-child(2){flex:1}
-.td.plein .td-k b{font-size:38px}
-@media (max-width:900px){.td-main3{grid-template-columns:1fr;overflow:auto}.td.plein{overflow:auto;display:flex}}
+.td.paysage .td-col{gap:12px;min-height:0}
+.td.paysage .td-c{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:14px 16px}
+.td.paysage .td-c>:not(.td-ct){min-height:0;overflow:auto;scrollbar-width:thin}
+.td.paysage .c1>.td-c{flex:0 0 auto}.td.paysage .c1 .td-duo{flex:1;min-height:0;gap:12px}
+.td.paysage .c2>.td-c:last-child,.td.paysage .c3>.td-c:nth-child(2){flex:1}
+.td.paysage .td-k b{font-size:38px}
 @media (max-width:1100px){.td-main{display:flex;flex-direction:column}.td-main>.td-col:last-child{order:-1}.td-ks{grid-template-columns:repeat(3,1fr)}.td-k:nth-child(4){border-left:0}.td-k:nth-child(n+4){border-top:1px solid var(--border)}}
 @media (max-width:640px){.td{padding:12px;border-radius:14px}.td-ks{grid-template-columns:repeat(2,1fr)}.td-k:nth-child(n){border-left:1px solid var(--border);border-top:1px solid var(--border)}.td-k:nth-child(odd){border-left:0}.td-k:nth-child(-n+2){border-top:0}.td-k{padding:12px 14px}.td-k b{font-size:28px}.td-duo{grid-template-columns:1fr}.td-c{padding:14px}.td-leg{margin-left:0;width:100%}}
 </style>`;
