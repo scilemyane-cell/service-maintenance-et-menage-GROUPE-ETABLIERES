@@ -40,10 +40,10 @@ const chargerImg = (src) => new Promise((ok, ko) => { const i = new Image(); i.o
 function zoneUtile(img) {
   const w = 420, h = Math.round(img.height * w / img.width), c = document.createElement("canvas"); c.width = w; c.height = h;
   const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0, w, h); const d = x.getImageData(0, 0, w, h).data;
-  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  let x0 = w, y0 = h, x1 = 0, y1 = 0; const paysage = img.width >= img.height; // cartouche (titre, échelle) en bas à gauche des plans en paysage
   for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) {
     const fx = i / w, fy = y / h;
-    if (fy < 0.09 || fy > 0.86 || (fx < 0.3 && fy > 0.7) || (fx > 0.75 && fy < 0.16) || fx < 0.02 || fx > 0.98) continue;
+    if (paysage ? (fy < 0.09 || fy > 0.86 || (fx < 0.3 && fy > 0.7) || (fx > 0.75 && fy < 0.16) || fx < 0.02 || fx > 0.98) : (fy < 0.035 || fy > 0.965 || fx < 0.035 || fx > 0.965)) continue;
     const k = (y * w + i) * 4; if (d[k] + d[k + 1] + d[k + 2] < 600) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   }
   if (x1 <= x0 || y1 <= y0) return { x: 0, y: 0, w: 1, h: 1 };
@@ -59,7 +59,7 @@ function texture(img, z, style, maxW = 2600, dejaRogne = false) {
   const id = x.getImageData(0, 0, W, H), d = id.data, a0 = new Uint8ClampedArray(W * H);
   for (let p = 0, k = 0; p < W * H; p++, k += 4) {
     const px = p % W, py = (p / W) | 0, fx = z.x + px / W * z.w, fy = z.y + py / H * z.h;
-    if ((fx < 0.3 && fy > 0.7) || (fx > 0.75 && fy < 0.16) || fy > 0.86) continue;
+    if (z.paysage !== false && ((fx < 0.3 && fy > 0.7) || (fx > 0.75 && fy < 0.16) || fy > 0.86)) continue;
     const l = d[k] * 0.3 + d[k + 1] * 0.59 + d[k + 2] * 0.11; a0[p] = Math.max(0, Math.min(255, (240 - l) * 1.9));
   }
   const [R, G, B] = style === "holo" ? [95, 200, 240] : [12, 38, 66];
@@ -346,7 +346,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     if (!vivant) return;
     const zs = imgs.map(i => i ? zoneUtile(i) : null).filter(Boolean);
     const z = zs.length ? { x: Math.min(...zs.map(a => a.x)), y: Math.min(...zs.map(a => a.y)) } : { x: 0, y: 0 };
-    z.w = zs.length ? Math.max(...zs.map(a => a.x + a.w)) - z.x : 1; z.h = zs.length ? Math.max(...zs.map(a => a.y + a.h)) - z.y : 1; st.z = z;
+    z.w = zs.length ? Math.max(...zs.map(a => a.x + a.w)) - z.x : 1; z.h = zs.length ? Math.max(...zs.map(a => a.y + a.h)) - z.y : 1; z.paysage = imgs.find(Boolean) ? imgs.find(Boolean).width >= imgs.find(Boolean).height : true; st.z = z;
     const ratio = imgs[0] ? (z.h * imgs[0].height) / (z.w * imgs[0].width) : 0.7, L = 100, P = L * ratio;
     g.etages.forEach((e, i) => {
       const groupe = new THREE.Group(); monde.add(groupe);

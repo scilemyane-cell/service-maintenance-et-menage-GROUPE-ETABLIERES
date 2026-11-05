@@ -25,8 +25,8 @@ const refPdf = (id, k) => doc(db, "config", `plancles-${id}-pdf${k}`);
 const pdfCache = new Map();
 // Noms des pièces : textes du PDF (position + texte), regroupés par étiquette (« salle » + « informatique 2 »).
 const refTextes = (id) => doc(db, "config", `plancles-${id}-textes`);
-const horsCartouche = (x, y) => !((x < 0.3 && y > 0.7) || (x > 0.75 && y < 0.16) || y > 0.86 || y < 0.06);
-const PARASITES = /^(\d*up|is|vh|vb|hsp|pl|td|pc|ss|\d+(?:[.,]\d+)?\s*(?:m²|m2|m|cm|ml)?)$/i;
+const horsCartouche = (x, y, paysage = true) => paysage ? !((x < 0.3 && y > 0.7) || (x > 0.75 && y < 0.16) || y > 0.86 || y < 0.06) : !(y < 0.035 || y > 0.965 || x < 0.035 || x > 0.965);
+const PARASITES = /^(\d*up|is|vh|vb|hsp:?|pl|pld\.?|td|pc|ss|ep|ev|eu|gtl|jd|pvc|vmc|logt|x|m|m2|ob|f|larg\.?|all|carrelage|trappe|[+-]?\d+[,.]\d+=?.*|\d+(?:[.,]\d+)?\s*(?:m²|m2|m|cm|ml)?)$/i;
 export async function extraireTextes(pdf) {
   const pages = {};
   for (let n = 1; n <= pdf.numPages; n++) {
@@ -37,7 +37,7 @@ export async function extraireTextes(pdf) {
       const [a, b, c, d, e, f] = it.transform, la = Math.hypot(a, b) || 1, lh = Math.hypot(c, d) || 1, w = it.width || 0, h = it.height || lh;
       const [x0, y0] = vp.convertToViewportPoint(e + c / lh * h / 2, f + d / lh * h / 2), [x1, y1] = vp.convertToViewportPoint(e + a / la * w + c / lh * h / 2, f + b / la * w + d / lh * h / 2);
       const fx = (x0 + x1) / 2 / vp.width, fy = (y0 + y1) / 2 / vp.height, H = h / Math.max(vp.width, vp.height);
-      if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !horsCartouche(fx, fy)) return;
+      if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !horsCartouche(fx, fy, vp.width >= vp.height)) return;
       items.push({ x: fx, y: fy, xa: Math.min(x0, x1) / vp.width, xb: Math.max(x0, x1) / vp.width, h: H, t });
     });
     // 1) Mots d'une même ligne (« Ch » + « 101 »).
