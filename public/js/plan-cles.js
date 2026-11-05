@@ -290,7 +290,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     <header class="pc-h"><b>🗺️ Plans — ${esc(dossier.nom || "")}</b><span class="pc-maj"></span>
       <div class="pc-hb">${editeur ? `<label class="pc-btn">📄 Importer un plan PDF<input type="file" accept="application/pdf" hidden data-import></label>` : ""}<button class="pc-btn" data-fermer>✕ Fermer</button></div></header>
     <div class="pc-barre"></div>
-    <div class="pc-corps"><div class="pc-vue"><div class="pc-scene"><img class="pc-img" alt=""><div class="pc-reps"></div></div><div class="pc-msg"></div></div><aside class="pc-liste" hidden></aside><aside class="pc-ed" hidden></aside></div>
+    <div class="pc-corps"><div class="pc-vue"><div class="pc-scene"><div class="pc-ban"></div><img class="pc-img" alt=""><div class="pc-reps"></div><div class="pc-pied"></div></div><div class="pc-msg"></div></div><aside class="pc-liste" hidden></aside><aside class="pc-ed" hidden></aside></div>
   </div>`;
   const $ = (s) => fond.querySelector(s);
   const vue = $(".pc-vue"), scene = $(".pc-scene"), img = $(".pc-img"), reps = $(".pc-reps"), msg = $(".pc-msg");
@@ -425,6 +425,10 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     st.page = n; st.sel = null; dessinerBarre(); if (st.edition) dessinerPanneau();
     const p = st.meta.pages.find(x => x.n === n); if (!p) return;
     img.style.width = p.w + "px"; img.style.height = p.h + "px"; scene.style.width = p.w + "px"; scene.style.height = p.h + "px";
+    // Mise en page Groupe Établières / AppSMM autour du plan (comme à l'impression).
+    scene.style.setProperty("--u", (p.w / 100) + "px");
+    $(".pc-ban").innerHTML = `<img src="${new URL("img/logo-etablieres.png", document.baseURI).href}" alt=""><div><b>${esc(dossier.nom || "")}</b><small>${esc(p.titre || "")}</small></div><div class="app"><b>AppSMM</b><small>Service Maintenance &amp; Ménage · Groupe Établières</small></div>`;
+    $(".pc-pied").innerHTML = `<span>Plans · repères clés, compteurs, tableaux</span><span>${st.meta.majLe ? `Mis à jour le ${new Date(st.meta.majLe).toLocaleDateString("fr-FR")}` : ""}</span><span>Page ${st.meta.pages.findIndex(x => x.n === n) + 1} / ${st.meta.pages.length}</span>`;
     const cle = `${dossier.id}-${n}`;
     if (!cacheImages.has(cle)) { msg.hidden = false; msg.textContent = "⏳ Chargement de la page…"; img.removeAttribute("src");
       try { await imagePage(n); } catch (e) { msg.textContent = "Page indisponible : " + (e?.message || e); return; } }
@@ -447,7 +451,8 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   function appliquer() { scene.style.transform = `translate(${st.tx}px,${st.ty}px) scale(${st.s})`; scene.style.setProperty("--inv", String(Math.max(1, 9.5 / (17 * st.s)))); }
   function ajuster() {
     const p = st.meta?.pages.find(x => x.n === st.page); if (!p) return;
-    const W = vue.clientWidth, H = vue.clientHeight; st.s = Math.min(W / p.w, H / p.h) * 0.98; st.tx = (W - p.w * st.s) / 2; st.ty = (H - p.h * st.s) / 2; appliquer();
+    const W = vue.clientWidth, H = vue.clientHeight, hb = p.w * 0.06, hp = p.w * 0.03, Ht = p.h + hb + hp;
+    st.s = Math.min(W / p.w, H / Ht) * 0.97; st.tx = (W - p.w * st.s) / 2; st.ty = (H - Ht * st.s) / 2 + hb * st.s; appliquer();
   }
   function zoomer(f, cx, cy) {
     const s2 = Math.max(0.05, Math.min(4, st.s * f)), k = s2 / st.s;
@@ -602,4 +607,9 @@ body.pc-ouvert{overflow:hidden}
 .pc-dlg{position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.35);display:grid;place-items:center}.pc-dlg>div{background:var(--panel,#fff);color:var(--text,#111);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:280px;box-shadow:0 20px 50px rgba(0,0,0,.35)}.pc-dlg p{margin:0;font-size:12.5px;color:var(--text-dim,#555)}.pc-dlg i{font-style:normal;opacity:.7}
 .pc-liste h4 small{font-weight:400;color:var(--text-dim,#555)}.pc-fond{position:fixed}.pc{position:relative}
 @media (max-width:700px){.pc-ed{position:absolute;right:0;top:0;bottom:0;z-index:6;width:86%;box-shadow:-10px 0 30px rgba(0,0,0,.25)}}
+.pc-ban{position:absolute;left:0;right:0;bottom:100%;height:calc(var(--u)*6);display:flex;align-items:center;gap:calc(var(--u)*1.5);padding:0 calc(var(--u)*1.5);background:linear-gradient(90deg,#14213d,#1f3a68);color:#fff;border-radius:calc(var(--u)*.8) calc(var(--u)*.8) 0 0;font-family:system-ui,sans-serif;pointer-events:none}
+.pc-ban img{height:calc(var(--u)*4);background:#fff;border-radius:calc(var(--u)*.5);padding:calc(var(--u)*.3) calc(var(--u)*.6)}.pc-ban>div{display:flex;flex-direction:column;flex:1;min-width:0}
+.pc-ban b{font-size:calc(var(--u)*2)}.pc-ban small{font-size:calc(var(--u)*1.25);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pc-ban .app{flex:none;text-align:right;border-left:1px solid rgba(255,255,255,.35);padding-left:calc(var(--u)*1.5)}.pc-ban .app b{color:#ffd166;letter-spacing:.04em;font-size:calc(var(--u)*1.8)}
+.pc-pied{position:absolute;left:0;right:0;top:100%;height:calc(var(--u)*3);display:flex;justify-content:space-between;align-items:center;padding:0 calc(var(--u)*1.5);background:#f4f6fa;color:#44506a;border-top:1px solid #c9d2e3;font:calc(var(--u)*1.15) system-ui,sans-serif;border-radius:0 0 calc(var(--u)*.8) calc(var(--u)*.8);pointer-events:none}
+.pc-scene{outline:calc(var(--u)*.2) solid #14213d;outline-offset:0;border-radius:2px}.pc-scene .pc-ban,.pc-scene .pc-pied{box-shadow:0 0 0 calc(var(--u)*.2) #14213d}
 </style>`;
