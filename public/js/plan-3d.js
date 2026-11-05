@@ -180,7 +180,7 @@ function geometrieMurs(THREE, murs, W, H, L, P, h, couleurs = null, pas = 0) {
   return geo;
 }
 
-export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null, masques = [] }) {
+export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null, masques = [], photos = null, caches = [] }) {
   // Zones masquées (cartouche de l'architecte…) : peintes en blanc sur chaque image avant la 3D.
   if (masques.length) {
     const ch0 = charger, hd0 = hd;
@@ -191,13 +191,14 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
   // Types de repères : clé (par défaut), compteur, tableau électrique.
-  const typeR = (r) => r.t || "cle", COUL_T = { compteur: "#06b6d4", tableau: "#f59e0b", logement: "#ff4d5e" };
+  const typeR = (r) => r.t || "cle", COUL_T = { compteur: "#06b6d4", tableau: "#f59e0b", logement: "#ff4d5e", vanne: "#3b82f6" };
+  const TYPES_V = [["cle", "🔑", "Clés"], ["tableau", "⚡", "Tableaux"], ["vanne", "🚰", "Vannes"], ["compteur", "🎛️", "Compteurs"], ["logement", "🏠", "Logements"]];
   const codes = [...new Set(reperes.filter(r => typeR(r) === "cle").map(r => r.c))].sort(triCode);
   const couleurCle = (c) => codes.includes(c) ? PALETTE[codes.indexOf(c) % PALETTE.length] : "#94a3b8";
   const couleurR = (r) => COUL_T[typeR(r)] || couleurCle(r.c);
-  const libR = (r) => typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛 ${r.c}` : r.c;
+  const libR = (r) => typeR(r) === "vanne" ? `🚰 ${r.c}` : typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛 ${r.c}` : r.c;
   const vise = (r) => !st.filtre ? false : st.filtre === "__tab" ? typeR(r) === "tableau" : st.filtre === "__cpt" ? typeR(r) === "compteur" : st.filtre === "__log" ? typeR(r) === "logement" : typeR(r) === "cle" && r.c === st.filtre;
-  const st = { g: 0, ecart: 22, filtre, auto: true };
+  const st = { caches: new Set(caches || []), g: 0, ecart: 22, filtre, auto: true };
   const fond = document.createElement("div"); fond.className = "p3";
   fond.innerHTML = `<div class="p3-ciel"></div>
     <header class="p3-h"><b>🧊 ${esc(titre)}</b><span class="p3-sous">${matchMedia("(pointer:coarse)").matches ? "1 doigt : déplacer · 2 doigts : zoomer et tourner · double-tap : zoomer ici" : "Glisse pour tourner · molette pour zoomer · clic droit pour déplacer · double-clic : zoomer ici"}</span>
@@ -251,7 +252,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     ici.filter(r => typeR(r) === "cle").forEach(r => { m[r.c] = (m[r.c] || 0) + 1; });
     if (st.filtre && !st.filtre.startsWith("__") && !m[st.filtre]) st.filtre = "";
     const libF = st.filtre === "__log" ? "logements" : st.filtre === "__tab" ? "tableaux" : st.filtre === "__cpt" ? "compteurs" : st.filtre;
-    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Repères${st.filtre ? ` : ${esc(libF)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4>${nL ? `<button data-cle="__log" class="${st.filtre === "__log" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.logement}"></i><b>🏠 Logements</b><span>${nL}</span></button>` : ""}${nT ? `<button data-cle="__tab" class="${st.filtre === "__tab" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.tableau}"></i><b>⚡ Tableaux</b><span>${nT}</span></button>` : ""}${nC ? `<button data-cle="__cpt" class="${st.filtre === "__cpt" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.compteur}"></i><b>🎛️ Compteurs</b><span>${nC}</span></button>` : ""}${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
+    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Repères${st.filtre ? ` : ${esc(libF)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4><div class="p3-yeux">${TYPES_V.filter(([t]) => reperes.some(x => typeR(x) === t)).map(([t, ic, l]) => `<button data-oeil="${t}" class="${st.caches.has(t) ? "off" : ""}" title="${st.caches.has(t) ? "Afficher" : "Masquer"} les ${l.toLowerCase()}">${st.caches.has(t) ? "🚫" : "👁"} ${ic} ${l}</button>`).join("")}</div>${nL ? `<button data-cle="__log" class="${st.filtre === "__log" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.logement}"></i><b>🏠 Logements</b><span>${nL}</span></button>` : ""}${nT ? `<button data-cle="__tab" class="${st.filtre === "__tab" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.tableau}"></i><b>⚡ Tableaux</b><span>${nT}</span></button>` : ""}${nC ? `<button data-cle="__cpt" class="${st.filtre === "__cpt" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.compteur}"></i><b>🎛️ Compteurs</b><span>${nC}</span></button>` : ""}${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
   }
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
@@ -334,12 +335,12 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   }
   function dessinerPoints() {
     etages.forEach(e => {
-      e.points.forEach(p => { const on = vise(p.r), off = !!st.filtre && !on;
-        p.mesh.material.opacity = off ? 0.07 : 1; p.mesh.scale.setScalar(on ? 1.9 : 1); p.halo.visible = !!on;
+      e.points.forEach(p => { const cache = st.caches.has(typeR(p.r)), on = !cache && vise(p.r), off = !!st.filtre && !on;
+        p.mesh.visible = !cache; p.mesh.material.opacity = off ? 0.07 : 1; p.mesh.scale.setScalar(on ? 1.9 : 1); p.halo.visible = !!on;
         if (on && !p.lab) { p.lab = etiquette(THREE, libR(p.r), couleurR(p.r), 0.8); p.lab.position.set(p.mesh.position.x, 2.6, p.mesh.position.z); e.groupe.add(p.lab);
           const tige = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(p.mesh.position.x, 0.1, p.mesh.position.z), new THREE.Vector3(p.mesh.position.x, 1.6, p.mesh.position.z)]), new THREE.LineBasicMaterial({ color: couleurR(p.r) })); p.tige = tige; e.groupe.add(tige); }
         if (p.lab) { p.lab.visible = !!on; p.tige.visible = !!on; } });
-      const nb = st.filtre ? e.points.filter(p => vise(p.r)).length : e.points.length;
+      const nb = e.points.filter(p => !st.caches.has(typeR(p.r)) && (!st.filtre || vise(p.r))).length;
       fond.querySelector(`[data-niv="${e.n}"] em`)?.replaceChildren(document.createTextNode(nb ? `${nb} 🔑` : ""));
     });
   }
@@ -408,6 +409,9 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     box.querySelector("[data-allumer]").onclick = () => { st.filtre = typeR(r) === "logement" ? "__log" : typeR(r) === "tableau" ? "__tab" : typeR(r) === "compteur" ? "__cpt" : r.c; filtreOptions(); dessinerPoints(); box.hidden = true; };
     box.querySelector("[data-plat]").onclick = () => { fermer(); onPlat?.(r.p, st.filtre); };
     box.querySelector("[data-fi]").onclick = () => { box.hidden = true; };
+    if (photos && typeR(r) !== "cle" && typeR(r) !== "logement") { const z = document.createElement("div"); z.className = "p3-ph"; z.innerHTML = "<small>⏳ photos…</small>"; box.insertBefore(z, box.lastElementChild);
+      photos(r.id).then(l => { z.innerHTML = l.length ? l.map((p, i) => `<img src="${p.data}" data-i="${i}" alt="">`).join("") : "<small>Pas de photo.</small>";
+        z.querySelectorAll("img").forEach(im => im.onclick = async () => { const { voirPhotos } = await import("./demandes-photos.js"); voirPhotos(l, +im.dataset.i); }); }).catch(() => { z.innerHTML = "<small>Photos indisponibles</small>"; }); }
   }
 
   // Clic : un point → infos ; un étage → plan à plat.
@@ -421,7 +425,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   const planVise = () => ray.intersectObjects(etages.flatMap(et => et.groupe.children.filter(c => c.userData.n !== undefined)).filter(o => o.parent.visible))[0];
   function tapSimple(e) {
     viser(e);
-    const pts = etages.filter(et => et.groupe.visible).flatMap(et => et.points.filter(p => p.mesh.material.opacity > 0.5).map(p => p.mesh));
+    const pts = etages.filter(et => et.groupe.visible).flatMap(et => et.points.filter(p => p.mesh.visible && p.mesh.material.opacity > 0.5).map(p => p.mesh));
     const hp = ray.intersectObjects(pts)[0]; if (hp) { infoPin(hp.object.userData.r); return; }
     if (st.maq) { const sols = etages.filter(et => et.groupe.visible && et.maq?.mSol.visible).map(et => et.maq.mSol), hs = ray.intersectObjects(sols)[0];
       if (hs?.uv) { const et = etages.find(x => x.n === hs.object.userData.sol), { W, H, lab } = et.maq.A; const id = lab[Math.min(H - 1, Math.round((1 - hs.uv.y) * H)) * W + Math.min(W - 1, Math.round(hs.uv.x * W))]; if (id) { infoPiece(et, id); return; } } }
@@ -451,6 +455,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   $(".p3-leg").addEventListener("click", (e) => { if (e.target.closest("[data-plier]")) { $(".p3-leg").classList.toggle("plie"); return; }
     if (matchMedia("(max-width:700px)").matches && e.target.closest("[data-cle]")) setTimeout(() => $(".p3-leg").classList.add("plie"), 250);
   });
+  $(".p3-leg").addEventListener("click", (e) => { const o = e.target.closest("[data-oeil]"); if (o) { const t = o.dataset.oeil; st.caches.has(t) ? st.caches.delete(t) : st.caches.add(t); filtreOptions(); dessinerPoints(); } });
   $(".p3-leg").addEventListener("click", (e) => { const b = e.target.closest("[data-cle]"); if (!b) return; st.filtre = st.filtre === b.dataset.cle ? "" : b.dataset.cle; majSols(); filtreOptions(); dessinerPoints(); });
   $(".p3-niv").addEventListener("click", (e) => { const pl = e.target.closest("[data-plat2]"); if (pl) { fermer(); onPlat?.(+pl.dataset.plat2, st.filtre); return; }
     if (e.target.closest("[data-tous]")) { seulNiveau(null); return; } const b = e.target.closest("[data-niv]"); if (b) seulNiveau(st.seul === +b.dataset.niv ? null : +b.dataset.niv); });
@@ -469,7 +474,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     boucle.n = (boucle.n || 0) + 1;
     if (boucle.n % 8 === 0) {
       const v = new THREE.Vector3(), proches = [];
-      etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.material.opacity > 0.5 && !vise(p.r);
+      etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.visible && p.mesh.material.opacity > 0.5 && !vise(p.r);
         if (!visible) { if (p.petite) p.petite.visible = false; return; }
         p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); const ndc = v.clone().project(camera); const ecran = Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && ndc.z < 1; if (d < (st.maq ? 70 : 170) && ecran) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
       proches.sort((a, b) => a[0] - b[0]).forEach(([, p, e], i) => {
@@ -521,6 +526,6 @@ const STYLE = `<style id="p3-style">
 .p3-etat{position:absolute;left:50%;top:60px;transform:translateX(-50%);z-index:4;background:rgba(6,16,28,.85);border:1px solid rgba(120,225,255,.4);border-radius:99px;padding:5px 14px;font-size:12.5px;color:#bfe9ff}.p3-etat[hidden]{display:none}
 .p3-load{position:absolute;inset:0;display:grid;place-items:center;font-size:16px;color:#9fd3ea;pointer-events:none}.p3-load[hidden]{display:none}
 .p3-info{position:absolute;right:200px;bottom:16px;z-index:4;background:rgba(6,16,28,.9);border:1px solid rgba(120,225,255,.4);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:240px;box-shadow:0 0 30px rgba(80,200,255,.2);font-size:13.5px}
-.p3-info[hidden]{display:none}.p3-info span{color:#9fc7da}.p3-info div{display:flex;gap:6px;flex-wrap:wrap}
+.p3-info[hidden]{display:none}.p3-ph{display:flex;gap:5px;flex-wrap:wrap}.p3-ph img{width:70px;height:70px;object-fit:cover;border-radius:8px;cursor:zoom-in;border:1px solid rgba(120,225,255,.4)}.p3-yeux{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}.p3-yeux button{font-size:11.5px!important;padding:3px 7px!important}.p3-yeux button.off{opacity:.55;text-decoration:line-through}.p3-info span{color:#9fc7da}.p3-info div{display:flex;gap:6px;flex-wrap:wrap}
 @media (max-width:700px){.p3-niv{top:auto;bottom:12px;transform:none;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;left:8px;right:170px;gap:5px}.p3-niv small,.p3-nl [data-plat2]{display:none}.p3-niv>button,.p3-nl{flex:none}.p3-leg h4 small{display:none}.p3-niv button{padding:5px 8px}.p3-niv b{font-size:13px}.p3-niv em{font-size:10px}.p3-niv button{min-width:0}.p3-sous{display:none}.p3-leg{top:auto;bottom:12px;max-height:55vh;height:auto;width:150px;background:rgba(5,11,20,.85);border-radius:12px;padding:8px}.p3-leg.plie{max-height:none}.p3-leg.plie button{display:none}.p3-leg h4{cursor:pointer;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.p3-pli{display:inline;font-style:normal;margin-left:auto}.p3-leg.plie .p3-pli{transform:rotate(180deg)}.p3-h{padding:8px 10px;gap:6px}.p3-h b{font-size:15px;max-width:60vw}.p3-hb{gap:5px}.p3-hb button,.p3-hb select{padding:5px 8px;font-size:12px}.p3-ec{display:none}.p3-info{right:12px;bottom:230px}}
 </style>`;

@@ -203,13 +203,14 @@ export const TYPES_R = {
   compteur: { ic: "🎛️", lib: "Compteur", pl: "Compteurs", k: "#0891b2" },
   tableau: { ic: "⚡", lib: "Tableau électrique", pl: "Tableaux électriques", k: "#d97706" },
   logement: { ic: "🏠", lib: "Logement", pl: "Logements", k: "#dc2626" },
+  vanne: { ic: "🚰", lib: "Vanne", pl: "Vannes", k: "#2563eb" },
 };
 export const TYPES_TABLEAU = ["TGBT", "TD", "TDR", "TC", "Armoire", "Coffret"];
 export const typeR = (r) => r.t || "cle";
 const couleurR = (r) => typeR(r) === "cle" ? (COULEURS[r.col] || COULEURS.rouge) : TYPES_R[typeR(r)].k;
-const libR = (r) => typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛️ ${r.c}` : r.c;
-const correspond = (r, f) => !f ? true : f === "__cle" ? typeR(r) === "cle" : f === "__tab" ? typeR(r) === "tableau" : f === "__cpt" ? typeR(r) === "compteur" : f === "__log" ? typeR(r) === "logement" : typeR(r) === "cle" && r.c === f;
-const libFiltre = (f) => f === "__cle" ? "Clés" : f === "__tab" ? "Tableaux électriques" : f === "__cpt" ? "Compteurs" : f === "__log" ? "Logements" : f ? `Clé ${f}` : "Tous les repères";
+const libR = (r) => typeR(r) === "vanne" ? `🚰 ${r.c}` : typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛️ ${r.c}` : r.c;
+const correspond = (r, f) => !f ? true : f === "__cle" ? typeR(r) === "cle" : f === "__tab" ? typeR(r) === "tableau" : f === "__cpt" ? typeR(r) === "compteur" : f === "__log" ? typeR(r) === "logement" : f === "__van" ? typeR(r) === "vanne" : typeR(r) === "cle" && r.c === f;
+const libFiltre = (f) => f === "__cle" ? "Clés" : f === "__tab" ? "Tableaux électriques" : f === "__cpt" ? "Compteurs" : f === "__log" ? "Logements" : f === "__van" ? "Vannes" : f ? `Clé ${f}` : "Tous les repères";
 export const prochainNumero = (reps, type) => 1 + Math.max(0, ...reps.filter(r => typeR(r) === "tableau" && r.tabType === type).map(r => parseInt(r.num, 10) || 0));
 
 // Photos d'un équipement (tableau électrique…) : petits documents dans « fiches-photos ».
@@ -272,7 +273,7 @@ async function imprimerPlans({ dossier, meta, filtre, charger }) {
 export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   const par = window.__smmNom || user?.displayName || user?.nom || user?.email || "";
   const st = { meta: null, page: 1, filtre: "", edition: false, s: 1, tx: 0, ty: 0, couleur: "rouge", dernierCode: "", liste: false, sel: null,
-    outil: "sel", tabType: "TD", tabNum: "", cptId: "", focus };
+    outil: "sel", tabType: "TD", tabNum: "", cptId: "", focus, caches: new Set((() => { try { return JSON.parse(localStorage.getItem("pc-caches") || "[]"); } catch { return []; } })()) };
   let compteursSite = [];
   import("./compteurs-data.js").then(m => m.listerTousLesCompteurs()).then(l => { compteursSite = (l || []).filter(c => c.dossierId === dossier.id).sort((a, b) => triCode(a.nom || "", b.nom || "")); if (st.edition) dessinerPanneau(); }).catch(() => {});
   const fond = document.createElement("div"); fond.className = "pc-fond";
@@ -322,7 +323,8 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const puce = (f, lib, n) => `<button class="pc-ty ${st.filtre === f ? "on" : ""}" data-f="${f}">${lib}${n !== undefined ? ` <i>${n}</i>` : ""}</button>`;
     b.innerHTML = `<div class="pc-pages">${st.meta.pages.map(p => { const n = parPage(p.n); return `<button class="pc-pg ${p.n === st.page ? "on" : ""} ${st.filtre && !n ? "vide" : ""}" data-page="${p.n}" title="${esc(p.titre)}">${esc(p.titre.replace(/^Plan (ensemble )?/i, "").replace(/^B[aâ]timent /i, "Bât. "))}${n ? `<i>${n}</i>` : ""}</button>`; }).join("")}</div>
       <div class="pc-outils">
-        <div class="pc-tys">${puce("", "Tout")}${puce("__cle", "🔑 Clés", nb("cle"))}${nb("compteur") || st.edition ? puce("__cpt", "🎛️ Compteurs", nb("compteur")) : ""}${nb("tableau") || st.edition ? puce("__tab", "⚡ Tableaux", nb("tableau")) : ""}${nb("logement") || st.edition ? puce("__log", "🏠 Logements", nb("logement")) : ""}</div>
+        <div class="pc-tys">${puce("", "Tout")}${puce("__cle", "🔑 Clés", nb("cle"))}${nb("compteur") || st.edition ? puce("__cpt", "🎛️ Compteurs", nb("compteur")) : ""}${nb("tableau") || st.edition ? puce("__tab", "⚡ Tableaux", nb("tableau")) : ""}${nb("vanne") || st.edition ? puce("__van", "🚰 Vannes", nb("vanne")) : ""}${nb("logement") || st.edition ? puce("__log", "🏠 Logements", nb("logement")) : ""}</div>
+        <div class="pc-yeux" title="Afficher / masquer un type de repère">${Object.keys(TYPES_R).filter(t => nb(t)).map(t => `<button data-oeil="${t}" class="${st.caches.has(t) ? "off" : ""}">${st.caches.has(t) ? "🚫" : "👁"} ${TYPES_R[t].ic}</button>`).join("")}</div>
         ${codes.length ? `<select data-filtre><option value="">🔑 Une clé…</option>${codes.map(c => `<option value="${esc(c)}" ${c === st.filtre ? "selected" : ""}>${esc(c)} — ${tous[c]} porte${tous[c] > 1 ? "s" : ""}</option>`).join("")}</select>` : ""}
         <button class="pc-btn" data-liste>${st.liste ? "✕ Liste" : "📋 Liste"}</button>
         ${groupesEtages(st.meta.pages).length ? `<button class="pc-btn p3-lance" data-3d>🧊 Vue 3D</button>` : ""}
@@ -332,6 +334,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
         ${editeur ? `<button class="pc-btn ${st.edition ? "edit" : ""}" data-edition>${st.edition ? "✓ Terminer l'édition" : "✏️ Mode édition"}</button>` : ""}
       </div>`;
     b.querySelectorAll("[data-page]").forEach(x => x.onclick = () => allerPage(+x.dataset.page));
+    b.querySelectorAll("[data-oeil]").forEach(x => x.onclick = () => { const t = x.dataset.oeil; st.caches.has(t) ? st.caches.delete(t) : st.caches.add(t); try { localStorage.setItem("pc-caches", JSON.stringify([...st.caches])); } catch { /* */ } majTout(); });
     b.querySelectorAll("[data-f]").forEach(x => x.onclick = () => { st.filtre = x.dataset.f; majTout(); });
     b.querySelector("[data-filtre]")?.addEventListener("change", (e) => { st.filtre = e.target.value; majTout(); });
     b.querySelector("[data-liste]").onclick = () => { st.liste = !st.liste; if (st.liste) basculerEdition(false); dessinerBarre(); dessinerListe(); };
@@ -339,7 +342,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     b.querySelector("[data-3d]")?.addEventListener("click", async () => {
       const { ouvrirVue3D } = await import("./plan-3d.js");
       const m = st.meta.pdf?.morceaux;
-      ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), masques: masques(), filtre: st.filtre, charger: imagePage,
+      ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), masques: masques(), photos: photosEquipement, caches: [...st.caches], filtre: st.filtre, charger: imagePage,
         hd: m ? rendeurHD(dossier.id, m) : null, aPdf: !!m, textes: () => lireTextes(dossier.id),
         ajouterPdf: editeur ? async (f) => { await sauverPdfPlan(dossier.id, f); const s2 = await getDoc(refMeta(dossier.id)); return rendeurHD(dossier.id, s2.data()?.pdf?.morceaux || 1); } : null,
         onPlat: (n, f) => { st.filtre = f || ""; allerPage(n); dessinerListe(); } });
@@ -357,7 +360,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const nb = (t) => reperes().filter(r => typeR(r) === t).length;
     const d = document.createElement("div"); d.className = "pc-dlg";
     d.innerHTML = `<div><b>🖨️ Imprimer / enregistrer en PDF</b><p>Les pages qui contiennent ces repères, en paysage, puis la liste complète.</p>
-      ${[["__log", "🏠 Logements", nb("logement")], ["__tab", "⚡ Tableaux électriques", nb("tableau")], ["__cpt", "🎛️ Compteurs", nb("compteur")], ["__cle", "🔑 Clés", nb("cle")], ...(st.filtre && !st.filtre.startsWith("__") ? [[st.filtre, `🔑 Clé ${st.filtre}`, reperes().filter(r => correspond(r, st.filtre)).length]] : []), ["", "Tous les repères", reperes().length]]
+      ${[["__log", "🏠 Logements", nb("logement")], ["__van", "🚰 Vannes", nb("vanne")], ["__tab", "⚡ Tableaux électriques", nb("tableau")], ["__cpt", "🎛️ Compteurs", nb("compteur")], ["__cle", "🔑 Clés", nb("cle")], ...(st.filtre && !st.filtre.startsWith("__") ? [[st.filtre, `🔑 Clé ${st.filtre}`, reperes().filter(r => correspond(r, st.filtre)).length]] : []), ["", "Tous les repères", reperes().length]]
         .filter(x => x[2]).map(([f, l, n]) => `<button class="pc-btn" data-imp="${esc(f)}">${l} <i>${n}</i></button>`).join("")}
       <button class="pc-btn" data-x>Annuler</button></div>`;
     fond.appendChild(d);
@@ -368,7 +371,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   function dessinerListe() {
     const a = $(".pc-liste"); a.hidden = !st.liste; if (!st.liste) return;
     const titre = (n) => st.meta.pages.find(p => p.n === n)?.titre || `Page ${n}`;
-    const groupes = [["logement", "🏠 Logements"], ["cle", "🔑 Clés"], ["tableau", "⚡ Tableaux électriques"], ["compteur", "🎛️ Compteurs"]].map(([t, lib]) => {
+    const groupes = [["logement", "🏠 Logements"], ["cle", "🔑 Clés"], ["tableau", "⚡ Tableaux électriques"], ["vanne", "🚰 Vannes"], ["compteur", "🎛️ Compteurs"]].map(([t, lib]) => {
       const m = {}; reperes().filter(r => typeR(r) === t).forEach(r => { (m[r.c] = m[r.c] || { n: 0, pages: {}, r }).n++; m[r.c].pages[r.p] = (m[r.c].pages[r.p] || 0) + 1; });
       return { t, lib, m };
     }).filter(g => Object.keys(g.m).length);
@@ -392,12 +395,13 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const nivAuto = niveauDe(p.titre || "");
     const outil = (id, ic, lib) => `<button class="pc-to ${st.outil === id ? "on" : ""}" data-outil="${id}"><span>${ic}</span>${lib}</button>`;
     a.innerHTML = `<h4>✏️ Mode édition</h4>
-      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}${outil("logement", "🏠", "Logement")}${outil("masque", "⬜", "Masquer une zone")}</div>
+      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}${outil("vanne", "🚰", "Vanne")}${outil("logement", "🏠", "Logement")}${outil("masque", "⬜", "Masquer une zone")}</div>
       <div class="pc-opt">${st.outil === "sel" ? `<p class="pc-aidep">Clique sur une vignette pour la modifier, ou fais-la glisser pour la déplacer.</p>`
         : st.outil === "masque" ? `<p class="pc-aidep">👉 Fais glisser sur le plan pour cacher une zone en blanc (cartouche, logo, mention…). Clique sur une zone cachée pour la retirer.</p>
           <button class="pc-btn" data-cartouche style="white-space:normal;text-align:left">🧹 Masquer le cartouche de l'architecte (toutes les pages)</button>`
         : st.outil === "cle" ? `<label>Numéro de clé<input data-code value="${esc(st.dernierCode)}" placeholder="ex. MV10"></label><div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === st.couleur ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}" title="${c}"></button>`).join("")}</div><p class="pc-aidep">👉 Clique sur le plan pour poser la clé.</p>`
         : st.outil === "compteur" ? (compteursSite.length ? `<label>Compteur du site<select data-cpt>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === st.cptId ? "selected" : ""}>${places.has(c.id) ? "✓ " : ""}${esc(c.nom || "")}</option>`).join("")}</select></label><p class="pc-aidep">👉 Clique sur le plan à l'endroit du compteur. ✓ = déjà placé.</p>` : `<p class="pc-aidep">Aucun compteur enregistré sur ce site (tuile Relevé compteur).</p>`)
+        : st.outil === "vanne" ? `<label>Nom de la vanne<input data-vannom value="${esc(st.vanNom || `V${1 + Math.max(0, ...reperes().filter(x => typeR(x) === "vanne").map(x => parseInt(String(x.c).replace(/\D/g, ""), 10) || 0))}`)}" placeholder="ex. V1, Vanne gaz"></label><p class="pc-aidep">👉 Clique sur le plan : le numéro suivant est ensuite proposé.</p>`
         : st.outil === "logement" ? `<label>N° du logement<input data-lognum value="${esc(st.logNum || String(1 + Math.max(0, ...reperes().filter(x => typeR(x) === "logement").map(x => parseInt(x.c, 10) || 0))))}" inputmode="numeric"></label><p class="pc-aidep">👉 Clique au centre du logement : le numéro suivant est ensuite proposé.</p>`
         : `<div class="pc-2"><label>Type<select data-tabtype>${TYPES_TABLEAU.map(t => `<option ${t === st.tabType ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Numéro<input data-tabnum value="${esc(st.tabNum)}" inputmode="numeric"></label></div><p class="pc-aidep">👉 Clique sur le plan : <b>${esc(st.tabType)} ${esc(st.tabNum)}</b> sera posé, puis le numéro suivant est proposé.</p>`}</div>
       <h5>📄 Cette page</h5>
@@ -411,6 +415,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     a.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { st.couleur = x.dataset.col; dessinerPanneau(); });
     a.querySelector("[data-cpt]")?.addEventListener("change", (e) => { st.cptId = e.target.value; });
     a.querySelector("[data-tabtype]")?.addEventListener("change", (e) => { st.tabType = e.target.value; st.tabNum = String(prochainNumero(reperes(), st.tabType)); dessinerPanneau(); });
+    a.querySelector("[data-vannom]")?.addEventListener("input", (e) => { st.vanNom = e.target.value.trim(); });
     a.querySelector("[data-lognum]")?.addEventListener("input", (e) => { st.logNum = e.target.value.trim(); });
     a.querySelector("[data-tabnum]")?.addEventListener("input", (e) => { st.tabNum = e.target.value.trim(); });
     a.querySelector("[data-bat]").addEventListener("change", (e) => sauverPages(st.meta.pages.map(x => x.n === st.page ? { ...x, batiment: e.target.value.trim() } : x)));
@@ -435,6 +440,8 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       const places = new Set([...liste.filter(r => typeR(r) === "compteur").map(r => r.cptId), c.id]);
       st.cptId = compteursSite.find(k => !places.has(k.id))?.id || st.cptId;
       sauver([...liste, { ...base, t: "compteur", c: c.nom || "Compteur", cptId: c.id, cptType: c.type || "" }], `✓ Compteur « ${c.nom} » placé`); return; }
+    if (st.outil === "vanne") { const c = (st.vanNom || `V${1 + Math.max(0, ...reperes().filter(x => typeR(x) === "vanne").map(x => parseInt(String(x.c).replace(/\D/g, ""), 10) || 0))}`).trim(); if (!c) return;
+      const m = c.match(/^(.*?)(\d+)$/); st.vanNom = m ? `${m[1]}${+m[2] + 1}` : ""; sauver([...reperes(), { ...base, t: "vanne", c }], `✓ Vanne ${c} posée`); return; }
     if (st.outil === "logement") { const c = (st.logNum || String(1 + Math.max(0, ...reperes().filter(x => typeR(x) === "logement").map(x => parseInt(x.c, 10) || 0)))).trim(); if (!c) return;
       if (reperes().some(x => typeR(x) === "logement" && x.c === c) && !confirm(`Le logement ${c} existe déjà. En poser un autre ?`)) return;
       st.logNum = String((parseInt(c, 10) || 0) + 1); sauver([...reperes(), { ...base, t: "logement", c }], `✓ Logement ${c} posé`); return; }
@@ -526,17 +533,17 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   function versPlan(e) { const r = scene.getBoundingClientRect(); return [+((e.clientX - r.left) / r.width).toFixed(5), +((e.clientY - r.top) / r.height).toFixed(5)]; }
 
   function dessinerReperes() {
-    const liste = reperes().filter(r => r.p === st.page);
+    const liste = reperes().filter(r => r.p === st.page && !st.caches.has(typeR(r)));
     const mk = masques().filter(m => m.p === st.page).map(m => `<div class="pc-mask" data-mask="${m.id}" style="left:${m.x * 100}%;top:${m.y * 100}%;width:${m.w * 100}%;height:${m.h * 100}%"></div>`).join("");
     reps.innerHTML = mk + liste.map(r => { const on = st.filtre && correspond(r, st.filtre);
       return `<div class="pc-m t-${typeR(r)} ${st.filtre && !on ? "terne" : ""} ${on && !st.filtre.startsWith("__") ? "fort" : ""} ${st.sel === r.id ? "sel" : ""}" data-id="${r.id}" style="left:${r.x * 100}%;top:${r.y * 100}%;--k:${couleurR(r)}" title="${esc(libR(r))}${r.note ? " — " + esc(r.note) : ""}">${esc(libR(r))}</div>`; }).join("");
     const sel = liste.find(r => r.id === st.sel); fond.querySelector(".pc-pop")?.remove();
     if (!sel) return;
     const t = typeR(sel), pop = document.createElement("div"); pop.className = "pc-pop";
-    const photosHTML = t === "tableau" ? `<div class="pc-ph" data-ph><small>⏳ photos…</small></div><div class="pc-2"><label class="pc-btn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-ph-add></label><label class="pc-btn">🖼️ Choisir des photos<input type="file" accept="image/*" multiple hidden data-ph-add></label></div>` : "";
+    const photosHTML = t === "tableau" || t === "vanne" ? `<div class="pc-ph" data-ph><small>⏳ photos…</small></div><div class="pc-2"><label class="pc-btn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-ph-add></label><label class="pc-btn">🖼️ Choisir des photos<input type="file" accept="image/*" multiple hidden data-ph-add></label></div>` : "";
     if (st.edition) {
       pop.innerHTML = `<b>${TYPES_R[t].ic} ${TYPES_R[t].lib}</b>
-        ${t === "cle" ? `<label>Numéro <input data-c value="${esc(sel.c)}"></label>` : ""}
+        ${["cle", "vanne", "logement"].includes(t) ? `<label>${t === "vanne" ? "Nom" : "Numéro"} <input data-c value="${esc(sel.c)}"></label>` : ""}
         ${t === "tableau" ? `<div class="pc-2"><label>Type<select data-tt>${TYPES_TABLEAU.map(x => `<option ${x === sel.tabType ? "selected" : ""}>${x}</option>`).join("")}</select></label><label>Numéro<input data-tn value="${esc(sel.num || "")}"></label></div>` : ""}
         ${t === "compteur" ? `<label>Compteur<select data-tc>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === sel.cptId ? "selected" : ""}>${esc(c.nom || "")}</option>`).join("") || `<option>${esc(sel.c)}</option>`}</select></label>` : ""}
         <label>${t === "cle" ? "Porte / local" : "Emplacement / note"} <input data-n value="${esc(sel.note || "")}" placeholder="${t === "tableau" ? "ex. local technique R+1" : "ex. bureau directeur"}"></label>
@@ -547,7 +554,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       pop.innerHTML = `<b style="color:${couleurR(sel)}">${t === "cle" ? "🔑 " : ""}${esc(libR(sel))}</b>${sel.note ? `<span>${esc(sel.note)}</span>` : ""}
         ${t === "cle" ? `<span>${reperes().filter(r => typeR(r) === "cle" && r.c === sel.c).length} porte(s) avec cette clé sur le site</span><div class="pc-pb"><button class="pc-btn" data-voir>Voir toutes ses portes</button></div>` : ""}
         ${t === "compteur" ? `<div class="pc-pb"><button class="pc-btn" data-relever>📷 Relever ce compteur</button></div>` : ""}
-        ${t === "tableau" ? photosHTML : ""}`;
+        ${t === "tableau" || t === "vanne" ? photosHTML : ""}`;
     }
     fond.querySelector(".pc-vue").appendChild(pop);
     const el = reps.querySelector(`[data-id="${sel.id}"]`), rv = vue.getBoundingClientRect(), re = el.getBoundingClientRect();
@@ -557,6 +564,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     pop.querySelector("[data-ok]")?.addEventListener("click", () => {
       const note = pop.querySelector("[data-n]").value.trim(); let maj = { note };
       if (t === "cle") { const c = pop.querySelector("[data-c]").value.trim(); if (!c) return; st.dernierCode = c; maj = { ...maj, c, col }; }
+      if (t === "vanne" || t === "logement") { const c = pop.querySelector("[data-c]").value.trim(); if (!c) return; maj = { ...maj, c }; }
       if (t === "tableau") { const tabType = pop.querySelector("[data-tt]").value, num = pop.querySelector("[data-tn]").value.trim(); maj = { ...maj, tabType, num, c: `${tabType}${num ? " " + num : ""}` }; }
       if (t === "compteur") { const c = compteursSite.find(k => k.id === pop.querySelector("[data-tc]").value); if (c) maj = { ...maj, cptId: c.id, c: c.nom || sel.c, cptType: c.type || "" }; }
       st.sel = null; sauver(reperes().map(r => r.id === sel.id ? { ...r, ...maj } : r), "✓ Modifié"); });
@@ -627,6 +635,7 @@ body.pc-ouvert{overflow:hidden}
 .pc-li div{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.pc-li a{font-size:11.5px;color:#1565d8;cursor:pointer;background:rgba(21,101,216,.08);border-radius:6px;padding:1px 6px}
 @media (max-width:700px){.pc{margin:0;border-radius:0}.pc-liste{position:absolute;right:0;top:0;bottom:0;background:var(--panel,#fff);z-index:5;width:85%}.pc-corps{position:relative}.pc-h b{font-size:14px}}
 .pc-tys{display:flex;gap:4px;flex-wrap:wrap}.pc-ty{font:inherit;font-size:12.5px;padding:5px 10px;border-radius:99px;border:1px solid var(--border,#ccc);background:none;color:var(--text,#111);cursor:pointer}.pc-ty.on{background:#1565d8;border-color:#1565d8;color:#fff}.pc-ty i{font-style:normal;opacity:.75;margin-left:2px}
+.pc-yeux{display:flex;gap:3px}.pc-yeux button{font:inherit;font-size:12px;padding:4px 7px;border-radius:8px;border:1px solid var(--border,#ccc);background:var(--panel,#fff);color:var(--text,#111);cursor:pointer}.pc-yeux button.off{opacity:.5;background:var(--panel-alt,#eee)}
 .pc-m.t-logement{background:#fff;color:#dc2626;border-color:#dc2626;font-size:20px}.pc-m.t-tableau,.pc-m.t-compteur{border-radius:99px;background:var(--k);color:#fff}.pc-m.t-tableau.terne,.pc-m.t-compteur.terne{opacity:.18}
 .pc-ed{width:290px;flex:none;border-left:1px solid var(--border,#ddd);overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px;background:var(--panel,#fff)}
 .pc-ed[hidden]{display:none}.pc-ed h4{margin:0;font-size:15px}.pc-ed h5{margin:8px 0 0;font-size:13px;color:var(--text-dim,#555)}.pc-ed h5 small{font-weight:400}
