@@ -19,6 +19,11 @@ const prefixe = (titre) => sa(titre).replace(/sous.?sol|\brdc\b|rez.de.chaussee|
 const nomNiveau = (n) => n < -1 ? `Sous-sol ${n}` : n < 0 ? "Sous-sol" : n === 0 ? "RDC" : `R+${n}`;
 // Groupes d'étages d'un même bâtiment (au moins 2 niveaux), le plus complet d'abord.
 export function groupesEtages(pages) {
+  const res = groupesEtagesBrut(pages); if (res.length || !pages?.length) return res;
+  // Aucun niveau reconnu (titres sans « rdc », « r+1 »…) : chaque page devient un niveau, dans l'ordre du PDF (réglable en mode édition).
+  return [{ cle: "plan", nom: "Plan", etages: pages.filter(p => p.niveauManuel !== "x").map((p, i) => ({ ...p, niv: i })) }].filter(g => g.etages.length);
+}
+function groupesEtagesBrut(pages) {
   const g = {};
   // Réglage manuel de la page (mode édition) prioritaire : niveauManuel ("" = auto, "x" = pas un étage) et batiment.
   pages.forEach(p => { const nm = p.niveauManuel; const n = nm === "x" ? null : nm !== undefined && nm !== "" ? +nm : niveauDe(p.titre); if (n === null || Number.isNaN(n)) return;
@@ -27,7 +32,7 @@ export function groupesEtages(pages) {
     const t = String(l[0].titre || "").replace(/sous.?sol|\brdc\b|rez.de.chauss[ée]e|r\s*\+\s*\d/gi, " ").replace(/^plan\s+/i, "").replace(/\s*[-–]\s*(?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
     return (t || k).replace(/^./, c => c.toUpperCase()).replace(/^Batiment/, "Bâtiment"); };
   return Object.entries(g).map(([k, l]) => ({ cle: k, nom: joli(k, l), etages: l.sort((a, b) => a.niv - b.niv) }))
-    .filter(x => x.etages.length >= 2).sort((a, b) => (b.cle === "ensemble") - (a.cle === "ensemble") || b.etages.length - a.etages.length || a.nom.localeCompare(b.nom));
+    .filter(x => x.etages.length >= 1).sort((a, b) => (b.cle === "ensemble") - (a.cle === "ensemble") || b.etages.length - a.etages.length || a.nom.localeCompare(b.nom));
 }
 
 // Image → zone utile (sans cartouche) + version « hologramme » (traits lumineux, fond transparent).
