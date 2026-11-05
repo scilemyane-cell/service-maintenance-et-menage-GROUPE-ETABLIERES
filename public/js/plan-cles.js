@@ -480,7 +480,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const sel = liste.find(r => r.id === st.sel); fond.querySelector(".pc-pop")?.remove();
     if (!sel) return;
     const t = typeR(sel), pop = document.createElement("div"); pop.className = "pc-pop";
-    const photosHTML = t === "tableau" ? `<div class="pc-ph" data-ph><small>⏳ photos…</small></div><label class="pc-btn">📸 Ajouter une photo<input type="file" accept="image/*" capture="environment" hidden data-ph-add></label>` : "";
+    const photosHTML = t === "tableau" ? `<div class="pc-ph" data-ph><small>⏳ photos…</small></div><div class="pc-2"><label class="pc-btn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-ph-add></label><label class="pc-btn">🖼️ Choisir des photos<input type="file" accept="image/*" multiple hidden data-ph-add></label></div>` : "";
     if (st.edition) {
       pop.innerHTML = `<b>${TYPES_R[t].ic} ${TYPES_R[t].lib}</b>
         ${t === "cle" ? `<label>Numéro <input data-c value="${esc(sel.c)}"></label>` : ""}
@@ -516,8 +516,10 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       const charger = async () => { try { const l = await photosEquipement(sel.id); boite.innerHTML = l.length ? l.map((p, i) => `<img src="${p.data}" data-i="${i}" alt="">`).join("") : `<small>Pas encore de photo.</small>`;
         boite.querySelectorAll("img").forEach(im => im.onclick = async () => { const { voirPhotos } = await import("./demandes-photos.js"); voirPhotos(l, +im.dataset.i); }); } catch (e) { boite.innerHTML = `<small>Photos indisponibles</small>`; } };
       charger();
-      pop.querySelector("[data-ph-add]").addEventListener("change", async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; boite.innerHTML = "<small>⏳ envoi…</small>";
-        try { await ajouterPhotoEquipement(dossier.id, sel.id, f, par); window.toast?.("📸 Photo ajoutée"); } catch (err) { alert("Photo non enregistrée : " + (err?.message || err)); } charger(); });
+      pop.querySelectorAll("[data-ph-add]").forEach(inp => inp.addEventListener("change", async (e) => { const fs = [...(e.target.files || [])]; e.target.value = ""; if (!fs.length) return;
+        let ok = 0; for (const [i, f] of fs.entries()) { boite.innerHTML = `<small>⏳ envoi ${i + 1} / ${fs.length}…</small>`;
+          try { await ajouterPhotoEquipement(dossier.id, sel.id, f, par); ok++; } catch (err) { alert(`Photo « ${f.name} » non enregistrée : ` + (err?.message || err)); } }
+        if (ok) window.toast?.(ok > 1 ? `📸 ${ok} photos ajoutées` : "📸 Photo ajoutée"); charger(); }));
     }
   }
 
@@ -579,7 +581,7 @@ body.pc-ouvert{overflow:hidden}
 .pc-tos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pc-to{font:inherit;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;border-radius:10px;border:1px solid var(--border,#ccc);background:var(--panel-alt,#f2f4f7);color:var(--text,#111);cursor:pointer}
 .pc-to span{font-size:22px}.pc-to.on{border-color:#1565d8;background:rgba(21,101,216,.12);box-shadow:0 0 0 2px rgba(21,101,216,.25)}
 .pc-opt{background:var(--panel-alt,#f2f4f7);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}.pc-aidep{margin:0;font-size:12px;color:var(--text-dim,#555)}
-.pc-2{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pc-2 input,.pc-2 select{width:100%;min-width:0;box-sizing:border-box}.pc-edl{display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}.pc-edl div{display:flex;gap:4px}
+.pc-2{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pc-2 .pc-btn{justify-content:center;font-size:12px;padding:6px 4px}.pc-2 input,.pc-2 select{width:100%;min-width:0;box-sizing:border-box}.pc-edl{display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}.pc-edl div{display:flex;gap:4px}
 .pc-edl button{font:inherit;font-size:12.5px;background:none;border:1px solid var(--border,#ddd);border-radius:7px;padding:4px 7px;cursor:pointer;color:var(--text,#111);display:flex;align-items:center;gap:6px}.pc-edl button:first-child{flex:1;text-align:left}.pc-edl i{width:9px;height:9px;border-radius:50%;flex:none}
 .pc-fond.pc-edit.pc-pose .pc-vue{cursor:copy}
 .pc-ph{display:flex;gap:4px;flex-wrap:wrap}.pc-ph img{width:64px;height:64px;object-fit:cover;border-radius:7px;cursor:zoom-in}.pc-ph small{color:var(--text-dim,#555)}
