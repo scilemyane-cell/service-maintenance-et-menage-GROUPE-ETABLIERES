@@ -219,7 +219,16 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   controls.enableDamping = true; controls.dampingFactor = 0.08; controls.autoRotate = true; controls.autoRotateSpeed = 0.6; controls.maxPolarAngle = Math.PI * 0.49; controls.minDistance = 8; controls.maxDistance = 400;
   // Doigts « comme une carte » : 1 doigt déplace le plan, 2 doigts zooment (pincer) et tournent / inclinent.
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
-  controls.screenSpacePanning = false; controls.zoomToCursor = true; controls.panSpeed = 1.1; controls.rotateSpeed = 0.55; controls.zoomSpeed = 1.1;
+  // Pincement au pavé tactile (ctrl + molette, petites valeurs) : zoom progressif vers le pointeur.
+  renderer.domElement.addEventListener("wheel", (e) => { if (!e.ctrlKey) return; e.preventDefault(); e.stopImmediatePropagation();
+    const k = Math.exp(Math.max(-60, Math.min(60, e.deltaY)) * 0.012), r = renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), ray0 = new THREE.Raycaster(); ray0.setFromCamera(v, camera);
+    const sol = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), pt = new THREE.Vector3(); const vise = ray0.ray.intersectPlane(sol, pt) ? pt : controls.target.clone();
+    const off = camera.position.clone().sub(vise).multiplyScalar(k), d = off.length();
+    if (d < controls.minDistance || d > controls.maxDistance) return;
+    camera.position.copy(vise).add(off); controls.target.sub(vise).multiplyScalar(k).add(vise); arreterAuto(); }, { passive: false, capture: true });
+
+  controls.screenSpacePanning = false; controls.zoomToCursor = true; controls.panSpeed = 1.1; controls.rotateSpeed = 0.55; controls.zoomSpeed = 2.2;
   const aniso = renderer.capabilities.getMaxAnisotropy(), mobile = matchMedia("(max-width:700px), (pointer:coarse)").matches;
   const taille = () => { const r = vue.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); renderer.domElement.style.width = r.width + "px"; renderer.domElement.style.height = r.height + "px"; camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
   ro = new ResizeObserver(taille); ro.observe(vue); taille();

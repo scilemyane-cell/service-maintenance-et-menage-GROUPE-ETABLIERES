@@ -441,7 +441,9 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const s2 = Math.max(0.05, Math.min(4, st.s * f)), k = s2 / st.s;
     st.tx = cx - (cx - st.tx) * k; st.ty = cy - (cy - st.ty) * k; st.s = s2; appliquer();
   }
-  vue.addEventListener("wheel", (e) => { e.preventDefault(); const r = vue.getBoundingClientRect(); zoomer(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+  // Molette ET pavé tactile (pincement = ctrl + petites valeurs) : zoom progressif, proportionnel au geste.
+  vue.addEventListener("wheel", (e) => { e.preventDefault(); const r = vue.getBoundingClientRect(), d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1);
+    zoomer(Math.exp(-Math.max(-300, Math.min(300, d)) * (e.ctrlKey ? 0.012 : 0.0018)), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   const pointeurs = new Map(); let geste = null;
   vue.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".pc-pop")) return;
