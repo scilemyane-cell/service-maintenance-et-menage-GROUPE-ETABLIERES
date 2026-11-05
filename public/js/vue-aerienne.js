@@ -1,3 +1,4 @@
+import { estEauChaude } from "./compteurs-schema.js";
 // vue-aerienne.js — Vue aérienne « poste de surveillance » d'un site, avec ses compteurs pointés.
 // Fond : orthophotos IGN (Géoplateforme, très haute résolution en France), satellite Esri ou plan.
 // Chaque compteur a une position { geo: { lat, lng } } posée par l'encadrement (« Pointer »).
@@ -200,8 +201,9 @@ function majZoom() { const z = map.getZoom(), el = ov?.querySelector("[data-va-z
 function tic() { const el = ov?.querySelector("[data-va-heure]"); if (el) el.textContent = new Date().toLocaleTimeString("fr-FR") + " LOC"; }
 function bandeau(txt, cls = "") { const b = ov?.querySelector("[data-va-bandeau]"); if (!b) return; b.hidden = !txt; b.className = "va-bandeau " + cls; b.textContent = txt || ""; }
 
+const typeVA = (c) => estEauChaude(c) ? { c: "#ef4444", i: "♨️", l: "EAU CH." } : (TYPES[c.type] || TYPES.eau);
 function iconeCompteur(c) {
-  const t = TYPES[c.type] || TYPES.eau, e = etat(c);
+  const t = typeVA(c), e = etat(c);
   if (st.pro) return window.L.divIcon({ className: "", iconSize: [0, 0], html: `<div class="va-p ${e.k}" style="--c:${t.c}"><span class="va-p-pin"><span>${t.i}</span></span><span class="va-p-etat"></span><span class="va-p-tag">${esc(c.nom || "")}</span></div>` });
   return window.L.divIcon({ className: "", iconSize: [0, 0], html: `<div class="va-m ${e.k}" style="--c:${t.c}"><span class="va-m-pulse"></span><span class="va-m-c"><span class="va-m-e">${t.i}</span></span><span class="va-m-tag"><b>${esc(c.nom || "")}</b><i>${t.l} · ${e.l}</i></span></div>` });
 }
@@ -215,7 +217,7 @@ function dessinerMarqueurs() {
   });
 }
 function carte(c, m) {
-  const t = TYPES[c.type] || TYPES.eau, e = etat(c), d = c.dernierReleve;
+  const t = typeVA(c), e = etat(c), d = c.dernierReleve;
   const phD = photosDossier(c), phR = Object.entries(d?.photos || {}).filter(([, p]) => p?.itemId || p?.url).map(([k, p]) => ({ ...p, legende: k === "valeur" ? "" : k }));
   const pop = window.L.popup({ className: "va-pop" + (st.pro ? " pro" : ""), closeButton: true, offset: [0, -14], maxWidth: 300 }).setLatLng(m.getLatLng()).setContent(`
     <div class="va-fiche" style="--c:${t.c}">
@@ -325,7 +327,7 @@ function panneau() {
   ov.querySelector("[data-va-filtres]").innerHTML = ["", ...types].map(t => `<button class="va-btn ${q === t ? "on" : ""}" data-va-type="${t}">${t ? (TYPES[t]?.i || "") + " " + T(TYPES[t]?.l || t, TYPE_LIB[t] || t) : T("TOUS", "Tous")}</button>`).join("");
   ov.querySelectorAll("[data-va-type]").forEach(b => b.onclick = () => { st.filtre = b.dataset.vaType; panneau(); });
   const vis = l.filter(c => !q || c.type === q).sort((a, b) => (!!a.geo?.lat - !!b.geo?.lat) || (etat(a).k === "alerte" ? -1 : 0) - (etat(b).k === "alerte" ? -1 : 0) || String(a.nom).localeCompare(String(b.nom), "fr", { numeric: true }));
-  ov.querySelector("[data-va-liste]").innerHTML = vis.map(c => { const t = TYPES[c.type] || TYPES.eau, e = etat(c), p = !!c.geo?.lat;
+  ov.querySelector("[data-va-liste]").innerHTML = vis.map(c => { const t = typeVA(c), e = etat(c), p = !!c.geo?.lat;
     return `<div class="va-li ${e.k} ${st.pointage === c.id ? "cible" : ""}" style="--c:${t.c}">
       <button class="va-li-m" data-va-aller="${c.id}" ${p ? "" : "disabled"}><span class="va-li-i">${t.i}</span><span class="va-li-t"><b>${esc(c.nom || "")}</b><small>${e.l}${p ? "" : T(" · NON POINTÉ", " · pas sur le plan")}</small></span></button>
       ${st.peutPointer ? `<button class="va-btn ${st.pointage === c.id ? "on" : ""}" data-va-pointer="${c.id}">${p ? "⟲" : "📍"} ${st.pointage === c.id ? T("ANNULER", "Annuler") : p ? "" : T("POINTER", "Placer")}</button>` : ""}

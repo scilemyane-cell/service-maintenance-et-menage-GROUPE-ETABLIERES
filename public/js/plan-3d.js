@@ -8,6 +8,7 @@ const sa = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLow
 const COULEURS = { rouge: "#ff4d5e", bleu: "#4da3ff", vert: "#3ddc84", orange: "#ffb020" };
 const triCode = (a, b) => String(a).localeCompare(String(b), "fr", { numeric: true });
 
+export const NIVEAUX = [[-2, "Sous-sol -2"], [-1, "Sous-sol"], [0, "RDC"], [1, "R+1"], [2, "R+2"], [3, "R+3"], [4, "R+4"], [5, "R+5"]];
 export function niveauDe(titre) {
   const s = sa(titre);
   if (/sous.?sol/.test(s)) return -1;
@@ -15,12 +16,14 @@ export function niveauDe(titre) {
   const m = s.match(/r\s*\+\s*(\d)/); return m ? +m[1] : null;
 }
 const prefixe = (titre) => sa(titre).replace(/sous.?sol|\brdc\b|rez.de.chaussee|r\s*\+\s*\d/g, " ").replace(/^plan\s+/, "").replace(/[-–\s]+/g, " ").trim();
-const nomNiveau = (n) => n < 0 ? "Sous-sol" : n === 0 ? "RDC" : `R+${n}`;
+const nomNiveau = (n) => n < -1 ? `Sous-sol ${n}` : n < 0 ? "Sous-sol" : n === 0 ? "RDC" : `R+${n}`;
 // Groupes d'étages d'un même bâtiment (au moins 2 niveaux), le plus complet d'abord.
 export function groupesEtages(pages) {
   const g = {};
-  pages.forEach(p => { const n = niveauDe(p.titre); if (n === null) return; const k = prefixe(p.titre) || "ensemble"; (g[k] = g[k] || []).push({ ...p, niv: n }); });
-  const joli = (k, l) => { if (/^ensemble$/.test(k)) return "Ensemble du site";
+  // Réglage manuel de la page (mode édition) prioritaire : niveauManuel ("" = auto, "x" = pas un étage) et batiment.
+  pages.forEach(p => { const nm = p.niveauManuel; const n = nm === "x" ? null : nm !== undefined && nm !== "" ? +nm : niveauDe(p.titre); if (n === null || Number.isNaN(n)) return;
+    const k = p.batiment ? "bat:" + sa(p.batiment) : (prefixe(p.titre) || "ensemble"); (g[k] = g[k] || []).push({ ...p, niv: n }); });
+  const joli = (k, l) => { if (k.startsWith("bat:")) return l[0].batiment; if (/^ensemble$/.test(k)) return "Ensemble du site";
     const t = String(l[0].titre || "").replace(/sous.?sol|\brdc\b|rez.de.chauss[ée]e|r\s*\+\s*\d/gi, " ").replace(/^plan\s+/i, "").replace(/\s*[-–]\s*(?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
     return (t || k).replace(/^./, c => c.toUpperCase()).replace(/^Batiment/, "Bâtiment"); };
   return Object.entries(g).map(([k, l]) => ({ cle: k, nom: joli(k, l), etages: l.sort((a, b) => a.niv - b.niv) }))
@@ -175,7 +178,13 @@ function geometrieMurs(THREE, murs, W, H, L, P, h, couleurs = null, pas = 0) {
 export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null }) {
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
-  const codes = [...new Set(reperes.map(r => r.c))].sort(triCode), couleurCle = (c) => PALETTE[codes.indexOf(c) % PALETTE.length];
+  // Types de repères : clé (par défaut), compteur, tableau électrique.
+  const typeR = (r) => r.t || "cle", COUL_T = { compteur: "#06b6d4", tableau: "#f59e0b" };
+  const codes = [...new Set(reperes.filter(r => typeR(r) === "cle").map(r => r.c))].sort(triCode);
+  const couleurCle = (c) => codes.includes(c) ? PALETTE[codes.indexOf(c) % PALETTE.length] : "#94a3b8";
+  const couleurR = (r) => COUL_T[typeR(r)] || couleurCle(r.c);
+  const libR = (r) => typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛 ${r.c}` : r.c;
+  const vise = (r) => !st.filtre ? false : st.filtre === "__tab" ? typeR(r) === "tableau" : st.filtre === "__cpt" ? typeR(r) === "compteur" : typeR(r) === "cle" && r.c === st.filtre;
   const st = { g: 0, ecart: 22, filtre, auto: true };
   const fond = document.createElement("div"); fond.className = "p3";
   fond.innerHTML = `<div class="p3-ciel"></div>
@@ -217,9 +226,11 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
 
   function filtreOptions() {
     const m = {}; const ns = new Set(groupes[st.g].etages.map(e => e.n));
-    reperes.filter(r => ns.has(r.p)).forEach(r => { m[r.c] = (m[r.c] || 0) + 1; });
-    if (st.filtre && !m[st.filtre]) st.filtre = "";
-    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Clés${st.filtre ? ` : ${esc(st.filtre)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4>${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
+    const ici = reperes.filter(r => ns.has(r.p)), nT = ici.filter(r => typeR(r) === "tableau").length, nC = ici.filter(r => typeR(r) === "compteur").length;
+    ici.filter(r => typeR(r) === "cle").forEach(r => { m[r.c] = (m[r.c] || 0) + 1; });
+    if (st.filtre && !st.filtre.startsWith("__") && !m[st.filtre]) st.filtre = "";
+    const libF = st.filtre === "__tab" ? "tableaux" : st.filtre === "__cpt" ? "compteurs" : st.filtre;
+    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Repères${st.filtre ? ` : ${esc(libF)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4>${nT ? `<button data-cle="__tab" class="${st.filtre === "__tab" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.tableau}"></i><b>⚡ Tableaux</b><span>${nT}</span></button>` : ""}${nC ? `<button data-cle="__cpt" class="${st.filtre === "__cpt" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.compteur}"></i><b>🎛️ Compteurs</b><span>${nC}</span></button>` : ""}${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
   }
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
@@ -237,7 +248,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         const x = px + dx, y = py + dy; if (x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x]) return lab[y * W + x]; } return 0; };
     et.pieces.forEach(q => { const id = proche(q.fx, q.fy, Math.round(W / 60)); if (id && (!noms[id] || q.t.length > noms[id].length) && !/^b[aâ]timent/i.test(q.t)) noms[id] = q.t; });
     et.points.forEach(p => { const id = proche(p.fx, p.fy, Math.round(W / 80));
-      if (id) (cles[id] = cles[id] || []).push(p.r.c); });
+      if (id && typeR(p.r) === "cle") (cles[id] = cles[id] || []).push(p.r.c); });
     const sol = document.createElement("canvas"); sol.width = W; sol.height = H;
     const tex = new THREE.CanvasTexture(sol); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = aniso;
     const mSol = new THREE.Mesh(new THREE.PlaneGeometry(L, P), new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false })); mSol.receiveShadow = true;
@@ -302,12 +313,12 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   }
   function dessinerPoints() {
     etages.forEach(e => {
-      e.points.forEach(p => { const on = st.filtre && p.r.c === st.filtre, off = st.filtre && !on;
+      e.points.forEach(p => { const on = vise(p.r), off = !!st.filtre && !on;
         p.mesh.material.opacity = off ? 0.07 : 1; p.mesh.scale.setScalar(on ? 1.9 : 1); p.halo.visible = !!on;
-        if (on && !p.lab) { p.lab = etiquette(THREE, p.r.c, couleurCle(p.r.c), 0.8); p.lab.position.set(p.mesh.position.x, 2.6, p.mesh.position.z); e.groupe.add(p.lab);
-          const tige = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(p.mesh.position.x, 0.1, p.mesh.position.z), new THREE.Vector3(p.mesh.position.x, 1.6, p.mesh.position.z)]), new THREE.LineBasicMaterial({ color: couleurCle(p.r.c) })); p.tige = tige; e.groupe.add(tige); }
+        if (on && !p.lab) { p.lab = etiquette(THREE, libR(p.r), couleurR(p.r), 0.8); p.lab.position.set(p.mesh.position.x, 2.6, p.mesh.position.z); e.groupe.add(p.lab);
+          const tige = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(p.mesh.position.x, 0.1, p.mesh.position.z), new THREE.Vector3(p.mesh.position.x, 1.6, p.mesh.position.z)]), new THREE.LineBasicMaterial({ color: couleurR(p.r) })); p.tige = tige; e.groupe.add(tige); }
         if (p.lab) { p.lab.visible = !!on; p.tige.visible = !!on; } });
-      const nb = st.filtre ? e.points.filter(p => p.r.c === st.filtre).length : e.points.length;
+      const nb = st.filtre ? e.points.filter(p => vise(p.r)).length : e.points.length;
       fond.querySelector(`[data-niv="${e.n}"] em`)?.replaceChildren(document.createTextNode(nb ? `${nb} 🔑` : ""));
     });
   }
@@ -337,7 +348,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
       }
       const nom = texteNiveau(THREE, nomNiveau(e.niv)); nom.position.set(-L / 2 - 10, 0, P / 2 - 2); groupe.add(nom);
       const points = reperes.filter(r => r.p === e.n).map(r => ({ r, fx: (r.x - z.x) / z.w, fy: (r.y - z.y) / z.h })).filter(r => r.fx >= 0 && r.fx <= 1 && r.fy >= 0 && r.fy <= 1).map(({ r, fx, fy }) => {
-        const col = new THREE.Color(couleurCle(r.c));
+        const col = new THREE.Color(couleurR(r));
         const mesh = new THREE.Mesh(new THREE.CircleGeometry(0.75, 20), new THREE.MeshBasicMaterial({ color: col, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
         mesh.rotation.x = -Math.PI / 2; mesh.position.set((fx - 0.5) * L, 0.12, (fy - 0.5) * P); mesh.userData.r = r.id; mesh.renderOrder = 5; groupe.add(mesh);
         const halo = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.5, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
@@ -371,9 +382,9 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const r = reperes.find(x => x.id === id); const box = $(".p3-info"); if (!r) { box.hidden = true; return; }
     const e = groupes[st.g].etages.find(x => x.n === r.p), tous = reperes.filter(x => x.c === r.c);
     box.hidden = false;
-    box.innerHTML = `<b style="color:${couleurCle(r.c)}">🔑 ${esc(r.c)}</b>${r.note ? `<span>${esc(r.note)}</span>` : ""}<span>${e ? nomNiveau(e.niv) + " · " : ""}${tous.length} porte${tous.length > 1 ? "s" : ""} avec cette clé</span>
+    box.innerHTML = `<b style="color:${couleurR(r)}">${typeR(r) === "cle" ? "🔑 " : ""}${esc(libR(r))}</b>${r.note ? `<span>${esc(r.note)}</span>` : ""}<span>${e ? nomNiveau(e.niv) + " · " : ""}${tous.length} porte${tous.length > 1 ? "s" : ""} avec cette clé</span>
       <div><button data-allumer>Isoler cette clé</button><button data-plat>Voir à plat ›</button><button data-fi>✕</button></div>`;
-    box.querySelector("[data-allumer]").onclick = () => { st.filtre = r.c; filtreOptions(); dessinerPoints(); box.hidden = true; };
+    box.querySelector("[data-allumer]").onclick = () => { st.filtre = typeR(r) === "tableau" ? "__tab" : typeR(r) === "compteur" ? "__cpt" : r.c; filtreOptions(); dessinerPoints(); box.hidden = true; };
     box.querySelector("[data-plat]").onclick = () => { fermer(); onPlat?.(r.p, st.filtre); };
     box.querySelector("[data-fi]").onclick = () => { box.hidden = true; };
   }
@@ -437,12 +448,12 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     boucle.n = (boucle.n || 0) + 1;
     if (boucle.n % 8 === 0) {
       const v = new THREE.Vector3(), proches = [];
-      etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.material.opacity > 0.5 && !(st.filtre && p.r.c === st.filtre);
+      etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.material.opacity > 0.5 && !vise(p.r);
         if (!visible) { if (p.petite) p.petite.visible = false; return; }
         p.mesh.getWorldPosition(v); const d = v.distanceTo(camera.position); const ndc = v.clone().project(camera); const ecran = Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && ndc.z < 1; if (d < (st.maq ? 70 : 170) && ecran) proches.push([d, p, e]); else if (p.petite) p.petite.visible = false; }));
       proches.sort((a, b) => a[0] - b[0]).forEach(([, p, e], i) => {
         if (i >= 50) { if (p.petite) p.petite.visible = false; return; }
-        if (!p.petite) { p.petite = etiquette(THREE, p.r.c, couleurCle(p.r.c), 0.42); p.petite.position.set(p.mesh.position.x, 1.1, p.mesh.position.z); e.groupe.add(p.petite); }
+        if (!p.petite) { p.petite = etiquette(THREE, libR(p.r), couleurR(p.r), 0.42); p.petite.position.set(p.mesh.position.x, 1.1, p.mesh.position.z); e.groupe.add(p.petite); }
         p.petite.visible = true; });
     }
     // Noms des pièces : affichés nets autour de l'endroit regardé (les 90 plus proches à l'écran).

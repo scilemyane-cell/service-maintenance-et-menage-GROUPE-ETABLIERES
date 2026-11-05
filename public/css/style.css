@@ -4904,3 +4904,9 @@ table.pm-t tbody th{font-size:11.5px;color:var(--text-dim)}
 .ndm-photo-btns{display:flex;flex-wrap:wrap;gap:8px}
 .dps-pastille.photo{background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;font-weight:800}
 .pm-fiche{font-style:normal;font-size:10.5px;font-weight:700;background:rgba(255,255,255,.22);border-radius:6px;padding:1px 6px;margin-top:2px}
+
+/* Dossier de site : équipements repérés sur le plan */
+.sd-equip{margin-top:12px}.sd-eq-l{display:flex;flex-direction:column;gap:6px}
+.sd-eq{display:grid;grid-template-columns:auto 1fr auto auto;gap:4px 10px;align-items:center;padding:7px 10px;border:1px solid var(--border);border-radius:10px;background:var(--panel-alt)}
+.sd-eq span{color:var(--text-dim);font-size:12.5px}.sd-eq em{display:flex;gap:3px;align-items:center;font-style:normal}.sd-eq em img{width:38px;height:38px;object-fit:cover;border-radius:6px;cursor:zoom-in}
+@media (max-width:600px){.sd-eq{grid-template-columns:1fr auto}.sd-eq span{grid-column:1/-1;grid-row:2}.sd-eq em{grid-column:1/-1}}

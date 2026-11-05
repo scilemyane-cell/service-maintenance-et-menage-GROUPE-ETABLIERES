@@ -1,3 +1,4 @@
+import { estEauChaude } from "./compteurs-schema.js";
 import { choixDateHTML, activerChoixDate, isoLocal } from "./choix-date.js";
 import { differerSiSaisieDate } from "./saisie-dates.js";
 import { nomPropre, villeDe, dessinPourSite } from "./sites-visuel.js";
@@ -37,6 +38,7 @@ import {
 
 const TYPE_ICONE = { eau: "💧", gaz: "🔥", chauffage: "🌡️", elec: "⚡" };
 const TYPE_LABEL = { eau: "Eau", gaz: "Gaz", chauffage: "Chauffage urbain", elec: "Électricité" };
+const iconeCompteur = (c) => estEauChaude(c) ? "♨️" : (TYPE_ICONE[c?.type] || "");
 const TYPES_COMPTEUR = ["eau", "gaz", "chauffage", "elec"]; // ordre d'affichage partout (liste, groupement par type, formulaires)
 const ROLES_SUPERVISION = ["super_admin", "admin", "n1"]; // seuls eux peuvent antidater un relevé
 
@@ -176,7 +178,7 @@ function procheHTML(siteId = null) {
   if (!l.length) return "";
   const [p, ...autres] = l, m = (d) => d < 5 ? "juste à côté" : `à ${Math.round(d)} m`;
   return `<div class="cpt-proche">
-    <div class="cpt-proche-t"><span class="cpt-proche-ico">📍</span><div><small>Compteur le plus proche de toi</small><b>${TYPE_ICONE[p.c.type] || ""} ${esc(p.c.nom || "")}</b><em>${esc(nomPropre(p.c.dossierNom || ""))} · ${m(p.d)}${estEnRetard(p.c) ? ` · <span class="r">${motRetard()}</span>` : ""}</em></div></div>
+    <div class="cpt-proche-t"><span class="cpt-proche-ico">📍</span><div><small>Compteur le plus proche de toi</small><b>${iconeCompteur(p.c) || ""} ${esc(p.c.nom || "")}</b><em>${esc(nomPropre(p.c.dossierNom || ""))} · ${m(p.d)}${estEnRetard(p.c) ? ` · <span class="r">${motRetard()}</span>` : ""}</em></div></div>
     <div class="cpt-proche-b"><button class="add-btn" data-prox-relever="${p.c.id}" data-prox-site="${p.c.dossierId}">📝 Relever ce compteur</button><button class="nav-btn" data-prox-refresh title="Relocaliser">↻</button></div>
     ${autres.length ? `<div class="cpt-proche-autres">Aussi à proximité : ${autres.map(x => `<button data-prox-relever="${x.c.id}" data-prox-site="${x.c.dossierId}">${TYPE_ICONE[x.c.type] || ""} ${esc(x.c.nom || "")} <small>${m(x.d)}</small></button>`).join("")}</div>` : ""}
   </div>`;
@@ -326,7 +328,7 @@ function renderSiteCard(site) {
               <div class="ssx-tip-content">
                 <p style="margin:0 0 6px;font-size:11px;color:var(--text-dim);font-weight:700">En retard sur ${esc(site.nom)} :</p>
                 <ul>
-                  ${enRetard.map(c => `<li><span>${TYPE_ICONE[c.type]} ${esc(c.nom)}</span><b>${formatDate(c.dernierReleve?.at)}</b></li>`).join("")}
+                  ${enRetard.map(c => `<li><span>${iconeCompteur(c)} ${esc(c.nom)}</span><b>${formatDate(c.dernierReleve?.at)}</b></li>`).join("")}
                 </ul>
               </div>
             </span>
@@ -384,13 +386,13 @@ function dessinCompteur(c) {
     <rect x="30" y="80" width="26" height="10" rx="3" fill="#9a9a9a"/><rect x="64" y="80" width="26" height="10" rx="3" fill="#9a9a9a"/>
     <rect x="26" y="112" width="68" height="20" rx="4" fill="#b3bf1f"/><text x="60" y="126" text-anchor="middle" font-family="system-ui" font-size="9" font-weight="800" fill="#4a5200">LINKY</text>
     <defs><linearGradient id="cdBrill" x1="0" x2="1"><stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs></svg>`;
-  if (c.type === "eau") return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
+  if (c.type === "eau") { const ch = estEauChaude(c), k1 = ch ? "#d63b2f" : "#2a78d6", k2 = ch ? "#f2a99f" : "#9cc3ef", k3 = ch ? "#fff7f6" : "#f7fbff"; return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
     <rect x="50" y="4" width="20" height="18" rx="3" fill="#8a9bb0"/><rect x="50" y="128" width="20" height="18" rx="3" fill="#8a9bb0"/>
-    <circle cx="60" cy="75" r="54" fill="#2a78d6"/><circle cx="60" cy="75" r="45" fill="#f7fbff" stroke="#9cc3ef" stroke-width="3"/>
+    <circle cx="60" cy="75" r="54" fill="${k1}"/><circle cx="60" cy="75" r="45" fill="${k3}" stroke="${k2}" stroke-width="3"/>
     <rect x="28" y="56" width="64" height="20" rx="3" fill="#1b1f27"/>
     <text x="60" y="71" text-anchor="middle" font-family="monospace" font-size="${val.length > 7 ? 10 : 12}" font-weight="700" fill="#fff">${val}</text>
-    <text x="60" y="92" text-anchor="middle" font-family="system-ui" font-size="9" font-weight="700" fill="#2a78d6">m³</text>
-    <circle cx="60" cy="104" r="7" fill="none" stroke="#d63b3b" stroke-width="2"/><line x1="60" y1="104" x2="65" y2="99" stroke="#d63b3b" stroke-width="2"/></svg>`;
+    <text x="60" y="92" text-anchor="middle" font-family="system-ui" font-size="9" font-weight="700" fill="${k1}">${ch ? "m³ · CHAUDE" : "m³"}</text>
+    <circle cx="60" cy="104" r="7" fill="none" stroke="#d63b3b" stroke-width="2"/><line x1="60" y1="104" x2="65" y2="99" stroke="#d63b3b" stroke-width="2"/></svg>`; }
   if (c.type === "gaz") return `<svg viewBox="0 0 120 150" class="cd-svg" aria-hidden="true">
     <rect x="34" y="2" width="16" height="16" rx="3" fill="#c9a227"/><rect x="70" y="2" width="16" height="16" rx="3" fill="#c9a227"/>
     <rect x="8" y="14" width="104" height="132" rx="12" fill="#eceef1" stroke="#c4c8ce" stroke-width="2"/>
@@ -743,10 +745,10 @@ function renderListe() {
 function renderCompteurRow(c) {
   const retard = estEnRetard(c);
   return `
-    <div class="form-card" style="margin-bottom:8px">
+    <div class="form-card" style="margin-bottom:8px${estEauChaude(c) ? ";border-left:4px solid #d63b2f" : ""}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div>
-          <p style="margin:0;font-weight:700">${esc(c.nom)}${c.emplacement ? ` <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(c.emplacement)}</span>` : ""}</p>
+          <p style="margin:0;font-weight:700">${estEauChaude(c) ? "♨️ " : ""}${esc(c.nom)}${c.emplacement ? ` <span style="font-weight:400;color:var(--text-dim);font-size:12px">— ${esc(c.emplacement)}</span>` : ""}</p>
           ${c.logement ? `<p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">🏠 Logement <b style="color:var(--text)">${esc(c.logement)}</b></p>` : ""}
           ${c.pdl ? `<p style="margin:2px 0 0;font-size:12px;color:var(--text-dim)">🔌 ${libPdl(c.type)} : <b style="color:var(--text);font-variant-numeric:tabular-nums;user-select:all">${esc(fmtPdl(c.pdl))}</b></p>` : ""}
           <p style="margin:2px 0 0;font-size:12px;${retard ? 'color:var(--red);font-weight:700' : 'color:var(--text-dim)'}">${retard ? '⚠️ ' : '✓ '}${formatDate(c.dernierReleve?.at)}${c.dernierReleve ? ` — ${c.dernierReleve.releveParNom}` : ""}</p>
@@ -1539,7 +1541,7 @@ function renderReleve() {
       <button class="nav-btn" id="cpt-r-quitter">✕ Quitter sans enregistrer</button>
       <div class="form-card" style="max-width:420px;margin:0 auto">
         <p class="hint" style="margin:0 0 2px">${esc(compteur.dossierNom)}</p>
-        <h3 style="margin:0 0 4px">${TYPE_ICONE[compteur.type]} ${esc(compteur.nom)}</h3>
+        <h3 style="margin:0 0 4px">${iconeCompteur(compteur)} ${esc(compteur.nom)}</h3>
         ${compteur.emplacement ? `<p class="hint" style="margin:0 0 12px">${esc(compteur.emplacement)}</p>` : ""}
         ${compteur.dernierReleve ? `<p class="hint" style="margin:0 0 12px">Dernier relevé : ${formatDate(compteur.dernierReleve.at)} — ${formatValeurs(compteur)}</p>` : ""}
 
@@ -1661,7 +1663,7 @@ function renderRapide() {
         <span class="hint">${ui.rapideIndex + 1} / ${liste.length} · ${esc(site.nom)}</span>
       </div>
       <div class="form-card" style="max-width:400px;margin:0 auto">
-        <h3 style="margin:0 0 2px">${TYPE_ICONE[compteur.type]} ${esc(compteur.nom)}</h3>
+        <h3 style="margin:0 0 2px">${iconeCompteur(compteur)} ${esc(compteur.nom)}</h3>
         ${compteur.emplacement ? `<p class="hint" style="margin:0 0 10px">${esc(compteur.emplacement)}</p>` : ""}
         ${compteur.dernierReleve ? `<p class="hint" style="margin:0 0 10px">Dernier relevé : ${formatDate(compteur.dernierReleve.at)} — ${formatValeurs(compteur)}</p>` : ""}
 

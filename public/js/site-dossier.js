@@ -826,11 +826,12 @@ function renderView(d) {
             </div>
           </details>
           ${d.compteursActifs ? `<button class="nav-btn va-lanceur" id="sd-plan-compteurs">🛰️ Plan des compteurs</button>` : ""}
-          <button class="nav-btn va-lanceur" id="sd-plan-cles" ${isEditorUser(mountedUser) ? "" : "hidden"}>🔑 Plan des clés</button>
+          <button class="nav-btn va-lanceur" id="sd-plan-cles" ${isEditorUser(mountedUser) ? "" : "hidden"}>🗺️ Plans · clés · tableaux</button>
           ${isEditorUser(mountedUser) ? `<button class="add-btn sdv-modifier" id="sd-edit">✏️ Modifier le dossier</button>` : ""}
         </div>
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
+      <div id="sd-equip"></div>
       <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
         <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b>. Utilisable par n'importe qui, y compris un prestataire externe <b>sans compte</b> Microsoft ni accès à SharePoint.</p>
@@ -931,6 +932,24 @@ function renderView(d) {
       try { const { ouvrirPlanCles } = await import("./plan-cles.js"); ouvrirPlanCles({ dossier: { id: d.id, nom: d.nom }, user: mountedUser, editeur: isEditorUser(mountedUser) && !mountedUser?.lectureSeule }); }
       catch (e) { window.toast?.("Plan des clés indisponible : " + (e?.message || e)); }
     });
+    // Équipements repérés sur le plan (tableaux électriques, compteurs) : liste + photos + « voir sur le plan ».
+    import("./plan-cles.js").then(async m => {
+      const meta = await m.lirePlanMeta(d.id), box = document.getElementById("sd-equip"); if (!box || !meta) return;
+      const tabs = (meta.reperes || []).filter(r => m.typeR(r) === "tableau").sort((a, b) => String(a.c).localeCompare(String(b.c), "fr", { numeric: true }));
+      const cpts = (meta.reperes || []).filter(r => m.typeR(r) === "compteur");
+      if (!tabs.length && !cpts.length) return;
+      const titre = (n) => meta.pages.find(p => p.n === n)?.titre || "";
+      box.innerHTML = `<section class="form-card sd-equip"><h3 style="margin:0 0 8px">⚡ Équipements repérés sur le plan</h3>
+        ${tabs.length ? `<p class="hint" style="margin:0 0 6px">Tableaux électriques (${tabs.length})</p><div class="sd-eq-l">${tabs.map(r => `<div class="sd-eq"><b>⚡ ${esc(r.c)}</b><span>${esc(r.note || "")}${r.note ? " · " : ""}${esc(titre(r.p))}</span><em data-eq-ph="${r.id}"></em><button class="nav-btn" data-eq-voir="${r.id}">📍 Sur le plan</button></div>`).join("")}</div>` : ""}
+        ${cpts.length ? `<p class="hint" style="margin:10px 0 6px">Compteurs placés sur le plan (${cpts.length})</p><div class="sd-eq-l">${cpts.map(r => `<div class="sd-eq"><b>🎛️ ${esc(r.c)}</b><span>${esc(titre(r.p))}</span><em></em><button class="nav-btn" data-eq-voir="${r.id}">📍 Sur le plan</button></div>`).join("")}</div>` : ""}
+        <button class="nav-btn" data-eq-imp style="margin-top:8px">🖨️ Plans des tableaux électriques (PDF)</button></section>`;
+      const ouvrir = (focus) => m.ouvrirPlanCles({ dossier: { id: d.id, nom: d.nom }, user: mountedUser, editeur: isEditorUser(mountedUser) && !mountedUser?.lectureSeule, focus });
+      box.querySelectorAll("[data-eq-voir]").forEach(b => b.onclick = () => ouvrir({ repId: b.dataset.eqVoir }));
+      box.querySelector("[data-eq-imp]").onclick = () => ouvrir({ filtre: "__tab" });
+      tabs.forEach(async r => { try { const l = await m.photosEquipement(r.id); const em = box.querySelector(`[data-eq-ph="${r.id}"]`); if (!em || !l.length) return;
+        em.innerHTML = l.slice(0, 4).map((p, i) => `<img src="${p.data}" data-i="${i}" alt="">`).join("") + (l.length > 4 ? `<small>+${l.length - 4}</small>` : "");
+        em.querySelectorAll("img").forEach(im => im.onclick = async () => { const { voirPhotos } = await import("./demandes-photos.js"); voirPhotos(l, +im.dataset.i); }); } catch { /* */ } });
+    }).catch(() => {});
   }
   document.getElementById("sd-plan-compteurs")?.addEventListener("click", async (ev) => {
     const b = ev.currentTarget, txt = b.textContent; b.disabled = true; b.textContent = "⏳ Plan…";

@@ -6,10 +6,12 @@
 // Stockage : config/plancles-<dossier> (pages + repères, écouté en direct) et
 // config/plancles-<dossier>-p<n> (image de la page, lue à la demande).
 import { db } from "./firebase-init.js";
-import { doc, getDoc, setDoc, deleteDoc, onSnapshot } from "./firestore-compte.js";
+import { doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, addDoc, query, where, getDocs } from "./firestore-compte.js";
+import { auth } from "./firebase-init.js";
 import { esc } from "./astreinte-logic.js";
 import { PDFJS, PDFJS_WORKER } from "./fiches-poste-import.js";
-import { groupesEtages } from "./plan-3d.js";
+import { groupesEtages, niveauDe, NIVEAUX } from "./plan-3d.js";
+const nomNiveau = (n) => n < -1 ? `Sous-sol ${n}` : n < 0 ? "Sous-sol" : n === 0 ? "RDC" : `R+${n}`;
 
 const refMeta = (id) => doc(db, "config", `plancles-${id}`);
 const refPage = (id, n) => doc(db, "config", `plancles-${id}-p${n}`);
@@ -192,36 +194,96 @@ export async function importerPlanPdf(dossier, fichier, par, progres = () => {})
   return { pages: pages.length, reperes: reperes.length };
 }
 
-// ---------- Visionneuse / édition ----------
-export function ouvrirPlanCles({ dossier, user, editeur }) {
+// ---------- Repères : clés, compteurs, tableaux électriques ----------
+export const TYPES_R = {
+  cle: { ic: "🔑", lib: "Clé", pl: "Clés" },
+  compteur: { ic: "🎛️", lib: "Compteur", pl: "Compteurs", k: "#0891b2" },
+  tableau: { ic: "⚡", lib: "Tableau électrique", pl: "Tableaux électriques", k: "#d97706" },
+};
+export const TYPES_TABLEAU = ["TGBT", "TD", "TDR", "TC", "Armoire", "Coffret"];
+export const typeR = (r) => r.t || "cle";
+const couleurR = (r) => typeR(r) === "cle" ? (COULEURS[r.col] || COULEURS.rouge) : TYPES_R[typeR(r)].k;
+const libR = (r) => typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛️ ${r.c}` : r.c;
+const correspond = (r, f) => !f ? true : f === "__cle" ? typeR(r) === "cle" : f === "__tab" ? typeR(r) === "tableau" : f === "__cpt" ? typeR(r) === "compteur" : typeR(r) === "cle" && r.c === f;
+const libFiltre = (f) => f === "__cle" ? "Clés" : f === "__tab" ? "Tableaux électriques" : f === "__cpt" ? "Compteurs" : f ? `Clé ${f}` : "Tous les repères";
+export const prochainNumero = (reps, type) => 1 + Math.max(0, ...reps.filter(r => typeR(r) === "tableau" && r.tabType === type).map(r => parseInt(r.num, 10) || 0));
+
+// Photos d'un équipement (tableau électrique…) : petits documents dans « fiches-photos ».
+export async function photosEquipement(repId) {
+  const s = await getDocs(query(collection(db, "fiches-photos"), where("repId", "==", repId)));
+  return s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.le || 0) - (b.le || 0));
+}
+export async function ajouterPhotoEquipement(dossierId, repId, fichier, par) {
+  const { compresserImage } = await import("./demandes-photos.js");
+  const data = await compresserImage(fichier);
+  return addDoc(collection(db, "fiches-photos"), { type: "equipement", dossierId, repId, agentUid: auth.currentUser?.uid || "", par, data, legende: "", le: Date.now() });
+}
+export async function lirePlanMeta(dossierId) { try { const s = await getDoc(refMeta(dossierId)); return s.exists() ? s.data() : null; } catch { return null; } }
+
+// ---------- Impression / PDF par type d'équipement ----------
+async function imprimerPlans({ dossier, meta, filtre, charger }) {
+  const reps = (meta.reperes || []).filter(r => correspond(r, filtre));
+  if (!reps.length) { alert("Aucun repère de ce type sur le plan."); return; }
+  const pages = meta.pages.filter(p => reps.some(r => r.p === p.n));
+  const imgs = [];
+  for (const p of pages) {
+    const src = await charger(p.n); if (!src) continue;
+    const im = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
+    const cv = document.createElement("canvas"); cv.width = p.w; cv.height = p.h; const x = cv.getContext("2d");
+    x.drawImage(im, 0, 0, p.w, p.h); const fs = Math.round(p.w / 110);
+    x.font = `bold ${fs}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
+    reps.filter(r => r.p === p.n).forEach(r => { const t = libR(r).replace(/^[^\w]+\s/, ""), w = x.measureText(t).width + fs * 0.8, cx = r.x * p.w, cy = r.y * p.h, k = couleurR(r);
+      x.fillStyle = "rgba(255,255,255,.95)"; x.fillRect(cx - w / 2, cy - fs * 0.75, w, fs * 1.5); x.strokeStyle = k; x.lineWidth = 3; x.strokeRect(cx - w / 2, cy - fs * 0.75, w, fs * 1.5); x.fillStyle = k; x.fillText(t, cx, cy + 1); });
+    imgs.push({ p, src: cv.toDataURL("image/jpeg", 0.88) });
+  }
+  const titre = (n) => meta.pages.find(p => p.n === n)?.titre || `Page ${n}`;
+  const lignes = reps.slice().sort((a, b) => triCode(a.c, b.c)).map(r => `<tr><td><b style="color:${couleurR(r)}">${esc(r.c)}</b></td><td>${esc(TYPES_R[typeR(r)].lib)}</td><td>${esc(titre(r.p))}</td><td>${esc(r.note || "")}</td></tr>`).join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(dossier.nom || "")} — ${esc(libFiltre(filtre))}</title><style>
+    @page{size:A4 landscape;margin:8mm}body{font-family:system-ui,sans-serif;margin:0;color:#111}
+    .pg{page-break-after:always;height:190mm;display:flex;flex-direction:column}.pg h2{margin:0 0 3mm;font-size:13pt}.pg h2 small{font-weight:400;color:#555;font-size:9pt}
+    .pg img{flex:1;min-height:0;width:100%;object-fit:contain}table{border-collapse:collapse;width:100%;font-size:9.5pt}th,td{border:1px solid #bbb;padding:3px 6px;text-align:left}th{background:#eee}
+  </style></head><body>
+  ${imgs.map(({ p, src }) => `<div class="pg"><h2>${esc(dossier.nom || "")} — ${esc(p.titre)} <small>· ${esc(libFiltre(filtre))} · ${reps.filter(r => r.p === p.n).length} repère(s) · ${new Date().toLocaleDateString("fr-FR")}</small></h2><img src="${src}"></div>`).join("")}
+  <h2 style="font-size:13pt">${esc(dossier.nom || "")} — Liste : ${esc(libFiltre(filtre))} (${reps.length})</h2>
+  <table><tr><th>Repère</th><th>Type</th><th>Plan</th><th>Emplacement / note</th></tr>${lignes}</table></body></html>`;
+  const f = document.createElement("iframe"); f.style.cssText = "position:fixed;left:-20000px;top:0;width:1123px;height:794px;border:0"; document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  await new Promise(r => setTimeout(r, 600)); f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000);
+}
+
+// ---------- Visionneuse / mode édition ----------
+export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   const par = window.__smmNom || user?.displayName || user?.nom || user?.email || "";
-  const st = { meta: null, page: 1, filtre: "", edition: false, s: 1, tx: 0, ty: 0, couleur: "rouge", dernierCode: "", liste: false, sel: null };
+  const st = { meta: null, page: 1, filtre: "", edition: false, s: 1, tx: 0, ty: 0, couleur: "rouge", dernierCode: "", liste: false, sel: null,
+    outil: "sel", tabType: "TD", tabNum: "", cptId: "", focus };
+  let compteursSite = [];
+  import("./compteurs-data.js").then(m => m.listerTousLesCompteurs()).then(l => { compteursSite = (l || []).filter(c => c.dossierId === dossier.id).sort((a, b) => triCode(a.nom || "", b.nom || "")); if (st.edition) dessinerPanneau(); }).catch(() => {});
   const fond = document.createElement("div"); fond.className = "pc-fond";
   document.body.appendChild(fond); document.body.classList.add("pc-ouvert");
   if (!document.getElementById("pc-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   let unsub = () => {};
   const fermer = () => { unsub(); fond.remove(); document.body.classList.remove("pc-ouvert"); document.removeEventListener("keydown", clavier); };
-  const clavier = (e) => { if (e.key === "Escape") { if (st.sel) { st.sel = null; dessinerReperes(); } else fermer(); } };
+  const clavier = (e) => { if (e.key === "Escape" && !e.target.closest?.("input,select,textarea")) { if (st.sel) { st.sel = null; dessinerReperes(); } else fermer(); } };
   document.addEventListener("keydown", clavier);
 
   const reperes = () => st.meta?.reperes || [];
   const sauver = async (liste, msg) => {
-    st.meta.reperes = liste; dessinerReperes(); dessinerBarre();
+    st.meta.reperes = liste; dessinerReperes(); dessinerBarre(); if (st.edition) dessinerPanneau();
     try { await setDoc(refMeta(dossier.id), { reperes: liste, majLe: Date.now(), majPar: par }, { merge: true }); if (msg) window.toast?.(msg); }
     catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); }
   };
+  const sauverPages = async (pages) => { st.meta.pages = pages; dessinerBarre(); try { await setDoc(refMeta(dossier.id), { pages, majLe: Date.now(), majPar: par }, { merge: true }); window.toast?.("✓ Page réglée"); } catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); } };
 
   fond.innerHTML = `<div class="pc">
-    <header class="pc-h"><b>🔑 Plan des clés — ${esc(dossier.nom || "")}</b><span class="pc-maj"></span>
+    <header class="pc-h"><b>🗺️ Plans — ${esc(dossier.nom || "")}</b><span class="pc-maj"></span>
       <div class="pc-hb">${editeur ? `<label class="pc-btn">📄 Importer un plan PDF<input type="file" accept="application/pdf" hidden data-import></label>` : ""}<button class="pc-btn" data-fermer>✕ Fermer</button></div></header>
     <div class="pc-barre"></div>
-    <div class="pc-corps"><div class="pc-vue"><div class="pc-scene"><img class="pc-img" alt=""><div class="pc-reps"></div></div><div class="pc-msg"></div></div><aside class="pc-liste" hidden></aside></div>
+    <div class="pc-corps"><div class="pc-vue"><div class="pc-scene"><img class="pc-img" alt=""><div class="pc-reps"></div></div><div class="pc-msg"></div></div><aside class="pc-liste" hidden></aside><aside class="pc-ed" hidden></aside></div>
   </div>`;
   const $ = (s) => fond.querySelector(s);
   const vue = $(".pc-vue"), scene = $(".pc-scene"), img = $(".pc-img"), reps = $(".pc-reps"), msg = $(".pc-msg");
   $("[data-fermer]").onclick = fermer;
 
-  // Import
   $("[data-import]")?.addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
     if (reperes().length && !confirm(`Remplacer le plan actuel (${st.meta.pages.length} pages, ${reperes().length} repères) par « ${f.name} » ?\nLes repères seront repris des étiquettes du nouveau PDF.`)) return;
@@ -231,26 +293,27 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     msg.hidden = true;
   });
 
-  // ---- Barre : pages, numéros de clé, modes ----
-  function compteParCode(page) { const m = {}; reperes().forEach(r => { if (page && r.p !== page) return; m[r.c] = (m[r.c] || 0) + 1; }); return m; }
+  // ---- Barre : pages, filtres par type / clé, actions ----
   function dessinerBarre() {
     const b = $(".pc-barre"); if (!st.meta) { b.innerHTML = ""; return; }
-    const tous = compteParCode(), codes = Object.keys(tous).sort(triCode);
-    const parPage = (p) => reperes().filter(r => r.p === p && (!st.filtre || r.c === st.filtre)).length;
+    const tous = {}; reperes().filter(r => typeR(r) === "cle").forEach(r => { tous[r.c] = (tous[r.c] || 0) + 1; });
+    const codes = Object.keys(tous).sort(triCode), nb = (t) => reperes().filter(r => typeR(r) === t).length;
+    const parPage = (p) => reperes().filter(r => r.p === p && correspond(r, st.filtre)).length;
+    const puce = (f, lib, n) => `<button class="pc-ty ${st.filtre === f ? "on" : ""}" data-f="${f}">${lib}${n !== undefined ? ` <i>${n}</i>` : ""}</button>`;
     b.innerHTML = `<div class="pc-pages">${st.meta.pages.map(p => { const n = parPage(p.n); return `<button class="pc-pg ${p.n === st.page ? "on" : ""} ${st.filtre && !n ? "vide" : ""}" data-page="${p.n}" title="${esc(p.titre)}">${esc(p.titre.replace(/^Plan (ensemble )?/i, "").replace(/^B[aâ]timent /i, "Bât. "))}${n ? `<i>${n}</i>` : ""}</button>`; }).join("")}</div>
       <div class="pc-outils">
-        <select data-filtre><option value="">🔑 Toutes les clés (${reperes().length})</option>${codes.map(c => `<option value="${esc(c)}" ${c === st.filtre ? "selected" : ""}>${esc(c)} — ${tous[c]} porte${tous[c] > 1 ? "s" : ""}</option>`).join("")}</select>
-        <button class="pc-btn" data-liste>${st.liste ? "✕ Liste" : "📋 Liste des clés"}</button>
+        <div class="pc-tys">${puce("", "Tout")}${puce("__cle", "🔑 Clés", nb("cle"))}${nb("compteur") || st.edition ? puce("__cpt", "🎛️ Compteurs", nb("compteur")) : ""}${nb("tableau") || st.edition ? puce("__tab", "⚡ Tableaux", nb("tableau")) : ""}</div>
+        ${codes.length ? `<select data-filtre><option value="">🔑 Une clé…</option>${codes.map(c => `<option value="${esc(c)}" ${c === st.filtre ? "selected" : ""}>${esc(c)} — ${tous[c]} porte${tous[c] > 1 ? "s" : ""}</option>`).join("")}</select>` : ""}
+        <button class="pc-btn" data-liste>${st.liste ? "✕ Liste" : "📋 Liste"}</button>
         ${groupesEtages(st.meta.pages).length ? `<button class="pc-btn p3-lance" data-3d>🧊 Vue 3D</button>` : ""}
         <button class="pc-btn" data-ajuster>⤢ Ajuster</button>
-        <button class="pc-btn" data-telecharger title="Image de la page avec ses repères">⬇️ Image</button>
-        ${editeur ? `<button class="pc-btn ${st.edition ? "edit" : ""}" data-edition>${st.edition ? "✓ Terminer les modifications" : "✏️ Modifier les repères"}</button>` : ""}
-      </div>
-      ${st.edition ? `<p class="pc-aide">Clique sur le plan pour <b>ajouter</b> un repère · fais glisser un repère pour le <b>déplacer</b> · clique dessus pour changer le <b>numéro</b>, la <b>couleur</b> ou le <b>supprimer</b>.
-        Nouveau repère : <input data-code value="${esc(st.dernierCode)}" size="6" placeholder="ex. MV10"> ${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === st.couleur ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}" title="${c}"></button>`).join("")}</p>` : ""}`;
+        <button class="pc-btn" data-imprimer title="Plans + liste, prêts à imprimer ou enregistrer en PDF">🖨️ Imprimer / PDF</button>
+        ${editeur ? `<button class="pc-btn ${st.edition ? "edit" : ""}" data-edition>${st.edition ? "✓ Terminer l'édition" : "✏️ Mode édition"}</button>` : ""}
+      </div>`;
     b.querySelectorAll("[data-page]").forEach(x => x.onclick = () => allerPage(+x.dataset.page));
-    b.querySelector("[data-filtre]").onchange = (e) => { st.filtre = e.target.value; dessinerReperes(); dessinerBarre(); dessinerListe(); };
-    b.querySelector("[data-liste]").onclick = () => { st.liste = !st.liste; dessinerBarre(); dessinerListe(); };
+    b.querySelectorAll("[data-f]").forEach(x => x.onclick = () => { st.filtre = x.dataset.f; majTout(); });
+    b.querySelector("[data-filtre]")?.addEventListener("change", (e) => { st.filtre = e.target.value; majTout(); });
+    b.querySelector("[data-liste]").onclick = () => { st.liste = !st.liste; if (st.liste) basculerEdition(false); dessinerBarre(); dessinerListe(); };
     b.querySelector("[data-ajuster]").onclick = ajuster;
     b.querySelector("[data-3d]")?.addEventListener("click", async () => {
       const { ouvrirVue3D } = await import("./plan-3d.js");
@@ -260,25 +323,94 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
         ajouterPdf: editeur ? async (f) => { await sauverPdfPlan(dossier.id, f); const s2 = await getDoc(refMeta(dossier.id)); return rendeurHD(dossier.id, s2.data()?.pdf?.morceaux || 1); } : null,
         onPlat: (n, f) => { st.filtre = f || ""; allerPage(n); dessinerListe(); } });
     });
-    b.querySelector("[data-telecharger]").onclick = telecharger;
-    b.querySelector("[data-edition]")?.addEventListener("click", () => { st.edition = !st.edition; st.sel = null; fond.classList.toggle("pc-edit", st.edition); dessinerBarre(); dessinerReperes(); });
-    b.querySelector("[data-code]")?.addEventListener("input", (e) => { st.dernierCode = e.target.value.trim(); });
-    b.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { st.couleur = x.dataset.col; dessinerBarre(); });
+    b.querySelector("[data-imprimer]").onclick = () => choixImpression();
+    b.querySelector("[data-edition]")?.addEventListener("click", () => basculerEdition(!st.edition));
   }
+  const majTout = () => { dessinerReperes(); dessinerBarre(); dessinerListe(); };
+  function basculerEdition(v) { st.edition = v; st.sel = null; if (v) st.liste = false; fond.classList.toggle("pc-edit", v); dessinerBarre(); dessinerListe(); dessinerPanneau(); dessinerReperes(); }
+
+  function choixImpression() {
+    const nb = (t) => reperes().filter(r => typeR(r) === t).length;
+    const d = document.createElement("div"); d.className = "pc-dlg";
+    d.innerHTML = `<div><b>🖨️ Imprimer / enregistrer en PDF</b><p>Les pages qui contiennent ces repères, en paysage, puis la liste complète.</p>
+      ${[["__tab", "⚡ Tableaux électriques", nb("tableau")], ["__cpt", "🎛️ Compteurs", nb("compteur")], ["__cle", "🔑 Clés", nb("cle")], ...(st.filtre && !st.filtre.startsWith("__") ? [[st.filtre, `🔑 Clé ${st.filtre}`, reperes().filter(r => correspond(r, st.filtre)).length]] : []), ["", "Tous les repères", reperes().length]]
+        .filter(x => x[2]).map(([f, l, n]) => `<button class="pc-btn" data-imp="${esc(f)}">${l} <i>${n}</i></button>`).join("")}
+      <button class="pc-btn" data-x>Annuler</button></div>`;
+    fond.appendChild(d);
+    d.onclick = async (e) => { if (e.target === d || e.target.closest("[data-x]")) { d.remove(); return; } const b = e.target.closest("[data-imp]"); if (!b) return;
+      b.textContent = "⏳ Préparation…"; try { await imprimerPlans({ dossier, meta: st.meta, filtre: b.dataset.imp, charger: imagePage }); } catch (err) { alert("Impression impossible : " + (err?.message || err)); } d.remove(); };
+  }
+
   function dessinerListe() {
     const a = $(".pc-liste"); a.hidden = !st.liste; if (!st.liste) return;
-    const m = {}; reperes().forEach(r => { const k = r.c; (m[k] = m[k] || { n: 0, pages: {}, col: r.col }).n++; m[k].pages[r.p] = (m[k].pages[r.p] || 0) + 1; });
     const titre = (n) => st.meta.pages.find(p => p.n === n)?.titre || `Page ${n}`;
-    a.innerHTML = `<h4>📋 ${Object.keys(m).length} numéros de clé · ${reperes().length} repères</h4>
-      ${Object.keys(m).sort(triCode).map(k => `<div class="pc-li ${k === st.filtre ? "on" : ""}"><button data-code-l="${esc(k)}"><i style="background:${COULEURS[m[k].col] || COULEURS.rouge}"></i><b>${esc(k)}</b><span>${m[k].n} porte${m[k].n > 1 ? "s" : ""}</span></button>
-        <div>${Object.entries(m[k].pages).map(([p, n]) => `<a data-aller="${p}" data-code-a="${esc(k)}">${esc(titre(+p))} (${n})</a>`).join("")}</div></div>`).join("")}`;
-    a.querySelectorAll("[data-code-l]").forEach(x => x.onclick = () => { st.filtre = st.filtre === x.dataset.codeL ? "" : x.dataset.codeL; dessinerBarre(); dessinerReperes(); dessinerListe(); });
-    a.querySelectorAll("[data-aller]").forEach(x => x.onclick = () => { st.filtre = x.dataset.codeA; allerPage(+x.dataset.aller); dessinerListe(); });
+    const groupes = [["cle", "🔑 Clés"], ["tableau", "⚡ Tableaux électriques"], ["compteur", "🎛️ Compteurs"]].map(([t, lib]) => {
+      const m = {}; reperes().filter(r => typeR(r) === t).forEach(r => { (m[r.c] = m[r.c] || { n: 0, pages: {}, r }).n++; m[r.c].pages[r.p] = (m[r.c].pages[r.p] || 0) + 1; });
+      return { t, lib, m };
+    }).filter(g => Object.keys(g.m).length);
+    a.innerHTML = groupes.map(g => `<h4>${g.lib} <small>${Object.keys(g.m).length}</small></h4>${Object.keys(g.m).sort(triCode).map(k => { const x = g.m[k];
+      return `<div class="pc-li ${k === st.filtre ? "on" : ""}"><button data-code-l="${esc(k)}" data-type-l="${g.t}"><i style="background:${couleurR(x.r)}"></i><b>${esc(k)}</b><span>${g.t === "cle" ? `${x.n} porte${x.n > 1 ? "s" : ""}` : esc(x.r.note || "")}</span></button>
+        <div>${Object.entries(x.pages).map(([p, n]) => `<a data-aller="${p}" data-code-a="${esc(k)}" data-type-a="${g.t}">${esc(titre(+p))}${g.t === "cle" ? ` (${n})` : ""}</a>`).join("")}</div></div>`; }).join("")}`).join("") || `<p class="pc-aidep">Aucun repère.</p>`;
+    a.querySelectorAll("[data-code-l]").forEach(x => x.onclick = () => {
+      if (x.dataset.typeL === "cle") { st.filtre = st.filtre === x.dataset.codeL ? "" : x.dataset.codeL; majTout(); return; }
+      const r = reperes().find(y => typeR(y) === x.dataset.typeL && y.c === x.dataset.codeL); if (r) allerRepere(r.id); });
+    a.querySelectorAll("[data-aller]").forEach(x => x.onclick = () => { if (x.dataset.typeA === "cle") { st.filtre = x.dataset.codeA; allerPage(+x.dataset.aller); dessinerListe(); }
+      else { const r = reperes().find(y => typeR(y) === x.dataset.typeA && y.c === x.dataset.codeA && y.p === +x.dataset.aller); if (r) allerRepere(r.id); } });
+  }
+
+  // ---- Panneau du mode édition (comme une barre d'outils de traitement de texte) ----
+  function dessinerPanneau() {
+    const a = $(".pc-ed"); a.hidden = !st.edition; if (!st.edition || !st.meta) return;
+    const p = st.meta.pages.find(x => x.n === st.page) || {}, ici = reperes().filter(r => r.p === st.page);
+    if (!st.tabNum) st.tabNum = String(prochainNumero(reperes(), st.tabType));
+    const places = new Set(reperes().filter(r => typeR(r) === "compteur").map(r => r.cptId));
+    const bats = [...new Set(st.meta.pages.map(x => x.batiment).filter(Boolean))];
+    const nivAuto = niveauDe(p.titre || "");
+    const outil = (id, ic, lib) => `<button class="pc-to ${st.outil === id ? "on" : ""}" data-outil="${id}"><span>${ic}</span>${lib}</button>`;
+    a.innerHTML = `<h4>✏️ Mode édition</h4>
+      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}</div>
+      <div class="pc-opt">${st.outil === "sel" ? `<p class="pc-aidep">Clique sur une vignette pour la modifier, ou fais-la glisser pour la déplacer.</p>`
+        : st.outil === "cle" ? `<label>Numéro de clé<input data-code value="${esc(st.dernierCode)}" placeholder="ex. MV10"></label><div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === st.couleur ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}" title="${c}"></button>`).join("")}</div><p class="pc-aidep">👉 Clique sur le plan pour poser la clé.</p>`
+        : st.outil === "compteur" ? (compteursSite.length ? `<label>Compteur du site<select data-cpt>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === st.cptId ? "selected" : ""}>${places.has(c.id) ? "✓ " : ""}${esc(c.nom || "")}</option>`).join("")}</select></label><p class="pc-aidep">👉 Clique sur le plan à l'endroit du compteur. ✓ = déjà placé.</p>` : `<p class="pc-aidep">Aucun compteur enregistré sur ce site (tuile Relevé compteur).</p>`)
+        : `<div class="pc-2"><label>Type<select data-tabtype>${TYPES_TABLEAU.map(t => `<option ${t === st.tabType ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Numéro<input data-tabnum value="${esc(st.tabNum)}" inputmode="numeric"></label></div><p class="pc-aidep">👉 Clique sur le plan : <b>${esc(st.tabType)} ${esc(st.tabNum)}</b> sera posé, puis le numéro suivant est proposé.</p>`}</div>
+      <h5>📄 Cette page</h5>
+      <label>Bâtiment<input data-bat list="pc-bats" value="${esc(p.batiment || "")}" placeholder="auto (d'après le titre)"><datalist id="pc-bats">${bats.map(x => `<option value="${esc(x)}">`).join("")}</datalist></label>
+      <label>Niveau (pour la 3D)<select data-niv><option value="">Auto${nivAuto !== null ? ` (${nomNiveau(nivAuto)})` : " (non détecté)"}</option>${NIVEAUX.map(([n, l]) => `<option value="${n}" ${String(p.niveauManuel) === String(n) ? "selected" : ""}>${l}</option>`).join("")}<option value="x" ${p.niveauManuel === "x" ? "selected" : ""}>Pas un étage (plan masse…)</option></select></label>
+      <h5>📍 Sur cette page <small>${ici.length}</small></h5>
+      <div class="pc-edl">${ici.slice().sort((x, y) => typeR(x).localeCompare(typeR(y)) || triCode(x.c, y.c)).map(r => `<div><button data-voir-r="${r.id}"><i style="background:${couleurR(r)}"></i>${esc(libR(r))}</button><button data-sup-r="${r.id}" title="Supprimer">🗑️</button></div>`).join("") || `<p class="pc-aidep">Rien sur cette page.</p>`}</div>
+      <button class="pc-btn edit" data-fin>✓ Terminer l'édition</button>`;
+    a.querySelectorAll("[data-outil]").forEach(x => x.onclick = () => { st.outil = x.dataset.outil; if (st.outil === "compteur" && !st.cptId) st.cptId = compteursSite.find(c => !places.has(c.id))?.id || compteursSite[0]?.id || ""; fond.classList.toggle("pc-pose", st.outil !== "sel"); dessinerPanneau(); });
+    a.querySelector("[data-code]")?.addEventListener("input", (e) => { st.dernierCode = e.target.value.trim(); });
+    a.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { st.couleur = x.dataset.col; dessinerPanneau(); });
+    a.querySelector("[data-cpt]")?.addEventListener("change", (e) => { st.cptId = e.target.value; });
+    a.querySelector("[data-tabtype]")?.addEventListener("change", (e) => { st.tabType = e.target.value; st.tabNum = String(prochainNumero(reperes(), st.tabType)); dessinerPanneau(); });
+    a.querySelector("[data-tabnum]")?.addEventListener("input", (e) => { st.tabNum = e.target.value.trim(); });
+    a.querySelector("[data-bat]").addEventListener("change", (e) => sauverPages(st.meta.pages.map(x => x.n === st.page ? { ...x, batiment: e.target.value.trim() } : x)));
+    a.querySelector("[data-niv]").addEventListener("change", (e) => sauverPages(st.meta.pages.map(x => x.n === st.page ? { ...x, niveauManuel: e.target.value } : x)));
+    a.querySelectorAll("[data-voir-r]").forEach(x => x.onclick = () => allerRepere(x.dataset.voirR));
+    a.querySelectorAll("[data-sup-r]").forEach(x => x.onclick = () => { const r = reperes().find(y => y.id === x.dataset.supR); if (r && confirm(`Supprimer ${libR(r)} ?`)) sauver(reperes().filter(y => y.id !== r.id), `${r.c} supprimé`); });
+    a.querySelector("[data-fin]").onclick = () => basculerEdition(false);
+  }
+  function poser(x, y) {
+    const base = { id: uid(), p: st.page, x, y, note: "" };
+    if (st.outil === "cle") { const code = (st.dernierCode || "").trim(); if (!code) { window.toast?.("Indique d'abord le numéro de la clé (panneau à droite)."); return; }
+      sauver([...reperes(), { ...base, t: "cle", c: code, col: st.couleur }], `✓ Clé ${code} posée`); return; }
+    if (st.outil === "compteur") { const c = compteursSite.find(k => k.id === st.cptId); if (!c) { window.toast?.("Choisis d'abord le compteur (panneau à droite)."); return; }
+      const deja = reperes().find(r => typeR(r) === "compteur" && r.cptId === c.id);
+      if (deja && !confirm(`« ${c.nom} » est déjà placé sur le plan. Le déplacer ici ?`)) return;
+      const liste = deja ? reperes().filter(r => r.id !== deja.id) : reperes();
+      const places = new Set([...liste.filter(r => typeR(r) === "compteur").map(r => r.cptId), c.id]);
+      st.cptId = compteursSite.find(k => !places.has(k.id))?.id || st.cptId;
+      sauver([...liste, { ...base, t: "compteur", c: c.nom || "Compteur", cptId: c.id, cptType: c.type || "" }], `✓ Compteur « ${c.nom} » placé`); return; }
+    if (st.outil === "tableau") { const num = String(st.tabNum || "").trim(), c = `${st.tabType}${num ? " " + num : ""}`;
+      if (reperes().some(r => typeR(r) === "tableau" && r.c === c) && !confirm(`${c} existe déjà sur ce site. En créer un autre quand même ?`)) return;
+      st.tabNum = String((parseInt(num, 10) || 0) + 1);
+      sauver([...reperes(), { ...base, t: "tableau", c, tabType: st.tabType, num }], `✓ ${c} posé`); }
   }
 
   // ---- Page / image / zoom ----
   async function allerPage(n) {
-    st.page = n; st.sel = null; dessinerBarre();
+    st.page = n; st.sel = null; dessinerBarre(); if (st.edition) dessinerPanneau();
     const p = st.meta.pages.find(x => x.n === n); if (!p) return;
     img.style.width = p.w + "px"; img.style.height = p.h + "px"; scene.style.width = p.w + "px"; scene.style.height = p.h + "px";
     const cle = `${dossier.id}-${n}`;
@@ -287,6 +419,13 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     if (st.page !== n) return;
     img.src = cacheImages.get(cle) || ""; msg.hidden = true;
     ajuster(); dessinerReperes();
+  }
+  async function allerRepere(id) {
+    const r = reperes().find(x => x.id === id); if (!r) return;
+    if (st.page !== r.p) await allerPage(r.p);
+    const p = st.meta.pages.find(x => x.n === r.p); const W = vue.clientWidth, H = vue.clientHeight;
+    st.s = Math.min(W / p.w, H / p.h) * 2.4; st.tx = W / 2 - r.x * p.w * st.s; st.ty = H / 2 - r.y * p.h * st.s; appliquer();
+    st.sel = id; dessinerReperes();
   }
   async function imagePage(n) {
     const cle = `${dossier.id}-${n}`;
@@ -329,48 +468,57 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     if (g.bouge) return;
     if (g.rep) { st.sel = g.rep; dessinerReperes(); return; }
     if (st.sel) { st.sel = null; dessinerReperes(); return; }
-    if (st.edition) { const code = (st.dernierCode || "").trim(); if (!code) { window.toast?.("Indique d'abord le numéro de clé du nouveau repère."); return; }
-      const [x, y] = versPlan(e); if (x < 0 || y < 0 || x > 1 || y > 1) return;
-      const nv = { id: uid(), p: st.page, x, y, c: code, col: st.couleur, note: "" }; sauver([...reperes(), nv], `✓ Repère ${code} ajouté`); }
+    if (st.edition && st.outil !== "sel") { const [x, y] = versPlan(e); if (x < 0 || y < 0 || x > 1 || y > 1) return; poser(x, y); }
   };
   vue.addEventListener("pointerup", fin); vue.addEventListener("pointercancel", fin);
   function versPlan(e) { const r = scene.getBoundingClientRect(); return [+((e.clientX - r.left) / r.width).toFixed(5), +((e.clientY - r.top) / r.height).toFixed(5)]; }
 
   function dessinerReperes() {
     const liste = reperes().filter(r => r.p === st.page);
-    reps.innerHTML = liste.map(r => `<div class="pc-m ${r.col || "rouge"} ${st.filtre && r.c !== st.filtre ? "terne" : ""} ${st.filtre && r.c === st.filtre ? "fort" : ""} ${st.sel === r.id ? "sel" : ""}" data-id="${r.id}" style="left:${r.x * 100}%;top:${r.y * 100}%;--k:${COULEURS[r.col] || COULEURS.rouge}" title="${esc(r.c)}${r.note ? " — " + esc(r.note) : ""}">${esc(r.c)}</div>`).join("");
+    reps.innerHTML = liste.map(r => { const on = st.filtre && correspond(r, st.filtre);
+      return `<div class="pc-m t-${typeR(r)} ${st.filtre && !on ? "terne" : ""} ${on && !st.filtre.startsWith("__") ? "fort" : ""} ${st.sel === r.id ? "sel" : ""}" data-id="${r.id}" style="left:${r.x * 100}%;top:${r.y * 100}%;--k:${couleurR(r)}" title="${esc(libR(r))}${r.note ? " — " + esc(r.note) : ""}">${esc(libR(r))}</div>`; }).join("");
     const sel = liste.find(r => r.id === st.sel); fond.querySelector(".pc-pop")?.remove();
     if (!sel) return;
-    const pop = document.createElement("div"); pop.className = "pc-pop";
-    pop.innerHTML = st.edition ? `<b>Repère de clé</b>
-        <label>Numéro <input data-c value="${esc(sel.c)}"></label>
-        <label>Porte / local <input data-n value="${esc(sel.note || "")}" placeholder="ex. bureau directeur"></label>
-        <div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === (sel.col || "rouge") ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}"></button>`).join("")}</div>
-        <div class="pc-pb"><button class="pc-btn rouge" data-suppr>🗑️ Supprimer</button><button class="pc-btn" data-ok>✓ OK</button></div>`
-      : `<b style="color:${COULEURS[sel.col] || COULEURS.rouge}">🔑 ${esc(sel.c)}</b>${sel.note ? `<span>${esc(sel.note)}</span>` : ""}<span>${reperes().filter(r => r.c === sel.c).length} porte(s) avec cette clé sur le site</span>
-        <div class="pc-pb"><button class="pc-btn" data-voir>Voir toutes ses portes</button></div>`;
+    const t = typeR(sel), pop = document.createElement("div"); pop.className = "pc-pop";
+    const photosHTML = t === "tableau" ? `<div class="pc-ph" data-ph><small>⏳ photos…</small></div><label class="pc-btn">📸 Ajouter une photo<input type="file" accept="image/*" capture="environment" hidden data-ph-add></label>` : "";
+    if (st.edition) {
+      pop.innerHTML = `<b>${TYPES_R[t].ic} ${TYPES_R[t].lib}</b>
+        ${t === "cle" ? `<label>Numéro <input data-c value="${esc(sel.c)}"></label>` : ""}
+        ${t === "tableau" ? `<div class="pc-2"><label>Type<select data-tt>${TYPES_TABLEAU.map(x => `<option ${x === sel.tabType ? "selected" : ""}>${x}</option>`).join("")}</select></label><label>Numéro<input data-tn value="${esc(sel.num || "")}"></label></div>` : ""}
+        ${t === "compteur" ? `<label>Compteur<select data-tc>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === sel.cptId ? "selected" : ""}>${esc(c.nom || "")}</option>`).join("") || `<option>${esc(sel.c)}</option>`}</select></label>` : ""}
+        <label>${t === "cle" ? "Porte / local" : "Emplacement / note"} <input data-n value="${esc(sel.note || "")}" placeholder="${t === "tableau" ? "ex. local technique R+1" : "ex. bureau directeur"}"></label>
+        ${t === "cle" ? `<div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === (sel.col || "rouge") ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}"></button>`).join("")}</div>` : ""}
+        ${photosHTML}
+        <div class="pc-pb"><button class="pc-btn rouge" data-suppr>🗑️ Supprimer</button><button class="pc-btn" data-ok>✓ OK</button></div>`;
+    } else {
+      pop.innerHTML = `<b style="color:${couleurR(sel)}">${t === "cle" ? "🔑 " : ""}${esc(libR(sel))}</b>${sel.note ? `<span>${esc(sel.note)}</span>` : ""}
+        ${t === "cle" ? `<span>${reperes().filter(r => typeR(r) === "cle" && r.c === sel.c).length} porte(s) avec cette clé sur le site</span><div class="pc-pb"><button class="pc-btn" data-voir>Voir toutes ses portes</button></div>` : ""}
+        ${t === "compteur" ? `<div class="pc-pb"><button class="pc-btn" data-relever>📷 Relever ce compteur</button></div>` : ""}
+        ${t === "tableau" ? photosHTML : ""}`;
+    }
     fond.querySelector(".pc-vue").appendChild(pop);
     const el = reps.querySelector(`[data-id="${sel.id}"]`), rv = vue.getBoundingClientRect(), re = el.getBoundingClientRect();
-    pop.style.left = Math.min(rv.width - 250, Math.max(8, re.left - rv.left - 20)) + "px"; pop.style.top = Math.min(rv.height - 200, re.bottom - rv.top + 8) + "px";
+    pop.style.left = Math.min(rv.width - 270, Math.max(8, re.left - rv.left - 20)) + "px"; pop.style.top = Math.min(rv.height - 300, re.bottom - rv.top + 8) + "px";
     let col = sel.col || "rouge";
     pop.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { col = x.dataset.col; pop.querySelectorAll("[data-col]").forEach(y => y.classList.toggle("on", y === x)); });
-    pop.querySelector("[data-ok]")?.addEventListener("click", () => { const c = pop.querySelector("[data-c]").value.trim(); if (!c) return; st.dernierCode = c; st.sel = null;
-      sauver(reperes().map(r => r.id === sel.id ? { ...r, c, note: pop.querySelector("[data-n]").value.trim(), col } : r), "✓ Repère modifié"); });
+    pop.querySelector("[data-ok]")?.addEventListener("click", () => {
+      const note = pop.querySelector("[data-n]").value.trim(); let maj = { note };
+      if (t === "cle") { const c = pop.querySelector("[data-c]").value.trim(); if (!c) return; st.dernierCode = c; maj = { ...maj, c, col }; }
+      if (t === "tableau") { const tabType = pop.querySelector("[data-tt]").value, num = pop.querySelector("[data-tn]").value.trim(); maj = { ...maj, tabType, num, c: `${tabType}${num ? " " + num : ""}` }; }
+      if (t === "compteur") { const c = compteursSite.find(k => k.id === pop.querySelector("[data-tc]").value); if (c) maj = { ...maj, cptId: c.id, c: c.nom || sel.c, cptType: c.type || "" }; }
+      st.sel = null; sauver(reperes().map(r => r.id === sel.id ? { ...r, ...maj } : r), "✓ Modifié"); });
     pop.querySelector("[data-c]")?.addEventListener("keydown", (e) => { if (e.key === "Enter") pop.querySelector("[data-ok]").click(); });
-    pop.querySelector("[data-suppr]")?.addEventListener("click", () => { st.sel = null; sauver(reperes().filter(r => r.id !== sel.id), `Repère ${sel.c} supprimé`); });
-    pop.querySelector("[data-voir]")?.addEventListener("click", () => { st.filtre = sel.c; st.sel = null; st.liste = true; dessinerBarre(); dessinerReperes(); dessinerListe(); });
-  }
-
-  // Image de la page avec ses repères (à imprimer / envoyer au serrurier).
-  async function telecharger() {
-    const p = st.meta?.pages.find(x => x.n === st.page); if (!p || !img.src) return;
-    const cv = document.createElement("canvas"); cv.width = p.w; cv.height = p.h; const x = cv.getContext("2d");
-    x.drawImage(img, 0, 0, p.w, p.h); const fs = Math.round(p.w / 120);
-    x.font = `bold ${fs}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
-    reperes().filter(r => r.p === st.page && (!st.filtre || r.c === st.filtre)).forEach(r => { const w = x.measureText(r.c).width + fs * 0.7, cx = r.x * p.w, cy = r.y * p.h, k = COULEURS[r.col] || COULEURS.rouge;
-      x.fillStyle = "rgba(255,255,255,.92)"; x.fillRect(cx - w / 2, cy - fs * 0.7, w, fs * 1.4); x.strokeStyle = k; x.lineWidth = 2; x.strokeRect(cx - w / 2, cy - fs * 0.7, w, fs * 1.4); x.fillStyle = k; x.fillText(r.c, cx, cy + 1); });
-    x.font = `bold ${fs * 1.4}px sans-serif`; x.textAlign = "left"; x.fillStyle = "#111"; x.fillText(`${dossier.nom || ""} — ${p.titre}${st.filtre ? ` — clé ${st.filtre}` : ""} — ${new Date().toLocaleDateString("fr-FR")}`, fs, fs * 1.5);
-    const a = document.createElement("a"); a.href = cv.toDataURL("image/jpeg", 0.9); a.download = `Plan clés ${dossier.nom || ""} - ${p.titre}${st.filtre ? " - " + st.filtre : ""}.jpg`; a.click();
+    pop.querySelector("[data-suppr]")?.addEventListener("click", () => { if (!confirm(`Supprimer ${libR(sel)} ?`)) return; st.sel = null; sauver(reperes().filter(r => r.id !== sel.id), `${sel.c} supprimé`); });
+    pop.querySelector("[data-voir]")?.addEventListener("click", () => { st.filtre = sel.c; st.sel = null; st.liste = true; majTout(); });
+    pop.querySelector("[data-relever]")?.addEventListener("click", () => { window.compteurRelevDeepLinkId = sel.cptId; fermer(); if (!window.__allerCategorie?.("compteurs")) { window.compteurRelevDeepLinkId = null; window.toast?.("Le relevé n'est pas accessible avec ce compte."); } });
+    const boite = pop.querySelector("[data-ph]");
+    if (boite) {
+      const charger = async () => { try { const l = await photosEquipement(sel.id); boite.innerHTML = l.length ? l.map((p, i) => `<img src="${p.data}" data-i="${i}" alt="">`).join("") : `<small>Pas encore de photo.</small>`;
+        boite.querySelectorAll("img").forEach(im => im.onclick = async () => { const { voirPhotos } = await import("./demandes-photos.js"); voirPhotos(l, +im.dataset.i); }); } catch (e) { boite.innerHTML = `<small>Photos indisponibles</small>`; } };
+      charger();
+      pop.querySelector("[data-ph-add]").addEventListener("change", async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; boite.innerHTML = "<small>⏳ envoi…</small>";
+        try { await ajouterPhotoEquipement(dossier.id, sel.id, f, par); window.toast?.("📸 Photo ajoutée"); } catch (err) { alert("Photo non enregistrée : " + (err?.message || err)); } charger(); });
+    }
   }
 
   window.addEventListener("resize", () => { if (document.body.contains(fond)) ajuster(); });
@@ -380,13 +528,15 @@ export function ouvrirPlanCles({ dossier, user, editeur }) {
     st.meta = s.exists() ? s.data() : null;
     if (!st.meta || !(st.meta.pages || []).length) {
       st.meta = null; dessinerBarre(); reps.innerHTML = ""; img.removeAttribute("src"); msg.hidden = false;
-      msg.innerHTML = editeur ? `<div class="pc-vide"><b>Aucun plan des clés pour ce site.</b><p>Importe le plan PDF de l'architecte : chaque page devient une image et les étiquettes (MV10, MV11…) deviennent des repères de clés modifiables.</p><label class="pc-btn grand">📄 Importer un plan PDF<input type="file" accept="application/pdf" hidden data-import2></label></div>` : `<div class="pc-vide"><b>Aucun plan des clés pour ce site.</b></div>`;
+      msg.innerHTML = editeur ? `<div class="pc-vide"><b>Aucun plan pour ce site.</b><p>Importe le plan PDF de l'architecte : chaque page devient une image, les étiquettes (MV10, MV11…) deviennent des repères de clés, puis le mode édition permet d'ajouter compteurs et tableaux électriques.</p><label class="pc-btn grand">📄 Importer un plan PDF<input type="file" accept="application/pdf" hidden data-import2></label></div>` : `<div class="pc-vide"><b>Aucun plan pour ce site.</b></div>`;
       msg.querySelector("[data-import2]")?.addEventListener("change", (e) => { const i = $("[data-import]"); const dt = new DataTransfer(); if (e.target.files[0]) dt.items.add(e.target.files[0]); i.files = dt.files; i.dispatchEvent(new Event("change")); });
       return;
     }
     $(".pc-maj").textContent = st.meta.majLe ? `mis à jour le ${new Date(st.meta.majLe).toLocaleDateString("fr-FR")}${st.meta.majPar ? ` par ${st.meta.majPar}` : ""}` : "";
     if (!st.meta.pages.some(p => p.n === st.page)) st.page = st.meta.pages[0].n;
-    dessinerBarre(); dessinerListe();
+    dessinerBarre(); dessinerListe(); if (st.edition) dessinerPanneau();
+    if (premier && st.focus?.repId) { const r = reperes().find(x => x.id === st.focus.repId); if (r) { st.page = r.p; allerPage(r.p).then(() => allerRepere(r.id)); return; } }
+    if (premier && st.focus?.filtre) st.filtre = st.focus.filtre;
     if (premier || !img.src) allerPage(st.page); else dessinerReperes();
   }, (e) => { msg.textContent = "Plan indisponible : " + (e?.message || e); });
 }
@@ -421,4 +571,19 @@ body.pc-ouvert{overflow:hidden}
 .pc-li button{all:unset;cursor:pointer;display:flex;align-items:center;gap:7px;width:100%}.pc-li button i{width:10px;height:10px;border-radius:3px}.pc-li button span{margin-left:auto;color:var(--text-dim,#555);font-size:12px}
 .pc-li div{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.pc-li a{font-size:11.5px;color:#1565d8;cursor:pointer;background:rgba(21,101,216,.08);border-radius:6px;padding:1px 6px}
 @media (max-width:700px){.pc{margin:0;border-radius:0}.pc-liste{position:absolute;right:0;top:0;bottom:0;background:var(--panel,#fff);z-index:5;width:85%}.pc-corps{position:relative}.pc-h b{font-size:14px}}
+.pc-tys{display:flex;gap:4px;flex-wrap:wrap}.pc-ty{font:inherit;font-size:12.5px;padding:5px 10px;border-radius:99px;border:1px solid var(--border,#ccc);background:none;color:var(--text,#111);cursor:pointer}.pc-ty.on{background:#1565d8;border-color:#1565d8;color:#fff}.pc-ty i{font-style:normal;opacity:.75;margin-left:2px}
+.pc-m.t-tableau,.pc-m.t-compteur{border-radius:99px;background:var(--k);color:#fff}.pc-m.t-tableau.terne,.pc-m.t-compteur.terne{opacity:.18}
+.pc-ed{width:290px;flex:none;border-left:1px solid var(--border,#ddd);overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px;background:var(--panel,#fff)}
+.pc-ed[hidden]{display:none}.pc-ed h4{margin:0;font-size:15px}.pc-ed h5{margin:8px 0 0;font-size:13px;color:var(--text-dim,#555)}.pc-ed h5 small{font-weight:400}
+.pc-ed label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text-dim,#555)}.pc-ed input,.pc-ed select,.pc-pop select{font:inherit;font-size:14px;padding:6px 8px;border-radius:8px;border:1px solid var(--border,#ccc);background:var(--panel,#fff);color:var(--text,#111)}
+.pc-tos{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pc-to{font:inherit;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;border-radius:10px;border:1px solid var(--border,#ccc);background:var(--panel-alt,#f2f4f7);color:var(--text,#111);cursor:pointer}
+.pc-to span{font-size:22px}.pc-to.on{border-color:#1565d8;background:rgba(21,101,216,.12);box-shadow:0 0 0 2px rgba(21,101,216,.25)}
+.pc-opt{background:var(--panel-alt,#f2f4f7);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}.pc-aidep{margin:0;font-size:12px;color:var(--text-dim,#555)}
+.pc-2{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pc-2 input,.pc-2 select{width:100%;min-width:0;box-sizing:border-box}.pc-edl{display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}.pc-edl div{display:flex;gap:4px}
+.pc-edl button{font:inherit;font-size:12.5px;background:none;border:1px solid var(--border,#ddd);border-radius:7px;padding:4px 7px;cursor:pointer;color:var(--text,#111);display:flex;align-items:center;gap:6px}.pc-edl button:first-child{flex:1;text-align:left}.pc-edl i{width:9px;height:9px;border-radius:50%;flex:none}
+.pc-fond.pc-edit.pc-pose .pc-vue{cursor:copy}
+.pc-ph{display:flex;gap:4px;flex-wrap:wrap}.pc-ph img{width:64px;height:64px;object-fit:cover;border-radius:7px;cursor:zoom-in}.pc-ph small{color:var(--text-dim,#555)}
+.pc-dlg{position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.35);display:grid;place-items:center}.pc-dlg>div{background:var(--panel,#fff);color:var(--text,#111);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:280px;box-shadow:0 20px 50px rgba(0,0,0,.35)}.pc-dlg p{margin:0;font-size:12.5px;color:var(--text-dim,#555)}.pc-dlg i{font-style:normal;opacity:.7}
+.pc-liste h4 small{font-weight:400;color:var(--text-dim,#555)}.pc-fond{position:fixed}.pc{position:relative}
+@media (max-width:700px){.pc-ed{position:absolute;right:0;top:0;bottom:0;z-index:6;width:86%;box-shadow:-10px 0 30px rgba(0,0,0,.25)}}
 </style>`;
