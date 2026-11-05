@@ -238,17 +238,29 @@ async function imprimerPlans({ dossier, meta, filtre, charger }) {
   }
   const titre = (n) => meta.pages.find(p => p.n === n)?.titre || `Page ${n}`;
   const lignes = reps.slice().sort((a, b) => triCode(a.c, b.c)).map(r => `<tr><td><b style="color:${couleurR(r)}">${esc(r.c)}</b></td><td>${esc(TYPES_R[typeR(r)].lib)}</td><td>${esc(titre(r.p))}</td><td>${esc(r.note || "")}</td></tr>`).join("");
+  // Mise en page Groupe Établières / AppSMM : bandeau, cartouche et pied de page sur chaque feuille.
+  const logo = new URL("img/logo-etablieres.png", document.baseURI).href, auj = new Date().toLocaleDateString("fr-FR"), par = window.__smmNom || "";
+  const nbT = Object.fromEntries(Object.keys(TYPES_R).map(t => [t, reps.filter(r => typeR(r) === t).length]));
+  const legende = Object.keys(TYPES_R).filter(t => nbT[t]).map(t => `<span><i style="background:${t === "cle" ? COULEURS.rouge : TYPES_R[t].k}"></i>${TYPES_R[t].ic} ${TYPES_R[t].pl} : ${nbT[t]}</span>`).join("");
+  const total = imgs.length + Math.max(1, Math.ceil(reps.length / 22));
+  const tete = (sous) => `<header><img src="${logo}" alt=""><div><b>${esc(dossier.nom || "")}</b><small>${sous}</small></div><div class="app"><b>AppSMM</b><small>Service Maintenance &amp; Ménage<br>Groupe Établières</small></div></header>`;
+  const pied = (k) => `<footer><span>${legende}</span><span>Édité le ${auj}${par ? ` par ${esc(par)}` : ""} · AppSMM</span><span>Page ${k} / ${total}</span></footer>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(dossier.nom || "")} — ${esc(libFiltre(filtre))}</title><style>
-    @page{size:A4 landscape;margin:8mm}body{font-family:system-ui,sans-serif;margin:0;color:#111}
-    .pg{page-break-after:always;height:190mm;display:flex;flex-direction:column}.pg h2{margin:0 0 3mm;font-size:13pt}.pg h2 small{font-weight:400;color:#555;font-size:9pt}
-    .pg img{flex:1;min-height:0;width:100%;object-fit:contain}table{border-collapse:collapse;width:100%;font-size:9.5pt}th,td{border:1px solid #bbb;padding:3px 6px;text-align:left}th{background:#eee}
+    @page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}body{font-family:system-ui,"Segoe UI",sans-serif;margin:0;color:#14213d;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .pg{page-break-after:always;height:195mm;display:flex;flex-direction:column;border:1.2pt solid #14213d;border-radius:3mm;overflow:hidden}
+    header{display:flex;align-items:center;gap:5mm;padding:2.5mm 5mm;background:linear-gradient(90deg,#14213d,#1f3a68);color:#fff}
+    header img{height:11mm;background:#fff;border-radius:2mm;padding:1mm 2mm}header>div{display:flex;flex-direction:column;flex:1}header b{font-size:13pt}header small{font-size:9pt;opacity:.85}
+    header .app{flex:none;text-align:right;border-left:1px solid rgba(255,255,255,.35);padding-left:5mm}header .app b{font-size:12pt;letter-spacing:.04em;color:#ffd166}header .app small{font-size:7.5pt;line-height:1.25}
+    .plan{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:2mm}.plan img{max-width:100%;max-height:100%;object-fit:contain}
+    footer{display:flex;justify-content:space-between;gap:4mm;align-items:center;padding:1.8mm 5mm;border-top:1pt solid #c9d2e3;font-size:8pt;color:#44506a;background:#f4f6fa}
+    footer span{display:flex;align-items:center;gap:3mm;flex-wrap:wrap}footer i{display:inline-block;width:3mm;height:3mm;border-radius:50%;margin-right:1mm;vertical-align:middle}
+    .liste{flex:1;padding:4mm 5mm;overflow:hidden}.pgl{height:auto;page-break-after:auto}.pgl .liste{overflow:visible}thead{display:table-header-group}tr{page-break-inside:avoid}table{border-collapse:collapse;width:100%;font-size:9pt}th,td{border:1px solid #c9d2e3;padding:1.5mm 2.5mm;text-align:left}th{background:#14213d;color:#fff}tr:nth-child(even) td{background:#f4f6fa}
   </style></head><body>
-  ${imgs.map(({ p, src }) => `<div class="pg"><h2>${esc(dossier.nom || "")} — ${esc(p.titre)} <small>· ${esc(libFiltre(filtre))} · ${reps.filter(r => r.p === p.n).length} repère(s) · ${new Date().toLocaleDateString("fr-FR")}</small></h2><img src="${src}"></div>`).join("")}
-  <h2 style="font-size:13pt">${esc(dossier.nom || "")} — Liste : ${esc(libFiltre(filtre))} (${reps.length})</h2>
-  <table><tr><th>Repère</th><th>Type</th><th>Plan</th><th>Emplacement / note</th></tr>${lignes}</table></body></html>`;
+  ${imgs.map(({ p, src }, k) => `<div class="pg">${tete(`${esc(p.titre)} · ${esc(libFiltre(filtre))} · ${reps.filter(r => r.p === p.n).length} repère(s)`)}<div class="plan"><img src="${src}"></div>${pied(k + 1)}</div>`).join("")}
+  <div class="pg pgl">${tete(`Liste des repères · ${esc(libFiltre(filtre))} (${reps.length})`)}<div class="liste"><table><thead><tr><th>Repère</th><th>Type</th><th>Plan</th><th>Emplacement / note</th></tr></thead><tbody>${lignes}</tbody></table></div>${pied(`${imgs.length + 1}${total > imgs.length + 1 ? `–${total}` : ""}`)}</div></body></html>`;
   const f = document.createElement("iframe"); f.style.cssText = "position:fixed;left:-20000px;top:0;width:1123px;height:794px;border:0"; document.body.appendChild(f);
   f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
-  await new Promise(r => setTimeout(r, 600)); f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000);
+  await new Promise(r => { const im = f.contentDocument.querySelector("header img"); if (!im || im.complete) setTimeout(r, 600); else { im.onload = im.onerror = () => setTimeout(r, 300); setTimeout(r, 4000); } }); f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000);
 }
 
 // ---------- Visionneuse / mode édition ----------
