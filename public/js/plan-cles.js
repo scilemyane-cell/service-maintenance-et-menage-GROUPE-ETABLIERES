@@ -325,6 +325,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
         ${groupesEtages(st.meta.pages).length ? `<button class="pc-btn p3-lance" data-3d>🧊 Vue 3D</button>` : ""}
         <button class="pc-btn" data-ajuster>⤢ Ajuster</button>
         <button class="pc-btn" data-imprimer title="Plans + liste, prêts à imprimer ou enregistrer en PDF">🖨️ Imprimer / PDF</button>
+        ${editeur ? `<button class="pc-btn ${st.edition && st.outil === "masque" ? "edit" : ""}" data-gomme title="Trace un rectangle sur le plan pour l'effacer en blanc">⬜ Effacer une zone</button>` : ""}
         ${editeur ? `<button class="pc-btn ${st.edition ? "edit" : ""}" data-edition>${st.edition ? "✓ Terminer l'édition" : "✏️ Mode édition"}</button>` : ""}
       </div>`;
     b.querySelectorAll("[data-page]").forEach(x => x.onclick = () => allerPage(+x.dataset.page));
@@ -342,6 +343,9 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     });
     b.querySelector("[data-imprimer]").onclick = () => choixImpression();
     b.querySelector("[data-edition]")?.addEventListener("click", () => basculerEdition(!st.edition));
+    b.querySelector("[data-gomme]")?.addEventListener("click", () => { if (st.edition && st.outil === "masque") { st.outil = "sel"; fond.classList.remove("pc-pose"); dessinerPanneau(); dessinerBarre(); return; }
+      st.outil = "masque"; if (!st.edition) basculerEdition(true); else { dessinerPanneau(); dessinerBarre(); } fond.classList.add("pc-pose", "pc-gomme");
+      window.toast?.("⬜ Fais glisser un rectangle sur la zone à effacer (clic sur une zone effacée = la remettre)"); });
   }
   const majTout = () => { dessinerReperes(); dessinerBarre(); dessinerListe(); };
   function basculerEdition(v) { st.edition = v; st.sel = null; if (v) st.liste = false; fond.classList.toggle("pc-edit", v); dessinerBarre(); dessinerListe(); dessinerPanneau(); dessinerReperes(); }
@@ -388,7 +392,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}${outil("masque", "⬜", "Masquer une zone")}</div>
       <div class="pc-opt">${st.outil === "sel" ? `<p class="pc-aidep">Clique sur une vignette pour la modifier, ou fais-la glisser pour la déplacer.</p>`
         : st.outil === "masque" ? `<p class="pc-aidep">👉 Fais glisser sur le plan pour cacher une zone en blanc (cartouche, logo, mention…). Clique sur une zone cachée pour la retirer.</p>
-          <button class="pc-btn" data-cartouche>🧹 Masquer le cartouche de l'architecte (toutes les pages)</button>`
+          <button class="pc-btn" data-cartouche style="white-space:normal;text-align:left">🧹 Masquer le cartouche de l'architecte (toutes les pages)</button>`
         : st.outil === "cle" ? `<label>Numéro de clé<input data-code value="${esc(st.dernierCode)}" placeholder="ex. MV10"></label><div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === st.couleur ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}" title="${c}"></button>`).join("")}</div><p class="pc-aidep">👉 Clique sur le plan pour poser la clé.</p>`
         : st.outil === "compteur" ? (compteursSite.length ? `<label>Compteur du site<select data-cpt>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === st.cptId ? "selected" : ""}>${places.has(c.id) ? "✓ " : ""}${esc(c.nom || "")}</option>`).join("")}</select></label><p class="pc-aidep">👉 Clique sur le plan à l'endroit du compteur. ✓ = déjà placé.</p>` : `<p class="pc-aidep">Aucun compteur enregistré sur ce site (tuile Relevé compteur).</p>`)
         : `<div class="pc-2"><label>Type<select data-tabtype>${TYPES_TABLEAU.map(t => `<option ${t === st.tabType ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Numéro<input data-tabnum value="${esc(st.tabNum)}" inputmode="numeric"></label></div><p class="pc-aidep">👉 Clique sur le plan : <b>${esc(st.tabType)} ${esc(st.tabNum)}</b> sera posé, puis le numéro suivant est proposé.</p>`}</div>
@@ -398,7 +402,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       <h5>📍 Sur cette page <small>${ici.length}</small></h5>
       <div class="pc-edl">${ici.slice().sort((x, y) => typeR(x).localeCompare(typeR(y)) || triCode(x.c, y.c)).map(r => `<div><button data-voir-r="${r.id}"><i style="background:${couleurR(r)}"></i>${esc(libR(r))}</button><button data-sup-r="${r.id}" title="Supprimer">🗑️</button></div>`).join("") || `<p class="pc-aidep">Rien sur cette page.</p>`}</div>
       <button class="pc-btn edit" data-fin>✓ Terminer l'édition</button>`;
-    a.querySelectorAll("[data-outil]").forEach(x => x.onclick = () => { st.outil = x.dataset.outil; if (st.outil === "compteur" && !st.cptId) st.cptId = compteursSite.find(c => !places.has(c.id))?.id || compteursSite[0]?.id || ""; fond.classList.toggle("pc-pose", st.outil !== "sel"); dessinerPanneau(); });
+    a.querySelectorAll("[data-outil]").forEach(x => x.onclick = () => { st.outil = x.dataset.outil; fond.classList.toggle("pc-gomme", st.outil === "masque"); dessinerBarre(); if (st.outil === "compteur" && !st.cptId) st.cptId = compteursSite.find(c => !places.has(c.id))?.id || compteursSite[0]?.id || ""; fond.classList.toggle("pc-pose", st.outil !== "sel"); dessinerPanneau(); });
     a.querySelector("[data-code]")?.addEventListener("input", (e) => { st.dernierCode = e.target.value.trim(); });
     a.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { st.couleur = x.dataset.col; dessinerPanneau(); });
     a.querySelector("[data-cpt]")?.addEventListener("change", (e) => { st.cptId = e.target.value; });
@@ -624,7 +628,7 @@ body.pc-ouvert{overflow:hidden}
 .pc-opt{background:var(--panel-alt,#f2f4f7);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}.pc-aidep{margin:0;font-size:12px;color:var(--text-dim,#555)}
 .pc-2{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pc-2 .pc-btn{justify-content:center;font-size:12px;padding:6px 4px}.pc-2 input,.pc-2 select{width:100%;min-width:0;box-sizing:border-box}.pc-edl{display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}.pc-edl div{display:flex;gap:4px}
 .pc-edl button{font:inherit;font-size:12.5px;background:none;border:1px solid var(--border,#ddd);border-radius:7px;padding:4px 7px;cursor:pointer;color:var(--text,#111);display:flex;align-items:center;gap:6px}.pc-edl button:first-child{flex:1;text-align:left}.pc-edl i{width:9px;height:9px;border-radius:50%;flex:none}
-.pc-fond.pc-edit.pc-pose .pc-vue{cursor:copy}
+.pc-fond.pc-edit.pc-pose .pc-vue{cursor:copy}.pc-fond.pc-edit.pc-gomme .pc-vue{cursor:crosshair}
 .pc-ph{display:flex;gap:4px;flex-wrap:wrap}.pc-ph img{width:64px;height:64px;object-fit:cover;border-radius:7px;cursor:zoom-in}.pc-ph small{color:var(--text-dim,#555)}
 .pc-dlg{position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.35);display:grid;place-items:center}.pc-dlg>div{background:var(--panel,#fff);color:var(--text,#111);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:280px;box-shadow:0 20px 50px rgba(0,0,0,.35)}.pc-dlg p{margin:0;font-size:12.5px;color:var(--text-dim,#555)}.pc-dlg i{font-style:normal;opacity:.7}
 .pc-liste h4 small{font-weight:400;color:var(--text-dim,#555)}.pc-fond{position:fixed}.pc{position:relative}
@@ -634,5 +638,5 @@ body.pc-ouvert{overflow:hidden}
 .pc-ban b{font-size:calc(var(--u)*2)}.pc-ban small{font-size:calc(var(--u)*1.25);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pc-ban .app{flex:none;text-align:right;border-left:1px solid rgba(255,255,255,.35);padding-left:calc(var(--u)*1.5)}.pc-ban .app b{color:#ffd166;letter-spacing:.04em;font-size:calc(var(--u)*1.8)}
 .pc-pied{position:absolute;left:0;right:0;top:100%;height:calc(var(--u)*3);display:flex;justify-content:space-between;align-items:center;padding:0 calc(var(--u)*1.5);background:#f4f6fa;color:#44506a;border-top:1px solid #c9d2e3;font:calc(var(--u)*1.15) system-ui,sans-serif;border-radius:0 0 calc(var(--u)*.8) calc(var(--u)*.8);pointer-events:none}
 .pc-scene{outline:calc(var(--u)*.2) solid #14213d;outline-offset:0;border-radius:2px}.pc-scene .pc-ban,.pc-scene .pc-pied{box-shadow:0 0 0 calc(var(--u)*.2) #14213d}
-.pc-mask{position:absolute;background:#fff}.pc-fond.pc-edit .pc-mask{outline:2px dashed #e11d48;background:rgba(255,255,255,.92);cursor:pointer}.pc-mask.trace{outline:2px dashed #1565d8;background:rgba(255,255,255,.7)}
+.pc-mask{position:absolute;background:#fff}.pc-fond.pc-edit .pc-mask{outline:2px dashed #e11d48;background:#fff;cursor:pointer}.pc-mask.trace{outline:2px dashed #1565d8;background:rgba(255,255,255,.7)}
 </style>`;
