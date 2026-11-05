@@ -18,6 +18,7 @@ const refPage = (id, n) => doc(db, "config", `plancles-${id}-p${n}`);
 const cacheImages = new Map();
 const COULEURS = { rouge: "#d11f1f", bleu: "#1565d8", vert: "#15803d", orange: "#d97706" };
 const uid = () => Math.random().toString(36).slice(2, 10);
+const nomSite = (n) => String(n || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, " ").replace(/\S+@\S+/g, "").replace(/\s+/g, " ").trim();
 const triCode = (a, b) => String(a).localeCompare(String(b), "fr", { numeric: true });
 
 // ---------- PDF d'origine (pour la 3D en haute définition) ----------
@@ -244,9 +245,9 @@ async function imprimerPlans({ dossier, meta, filtre, charger }) {
   const nbT = Object.fromEntries(Object.keys(TYPES_R).map(t => [t, reps.filter(r => typeR(r) === t).length]));
   const legende = Object.keys(TYPES_R).filter(t => nbT[t]).map(t => `<span><i style="background:${t === "cle" ? COULEURS.rouge : TYPES_R[t].k}"></i>${TYPES_R[t].ic} ${TYPES_R[t].pl} : ${nbT[t]}</span>`).join("");
   const total = imgs.length + Math.max(1, Math.ceil(reps.length / 22));
-  const tete = (sous) => `<header><img src="${logo}" alt=""><div><b>${esc(dossier.nom || "")}</b><small>${sous}</small></div><div class="app"><b>AppSMM</b><small>Service Maintenance &amp; Ménage<br>Groupe Établières</small></div></header>`;
+  const tete = (sous) => `<header><img src="${logo}" alt=""><div><b>${esc(nomSite(dossier.nom))}</b><small>${sous}</small></div><div class="app"><b>AppSMM</b><small>Service Maintenance &amp; Ménage<br>Groupe Établières</small></div></header>`;
   const pied = (k) => `<footer><span>${legende}</span><span>Édité le ${auj}${par ? ` par ${esc(par)}` : ""} · AppSMM</span><span>Page ${k} / ${total}</span></footer>`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(dossier.nom || "")} — ${esc(libFiltre(filtre))}</title><style>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(nomSite(dossier.nom))} — ${esc(libFiltre(filtre))}</title><style>
     @page{size:A4 landscape;margin:7mm}*{box-sizing:border-box}body{font-family:system-ui,"Segoe UI",sans-serif;margin:0;color:#14213d;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .pg{page-break-after:always;height:195mm;display:flex;flex-direction:column;border:1.2pt solid #14213d;border-radius:3mm;overflow:hidden}
     header{display:flex;align-items:center;gap:5mm;padding:2.5mm 5mm;background:linear-gradient(90deg,#14213d,#1f3a68);color:#fff}
@@ -291,7 +292,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   const sauverPages = async (pages) => { st.meta.pages = pages; dessinerBarre(); try { await setDoc(refMeta(dossier.id), { pages, majLe: Date.now(), majPar: par }, { merge: true }); window.toast?.("✓ Page réglée"); } catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); } };
 
   fond.innerHTML = `<div class="pc">
-    <header class="pc-h"><b>🗺️ Plans — ${esc(dossier.nom || "")}</b><span class="pc-maj"></span>
+    <header class="pc-h"><b>🗺️ Plans — ${esc(nomSite(dossier.nom))}</b><span class="pc-maj"></span>
       <div class="pc-hb">${editeur ? `<label class="pc-btn">📄 Importer un plan PDF<input type="file" accept="application/pdf" hidden data-import></label>` : ""}<button class="pc-btn" data-fermer>✕ Fermer</button></div></header>
     <div class="pc-barre"></div>
     <div class="pc-corps"><div class="pc-vue"><div class="pc-scene"><div class="pc-ban"></div><img class="pc-img" alt=""><div class="pc-reps"></div><div class="pc-pied"></div></div><div class="pc-msg"></div></div><aside class="pc-liste" hidden></aside><aside class="pc-ed" hidden></aside></div>
@@ -438,7 +439,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     img.style.width = p.w + "px"; img.style.height = p.h + "px"; scene.style.width = p.w + "px"; scene.style.height = p.h + "px";
     // Mise en page Groupe Établières / AppSMM autour du plan (comme à l'impression).
     scene.style.setProperty("--u", (p.w / 100) + "px");
-    $(".pc-ban").innerHTML = `<img src="${new URL("img/logo-etablieres.png", document.baseURI).href}" alt=""><div><b>${esc(dossier.nom || "")}</b><small>${esc(p.titre || "")}</small></div><div class="app"><b>AppSMM</b><small>Service Maintenance &amp; Ménage · Groupe Établières</small></div>`;
+    $(".pc-ban").innerHTML = `<img src="${new URL("img/logo-etablieres.png", document.baseURI).href}" alt=""><div><b>${esc(nomSite(dossier.nom))}</b><small>${esc(p.titre || "")}</small></div><div class="app"><b>AppSMM</b><small>Service Maintenance &amp; Ménage · Groupe Établières</small></div>`;
     $(".pc-pied").innerHTML = `<span>Plans · repères clés, compteurs, tableaux</span><span>${st.meta.majLe ? `Mis à jour le ${new Date(st.meta.majLe).toLocaleDateString("fr-FR")}` : ""}</span><span>Page ${st.meta.pages.findIndex(x => x.n === n) + 1} / ${st.meta.pages.length}</span>`;
     const cle = `${dossier.id}-${n}`;
     if (!cacheImages.has(cle)) { msg.hidden = false; msg.textContent = "⏳ Chargement de la page…"; img.removeAttribute("src");
