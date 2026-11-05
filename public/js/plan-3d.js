@@ -180,7 +180,14 @@ function geometrieMurs(THREE, murs, W, H, L, P, h, couleurs = null, pas = 0) {
   return geo;
 }
 
-export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null }) {
+export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charger, onPlat, hd = null, aPdf = false, ajouterPdf = null, textes = null, masques = [] }) {
+  // Zones masquées (cartouche de l'architecte…) : peintes en blanc sur chaque image avant la 3D.
+  if (masques.length) {
+    const ch0 = charger, hd0 = hd;
+    charger = async (n) => { const src = await ch0(n), ms = masques.filter(m => m.p === n); if (!src || !ms.length) return src; const im = await chargerImg(src);
+      const c = document.createElement("canvas"); c.width = im.width; c.height = im.height; const x = c.getContext("2d"); x.drawImage(im, 0, 0); x.fillStyle = "#fff"; ms.forEach(m => x.fillRect(m.x * c.width, m.y * c.height, m.w * c.width, m.h * c.height)); return c.toDataURL("image/jpeg", 0.92); };
+    if (hd0) { hd = async (n, larg, z) => { const cv = await hd0(n, larg, z); const ms = masques.filter(m => m.p === n); if (cv && ms.length) { const x = cv.getContext("2d"); x.fillStyle = "#fff"; ms.forEach(m => x.fillRect((m.x - z.x) / z.w * cv.width, (m.y - z.y) / z.h * cv.height, m.w / z.w * cv.width, m.h / z.h * cv.height)); } return cv; }; hd.murs = hd0.murs; }
+  }
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
   // Types de repères : clé (par défaut), compteur, tableau électrique.

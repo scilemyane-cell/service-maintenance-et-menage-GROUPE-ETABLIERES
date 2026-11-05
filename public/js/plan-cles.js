@@ -231,6 +231,7 @@ async function imprimerPlans({ dossier, meta, filtre, charger }) {
     const im = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
     const cv = document.createElement("canvas"); cv.width = p.w; cv.height = p.h; const x = cv.getContext("2d");
     x.drawImage(im, 0, 0, p.w, p.h); const fs = Math.round(p.w / 110);
+    x.fillStyle = "#fff"; (meta.masques || []).filter(m => m.p === p.n).forEach(m => x.fillRect(m.x * p.w, m.y * p.h, m.w * p.w, m.h * p.h));
     x.font = `bold ${fs}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
     reps.filter(r => r.p === p.n).forEach(r => { const t = libR(r).replace(/^[^\w]+\s/, ""), w = x.measureText(t).width + fs * 0.8, cx = r.x * p.w, cy = r.y * p.h, k = couleurR(r);
       x.fillStyle = "rgba(255,255,255,.95)"; x.fillRect(cx - w / 2, cy - fs * 0.75, w, fs * 1.5); x.strokeStyle = k; x.lineWidth = 3; x.strokeRect(cx - w / 2, cy - fs * 0.75, w, fs * 1.5); x.fillStyle = k; x.fillText(t, cx, cy + 1); });
@@ -279,6 +280,9 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   document.addEventListener("keydown", clavier);
 
   const reperes = () => st.meta?.reperes || [];
+  const masques = () => st.meta?.masques || [];
+  const sauverMasques = async (liste, msg) => { st.meta.masques = liste; dessinerReperes(); if (st.edition) dessinerPanneau();
+    try { await setDoc(refMeta(dossier.id), { masques: liste, majLe: Date.now(), majPar: par }, { merge: true }); if (msg) window.toast?.(msg); } catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); } };
   const sauver = async (liste, msg) => {
     st.meta.reperes = liste; dessinerReperes(); dessinerBarre(); if (st.edition) dessinerPanneau();
     try { await setDoc(refMeta(dossier.id), { reperes: liste, majLe: Date.now(), majPar: par }, { merge: true }); if (msg) window.toast?.(msg); }
@@ -330,7 +334,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     b.querySelector("[data-3d]")?.addEventListener("click", async () => {
       const { ouvrirVue3D } = await import("./plan-3d.js");
       const m = st.meta.pdf?.morceaux;
-      ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), filtre: st.filtre, charger: imagePage,
+      ouvrirVue3D({ titre: dossier.nom || "", groupes: groupesEtages(st.meta.pages), reperes: reperes(), masques: masques(), filtre: st.filtre, charger: imagePage,
         hd: m ? rendeurHD(dossier.id, m) : null, aPdf: !!m, textes: () => lireTextes(dossier.id),
         ajouterPdf: editeur ? async (f) => { await sauverPdfPlan(dossier.id, f); const s2 = await getDoc(refMeta(dossier.id)); return rendeurHD(dossier.id, s2.data()?.pdf?.morceaux || 1); } : null,
         onPlat: (n, f) => { st.filtre = f || ""; allerPage(n); dessinerListe(); } });
@@ -380,8 +384,10 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const nivAuto = niveauDe(p.titre || "");
     const outil = (id, ic, lib) => `<button class="pc-to ${st.outil === id ? "on" : ""}" data-outil="${id}"><span>${ic}</span>${lib}</button>`;
     a.innerHTML = `<h4>✏️ Mode édition</h4>
-      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}</div>
+      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}${outil("masque", "⬜", "Masquer une zone")}</div>
       <div class="pc-opt">${st.outil === "sel" ? `<p class="pc-aidep">Clique sur une vignette pour la modifier, ou fais-la glisser pour la déplacer.</p>`
+        : st.outil === "masque" ? `<p class="pc-aidep">👉 Fais glisser sur le plan pour cacher une zone en blanc (cartouche, logo, mention…). Clique sur une zone cachée pour la retirer.</p>
+          <button class="pc-btn" data-cartouche>🧹 Masquer le cartouche de l'architecte (toutes les pages)</button>`
         : st.outil === "cle" ? `<label>Numéro de clé<input data-code value="${esc(st.dernierCode)}" placeholder="ex. MV10"></label><div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === st.couleur ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}" title="${c}"></button>`).join("")}</div><p class="pc-aidep">👉 Clique sur le plan pour poser la clé.</p>`
         : st.outil === "compteur" ? (compteursSite.length ? `<label>Compteur du site<select data-cpt>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === st.cptId ? "selected" : ""}>${places.has(c.id) ? "✓ " : ""}${esc(c.nom || "")}</option>`).join("")}</select></label><p class="pc-aidep">👉 Clique sur le plan à l'endroit du compteur. ✓ = déjà placé.</p>` : `<p class="pc-aidep">Aucun compteur enregistré sur ce site (tuile Relevé compteur).</p>`)
         : `<div class="pc-2"><label>Type<select data-tabtype>${TYPES_TABLEAU.map(t => `<option ${t === st.tabType ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Numéro<input data-tabnum value="${esc(st.tabNum)}" inputmode="numeric"></label></div><p class="pc-aidep">👉 Clique sur le plan : <b>${esc(st.tabType)} ${esc(st.tabNum)}</b> sera posé, puis le numéro suivant est proposé.</p>`}</div>
@@ -402,6 +408,11 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     a.querySelectorAll("[data-voir-r]").forEach(x => x.onclick = () => allerRepere(x.dataset.voirR));
     a.querySelectorAll("[data-sup-r]").forEach(x => x.onclick = () => { const r = reperes().find(y => y.id === x.dataset.supR); if (r && confirm(`Supprimer ${libR(r)} ?`)) sauver(reperes().filter(y => y.id !== r.id), `${r.c} supprimé`); });
     a.querySelector("[data-fin]").onclick = () => basculerEdition(false);
+    a.querySelector("[data-cartouche]")?.addEventListener("click", () => {
+      // Cartouche « michel joyau + agence » en bas à droite des plans en paysage (portrait : bandeau du bas).
+      const nv = st.meta.pages.filter(p => !masques().some(m => m.p === p.n && m.auto)).map(p => p.w >= p.h ? { id: uid(), p: p.n, x: 0.835, y: 0.885, w: 0.145, h: 0.07, auto: true } : { id: uid(), p: p.n, x: 0.6, y: 0.93, w: 0.38, h: 0.06, auto: true });
+      if (!nv.length) { window.toast?.("Cartouche déjà masqué sur toutes les pages."); return; }
+      sauverMasques([...masques(), ...nv], `🧹 Cartouche masqué sur ${nv.length} page${nv.length > 1 ? "s" : ""} — ajuste ou ajoute des zones si besoin`); });
   }
   function poser(x, y) {
     const base = { id: uid(), p: st.page, x, y, note: "" };
@@ -467,6 +478,8 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     vue.setPointerCapture(e.pointerId); pointeurs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const rep = e.target.closest(".pc-m");
     if (pointeurs.size === 2) { const [a, b] = [...pointeurs.values()]; geste = { type: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y) }; return; }
+    if (st.edition && st.outil === "masque") { const mk = e.target.closest(".pc-mask"); const [x, y] = versPlan(e);
+      geste = { type: "masque", x0: e.clientX, y0: e.clientY, fx: x, fy: y, bouge: false, suppr: mk?.dataset.mask }; return; }
     geste = rep && st.edition ? { type: "rep", id: rep.dataset.id, x0: e.clientX, y0: e.clientY, bouge: false } : { type: "pan", x0: e.clientX, y0: e.clientY, tx: st.tx, ty: st.ty, bouge: false, rep: rep?.dataset.id };
   });
   vue.addEventListener("pointermove", (e) => {
@@ -474,11 +487,18 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     if (geste.type === "pinch" && pointeurs.size === 2) { const [a, b] = [...pointeurs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), r = vue.getBoundingClientRect(); zoomer(d / geste.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); geste.d = d; return; }
     const dx = e.clientX - geste.x0, dy = e.clientY - geste.y0; if (Math.abs(dx) + Math.abs(dy) > 4) geste.bouge = true;
     if (geste.type === "pan") { st.tx = geste.tx + dx; st.ty = geste.ty + dy; appliquer(); }
+    else if (geste.type === "masque" && geste.bouge) { const [x, y] = versPlan(e); let el = reps.querySelector(".pc-mask.trace"); if (!el) { el = document.createElement("div"); el.className = "pc-mask trace"; reps.appendChild(el); }
+      Object.assign(el.style, { left: Math.min(x, geste.fx) * 100 + "%", top: Math.min(y, geste.fy) * 100 + "%", width: Math.abs(x - geste.fx) * 100 + "%", height: Math.abs(y - geste.fy) * 100 + "%" }); }
     else if (geste.type === "rep" && geste.bouge) { const el = reps.querySelector(`[data-id="${geste.id}"]`); const [x, y] = versPlan(e); if (el) { el.style.left = x * 100 + "%"; el.style.top = y * 100 + "%"; } }
   });
   const fin = (e) => {
     if (!pointeurs.has(e.pointerId)) return; pointeurs.delete(e.pointerId);
     const g = geste; if (pointeurs.size) { geste = null; return; } geste = null; if (!g || g.type === "pinch") return;
+    if (g.type === "masque") {
+      if (!g.bouge) { if (g.suppr && confirm("Retirer ce masque ? La zone redevient visible.")) sauverMasques(masques().filter(m => m.id !== g.suppr), "Zone de nouveau visible"); return; }
+      const [x, y] = versPlan(e), m = { id: uid(), p: st.page, x: +Math.max(0, Math.min(x, g.fx)).toFixed(4), y: +Math.max(0, Math.min(y, g.fy)).toFixed(4), w: +Math.abs(x - g.fx).toFixed(4), h: +Math.abs(y - g.fy).toFixed(4) };
+      if (m.w > 0.005 && m.h > 0.005) sauverMasques([...masques(), m], "⬜ Zone masquée"); else dessinerReperes(); return;
+    }
     if (g.type === "rep") {
       if (g.bouge) { const [x, y] = versPlan(e); sauver(reperes().map(r => r.id === g.id ? { ...r, x, y } : r)); }
       else { st.sel = g.id; dessinerReperes(); }
@@ -494,7 +514,8 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
 
   function dessinerReperes() {
     const liste = reperes().filter(r => r.p === st.page);
-    reps.innerHTML = liste.map(r => { const on = st.filtre && correspond(r, st.filtre);
+    const mk = masques().filter(m => m.p === st.page).map(m => `<div class="pc-mask" data-mask="${m.id}" style="left:${m.x * 100}%;top:${m.y * 100}%;width:${m.w * 100}%;height:${m.h * 100}%"></div>`).join("");
+    reps.innerHTML = mk + liste.map(r => { const on = st.filtre && correspond(r, st.filtre);
       return `<div class="pc-m t-${typeR(r)} ${st.filtre && !on ? "terne" : ""} ${on && !st.filtre.startsWith("__") ? "fort" : ""} ${st.sel === r.id ? "sel" : ""}" data-id="${r.id}" style="left:${r.x * 100}%;top:${r.y * 100}%;--k:${couleurR(r)}" title="${esc(libR(r))}${r.note ? " — " + esc(r.note) : ""}">${esc(libR(r))}</div>`; }).join("");
     const sel = liste.find(r => r.id === st.sel); fond.querySelector(".pc-pop")?.remove();
     if (!sel) return;
@@ -612,4 +633,5 @@ body.pc-ouvert{overflow:hidden}
 .pc-ban b{font-size:calc(var(--u)*2)}.pc-ban small{font-size:calc(var(--u)*1.25);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pc-ban .app{flex:none;text-align:right;border-left:1px solid rgba(255,255,255,.35);padding-left:calc(var(--u)*1.5)}.pc-ban .app b{color:#ffd166;letter-spacing:.04em;font-size:calc(var(--u)*1.8)}
 .pc-pied{position:absolute;left:0;right:0;top:100%;height:calc(var(--u)*3);display:flex;justify-content:space-between;align-items:center;padding:0 calc(var(--u)*1.5);background:#f4f6fa;color:#44506a;border-top:1px solid #c9d2e3;font:calc(var(--u)*1.15) system-ui,sans-serif;border-radius:0 0 calc(var(--u)*.8) calc(var(--u)*.8);pointer-events:none}
 .pc-scene{outline:calc(var(--u)*.2) solid #14213d;outline-offset:0;border-radius:2px}.pc-scene .pc-ban,.pc-scene .pc-pied{box-shadow:0 0 0 calc(var(--u)*.2) #14213d}
+.pc-mask{position:absolute;background:#fff}.pc-fond.pc-edit .pc-mask{outline:2px dashed #e11d48;background:rgba(255,255,255,.92);cursor:pointer}.pc-mask.trace{outline:2px dashed #1565d8;background:rgba(255,255,255,.7)}
 </style>`;
