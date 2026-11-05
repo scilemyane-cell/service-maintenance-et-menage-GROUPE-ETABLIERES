@@ -286,7 +286,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
 
   $("[data-import]")?.addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
-    if (reperes().length && !confirm(`Remplacer le plan actuel (${st.meta.pages.length} pages, ${reperes().length} repères) par « ${f.name} » ?\nLes repères seront repris des étiquettes du nouveau PDF.`)) return;
+    if (st.meta && !confirm(`Remplacer le plan actuel (${st.meta.pages.length} page${st.meta.pages.length > 1 ? "s" : ""}, ${reperes().length} repère${reperes().length > 1 ? "s" : ""}) par « ${f.name} » ?${reperes().length ? "\nLes repères seront repris des étiquettes du nouveau PDF." : ""}`)) return;
     msg.hidden = false; msg.textContent = "⏳ Import du plan…";
     try { const r = await importerPlanPdf(dossier, f, par, (t) => { msg.textContent = "⏳ " + t; }); st.page = 1; window.toast?.(`✓ Plan importé : ${r.pages} pages, ${r.reperes} repères de clés`); }
     catch (err) { console.error(err); alert("Import impossible : " + (err?.message || err)); }
