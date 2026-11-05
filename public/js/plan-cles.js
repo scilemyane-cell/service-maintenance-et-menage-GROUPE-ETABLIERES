@@ -182,7 +182,9 @@ export async function importerPlanPdf(dossier, fichier, par, progres = () => {})
       const txt = String(a.contentsObj?.str || a.contents || a.textContent?.join(" ") || "").replace(/\s+/g, " ").trim();
       if (!txt || !a.rect) return;
       const [x1, y1, x2, y2] = vp.convertToViewportRectangle(a.rect);
-      reperes.push({ id: uid(), p: n, x: +(((x1 + x2) / 2) / vp.width).toFixed(5), y: +(((y1 + y2) / 2) / vp.height).toFixed(5), c: txt.slice(0, 40), col: couleurAnnot(a), note: "" });
+      const lg = txt.match(/^log(?:ement|t)?\.?\s*(\S+)$/i), tb = txt.match(/^(TGBT|TDR|TD|TC)\s*(\d+)?$/i);
+      const base = { id: uid(), p: n, x: +(((x1 + x2) / 2) / vp.width).toFixed(5), y: +(((y1 + y2) / 2) / vp.height).toFixed(5), note: "" };
+      reperes.push(lg ? { ...base, t: "logement", c: lg[1] } : tb ? { ...base, t: "tableau", c: `${tb[1].toUpperCase()}${tb[2] ? " " + tb[2] : ""}`, tabType: tb[1].toUpperCase(), num: tb[2] || "" } : { ...base, c: txt.slice(0, 40), col: couleurAnnot(a) });
     });
     await setDoc(refPage(dossier.id, n), { data: img.data, dossierId: dossier.id, n });
     cacheImages.set(`${dossier.id}-${n}`, img.data);
@@ -200,13 +202,14 @@ export const TYPES_R = {
   cle: { ic: "🔑", lib: "Clé", pl: "Clés" },
   compteur: { ic: "🎛️", lib: "Compteur", pl: "Compteurs", k: "#0891b2" },
   tableau: { ic: "⚡", lib: "Tableau électrique", pl: "Tableaux électriques", k: "#d97706" },
+  logement: { ic: "🏠", lib: "Logement", pl: "Logements", k: "#dc2626" },
 };
 export const TYPES_TABLEAU = ["TGBT", "TD", "TDR", "TC", "Armoire", "Coffret"];
 export const typeR = (r) => r.t || "cle";
 const couleurR = (r) => typeR(r) === "cle" ? (COULEURS[r.col] || COULEURS.rouge) : TYPES_R[typeR(r)].k;
-const libR = (r) => typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛️ ${r.c}` : r.c;
-const correspond = (r, f) => !f ? true : f === "__cle" ? typeR(r) === "cle" : f === "__tab" ? typeR(r) === "tableau" : f === "__cpt" ? typeR(r) === "compteur" : typeR(r) === "cle" && r.c === f;
-const libFiltre = (f) => f === "__cle" ? "Clés" : f === "__tab" ? "Tableaux électriques" : f === "__cpt" ? "Compteurs" : f ? `Clé ${f}` : "Tous les repères";
+const libR = (r) => typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛️ ${r.c}` : r.c;
+const correspond = (r, f) => !f ? true : f === "__cle" ? typeR(r) === "cle" : f === "__tab" ? typeR(r) === "tableau" : f === "__cpt" ? typeR(r) === "compteur" : f === "__log" ? typeR(r) === "logement" : typeR(r) === "cle" && r.c === f;
+const libFiltre = (f) => f === "__cle" ? "Clés" : f === "__tab" ? "Tableaux électriques" : f === "__cpt" ? "Compteurs" : f === "__log" ? "Logements" : f ? `Clé ${f}` : "Tous les repères";
 export const prochainNumero = (reps, type) => 1 + Math.max(0, ...reps.filter(r => typeR(r) === "tableau" && r.tabType === type).map(r => parseInt(r.num, 10) || 0));
 
 // Photos d'un équipement (tableau électrique…) : petits documents dans « fiches-photos ».
@@ -319,7 +322,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const puce = (f, lib, n) => `<button class="pc-ty ${st.filtre === f ? "on" : ""}" data-f="${f}">${lib}${n !== undefined ? ` <i>${n}</i>` : ""}</button>`;
     b.innerHTML = `<div class="pc-pages">${st.meta.pages.map(p => { const n = parPage(p.n); return `<button class="pc-pg ${p.n === st.page ? "on" : ""} ${st.filtre && !n ? "vide" : ""}" data-page="${p.n}" title="${esc(p.titre)}">${esc(p.titre.replace(/^Plan (ensemble )?/i, "").replace(/^B[aâ]timent /i, "Bât. "))}${n ? `<i>${n}</i>` : ""}</button>`; }).join("")}</div>
       <div class="pc-outils">
-        <div class="pc-tys">${puce("", "Tout")}${puce("__cle", "🔑 Clés", nb("cle"))}${nb("compteur") || st.edition ? puce("__cpt", "🎛️ Compteurs", nb("compteur")) : ""}${nb("tableau") || st.edition ? puce("__tab", "⚡ Tableaux", nb("tableau")) : ""}</div>
+        <div class="pc-tys">${puce("", "Tout")}${puce("__cle", "🔑 Clés", nb("cle"))}${nb("compteur") || st.edition ? puce("__cpt", "🎛️ Compteurs", nb("compteur")) : ""}${nb("tableau") || st.edition ? puce("__tab", "⚡ Tableaux", nb("tableau")) : ""}${nb("logement") || st.edition ? puce("__log", "🏠 Logements", nb("logement")) : ""}</div>
         ${codes.length ? `<select data-filtre><option value="">🔑 Une clé…</option>${codes.map(c => `<option value="${esc(c)}" ${c === st.filtre ? "selected" : ""}>${esc(c)} — ${tous[c]} porte${tous[c] > 1 ? "s" : ""}</option>`).join("")}</select>` : ""}
         <button class="pc-btn" data-liste>${st.liste ? "✕ Liste" : "📋 Liste"}</button>
         ${groupesEtages(st.meta.pages).length ? `<button class="pc-btn p3-lance" data-3d>🧊 Vue 3D</button>` : ""}
@@ -354,7 +357,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const nb = (t) => reperes().filter(r => typeR(r) === t).length;
     const d = document.createElement("div"); d.className = "pc-dlg";
     d.innerHTML = `<div><b>🖨️ Imprimer / enregistrer en PDF</b><p>Les pages qui contiennent ces repères, en paysage, puis la liste complète.</p>
-      ${[["__tab", "⚡ Tableaux électriques", nb("tableau")], ["__cpt", "🎛️ Compteurs", nb("compteur")], ["__cle", "🔑 Clés", nb("cle")], ...(st.filtre && !st.filtre.startsWith("__") ? [[st.filtre, `🔑 Clé ${st.filtre}`, reperes().filter(r => correspond(r, st.filtre)).length]] : []), ["", "Tous les repères", reperes().length]]
+      ${[["__log", "🏠 Logements", nb("logement")], ["__tab", "⚡ Tableaux électriques", nb("tableau")], ["__cpt", "🎛️ Compteurs", nb("compteur")], ["__cle", "🔑 Clés", nb("cle")], ...(st.filtre && !st.filtre.startsWith("__") ? [[st.filtre, `🔑 Clé ${st.filtre}`, reperes().filter(r => correspond(r, st.filtre)).length]] : []), ["", "Tous les repères", reperes().length]]
         .filter(x => x[2]).map(([f, l, n]) => `<button class="pc-btn" data-imp="${esc(f)}">${l} <i>${n}</i></button>`).join("")}
       <button class="pc-btn" data-x>Annuler</button></div>`;
     fond.appendChild(d);
@@ -365,7 +368,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   function dessinerListe() {
     const a = $(".pc-liste"); a.hidden = !st.liste; if (!st.liste) return;
     const titre = (n) => st.meta.pages.find(p => p.n === n)?.titre || `Page ${n}`;
-    const groupes = [["cle", "🔑 Clés"], ["tableau", "⚡ Tableaux électriques"], ["compteur", "🎛️ Compteurs"]].map(([t, lib]) => {
+    const groupes = [["logement", "🏠 Logements"], ["cle", "🔑 Clés"], ["tableau", "⚡ Tableaux électriques"], ["compteur", "🎛️ Compteurs"]].map(([t, lib]) => {
       const m = {}; reperes().filter(r => typeR(r) === t).forEach(r => { (m[r.c] = m[r.c] || { n: 0, pages: {}, r }).n++; m[r.c].pages[r.p] = (m[r.c].pages[r.p] || 0) + 1; });
       return { t, lib, m };
     }).filter(g => Object.keys(g.m).length);
@@ -389,12 +392,13 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     const nivAuto = niveauDe(p.titre || "");
     const outil = (id, ic, lib) => `<button class="pc-to ${st.outil === id ? "on" : ""}" data-outil="${id}"><span>${ic}</span>${lib}</button>`;
     a.innerHTML = `<h4>✏️ Mode édition</h4>
-      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}${outil("masque", "⬜", "Masquer une zone")}</div>
+      <div class="pc-tos">${outil("sel", "✋", "Sélection")}${outil("cle", "🔑", "Clé")}${outil("compteur", "🎛️", "Compteur")}${outil("tableau", "⚡", "Tableau élec.")}${outil("logement", "🏠", "Logement")}${outil("masque", "⬜", "Masquer une zone")}</div>
       <div class="pc-opt">${st.outil === "sel" ? `<p class="pc-aidep">Clique sur une vignette pour la modifier, ou fais-la glisser pour la déplacer.</p>`
         : st.outil === "masque" ? `<p class="pc-aidep">👉 Fais glisser sur le plan pour cacher une zone en blanc (cartouche, logo, mention…). Clique sur une zone cachée pour la retirer.</p>
           <button class="pc-btn" data-cartouche style="white-space:normal;text-align:left">🧹 Masquer le cartouche de l'architecte (toutes les pages)</button>`
         : st.outil === "cle" ? `<label>Numéro de clé<input data-code value="${esc(st.dernierCode)}" placeholder="ex. MV10"></label><div class="pc-pcol">${Object.keys(COULEURS).map(c => `<button class="pc-col ${c === st.couleur ? "on" : ""}" data-col="${c}" style="--k:${COULEURS[c]}" title="${c}"></button>`).join("")}</div><p class="pc-aidep">👉 Clique sur le plan pour poser la clé.</p>`
         : st.outil === "compteur" ? (compteursSite.length ? `<label>Compteur du site<select data-cpt>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === st.cptId ? "selected" : ""}>${places.has(c.id) ? "✓ " : ""}${esc(c.nom || "")}</option>`).join("")}</select></label><p class="pc-aidep">👉 Clique sur le plan à l'endroit du compteur. ✓ = déjà placé.</p>` : `<p class="pc-aidep">Aucun compteur enregistré sur ce site (tuile Relevé compteur).</p>`)
+        : st.outil === "logement" ? `<label>N° du logement<input data-lognum value="${esc(st.logNum || String(1 + Math.max(0, ...reperes().filter(x => typeR(x) === "logement").map(x => parseInt(x.c, 10) || 0))))}" inputmode="numeric"></label><p class="pc-aidep">👉 Clique au centre du logement : le numéro suivant est ensuite proposé.</p>`
         : `<div class="pc-2"><label>Type<select data-tabtype>${TYPES_TABLEAU.map(t => `<option ${t === st.tabType ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Numéro<input data-tabnum value="${esc(st.tabNum)}" inputmode="numeric"></label></div><p class="pc-aidep">👉 Clique sur le plan : <b>${esc(st.tabType)} ${esc(st.tabNum)}</b> sera posé, puis le numéro suivant est proposé.</p>`}</div>
       <h5>📄 Cette page</h5>
       <label>Bâtiment<input data-bat list="pc-bats" value="${esc(p.batiment || "")}" placeholder="auto (d'après le titre)"><datalist id="pc-bats">${bats.map(x => `<option value="${esc(x)}">`).join("")}</datalist></label>
@@ -407,6 +411,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     a.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { st.couleur = x.dataset.col; dessinerPanneau(); });
     a.querySelector("[data-cpt]")?.addEventListener("change", (e) => { st.cptId = e.target.value; });
     a.querySelector("[data-tabtype]")?.addEventListener("change", (e) => { st.tabType = e.target.value; st.tabNum = String(prochainNumero(reperes(), st.tabType)); dessinerPanneau(); });
+    a.querySelector("[data-lognum]")?.addEventListener("input", (e) => { st.logNum = e.target.value.trim(); });
     a.querySelector("[data-tabnum]")?.addEventListener("input", (e) => { st.tabNum = e.target.value.trim(); });
     a.querySelector("[data-bat]").addEventListener("change", (e) => sauverPages(st.meta.pages.map(x => x.n === st.page ? { ...x, batiment: e.target.value.trim() } : x)));
     a.querySelector("[data-niv]").addEventListener("change", (e) => sauverPages(st.meta.pages.map(x => x.n === st.page ? { ...x, niveauManuel: e.target.value } : x)));
@@ -430,6 +435,9 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       const places = new Set([...liste.filter(r => typeR(r) === "compteur").map(r => r.cptId), c.id]);
       st.cptId = compteursSite.find(k => !places.has(k.id))?.id || st.cptId;
       sauver([...liste, { ...base, t: "compteur", c: c.nom || "Compteur", cptId: c.id, cptType: c.type || "" }], `✓ Compteur « ${c.nom} » placé`); return; }
+    if (st.outil === "logement") { const c = (st.logNum || String(1 + Math.max(0, ...reperes().filter(x => typeR(x) === "logement").map(x => parseInt(x.c, 10) || 0)))).trim(); if (!c) return;
+      if (reperes().some(x => typeR(x) === "logement" && x.c === c) && !confirm(`Le logement ${c} existe déjà. En poser un autre ?`)) return;
+      st.logNum = String((parseInt(c, 10) || 0) + 1); sauver([...reperes(), { ...base, t: "logement", c }], `✓ Logement ${c} posé`); return; }
     if (st.outil === "tableau") { const num = String(st.tabNum || "").trim(), c = `${st.tabType}${num ? " " + num : ""}`;
       if (reperes().some(r => typeR(r) === "tableau" && r.c === c) && !confirm(`${c} existe déjà sur ce site. En créer un autre quand même ?`)) return;
       st.tabNum = String((parseInt(num, 10) || 0) + 1);
@@ -619,7 +627,7 @@ body.pc-ouvert{overflow:hidden}
 .pc-li div{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.pc-li a{font-size:11.5px;color:#1565d8;cursor:pointer;background:rgba(21,101,216,.08);border-radius:6px;padding:1px 6px}
 @media (max-width:700px){.pc{margin:0;border-radius:0}.pc-liste{position:absolute;right:0;top:0;bottom:0;background:var(--panel,#fff);z-index:5;width:85%}.pc-corps{position:relative}.pc-h b{font-size:14px}}
 .pc-tys{display:flex;gap:4px;flex-wrap:wrap}.pc-ty{font:inherit;font-size:12.5px;padding:5px 10px;border-radius:99px;border:1px solid var(--border,#ccc);background:none;color:var(--text,#111);cursor:pointer}.pc-ty.on{background:#1565d8;border-color:#1565d8;color:#fff}.pc-ty i{font-style:normal;opacity:.75;margin-left:2px}
-.pc-m.t-tableau,.pc-m.t-compteur{border-radius:99px;background:var(--k);color:#fff}.pc-m.t-tableau.terne,.pc-m.t-compteur.terne{opacity:.18}
+.pc-m.t-logement{background:#fff;color:#dc2626;border-color:#dc2626;font-size:20px}.pc-m.t-tableau,.pc-m.t-compteur{border-radius:99px;background:var(--k);color:#fff}.pc-m.t-tableau.terne,.pc-m.t-compteur.terne{opacity:.18}
 .pc-ed{width:290px;flex:none;border-left:1px solid var(--border,#ddd);overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px;background:var(--panel,#fff)}
 .pc-ed[hidden]{display:none}.pc-ed h4{margin:0;font-size:15px}.pc-ed h5{margin:8px 0 0;font-size:13px;color:var(--text-dim,#555)}.pc-ed h5 small{font-weight:400}
 .pc-ed label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text-dim,#555)}.pc-ed input,.pc-ed select,.pc-pop select{font:inherit;font-size:14px;padding:6px 8px;border-radius:8px;border:1px solid var(--border,#ccc);background:var(--panel,#fff);color:var(--text,#111)}

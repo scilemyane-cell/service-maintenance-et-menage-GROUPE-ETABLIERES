@@ -191,12 +191,12 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   if (!document.getElementById("p3-style")) document.head.insertAdjacentHTML("beforeend", STYLE);
   const PALETTE = ["#ff4d5e", "#4da3ff", "#3ddc84", "#ffb020", "#c77dff", "#ff7ac6", "#2ee6d6", "#ffe14d", "#ff8a3d", "#9be15d", "#7aa2ff", "#ff5c8a", "#5ce1ff", "#d4a373", "#b8f2e6", "#f4a261"];
   // Types de repères : clé (par défaut), compteur, tableau électrique.
-  const typeR = (r) => r.t || "cle", COUL_T = { compteur: "#06b6d4", tableau: "#f59e0b" };
+  const typeR = (r) => r.t || "cle", COUL_T = { compteur: "#06b6d4", tableau: "#f59e0b", logement: "#ff4d5e" };
   const codes = [...new Set(reperes.filter(r => typeR(r) === "cle").map(r => r.c))].sort(triCode);
   const couleurCle = (c) => codes.includes(c) ? PALETTE[codes.indexOf(c) % PALETTE.length] : "#94a3b8";
   const couleurR = (r) => COUL_T[typeR(r)] || couleurCle(r.c);
-  const libR = (r) => typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛 ${r.c}` : r.c;
-  const vise = (r) => !st.filtre ? false : st.filtre === "__tab" ? typeR(r) === "tableau" : st.filtre === "__cpt" ? typeR(r) === "compteur" : typeR(r) === "cle" && r.c === st.filtre;
+  const libR = (r) => typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛 ${r.c}` : r.c;
+  const vise = (r) => !st.filtre ? false : st.filtre === "__tab" ? typeR(r) === "tableau" : st.filtre === "__cpt" ? typeR(r) === "compteur" : st.filtre === "__log" ? typeR(r) === "logement" : typeR(r) === "cle" && r.c === st.filtre;
   const st = { g: 0, ecart: 22, filtre, auto: true };
   const fond = document.createElement("div"); fond.className = "p3";
   fond.innerHTML = `<div class="p3-ciel"></div>
@@ -247,11 +247,11 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
 
   function filtreOptions() {
     const m = {}; const ns = new Set(groupes[st.g].etages.map(e => e.n));
-    const ici = reperes.filter(r => ns.has(r.p)), nT = ici.filter(r => typeR(r) === "tableau").length, nC = ici.filter(r => typeR(r) === "compteur").length;
+    const ici = reperes.filter(r => ns.has(r.p)), nT = ici.filter(r => typeR(r) === "tableau").length, nC = ici.filter(r => typeR(r) === "compteur").length, nL = ici.filter(r => typeR(r) === "logement").length;
     ici.filter(r => typeR(r) === "cle").forEach(r => { m[r.c] = (m[r.c] || 0) + 1; });
     if (st.filtre && !st.filtre.startsWith("__") && !m[st.filtre]) st.filtre = "";
-    const libF = st.filtre === "__tab" ? "tableaux" : st.filtre === "__cpt" ? "compteurs" : st.filtre;
-    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Repères${st.filtre ? ` : ${esc(libF)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4>${nT ? `<button data-cle="__tab" class="${st.filtre === "__tab" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.tableau}"></i><b>⚡ Tableaux</b><span>${nT}</span></button>` : ""}${nC ? `<button data-cle="__cpt" class="${st.filtre === "__cpt" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.compteur}"></i><b>🎛️ Compteurs</b><span>${nC}</span></button>` : ""}${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
+    const libF = st.filtre === "__log" ? "logements" : st.filtre === "__tab" ? "tableaux" : st.filtre === "__cpt" ? "compteurs" : st.filtre;
+    $(".p3-leg").innerHTML = `<h4 data-plier>🔑 Repères${st.filtre ? ` : ${esc(libF)}` : ""} <small>clique pour isoler</small><i class="p3-pli">▾</i></h4>${nL ? `<button data-cle="__log" class="${st.filtre === "__log" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.logement}"></i><b>🏠 Logements</b><span>${nL}</span></button>` : ""}${nT ? `<button data-cle="__tab" class="${st.filtre === "__tab" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.tableau}"></i><b>⚡ Tableaux</b><span>${nT}</span></button>` : ""}${nC ? `<button data-cle="__cpt" class="${st.filtre === "__cpt" ? "on" : st.filtre ? "off" : ""}"><i style="background:${COUL_T.compteur}"></i><b>🎛️ Compteurs</b><span>${nC}</span></button>` : ""}${Object.keys(m).sort(triCode).map(c => `<button data-cle="${esc(c)}" class="${c === st.filtre ? "on" : st.filtre ? "off" : ""}"><i style="background:${couleurCle(c)}"></i><b>${esc(c)}</b><span>${m[c]}</span></button>`).join("")}`;
   }
   function placer() { const n = etages.length; etages.forEach((e, i) => { e.cibleY = st.seul != null ? 0 : (i - (n - 1) / 2) * st.ecart; e.groupe.visible = st.seul == null || st.seul === e.n; });
     fond.querySelectorAll(".p3-niv [data-niv]").forEach(b => b.classList.toggle("on", +b.dataset.niv === st.seul)); fond.querySelector(".p3-niv [data-tous]")?.classList.toggle("on", st.seul == null); }
@@ -403,9 +403,9 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     const r = reperes.find(x => x.id === id); const box = $(".p3-info"); if (!r) { box.hidden = true; return; }
     const e = groupes[st.g].etages.find(x => x.n === r.p), tous = reperes.filter(x => x.c === r.c);
     box.hidden = false;
-    box.innerHTML = `<b style="color:${couleurR(r)}">${typeR(r) === "cle" ? "🔑 " : ""}${esc(libR(r))}</b>${r.note ? `<span>${esc(r.note)}</span>` : ""}<span>${e ? nomNiveau(e.niv) + " · " : ""}${tous.length} porte${tous.length > 1 ? "s" : ""} avec cette clé</span>
+    box.innerHTML = `<b style="color:${couleurR(r)}">${typeR(r) === "cle" ? "🔑 " : ""}${esc(libR(r))}</b>${r.note ? `<span>${esc(r.note)}</span>` : ""}<span>${e ? nomNiveau(e.niv) : ""}${typeR(r) === "cle" ? `${e ? " · " : ""}${tous.length} porte${tous.length > 1 ? "s" : ""} avec cette clé` : ""}</span>
       <div><button data-allumer>Isoler cette clé</button><button data-plat>Voir à plat ›</button><button data-fi>✕</button></div>`;
-    box.querySelector("[data-allumer]").onclick = () => { st.filtre = typeR(r) === "tableau" ? "__tab" : typeR(r) === "compteur" ? "__cpt" : r.c; filtreOptions(); dessinerPoints(); box.hidden = true; };
+    box.querySelector("[data-allumer]").onclick = () => { st.filtre = typeR(r) === "logement" ? "__log" : typeR(r) === "tableau" ? "__tab" : typeR(r) === "compteur" ? "__cpt" : r.c; filtreOptions(); dessinerPoints(); box.hidden = true; };
     box.querySelector("[data-plat]").onclick = () => { fermer(); onPlat?.(r.p, st.filtre); };
     box.querySelector("[data-fi]").onclick = () => { box.hidden = true; };
   }
