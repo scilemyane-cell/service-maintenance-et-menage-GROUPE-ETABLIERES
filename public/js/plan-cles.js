@@ -544,6 +544,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     if (st.edition) {
       pop.innerHTML = `<b>${TYPES_R[t].ic} ${TYPES_R[t].lib}</b>
         ${["cle", "vanne", "logement"].includes(t) ? `<label>${t === "vanne" ? "Nom" : "Numéro"} <input data-c value="${esc(sel.c)}"></label>` : ""}
+        ${t === "tableau" ? `<label>Alimenté par<select data-tp><option value="">— (départ général / non renseigné)</option>${reperes().filter(x => typeR(x) === "tableau" && x.id !== sel.id).sort((a, b) => (b.tabType === "TGBT") - (a.tabType === "TGBT") || triCode(a.c, b.c)).map(x => `<option value="${x.id}" ${x.id === sel.parent ? "selected" : ""}>⚡ ${esc(x.c)}</option>`).join("")}</select></label>` : ""}
         ${t === "tableau" ? `<div class="pc-2"><label>Type<select data-tt>${TYPES_TABLEAU.map(x => `<option ${x === sel.tabType ? "selected" : ""}>${x}</option>`).join("")}</select></label><label>Numéro<input data-tn value="${esc(sel.num || "")}"></label></div>` : ""}
         ${t === "compteur" ? `<label>Compteur<select data-tc>${compteursSite.map(c => `<option value="${esc(c.id)}" ${c.id === sel.cptId ? "selected" : ""}>${esc(c.nom || "")}</option>`).join("") || `<option>${esc(sel.c)}</option>`}</select></label>` : ""}
         <label>${t === "cle" ? "Porte / local" : "Emplacement / note"} <input data-n value="${esc(sel.note || "")}" placeholder="${t === "tableau" ? "ex. local technique R+1" : "ex. bureau directeur"}"></label>
@@ -554,6 +555,8 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       pop.innerHTML = `<b style="color:${couleurR(sel)}">${t === "cle" ? "🔑 " : ""}${esc(libR(sel))}</b>${sel.note ? `<span>${esc(sel.note)}</span>` : ""}
         ${t === "cle" ? `<span>${reperes().filter(r => typeR(r) === "cle" && r.c === sel.c).length} porte(s) avec cette clé sur le site</span><div class="pc-pb"><button class="pc-btn" data-voir>Voir toutes ses portes</button></div>` : ""}
         ${t === "compteur" ? `<div class="pc-pb"><button class="pc-btn" data-relever>📷 Relever ce compteur</button></div>` : ""}
+        ${t === "tableau" ? (() => { const pa = reperes().find(x => x.id === sel.parent), en = reperes().filter(x => typeR(x) === "tableau" && x.parent === sel.id);
+          return `${pa ? `<span>↑ Alimenté par <a data-go-r="${pa.id}">⚡ ${esc(pa.c)}</a></span>` : ""}${en.length ? `<span>↓ Alimente : ${en.map(x => `<a data-go-r="${x.id}">⚡ ${esc(x.c)}</a>`).join(", ")}</span>` : ""}`; })() : ""}
         ${t === "tableau" || t === "vanne" ? photosHTML : ""}`;
     }
     fond.querySelector(".pc-vue").appendChild(pop);
@@ -565,11 +568,15 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
       const note = pop.querySelector("[data-n]").value.trim(); let maj = { note };
       if (t === "cle") { const c = pop.querySelector("[data-c]").value.trim(); if (!c) return; st.dernierCode = c; maj = { ...maj, c, col }; }
       if (t === "vanne" || t === "logement") { const c = pop.querySelector("[data-c]").value.trim(); if (!c) return; maj = { ...maj, c }; }
-      if (t === "tableau") { const tabType = pop.querySelector("[data-tt]").value, num = pop.querySelector("[data-tn]").value.trim(); maj = { ...maj, tabType, num, c: `${tabType}${num ? " " + num : ""}` }; }
+      if (t === "tableau") { const tabType = pop.querySelector("[data-tt]").value, num = pop.querySelector("[data-tn]").value.trim(); let parent = pop.querySelector("[data-tp]").value;
+        // Pas de boucle (A alimenté par B alimenté par A).
+        for (let x = parent, k = 0; x && k < 50; x = reperes().find(y => y.id === x)?.parent, k++) if (x === sel.id) { alert("Impossible : ce tableau alimente déjà celui-là."); return; }
+        maj = { ...maj, tabType, num, parent, c: `${tabType}${num ? " " + num : ""}` }; }
       if (t === "compteur") { const c = compteursSite.find(k => k.id === pop.querySelector("[data-tc]").value); if (c) maj = { ...maj, cptId: c.id, c: c.nom || sel.c, cptType: c.type || "" }; }
       st.sel = null; sauver(reperes().map(r => r.id === sel.id ? { ...r, ...maj } : r), "✓ Modifié"); });
     pop.querySelector("[data-c]")?.addEventListener("keydown", (e) => { if (e.key === "Enter") pop.querySelector("[data-ok]").click(); });
     pop.querySelector("[data-suppr]")?.addEventListener("click", () => { if (!confirm(`Supprimer ${libR(sel)} ?`)) return; st.sel = null; sauver(reperes().filter(r => r.id !== sel.id), `${sel.c} supprimé`); });
+    pop.querySelectorAll("[data-go-r]").forEach(x => x.onclick = () => allerRepere(x.dataset.goR));
     pop.querySelector("[data-voir]")?.addEventListener("click", () => { st.filtre = sel.c; st.sel = null; st.liste = true; majTout(); });
     pop.querySelector("[data-relever]")?.addEventListener("click", () => { window.compteurRelevDeepLinkId = sel.cptId; fermer(); if (!window.__allerCategorie?.("compteurs")) { window.compteurRelevDeepLinkId = null; window.toast?.("Le relevé n'est pas accessible avec ce compte."); } });
     const boite = pop.querySelector("[data-ph]");
@@ -628,7 +635,7 @@ body.pc-ouvert{overflow:hidden}
 .pc-msg{position:absolute;inset:0;display:grid;place-items:center;font-size:15px;color:#333;pointer-events:none}.pc-msg[hidden]{display:none}.pc-vide{pointer-events:auto;background:#fff;padding:22px;border-radius:14px;max-width:460px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.15)}.pc-vide p{font-size:13.5px;color:#555}
 .pc-pop{position:absolute;z-index:10;width:240px;background:var(--panel,#fff);color:var(--text,#111);border:1px solid var(--border,#ccc);border-radius:12px;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:7px;font-size:13px;cursor:default}
 .pc-pop label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--text-dim,#555)}.pc-pop input{font:inherit;font-size:14px;padding:5px 7px;border-radius:7px;border:1px solid var(--border,#ccc);background:var(--panel,#fff);color:var(--text,#111)}
-.pc-pop span{color:var(--text-dim,#555)}.pc-pcol{display:flex;gap:6px}.pc-pb{display:flex;gap:6px;justify-content:space-between}
+.pc-pop span{color:var(--text-dim,#555)}.pc-pop a{color:#1565d8;cursor:pointer;font-weight:600}.pc-pcol{display:flex;gap:6px}.pc-pb{display:flex;gap:6px;justify-content:space-between}
 .pc-liste{width:290px;flex:none;border-left:1px solid var(--border,#ddd);overflow:auto;padding:10px 12px;font-size:13px}.pc-liste h4{margin:0 0 8px;font-size:13.5px}
 .pc-li{border-bottom:1px solid var(--border,#eee);padding:6px 0}.pc-li.on{background:color-mix(in srgb,#d11f1f 8%,transparent)}
 .pc-li button{all:unset;cursor:pointer;display:flex;align-items:center;gap:7px;width:100%}.pc-li button i{width:10px;height:10px;border-radius:3px}.pc-li button span{margin-left:auto;color:var(--text-dim,#555);font-size:12px}

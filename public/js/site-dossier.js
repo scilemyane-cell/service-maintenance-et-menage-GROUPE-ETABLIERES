@@ -831,7 +831,6 @@ function renderView(d) {
         </div>
       </div>
       <div id="sd-pdf-status" style="font-size:12px"></div>
-      <div id="sd-equip"></div>
       <div id="sd-qr-holder" class="qr-print-card" style="display:none;background:#fff;border-radius:10px;padding:16px;text-align:center;max-width:260px">
         <div id="sd-qr-canvas" style="width:200px;height:200px;margin:0 auto"></div>
         <p style="color:#111;font-size:11px;margin:8px 0 0">À imprimer et coller sur place (local technique, entrée…) — scanné avec l'appareil photo du téléphone, ouvre directement le PDF complet (avec photos) de <b>${esc(d.nom)}</b>. Utilisable par n'importe qui, y compris un prestataire externe <b>sans compte</b> Microsoft ni accès à SharePoint.</p>
@@ -887,6 +886,7 @@ function renderView(d) {
       </div>
 
       <h3 class="sdv-titre-section">🔧 Équipements & organes techniques</h3>
+      <div id="sd-equip"></div>
       ${concernes.length === 0 ? `<p class="hint">Aucun équipement marqué "concerné" pour l'instant.${isEditorUser(mountedUser) ? " Utilise « Modifier le dossier » pour les renseigner." : ""}</p>` : `<div class="sdv-grille">${
         concernes.map((s) => {
           const si = d.sections.indexOf(s);
@@ -935,18 +935,37 @@ function renderView(d) {
     // Équipements repérés sur le plan (tableaux électriques, compteurs) : liste + photos + « voir sur le plan ».
     import("./plan-cles.js").then(async m => {
       const meta = await m.lirePlanMeta(d.id), box = document.getElementById("sd-equip"); if (!box || !meta) return;
-      const tabs = (meta.reperes || []).filter(r => m.typeR(r) === "tableau").sort((a, b) => String(a.c).localeCompare(String(b.c), "fr", { numeric: true }));
-      const cpts = (meta.reperes || []).filter(r => m.typeR(r) === "compteur");
-      if (!tabs.length && !cpts.length) return;
+      const reps = meta.reperes || [], tri = (a, b) => String(a.c).localeCompare(String(b.c), "fr", { numeric: true });
+      const tabs = reps.filter(r => m.typeR(r) === "tableau").sort(tri), cpts = reps.filter(r => m.typeR(r) === "compteur"), vannes = reps.filter(r => m.typeR(r) === "vanne").sort(tri);
+      if (!tabs.length && !cpts.length && !vannes.length) return;
       const titre = (n) => meta.pages.find(p => p.n === n)?.titre || "";
-      box.innerHTML = `<section class="form-card sd-equip"><h3 style="margin:0 0 8px">⚡ Équipements repérés sur le plan</h3>
-        ${tabs.length ? `<p class="hint" style="margin:0 0 6px">Tableaux électriques (${tabs.length})</p><div class="sd-eq-l">${tabs.map(r => `<div class="sd-eq"><b>⚡ ${esc(r.c)}</b><span>${esc(r.note || "")}${r.note ? " · " : ""}${esc(titre(r.p))}</span><em data-eq-ph="${r.id}"></em><button class="nav-btn" data-eq-voir="${r.id}">📍 Sur le plan</button></div>`).join("")}</div>` : ""}
-        ${cpts.length ? `<p class="hint" style="margin:10px 0 6px">Compteurs placés sur le plan (${cpts.length})</p><div class="sd-eq-l">${cpts.map(r => `<div class="sd-eq"><b>🎛️ ${esc(r.c)}</b><span>${esc(titre(r.p))}</span><em></em><button class="nav-btn" data-eq-voir="${r.id}">📍 Sur le plan</button></div>`).join("")}</div>` : ""}
-        <button class="nav-btn" data-eq-imp style="margin-top:8px">🖨️ Plans des tableaux électriques (PDF)</button></section>`;
-      const ouvrir = (focus) => m.ouvrirPlanCles({ dossier: { id: d.id, nom: d.nom }, user: mountedUser, editeur: isEditorUser(mountedUser) && !mountedUser?.lectureSeule, focus });
-      box.querySelectorAll("[data-eq-voir]").forEach(b => b.onclick = () => ouvrir({ repId: b.dataset.eqVoir }));
-      box.querySelector("[data-eq-imp]").onclick = () => ouvrir({ filtre: "__tab" });
-      tabs.forEach(async r => { try { const l = await m.photosEquipement(r.id); const em = box.querySelector(`[data-eq-ph="${r.id}"]`); if (!em || !l.length) return;
+      const ligne = (r, ic, prof = 0) => `<div class="sd-eq" style="margin-left:${prof * 22}px">${prof ? `<i class="sd-eq-fil">└</i>` : ""}<b>${ic} ${esc(r.c)}</b><span>${esc(r.note || "")}${r.note ? " · " : ""}${esc(titre(r.p))}</span><em data-eq-ph="${r.id}"></em><button class="nav-btn" data-eq-voir="${r.id}">📍 Sur le plan</button></div>`;
+      // Arborescence électrique : TGBT → TD → TDR… (champ « Alimenté par » réglé sur le plan).
+      const ids = new Set(tabs.map(t => t.id)), enfants = (id) => tabs.filter(t => t.parent === id);
+      const racines = tabs.filter(t => !t.parent || !ids.has(t.parent)).sort((a, b) => (b.tabType === "TGBT") - (a.tabType === "TGBT") || tri(a, b));
+      const arbre = (t, prof, vus) => vus.has(t.id) ? "" : (vus.add(t.id), ligne(t, "⚡", prof) + enfants(t.id).sort(tri).map(e => arbre(e, prof + 1, vus)).join(""));
+      const vus = new Set(), arbreHTML = racines.map(t => arbre(t, 0, vus)).join("");
+      const sansLien = tabs.filter(t => !t.parent && t.tabType !== "TGBT").length;
+      const editeur = isEditorUser(mountedUser) && !mountedUser?.lectureSeule;
+      box.innerHTML = `<div class="form-card sd-equip">
+        ${tabs.length ? `<h4 style="margin:0 0 4px;font-size:14px">⚡ Tableaux électriques <small class="hint">(${tabs.length}, repérés sur le plan)</small></h4>
+          <div class="sd-eq-l">${arbreHTML}</div>
+          ${sansLien && tabs.some(t => t.tabType === "TGBT") ? `<p class="hint" style="margin:6px 0 0">💡 ${sansLien} tableau(x) pas encore rattaché(s) au TGBT${editeur ? " : sur le plan, mode édition › clic sur le TD › « Alimenté par »." : "."}</p>` : ""}
+          <button class="nav-btn" data-eq-imp="__tab" style="margin-top:8px">🖨️ Plans des tableaux électriques (PDF)</button>` : ""}
+        ${vannes.length ? `<h4 style="margin:12px 0 4px;font-size:14px">🚰 Vannes <small class="hint">(${vannes.length})</small></h4><div class="sd-eq-l">${vannes.map(r => ligne(r, "🚰")).join("")}</div>` : ""}
+        ${cpts.length ? `<h4 style="margin:12px 0 4px;font-size:14px">🎛️ Compteurs placés sur le plan <small class="hint">(${cpts.length})</small></h4><div class="sd-eq-l">${cpts.map(r => ligne(r, "🎛️")).join("")}</div>` : ""}
+      </div>`;
+      // Placé juste après la fiche « TGBT » du dossier (sinon en tête de la grille des équipements).
+      const secTgbt = (d.sections || []).findIndex(sc => sc.concerne && /tgbt|coupure g[ée]n[ée]rale [ée]lectricit/i.test(sc.titre || ""));
+      const carteTgbt = secTgbt >= 0 ? document.getElementById(`sd-sec-${secTgbt}`) : null;
+      if (carteTgbt) { carteTgbt.after(box); box.classList.add("sd-equip-grille");
+        const tgbt = tabs.find(t => t.tabType === "TGBT");
+        if (tgbt && !carteTgbt.querySelector("[data-eq-voir]")) carteTgbt.insertAdjacentHTML("beforeend", `<button class="nav-btn" data-eq-voir="${tgbt.id}" style="margin-top:8px">📍 ${esc(tgbt.c)} sur le plan${enfants(tgbt.id).length ? ` · alimente ${enfants(tgbt.id).length} tableau(x)` : ""}</button>`); }
+      else document.querySelector(".sdv-grille")?.prepend(box), box.classList.add("sd-equip-grille");
+      const ouvrir = (focus) => m.ouvrirPlanCles({ dossier: { id: d.id, nom: d.nom }, user: mountedUser, editeur, focus });
+      document.querySelectorAll("[data-eq-voir]").forEach(b => b.onclick = () => ouvrir({ repId: b.dataset.eqVoir }));
+      box.querySelectorAll("[data-eq-imp]").forEach(b => b.onclick = () => ouvrir({ filtre: b.dataset.eqImp }));
+      [...tabs, ...vannes].forEach(async r => { try { const l = await m.photosEquipement(r.id); const em = box.querySelector(`[data-eq-ph="${r.id}"]`); if (!em || !l.length) return;
         em.innerHTML = l.slice(0, 4).map((p, i) => `<img src="${p.data}" data-i="${i}" alt="">`).join("") + (l.length > 4 ? `<small>+${l.length - 4}</small>` : "");
         em.querySelectorAll("img").forEach(im => im.onclick = async () => { const { voirPhotos } = await import("./demandes-photos.js"); voirPhotos(l, +im.dataset.i); }); } catch { /* */ } });
     }).catch(() => {});
