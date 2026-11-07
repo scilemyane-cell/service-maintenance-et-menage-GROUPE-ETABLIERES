@@ -219,8 +219,8 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   try { [THREE, { OrbitControls }] = await Promise.all([import(/* @vite-ignore */ THREE_URL), import(/* @vite-ignore */ ORBIT_URL)]); }
   catch (e) { $(".p3-load").textContent = "La 3D n'a pas pu se charger (connexion ?)."; return; }
   if (!vivant) return;
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer = new THREE.WebGLRenderer({ antialias: !matchMedia("(pointer:coarse)").matches, alpha: true, powerPreference: "high-performance" }); renderer.shadowMap.enabled = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const PR = Math.min(matchMedia("(pointer:coarse)").matches ? 1.5 : 1.75, window.devicePixelRatio || 1); renderer.setPixelRatio(PR); renderer.outputColorSpace = THREE.SRGBColorSpace;
   vue.appendChild(renderer.domElement);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 0.5, 2000);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -326,7 +326,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   // Niveau seul : redessiné encore plus fin (jusqu'à 6144 px sur ordinateur, 4096 sur téléphone).
   async function ultraHD(n) {
     const et = etages.find(e => e.n === n); if (!hd || !et?.plan || !st.z || et.ultra) return;
-    const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 4096 : 6144); if (larg <= (et.larg || 0)) return;
+    const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 3072 : 4096); if (larg <= (et.larg || 0)) return;
     const etat = $(".p3-etat"); etat.hidden = false; etat.textContent = "✨ Détails du niveau…";
     try { const cv = await hd(n, larg, st.z); if (!cv || !vivant) return;
       const t = new THREE.CanvasTexture(texture(cv, st.z, "holo", larg, true)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
@@ -388,7 +388,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     // Haute définition : les étages sont redessinés depuis le PDF (traits vectoriels → texture 4096 px).
     if (hd) {
       const jeton = (construire.jeton = (construire.jeton || 0) + 1), etat = $(".p3-etat");
-      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 3072 : 4096);
+      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 2048 : 3072);
       for (const [i, et] of etages.entries()) {
         if (!vivant || jeton !== construire.jeton) return;
         etat.hidden = false; etat.textContent = `✨ Haute définition… ${i + 1} / ${etages.length}`;
@@ -465,14 +465,33 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   $("[data-dessus]").onclick = () => { arreterAuto(); allerCamera([0, 150, 0.01], [0, 0, 0]); };
   $("[data-face]").onclick = () => { allerCamera([70, 95, 100], [0, 0, 0]); };
 
+  // Rendu à la demande : rien n'est recalculé quand la vue est immobile (fini la latence / la chauffe).
+  let besoin = true, bouge = 0, dernierRendu = 0, camPrec = "";
+  controls.addEventListener("change", () => { besoin = true; bouge = performance.now(); });
+  renderer.domElement.addEventListener("pointerdown", () => { besoin = true; });
+  fond.addEventListener("click", () => { besoin = true; setTimeout(() => { besoin = true; }, 120); }, true);
   const boucle = () => {
     if (!vivant) return;
-    etages.forEach(e => { e.groupe.position.y += (e.cibleY - e.groupe.position.y) * 0.08; });
+    raf = requestAnimationFrame(boucle);
+    const now = performance.now();
+    let anim = false;
+    etages.forEach(e => { const d = e.cibleY - e.groupe.position.y; if (Math.abs(d) > 0.01) { e.groupe.position.y += d * 0.08; anim = true; } else e.groupe.position.y = e.cibleY; });
+    if (cible || controls.autoRotate || etages.some(e => e.points.some(p => p.halo.visible))) anim = true;
+    controls.update();
+    // Résolution réduite pendant le mouvement, pleine résolution à l'arrêt.
+    const enMouvement = now - bouge < 180 || cible;
+    const prVoulu = enMouvement && !controls.autoRotate ? Math.min(1, PR) : PR;
+    if (renderer.getPixelRatio() !== prVoulu) { renderer.setPixelRatio(prVoulu); const rr = vue.getBoundingClientRect(); renderer.setSize(rr.width, rr.height, false); besoin = true; }
+    if (boucle.mvt && !enMouvement) besoin = true; boucle.mvt = !!enMouvement;
+    if (!anim && !besoin && now - dernierRendu < 400) return;
+    besoin = false; dernierRendu = now;
     if (cible) { cible.t = Math.min(1, cible.t + 0.035); const k = 1 - Math.pow(1 - cible.t, 3);
       camera.position.lerpVectors(cible.p0, cible.pos, k); controls.target.lerpVectors(cible.g0, cible.tgt, k); if (cible.t >= 1) cible = null; }
-    // De près : chaque point affiche son numéro de clé (les 60 plus proches).
+    // Étiquettes recalculées seulement quand la caméra a bougé.
+    const camCle = camera.position.toArray().map(x => x.toFixed(1)).join() + controls.target.toArray().map(x => x.toFixed(1)).join() + st.filtre + st.seul + st.maq + [...st.caches].join();
+    const camChange = camCle !== camPrec && !enMouvement; if (camChange) camPrec = camCle;
     boucle.n = (boucle.n || 0) + 1;
-    if (boucle.n % 8 === 0) {
+    if (camChange || boucle.n % 30 === 0) {
       const v = new THREE.Vector3(), proches = [];
       etages.forEach(e => e.points.forEach(p => { const visible = e.groupe.visible && p.mesh.visible && p.mesh.material.opacity > 0.5 && !vise(p.r);
         if (!visible) { if (p.petite) p.petite.visible = false; return; }
@@ -483,7 +502,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         p.petite.visible = true; });
     }
     // Noms des pièces : affichés nets autour de l'endroit regardé (les 90 plus proches à l'écran).
-    if (boucle.n % 8 === 4) {
+    if (camChange || boucle.n % 30 === 15) {
       const v = new THREE.Vector3(), proches = [];
       etages.forEach(e => (st.maq && e.maq ? e.pieces : e.maq?.etiq || []).forEach(q => { if (q.sp) q.sp.visible = false; }));
       etages.forEach(e => (st.maq && e.maq ? e.maq.etiq : e.pieces).forEach(q => { if (!e.groupe.visible) { if (q.sp) q.sp.visible = false; return; } v.copy(q.pos).add(e.groupe.position); const d = v.distanceTo(camera.position), ndc = v.clone().project(camera);
@@ -500,7 +519,8 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
         q.sp.visible = true; });
     }
     const t = performance.now() / 1000; etages.forEach(e => e.points.forEach(p => { if (p.halo.visible) { const s = 1 + (t * 1.2 % 1) * 1.4; p.halo.scale.setScalar(s); p.halo.material.opacity = 0.9 * (1 - (t * 1.2 % 1)); } }));
-    controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(boucle);
+    if (renderer.shadowMap.enabled && etages.some(e => e.maq?.murs?.visible)) { if (camChange || boucle.n % 60 === 0) renderer.shadowMap.needsUpdate = true; }
+    renderer.render(scene, camera);
   };
   camera.position.set(140, 160, 180); controls.target.set(0, 0, 0);
   boucle(); await construire();
