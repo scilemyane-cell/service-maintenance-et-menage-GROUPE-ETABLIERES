@@ -404,12 +404,12 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
         : st.outil === "vanne" ? `<label>Nom de la vanne<input data-vannom value="${esc(st.vanNom || `V${1 + Math.max(0, ...reperes().filter(x => typeR(x) === "vanne").map(x => parseInt(String(x.c).replace(/\D/g, ""), 10) || 0))}`)}" placeholder="ex. V1, Vanne gaz"></label><p class="pc-aidep">👉 Clique sur le plan : le numéro suivant est ensuite proposé.</p>`
         : st.outil === "logement" ? `<label>N° du logement<input data-lognum value="${esc(st.logNum || String(1 + Math.max(0, ...reperes().filter(x => typeR(x) === "logement").map(x => parseInt(x.c, 10) || 0))))}" inputmode="numeric"></label><p class="pc-aidep">👉 Clique au centre du logement : le numéro suivant est ensuite proposé.</p>`
         : `<div class="pc-2"><label>Type<select data-tabtype>${TYPES_TABLEAU.map(t => `<option ${t === st.tabType ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Numéro<input data-tabnum value="${esc(st.tabNum)}" inputmode="numeric"></label></div><p class="pc-aidep">👉 Clique sur le plan : <b>${esc(st.tabType)} ${esc(st.tabNum)}</b> sera posé, puis le numéro suivant est proposé.</p>`}</div>
-      <h5>📄 Cette page</h5>
+      <details class="pc-det" ${matchMedia("(max-width:700px)").matches ? "" : "open"}><summary>📄 Cette page <small>bâtiment, niveau</small></summary>
       <label>Bâtiment<input data-bat list="pc-bats" value="${esc(p.batiment || "")}" placeholder="auto (d'après le titre)"><datalist id="pc-bats">${bats.map(x => `<option value="${esc(x)}">`).join("")}</datalist></label>
       <label>Niveau (pour la 3D)<select data-niv><option value="">Auto${nivAuto !== null ? ` (${nomNiveau(nivAuto)})` : " (non détecté)"}</option>${NIVEAUX.map(([n, l]) => `<option value="${n}" ${String(p.niveauManuel) === String(n) ? "selected" : ""}>${l}</option>`).join("")}<option value="x" ${p.niveauManuel === "x" ? "selected" : ""}>Pas un étage (plan masse…)</option></select></label>
-      <h5>📍 Sur cette page <small>${ici.length}</small></h5>
+      </details><details class="pc-det" ${matchMedia("(max-width:700px)").matches ? "" : "open"}><summary>📍 Sur cette page <small>${ici.length}</small></summary>
       <div class="pc-edl">${ici.slice().sort((x, y) => typeR(x).localeCompare(typeR(y)) || triCode(x.c, y.c)).map(r => `<div><button data-voir-r="${r.id}"><i style="background:${couleurR(r)}"></i>${esc(libR(r))}</button><button data-sup-r="${r.id}" title="Supprimer">🗑️</button></div>`).join("") || `<p class="pc-aidep">Rien sur cette page.</p>`}</div>
-      <button class="pc-btn edit" data-fin>✓ Terminer l'édition</button>`;
+      </details><button class="pc-btn edit" data-fin>✓ Terminer l'édition</button>`;
     a.querySelectorAll("[data-outil]").forEach(x => x.onclick = () => { st.outil = x.dataset.outil; fond.classList.toggle("pc-gomme", st.outil === "masque"); dessinerBarre(); if (st.outil === "compteur" && !st.cptId) st.cptId = compteursSite.find(c => !places.has(c.id))?.id || compteursSite[0]?.id || ""; fond.classList.toggle("pc-pose", st.outil !== "sel"); dessinerPanneau(); });
     a.querySelector("[data-code]")?.addEventListener("input", (e) => { st.dernierCode = e.target.value.trim(); });
     a.querySelectorAll("[data-col]").forEach(x => x.onclick = () => { st.couleur = x.dataset.col; dessinerPanneau(); });
@@ -663,4 +663,15 @@ body.pc-ouvert{overflow:hidden}
 .pc-pied{position:absolute;left:0;right:0;top:100%;height:calc(var(--u)*3);display:flex;justify-content:space-between;align-items:center;padding:0 calc(var(--u)*1.5);background:#f4f6fa;color:#44506a;border-top:1px solid #c9d2e3;font:calc(var(--u)*1.15) system-ui,sans-serif;border-radius:0 0 calc(var(--u)*.8) calc(var(--u)*.8);pointer-events:none}
 .pc-scene{outline:calc(var(--u)*.2) solid #14213d;outline-offset:0;border-radius:2px}.pc-scene .pc-ban,.pc-scene .pc-pied{box-shadow:0 0 0 calc(var(--u)*.2) #14213d}
 .pc-mask{position:absolute;background:#fff}.pc-fond.pc-edit .pc-mask{outline:2px dashed #e11d48;background:#fff;cursor:pointer}.pc-mask.trace{outline:2px dashed #1565d8;background:rgba(255,255,255,.7)}
+
+/* Téléphone : barre compacte qui défile, panneau d'édition en tiroir bas */
+@media (max-width:700px){
+.pc-h{padding:8px 10px;flex-wrap:nowrap}.pc-h b{font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pc-maj{display:none}.pc-hb{flex:none}.pc-hb .pc-btn{padding:5px 8px;font-size:12px}
+.pc-barre{padding:6px 8px;gap:5px}.pc-pages,.pc-outils{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.pc-pages::-webkit-scrollbar,.pc-outils::-webkit-scrollbar{display:none}
+.pc-outils>*,.pc-tys,.pc-yeux{flex:none}.pc-tys{flex-wrap:nowrap}.pc-outils .pc-btn,.pc-ty,.pc-pg{font-size:12px;padding:5px 8px}.pc-outils select{max-width:130px;font-size:12px}
+.pc-ed{position:absolute;left:0;right:0;bottom:0;top:auto;width:auto;max-height:52%;z-index:6;border-left:0;border-top:1px solid var(--border,#ddd);border-radius:14px 14px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.25);padding:8px 10px 10px;gap:6px}
+.pc-ed h4{display:none}.pc-tos{grid-template-columns:repeat(7,1fr);gap:3px}.pc-to{padding:4px 1px;font-size:9px;line-height:1.1;overflow:hidden}.pc-to span{font-size:18px}.pc-aidep{display:none}
+.pc-opt{padding:7px;gap:6px}.pc-opt:empty,.pc-opt:not(:has(*:not(.pc-aidep))){display:none}.pc-ed>[data-fin]{position:sticky;bottom:0;padding:8px}
+}
+.pc-det summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim,#555);padding:4px 0}.pc-det summary small{font-weight:400}.pc-det[open]{display:flex;flex-direction:column;gap:6px}
 </style>`;
