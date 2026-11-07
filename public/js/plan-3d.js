@@ -219,8 +219,8 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   try { [THREE, { OrbitControls }] = await Promise.all([import(/* @vite-ignore */ THREE_URL), import(/* @vite-ignore */ ORBIT_URL)]); }
   catch (e) { $(".p3-load").textContent = "La 3D n'a pas pu se charger (connexion ?)."; return; }
   if (!vivant) return;
-  renderer = new THREE.WebGLRenderer({ antialias: !matchMedia("(pointer:coarse)").matches, alpha: true, powerPreference: "high-performance" }); renderer.shadowMap.enabled = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const PR = Math.min(matchMedia("(pointer:coarse)").matches ? 1.5 : 1.75, window.devicePixelRatio || 1); renderer.setPixelRatio(PR); renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" }); renderer.shadowMap.enabled = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const PR = Math.min(2, window.devicePixelRatio || 1); renderer.setPixelRatio(PR); renderer.outputColorSpace = THREE.SRGBColorSpace;
   vue.appendChild(renderer.domElement);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 0.5, 2000);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -326,7 +326,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
   // Niveau seul : redessiné encore plus fin (jusqu'à 6144 px sur ordinateur, 4096 sur téléphone).
   async function ultraHD(n) {
     const et = etages.find(e => e.n === n); if (!hd || !et?.plan || !st.z || et.ultra) return;
-    const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 3072 : 4096); if (larg <= (et.larg || 0)) return;
+    const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 4096 : 6144); if (larg <= (et.larg || 0)) return;
     const etat = $(".p3-etat"); etat.hidden = false; etat.textContent = "✨ Détails du niveau…";
     try { const cv = await hd(n, larg, st.z); if (!cv || !vivant) return;
       const t = new THREE.CanvasTexture(texture(cv, st.z, "holo", larg, true)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
@@ -388,7 +388,7 @@ export async function ouvrirVue3D({ titre, groupes, reperes, filtre = "", charge
     // Haute définition : les étages sont redessinés depuis le PDF (traits vectoriels → texture 4096 px).
     if (hd) {
       const jeton = (construire.jeton = (construire.jeton || 0) + 1), etat = $(".p3-etat");
-      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 2048 : 3072);
+      const larg = Math.min(renderer.capabilities.maxTextureSize || 4096, mobile ? 3072 : 4096);
       for (const [i, et] of etages.entries()) {
         if (!vivant || jeton !== construire.jeton) return;
         etat.hidden = false; etat.textContent = `✨ Haute définition… ${i + 1} / ${etages.length}`;
