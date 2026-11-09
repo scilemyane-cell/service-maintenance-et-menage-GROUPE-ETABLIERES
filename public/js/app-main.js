@@ -84,6 +84,7 @@
   const mountHeures = aLaDemande(charger_heures, "mountHeures");
   const charger_heures_repartition = () => import("./heures-repartition.js");
   const mountRepartitionForDispositif = aLaDemande(charger_heures_repartition, "mountRepartitionForDispositif");
+  const mountPoubelles = aLaDemande(() => import("./poubelles.js"), "mountPoubelles");
   const charger_heures_archive = () => import("./heures-archive.js");
   const mountArchiveForDispositif = aLaDemande(charger_heures_archive, "mountArchiveForDispositif");
   const charger_tracabilite = () => import("./tracabilite.js");
@@ -341,6 +342,7 @@
         id: "disp-" + d, label: d, icon: "🧽", desc: "Fiches, traçabilité",
         subtabs: [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
+          ...((dispositifSettings[d]?.poubelles ?? /mahdi|daoud/i.test(d)) ? [{ id: "poubelles", label: "Poubelles", icon: "🗑️", roles: MENAGE_ROLES, mount: (c, u) => mountPoubelles(c, u, d) }] : []),
           ...(heuresEnabled(dispositifSettings, d) ? [
             { id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
             { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },

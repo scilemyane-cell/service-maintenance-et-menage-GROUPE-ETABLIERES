@@ -4913,3 +4913,19 @@ table.pm-t tbody th{font-size:11.5px;color:var(--text-dim)}
 @media (max-width:600px){.sd-eq{grid-template-columns:1fr auto}.sd-eq span{grid-column:1/-1;grid-row:2}.sd-eq em{grid-column:1/-1}}
 
 .sd-equip-grille{grid-column:1/-1}.sd-equip-grille>.form-card{margin:0}.sd-eq-fil{font-style:normal;color:var(--text-dim);margin-right:-4px}
+/* Poubelles : calendrier de collecte */
+.pb-h{margin:6px 0 4px;font-size:15px}.pb-h small{font-weight:400;color:var(--text-dim)}.pb-h.rouge,.pb .rouge{color:var(--red)}.pb .vert{color:#10b981}
+.pb-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.pb-c{border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--card,var(--surface));display:flex;flex-direction:column;gap:8px}
+.pb-c.auj{border-color:var(--gold);box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 35%,transparent)}.pb-c.retard{border-color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent)}.pb-c.ok{border-color:#10b98166}
+.pb-c-t{display:flex;align-items:center;gap:10px}.pb-c-t>div{flex:1;min-width:0}.pb-c-t b{display:block}.pb-c-t small{color:var(--text-dim)}.pb-ic{font-size:24px}.pb-d{font-size:12px;font-weight:700;white-space:nowrap}
+.pb-ph{display:flex;gap:6px;overflow-x:auto}.pb-ph img{width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer}
+.pb-fait{font-size:12.5px;color:#10b981;font-weight:700}.pb-go{width:100%}
+.pb-sites,.pb-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pb-sites input{flex:1;min-width:180px}
+.pb-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 4px 4px 9px;border-radius:99px;border:1px solid var(--border);font-size:12px}.pb-chip small{color:var(--text-dim)}
+.pb-chip.sortie{background:color-mix(in srgb,#3b82f6 12%,transparent)}.pb-chip.rentree{background:color-mix(in srgb,#10b981 12%,transparent)}.pb-chip.ferie{border-color:#F97316;color:#F97316}
+.pb-chip button{border:0;background:none;color:inherit;cursor:pointer;opacity:.6;padding:0 5px}.pb-m{margin:8px 0}.pb-m>b{display:block;margin-bottom:4px;text-transform:capitalize}
+.pb-mois summary{cursor:pointer;display:flex;gap:10px;align-items:center;text-transform:capitalize}.pb-mois .pb-l{margin-top:10px}
+.pb-z{border:1px dashed var(--border);border-radius:12px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.pb-z>b{width:100%}.pb-z em{font-style:normal;font-size:11px;color:var(--red);margin-left:6px}
+.pb-z-l{width:100%;display:flex;gap:6px;flex-wrap:wrap}.pb-mini{position:relative}.pb-mini img{width:72px;height:72px;object-fit:cover;border-radius:8px}.pb-mini button{position:absolute;top:-6px;right:-6px;border:0;border-radius:99px;background:var(--red);color:#fff;width:22px;height:22px;cursor:pointer}
+.pb-z-b{cursor:pointer}
