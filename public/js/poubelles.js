@@ -8,7 +8,11 @@ import { doc, setDoc, onSnapshot, collection, addDoc, deleteDoc, query, where } 
 import { esc, dateKey, addDays, HOLIDAYS } from "./astreinte-logic.js";
 import { compresserImage, voirPhotos } from "./demandes-photos.js";
 
-const TYPES = { sortie: ["⬆️", "Sortie des bacs"], rentree: ["⬇️", "Rentrée des bacs"] };
+const TYPES = { sortie: ["⬆️", "Sortie des bacs"], rentree: ["⬇️", "Rentrée des bacs"], picking: ["🧤", "Ramassage des déchets (picking)"] };
+// Photos obligatoires selon l'action : bacs + zone, ou avant / après pour le ramassage.
+const PHOTOS = (t) => t === "picking" ? [["avant", "📸 Avant (déchets au sol)"], ["apres", "✨ Après (site propre)"]]
+  : [["bacs", t === "rentree" ? "🗑️ Bacs rentrés" : "🗑️ Bacs sortis"], ["zone", "🧽 Zone nettoyée (local / abords)"]];
+const LIB_MOMENT = { bacs: "Bacs", zone: "Zone nettoyée", avant: "Avant", apres: "Après" };
 const FLUX = ["Ordures ménagères", "Tri sélectif", "Verre", "Biodéchets", "Encombrants", "Autre"];
 const JS = [["1", "Lundi"], ["2", "Mardi"], ["3", "Mercredi"], ["4", "Jeudi"], ["5", "Vendredi"], ["6", "Samedi"], ["0", "Dimanche"]];
 const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -30,7 +34,10 @@ export function mountPoubelles(container, u, dispositif) {
 
 const sauver = (patch) => setDoc(ref(), { ...patch, majLe: Date.now(), majPar: user?.nom || user?.email || "" }, { merge: true });
 const photosDe = (id) => st.photos.filter(p => p.dateId === id).sort((a, b) => (a.le || 0) - (b.le || 0));
-const fait = (id) => { const p = photosDe(id); return p.some(x => x.moment === "bacs") && p.some(x => x.moment === "zone"); };
+// Ramassages faits hors calendrier (« maintenant ») : reconstitués depuis leurs photos.
+const libres = () => { const m = {}; st.photos.filter(p => String(p.dateId).startsWith("libre-")).forEach(p => { m[p.dateId] = m[p.dateId] || { id: p.dateId, d: p.d, t: p.t || "picking", site: p.site, libre: true }; }); return Object.values(m); };
+const typeDe = (id) => (st.cal.dates.find(x => x.id === id) || libres().find(x => x.id === id))?.t || "sortie";
+const fait = (id) => { const p = photosDe(id); return PHOTOS(typeDe(id)).every(([k]) => p.some(x => x.moment === k)); };
 
 function carte(x, auj) {
   const [ic, lib] = TYPES[x.t] || TYPES.sortie, ok = fait(x.id), ph = photosDe(x.id), retard = !ok && x.d < auj;
@@ -38,7 +45,7 @@ function carte(x, auj) {
   return `<div class="pb-c ${ok ? "ok" : retard ? "retard" : x.d === auj ? "auj" : ""}">
     <div class="pb-c-t"><span class="pb-ic">${ic}</span><div><b>${lib}</b><small>${esc(x.site || "")}${x.flux ? ` · ${esc(x.flux)}` : ""}</small></div>
       <span class="pb-d">${x.d === auj ? "Aujourd'hui" : frJ(x.d)}${HOLIDAYS.has(x.d) ? " · férié" : ""}</span></div>
-    ${ph.length ? `<div class="pb-ph">${ph.map((p, i) => `<img src="${p.data}" alt="" data-pb-voir="${x.id}" data-i="${i}" title="${p.moment === "zone" ? "Zone nettoyée" : "Bacs"}">`).join("")}</div>` : ""}
+    ${ph.length ? `<div class="pb-ph">${ph.map((p, i) => `<img src="${p.data}" alt="" data-pb-voir="${x.id}" data-i="${i}" title="${LIB_MOMENT[p.moment] || ""}">`).join("")}</div>` : ""}
     ${ok ? `<div class="pb-fait">✅ Fait${ph.at(-1)?.le ? ` le ${new Date(ph.at(-1).le).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}${qui}</div>`
       : `<button class="add-btn pb-go" data-pb-faire="${x.id}">📸 ${retard ? "En retard — " : ""}Cocher avec photos</button>`}
     ${ph.length && estEditeur(user) ? `<button class="del-btn" data-pb-annuler="${x.id}" style="align-self:flex-start;font-size:12px">🗑️ Effacer ce passage (${ph.length} photo${ph.length > 1 ? "s" : ""})</button>` : ""}
@@ -48,16 +55,17 @@ function carte(x, auj) {
 function render() {
   if (!cont || !document.contains(cont)) { unsubs.forEach(f => f()); unsubs = []; return; }
   const auj = dateKey(new Date()), ed = estEditeur(user);
-  const dates = [...st.cal.dates].sort((a, b) => a.d.localeCompare(b.d) || (a.t === "sortie" ? -1 : 1));
+  const dates = [...st.cal.dates, ...libres()].sort((a, b) => a.d.localeCompare(b.d) || (a.t === "sortie" ? -1 : 1));
   const d0 = dateKey(addDays(new Date(), -14)), d1 = dateKey(addDays(new Date(), 7));
   const enRetard = dates.filter(x => x.d < auj && x.d >= d0 && !fait(x.id));
-  const prochains = dates.filter(x => x.d >= auj && x.d <= d1);
-  const faits = dates.filter(x => x.d < auj && x.d >= d0 && fait(x.id)).reverse();
+  const prochains = dates.filter(x => x.d >= auj && x.d <= d1 && !(x.libre && fait(x.id)));
+  const faits = dates.filter(x => (x.d < auj || (x.libre && x.d === auj)) && x.d >= d0 && fait(x.id)).reverse();
   const onglets = [["afaire", "✅ À faire"], ["historique", "🗂️ Historique"], ...(ed ? [["programmer", "📅 Programmer l'année"]] : [])];
   cont.innerHTML = `<div class="stack pb">
     <div class="tabs" style="background:none;border:none;padding:0">${onglets.map(([k, l]) => `<button class="tab-btn ${ui.vue === k ? "active" : ""}" data-pb-vue="${k}">${l}</button>`).join("")}</div>
     ${ui.vue === "afaire" ? `
-      <p class="hint">Pour chaque sortie ou rentrée des bacs : coche-la en ajoutant <b>obligatoirement</b> une photo des bacs et une photo de la zone nettoyée.</p>
+      <p class="hint">Chaque passage se coche avec des photos <b>obligatoires</b> : bacs + zone nettoyée pour les poubelles, <b>avant / après</b> pour le ramassage des déchets.</p>
+      <button class="add-btn pb-picking" data-pb-picking>🧤 Ramassage des déchets maintenant <small>photos avant / après</small></button>
       ${enRetard.length ? `<h3 class="pb-h rouge">⚠️ En retard (${enRetard.length})</h3><div class="pb-l">${enRetard.map(x => carte(x, auj)).join("")}</div>` : ""}
       <h3 class="pb-h">📅 Cette semaine et la suivante</h3>
       <div class="pb-l">${prochains.map(x => carte(x, auj)).join("") || `<p class="hint">${dates.length ? "Rien de prévu dans les 7 prochains jours." : "Aucune date programmée pour l'instant" + (ed ? " — va dans « 📅 Programmer l'année »." : ".")}</p>`}</div>
@@ -121,6 +129,7 @@ function brancher() {
     b.disabled = true; try { for (const p of l) await deleteDoc(doc(db, "fiches-photos", p.id)); window.toast?.("🗑️ Passage effacé"); } catch (e) { alert("Effacement impossible : " + (e?.message || e)); b.disabled = false; }
   });
   $$("[data-pb-faire]").forEach(b => b.onclick = () => ouvrirValidation(st.cal.dates.find(x => x.id === b.dataset.pbFaire)));
+  cont.querySelector("[data-pb-picking]")?.addEventListener("click", () => ouvrirValidation({ id: "libre-" + Date.now().toString(36) + uid(), d: dateKey(new Date()), t: "picking", site: st.cal.sites[0] || "", libre: true }));
   $$("[data-r]").forEach(el => el.onchange = () => { ui.regle[el.dataset.r] = el.value; });
   cont.querySelector("[data-pb-site-add]")?.addEventListener("click", () => { const v = cont.querySelector("#pb-site-nv").value.trim(); if (v && !st.cal.sites.includes(v)) sauver({ sites: [...st.cal.sites, v] }); });
   $$("[data-pb-site-del]").forEach(b => b.onclick = () => { const s = st.cal.sites[+b.dataset.pbSiteDel]; if (confirm(`Retirer « ${s} » de la liste des sites ? (les dates déjà programmées restent)`)) sauver({ sites: st.cal.sites.filter(x => x !== s) }); });
@@ -149,22 +158,22 @@ function brancher() {
 function ouvrirValidation(x) {
   if (!x) return;
   const [ic, lib] = TYPES[x.t] || TYPES.sortie;
-  const pris = { bacs: [], zone: [] };
+  const req = PHOTOS(x.t), pris = Object.fromEntries(req.map(([k]) => [k, []]));
   const fond = document.createElement("div"); fond.className = "cd-fond"; fond.style.zIndex = "1400";
   const zone = (k, titre) => `<div class="pb-z"><b>${titre} <em>obligatoire</em></b><div class="pb-z-l" data-z-l="${k}"></div>
     <label class="nav-btn pb-z-b">📷 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-z="${k}"></label>
     <label class="nav-btn pb-z-b">🖼️ Galerie<input type="file" accept="image/*" multiple hidden data-z="${k}"></label></div>`;
   fond.innerHTML = `<div class="cd-fenetre" style="max-width:480px"><div class="cd-fenetre-tete"><div><b>${ic} ${lib}</b><small>${esc(x.site || "")} · ${frJ(x.d, { weekday: "long", day: "numeric", month: "long" })}${x.flux ? " · " + esc(x.flux) : ""}</small></div><button class="cd-x" data-x>✕</button></div>
     <div class="stack" style="gap:12px">
-      ${zone("bacs", x.t === "rentree" ? "🗑️ Bacs rentrés" : "🗑️ Bacs sortis")}
-      ${zone("zone", "🧽 Zone nettoyée (local / abords)")}
+      ${x.libre && st.cal.sites.length > 1 ? `<label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Site<select data-site>${st.cal.sites.map(s => `<option ${s === x.site ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label>` : ""}
+      ${req.map(([k, t]) => zone(k, t)).join("")}
       <button class="add-btn" data-ok disabled>✓ Valider le passage</button>
     </div></div>`;
   document.body.append(fond);
   const maj = () => {
     Object.entries(pris).forEach(([k, l]) => { fond.querySelector(`[data-z-l="${k}"]`).innerHTML = l.map((d, i) => `<span class="pb-mini"><img src="${d}" alt=""><button data-rm="${k}" data-i="${i}">✕</button></span>`).join("") || `<small class="hint">Aucune photo</small>`; });
     fond.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { pris[b.dataset.rm].splice(+b.dataset.i, 1); maj(); });
-    const ok = pris.bacs.length && pris.zone.length, bt = fond.querySelector("[data-ok]");
+    const ok = req.every(([k]) => pris[k].length), bt = fond.querySelector("[data-ok]");
     bt.disabled = !ok; bt.textContent = ok ? "✓ Valider le passage" : "📸 Ajoute les 2 photos pour valider";
   };
   maj();
@@ -177,7 +186,7 @@ function ouvrirValidation(x) {
   fond.querySelector("[data-ok]").onclick = async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = "Envoi des photos…";
     try {
-      const base = { type: "poubelles", dispositif: disp, dateId: x.id, d: x.d, t: x.t, site: x.site || "", flux: x.flux || "", agentUid: auth.currentUser?.uid || "", agentNom: user?.nom || user?.email || "", legende: "" };
+      const base = { type: "poubelles", dispositif: disp, dateId: x.id, d: x.d, t: x.t, site: fond.querySelector("[data-site]")?.value || x.site || "", flux: x.flux || "", agentUid: auth.currentUser?.uid || "", agentNom: user?.nom || user?.email || "", legende: "" };
       for (const [k, l] of Object.entries(pris)) for (const data of l) await addDoc(collection(db, "fiches-photos"), { ...base, moment: k, data, le: Date.now() });
       fermer(); window.toast?.("✅ Passage validé");
     } catch (err) { alert("Envoi impossible : " + (err?.message || err)); b.disabled = false; maj(); }
