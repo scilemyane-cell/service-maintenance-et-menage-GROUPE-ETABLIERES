@@ -434,7 +434,7 @@ select{ max-width:100%; }
 
   /* Fiche de traçabilité ménage : A4 portrait, compacte (moins de pages). */
   .print-trac{ border:none !important; border-radius:0 !important; padding:0 !important; }
-  .print-trac img{ height:38px !important; }
+  .print-trac > div:first-child img{ height:38px !important; } /* le logo seulement, pas les photos */
   .print-trac > div:first-child{ margin-bottom:6px !important; }
   .print-trac > p{ font-size:11px !important; margin:0 0 2px !important; }
   .print-trac .trac-piece{ break-inside:avoid; page-break-inside:avoid; }
