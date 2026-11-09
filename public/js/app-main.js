@@ -85,6 +85,7 @@
   const charger_heures_repartition = () => import("./heures-repartition.js");
   const mountRepartitionForDispositif = aLaDemande(charger_heures_repartition, "mountRepartitionForDispositif");
   const mountPoubelles = aLaDemande(() => import("./poubelles.js"), "mountPoubelles");
+  const mountPointage = aLaDemande(() => import("./pointage.js"), "mountPointage");
   const charger_heures_archive = () => import("./heures-archive.js");
   const mountArchiveForDispositif = aLaDemande(charger_heures_archive, "mountArchiveForDispositif");
   const charger_tracabilite = () => import("./tracabilite.js");
@@ -343,7 +344,10 @@
         subtabs: (dispositifSettings[d]?.ongletsMasques ?? (/mahdi|daoud/i.test(d) ? ["fiches", "planning", "tracabilite", "prestataire", "stats-menage"] : [])).reduce((l, m) => l.filter(t => t.id !== m), [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
           ...((dispositifSettings[d]?.poubelles ?? /mahdi|daoud/i.test(d)) ? [{ id: "poubelles", label: "Poubelles", icon: "🗑️", roles: MENAGE_ROLES, mount: (c, u) => mountPoubelles(c, u, d) }] : []),
-          ...(heuresEnabled(dispositifSettings, d) ? [
+          ...(/mahdi|daoud/i.test(d) ? [
+            { id: "pointage", label: "Mes heures", icon: "⏱️", roles: MENAGE_ROLES, mount: (c, u) => mountPointage(c, u, d) },
+            { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
+          ] : heuresEnabled(dispositifSettings, d) ? [
             { id: "heures", label: "Heures", icon: "🕒", roles: MENAGE_ROLES, mount: mountHeures },
             { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
             { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },

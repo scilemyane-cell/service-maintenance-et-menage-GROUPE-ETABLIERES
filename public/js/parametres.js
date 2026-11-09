@@ -625,7 +625,7 @@ let dpNewUserForm = { email: "", password: "", nom: "" };
 
 export function mountParametresDispositif(container, user, dispositif) {
   cleanup();
-  dpUi.section = "fiches";
+  dpUi.section = /mahdi|daoud/i.test(dispositif) ? "general" : "fiches";
   dpUi.editSiteId = null;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => {
@@ -645,7 +645,7 @@ function renderParametresDispositif(container, user, dispositif) {
     <div class="stack">
       <div class="tabs" style="background:none;border:none;padding:0;margin-bottom:-6px">
         <button class="tab-btn ${dpUi.section === 'general' ? 'active' : ''}" data-dpp-section="general">⚙️ Général</button>
-        <button class="tab-btn ${dpUi.section === 'fiches' ? 'active' : ''}" data-dpp-section="fiches">📋 Fiches</button>
+        ${/mahdi|daoud/i.test(dispositif) ? "" : `<button class="tab-btn ${dpUi.section === 'fiches' ? 'active' : ''}" data-dpp-section="fiches">📋 Fiches</button>`}
         <button class="tab-btn ${dpUi.section === 'acces' ? 'active' : ''}" data-dpp-section="acces">🔐 Accès</button>
       </div>
       <div id="dpp-sub"></div>
@@ -664,6 +664,19 @@ function renderGeneralEditor(container, user, dispositif) {
   const heuresOn = heuresEnabled(dpState.settings, dispositif);
   const template = templateFor(dpState.settings, dispositif);
   const totalTemplate = template.reduce((s, t) => s + (t.heures || 0), 0);
+  if (/mahdi|daoud/i.test(dispositif)) {
+    container.innerHTML = `<div class="stack"><div class="form-card">
+      <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">⏱️ Heures prévues au contrat</h3>
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;max-width:320px"><input type="number" step="0.25" min="0" id="gen-contrat" value="${totalTemplate || ""}" placeholder="ex. 10" style="width:110px"> heures par semaine</label>
+      <p class="hint" style="margin-top:8px">Sert à afficher l'écart dans « Mes heures » (total pointé de la semaine − contrat).</p>
+      <button class="add-btn" id="gen-contrat-ok" style="margin-top:8px">💾 Enregistrer</button></div></div>`;
+    document.getElementById("gen-contrat-ok").onclick = async () => {
+      const h = parseFloat(document.getElementById("gen-contrat").value) || 0;
+      await setDispositifTemplate(dispositif, [{ label: template[0]?.label || "Poubelles Cécile Sauvage", heures: h }]);
+      window.toast?.("✓ Contrat enregistré : " + h + " h / semaine");
+    };
+    return;
+  }
   container.innerHTML = `
     <div class="stack">
       <div class="form-card">

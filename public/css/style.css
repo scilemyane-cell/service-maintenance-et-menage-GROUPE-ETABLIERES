@@ -4930,3 +4930,15 @@ table.pm-t tbody th{font-size:11.5px;color:var(--text-dim)}
 .pb-z-l{width:100%;display:flex;gap:6px;flex-wrap:wrap}.pb-mini{position:relative}.pb-mini img{width:72px;height:72px;object-fit:cover;border-radius:8px}.pb-mini button{position:absolute;top:-6px;right:-6px;border:0;border-radius:99px;background:var(--red);color:#fff;width:22px;height:22px;cursor:pointer}
 .pb-z-b{cursor:pointer}
 .mtt-jours:not([hidden]){display:flex;flex-direction:column;gap:10px}
+/* Pointage des heures (simple) */
+.pt{max-width:640px;margin:0 auto}.pt-ag{display:flex;gap:8px;align-items:center;font-weight:700}
+.pt-sem{display:flex;align-items:center;justify-content:space-between;gap:10px}.pt-sem>div{text-align:center}.pt-sem b{display:block;font-size:16px}.pt-sem small{color:var(--text-dim)}
+.pt-gros{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--panel)}.pt-gros p{margin:0;font-size:15px}.pt-gros small{color:var(--text-dim);text-align:center}
+.pt-btn{border:0;border-radius:14px;padding:16px 28px;font-size:20px;font-weight:800;cursor:pointer;width:100%;max-width:340px;color:#fff}.pt-btn.go{background:#10b981}.pt-btn.stop{background:#ef4444}
+.pt-tot{display:flex;justify-content:space-around;gap:8px;padding:12px;border-radius:14px;border:1px solid var(--border);background:var(--panel);text-align:center}.pt-tot span{display:block;font-size:11.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}.pt-tot b{font-size:20px}
+.pt-tot.moins>div:last-child b{color:#f59e0b}.pt-tot.plus>div:last-child b{color:#3b82f6}.pt-tot.ok>div:last-child b{color:#10b981}
+.pt-jours{display:flex;flex-direction:column;gap:8px}.pt-j{border:1px solid var(--border);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}.pt-j.auj{border-color:var(--gold);box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 30%,transparent)}
+.pt-j-t{display:flex;align-items:baseline;gap:8px}.pt-j-t small{color:var(--text-dim);flex:1}.pt-j-t span{font-weight:800}.pt-j:not(.plein) .pt-j-t span{color:var(--text-dim);font-weight:400}
+.pt-cr{display:flex;align-items:center;gap:6px}.pt-cr input{width:auto;flex:1;max-width:130px;font-size:16px}.pt-cr button{border:0;background:none;color:var(--red);font-size:16px;cursor:pointer}
+.pt-add{align-self:flex-start;border:1px dashed var(--border);background:none;color:var(--text-dim);border-radius:10px;padding:6px 10px;cursor:pointer;font-size:13px}
+.pt-pied{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}.pt-etat{flex:1;font-size:12.5px;color:var(--text-dim)}
