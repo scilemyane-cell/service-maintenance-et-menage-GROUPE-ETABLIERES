@@ -147,27 +147,25 @@ function blocsSuite(f) {
 function paginer(f, entete) {
   const { tete, blocs } = blocsSuite(f);
   if (typeof document === "undefined" || !document.body) return [tete + blocs.map(b => b.html).join("")];
-  // Mesure réelle, dans une page invisible aux mêmes styles.
+  // Mise en page réelle : on remplit une vraie page (mêmes classes que le PDF, 1110 px de haut)
+  // bloc par bloc, et on passe à la page suivante dès que le contenu entrerait dans la zone du pied.
   const m = document.createElement("div");
-  m.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden";
-  m.innerHTML = `<div class="fp-doc"><section class="fp-page" style="height:auto;min-height:0">${entete}<div data-c></div></section></div>`;
+  m.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;width:794px";
+  m.innerHTML = `<div class="fp-pdf"><div class="fp-doc"><section class="fp-page">${entete}<div data-c></div></section></div></div>`;
   document.body.appendChild(m);
   const page = m.querySelector(".fp-page"), c = m.querySelector("[data-c]");
-  // Hauteur utile = page PDF (1110 px, voir .fp-pdf .fp-page) − marges − pied, avec une marge de sécurité.
-  const dispo = 1110 - 30 - 60 - 14 - (c.getBoundingClientRect().top - page.getBoundingClientRect().top - 28);
-  const haut = (html) => { c.innerHTML = html; const h = c.getBoundingClientRect().height; return h; };
-  const hTete = haut(tete);
-  const pages = []; let cur = [], h = 0;
-  blocs.forEach((b, i) => {
-    const avecTete = b.table && (b.premier || !cur.length);
-    let hb = haut(b.html) + (avecTete ? hTete : 0);
-    if (cur.length && h + hb > dispo) {
-      pages.push(cur.join("")); cur = []; h = 0;
-      if (b.table) hb = haut(b.html) + hTete;
-    }
-    if (b.table && (b.premier || !cur.length)) { cur.push(tete); }
-    cur.push(b.html); h += hb;
-    if (!b.table && blocs[i - 1]?.table) h += 8;
+  const limite = () => page.getBoundingClientRect().top + 1110 - 30 - 42; // padding bas + zone « Page x sur y »
+  const deborde = () => { const der = c.lastElementChild; return der && der.getBoundingClientRect().bottom > limite(); };
+  const pages = []; let cur = [];
+  const vider = () => { pages.push(cur.join("")); cur = []; c.innerHTML = ""; };
+  blocs.forEach((b) => {
+    const morceaux = (b.table && (b.premier || !cur.length)) ? [tete, b.html] : [b.html];
+    c.insertAdjacentHTML("beforeend", morceaux.join(""));
+    if (deborde() && cur.length) {
+      vider();
+      const m2 = b.table ? [tete, b.html] : [b.html];
+      c.insertAdjacentHTML("beforeend", m2.join("")); cur.push(...m2);
+    } else cur.push(...morceaux);
   });
   if (cur.length) pages.push(cur.join(""));
   m.remove();
