@@ -41,6 +41,7 @@ function carte(x, auj) {
     ${ph.length ? `<div class="pb-ph">${ph.map((p, i) => `<img src="${p.data}" alt="" data-pb-voir="${x.id}" data-i="${i}" title="${p.moment === "zone" ? "Zone nettoyée" : "Bacs"}">`).join("")}</div>` : ""}
     ${ok ? `<div class="pb-fait">✅ Fait${ph.at(-1)?.le ? ` le ${new Date(ph.at(-1).le).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}${qui}</div>`
       : `<button class="add-btn pb-go" data-pb-faire="${x.id}">📸 ${retard ? "En retard — " : ""}Cocher avec photos</button>`}
+    ${ph.length && estEditeur(user) ? `<button class="del-btn" data-pb-annuler="${x.id}" style="align-self:flex-start;font-size:12px">🗑️ Effacer ce passage (${ph.length} photo${ph.length > 1 ? "s" : ""})</button>` : ""}
   </div>`;
 }
 
@@ -115,6 +116,10 @@ function brancher() {
   const $$ = (s) => cont.querySelectorAll(s);
   $$("[data-pb-vue]").forEach(b => b.onclick = () => { ui.vue = b.dataset.pbVue; render(); });
   $$("[data-pb-voir]").forEach(im => im.onclick = () => voirPhotos(photosDe(im.dataset.pbVoir), +im.dataset.i));
+  $$("[data-pb-annuler]").forEach(b => b.onclick = async () => {
+    const l = photosDe(b.dataset.pbAnnuler); if (!confirm(`Effacer ce passage et ses ${l.length} photo(s) ? Il redeviendra « à faire ».`)) return;
+    b.disabled = true; try { for (const p of l) await deleteDoc(doc(db, "fiches-photos", p.id)); window.toast?.("🗑️ Passage effacé"); } catch (e) { alert("Effacement impossible : " + (e?.message || e)); b.disabled = false; }
+  });
   $$("[data-pb-faire]").forEach(b => b.onclick = () => ouvrirValidation(st.cal.dates.find(x => x.id === b.dataset.pbFaire)));
   $$("[data-r]").forEach(el => el.onchange = () => { ui.regle[el.dataset.r] = el.value; });
   cont.querySelector("[data-pb-site-add]")?.addEventListener("click", () => { const v = cont.querySelector("#pb-site-nv").value.trim(); if (v && !st.cal.sites.includes(v)) sauver({ sites: [...st.cal.sites, v] }); });

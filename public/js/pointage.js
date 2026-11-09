@@ -2,7 +2,8 @@
 // Enregistré dans le même document que la « Répartition » (heures-repartition/{dispositif}_{lundi}_{uid})
 // pour rester compatible avec l'archive et les stats : jours[LUN…] = heures calculées depuis les créneaux.
 import { esc, dateKey, addDays } from "./astreinte-logic.js";
-import { auth } from "./firebase-init.js";
+import { auth, db } from "./firebase-init.js";
+import { doc, deleteDoc } from "./firestore-compte.js";
 import { watchDispositifSettings, templateFor } from "./dispositif-settings-data.js";
 import { watchRepartitions, saveRepartition, repartitionId } from "./heures-repartition-data.js";
 import { watchUsers } from "./users-data.js";
@@ -96,6 +97,7 @@ function render() {
     <div class="pt-pied"><span class="pt-etat"></span>
       ${data.valide ? `<span class="stat-chip ok">✅ Semaine validée</span>` : data.submitted ? `<span class="stat-chip ok">📨 Envoyée au responsable</span>` : ""}
       ${!data.valide ? `<button class="${data.submitted ? "nav-btn" : "add-btn"}" data-pt-envoi>${data.submitted ? "↩️ Modifier ma semaine" : "📨 Envoyer ma semaine"}</button>` : ""}
+      ${estEditeur(user) && st.reps.some(r => r.id === f.id) ? `<button class="del-btn" data-pt-effacer>🗑️ Effacer la semaine</button>` : ""}
       ${estEditeur(user) ? `<button class="nav-btn" data-pt-valide>${data.valide ? "↩️ Retirer la validation" : "✅ Valider la semaine"}</button>` : ""}</div>
   </div>`;
   const $$ = (s) => cont.querySelectorAll(s), cle = (v) => v.split("|");
@@ -109,5 +111,10 @@ function render() {
   $$("[data-pt-a],[data-pt-d]").forEach(inp => inp.onchange = () => { const [d, k] = cle(inp.dataset.ptA || inp.dataset.ptD); const c = data.pointages[d][+k]; c[inp.dataset.ptA ? "a" : "d"] = inp.value;
     if (c.a && c.d && min(c.d) <= min(c.a)) window.toast?.("⚠️ L'heure de départ doit être après l'arrivée"); enregistrer(f); render(); });
   cont.querySelector("[data-pt-envoi]")?.addEventListener("click", () => { data.submitted = !data.submitted; enregistrer(f); render(); });
+  cont.querySelector("[data-pt-effacer]")?.addEventListener("click", async () => {
+    if (!confirm(`Effacer toutes les heures de ${f.nom || "l'agent"} pour cette semaine ?`)) return;
+    clearTimeout(tSave); tSave = null;
+    try { await deleteDoc(doc(db, "heures-repartition", f.id)); brouillon = null; window.toast?.("🗑️ Semaine effacée"); render(); } catch (e) { alert("Effacement impossible : " + (e?.message || e)); }
+  });
   cont.querySelector("[data-pt-valide]")?.addEventListener("click", () => { data.valide = !data.valide; if (data.valide) data.submitted = true; enregistrer(f); render(); });
 }
