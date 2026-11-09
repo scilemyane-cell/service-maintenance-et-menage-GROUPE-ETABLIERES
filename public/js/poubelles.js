@@ -23,7 +23,7 @@ export function mountPoubelles(container, u, dispositif) {
   unsubs.forEach(f => f()); unsubs = [];
   cont = container; user = u; disp = dispositif; ui = { vue: "afaire", ...(ui.disp === dispositif ? ui : {}), disp: dispositif };
   container.innerHTML = `<p class="hint">Chargement…</p>`;
-  unsubs.push(onSnapshot(ref(), (s) => { const d = s.exists() ? s.data() : {}; st.cal = { sites: d.sites || ["Cécile Sauvage", "Haras de Vendée"], dates: d.dates || [] }; render(); }, () => render()));
+  unsubs.push(onSnapshot(ref(), (s) => { const d = s.exists() ? s.data() : {}; st.cal = { sites: d.sites || ["Cécile Sauvage"], dates: d.dates || [] }; render(); }, () => render()));
   unsubs.push(onSnapshot(query(collection(db, "fiches-photos"), where("type", "==", "poubelles")),
     (s) => { st.photos = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.dispositif === disp); render(); }, (e) => { console.warn("Photos poubelles :", e); }));
 }
