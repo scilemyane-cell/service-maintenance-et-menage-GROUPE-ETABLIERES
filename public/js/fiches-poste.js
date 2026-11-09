@@ -153,7 +153,8 @@ function paginer(f, entete) {
   m.innerHTML = `<div class="fp-doc"><section class="fp-page" style="height:auto;min-height:0">${entete}<div data-c></div></section></div>`;
   document.body.appendChild(m);
   const page = m.querySelector(".fp-page"), c = m.querySelector("[data-c]");
-  const dispo = 1122 - 28 - 60 - (c.getBoundingClientRect().top - page.getBoundingClientRect().top - 28);
+  // Hauteur utile = page PDF (1110 px, voir .fp-pdf .fp-page) − marges − pied, avec une marge de sécurité.
+  const dispo = 1110 - 30 - 60 - 14 - (c.getBoundingClientRect().top - page.getBoundingClientRect().top - 28);
   const haut = (html) => { c.innerHTML = html; const h = c.getBoundingClientRect().height; return h; };
   const hTete = haut(tete);
   const pages = []; let cur = [], h = 0;
@@ -380,9 +381,18 @@ async function pdf(f) {
   await Promise.all([...cache.querySelectorAll("img")].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; setTimeout(r, 3000); })));
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
-    return await html2pdf().set({ margin: 0, filename: nomFichier(f), image: { type: "jpeg", quality: 0.95 },
-      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: ["css"], before: ".fp-page + .fp-page" } }).from(cache.firstElementChild).outputPdf("blob");
+    // Une page HTML = une page PDF : chaque page est rendue seule (dans son conteneur .fp-pdf/.fp-doc
+    // pour garder polices et couleurs) puis posée sur une page A4 — plus de décalage ni de ligne coupée.
+    const opts = { margin: 0, filename: nomFichier(f), image: { type: "jpeg", quality: 0.95 },
+      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: [] } };
+    const enveloppe = (pg) => { const d = document.createElement("div"); d.className = "fp-pdf"; d.innerHTML = `<div class="fp-doc">${pg.outerHTML}</div>`; return d; };
+    const pages = [...cache.querySelectorAll(".fp-page")];
+    const doc = await html2pdf().set(opts).from(enveloppe(pages[0])).toPdf().get("pdf");
+    for (const pg of pages.slice(1)) {
+      const cv = await html2pdf().set(opts).from(enveloppe(pg)).toCanvas().get("canvas");
+      doc.addPage(); doc.addImage(cv.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, Math.min(297, 210 * cv.height / cv.width));
+    }
+    return doc.output("blob");
   } finally { cache.remove(); }
 }
 
