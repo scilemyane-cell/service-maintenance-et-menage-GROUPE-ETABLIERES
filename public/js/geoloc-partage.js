@@ -53,7 +53,7 @@ function retirerUI() { chip?.remove(); chip = null; }
 function afficherUI() {
   // Encadrement : pas de bandeau en bas d'écran (inutile pour eux) ; seul le
   // technicien garde l'indicateur « position visible par le responsable ».
-  if (user?.role !== "technicien") { retirerUI(); return; }
+  if (user?.role !== "technicien" && !bloque) { retirerUI(); return; }
   const h = envoiLe ? new Date(envoiLe).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
   const etat = erreurEnvoi ? ` · ⚠️ non envoyée (${erreurEnvoi})` : envoiLe ? ` · envoyée à ${h}` : " · recherche GPS…";
   const html = bloque ? `<button type="button" data-gp-aide style="color:#ef4444">📍 Localisation désactivée — <u>toucher ici pour l'activer</u></button>`
@@ -72,7 +72,12 @@ export function aideLocalisation() {
   const ua = navigator.userAgent || "", ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
   const installee = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   const nav = /CriOS|Chrome/i.test(ua) ? "Chrome" : /Firefox|FxiOS/i.test(ua) ? "Firefox" : /SamsungBrowser/i.test(ua) ? "Samsung Internet" : ios ? "Safari" : "Chrome";
-  const etapes = ios ? [
+  const pc = !estMobile();
+  const etapes = pc ? [
+    "Clique sur le <b>cadenas 🔒</b> (ou l'icône réglages) à gauche de l'adresse du site",
+    "<b>Position</b> (ou Localisation) › <b>Autoriser</b>",
+    "Clique sur <b>Réessayer</b> ci-dessous — sur ordinateur la position est approximative (wifi)",
+  ] : ios ? [
     "Ouvre <b>Réglages</b> ⚙️ du téléphone",
     "<b>Confidentialité et sécurité</b> › <b>Service de localisation</b> : <b>activé</b>",
     `Plus bas dans la liste, touche <b>${nav === "Safari" ? "Sites Safari" : nav}</b> › <b>Lorsque l'app est active</b> (et <b>Position exacte</b> activée)`,
@@ -84,11 +89,14 @@ export function aideLocalisation() {
     "Touche <b>Réessayer</b> ci-dessous",
   ];
   const f = document.createElement("div"); f.className = "cd-fond"; f.style.zIndex = "9500";
-  f.innerHTML = `<div class="cd-fenetre" style="max-width:420px"><div class="cd-fenetre-tete"><div><b>📍 Activer la localisation</b><small>${ios ? "iPhone" : "Android"} · ${nav}</small></div><button class="cd-x" data-x>✕</button></div>
-    <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;line-height:1.4">${etapes.map(e => `<li>${e}</li>`).join("")}</ol>
+  f.innerHTML = `<div class="cd-fenetre" style="max-width:420px"><div class="cd-fenetre-tete"><div><b>📍 Activer la localisation</b><small>${pc ? "Ordinateur" : ios ? "iPhone" : "Android"} · ${nav}</small></div><button class="cd-x" data-x>✕</button></div>
+    <p class="gp-etat" style="margin:0 0 10px;font-weight:700"></p><ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;line-height:1.4">${etapes.map(e => `<li>${e}</li>`).join("")}</ol>
     <button class="add-btn" data-re style="margin-top:14px;width:100%">🔄 Réessayer</button><p class="gp-res" style="text-align:center;margin:8px 0 0;font-size:13px"></p></div>`;
   document.body.append(f);
   f.querySelector("[data-x]").onclick = () => f.remove();
+  const et = f.querySelector(".gp-etat");
+  if (!("geolocation" in navigator)) et.textContent = "📵 Cet appareil ne donne pas sa position.";
+  else navigator.permissions?.query({ name: "geolocation" }).then(p => { et.textContent = p.state === "granted" ? "✅ La localisation est déjà autorisée pour l'appli." : p.state === "denied" ? "❌ La localisation est bloquée pour l'appli — suis les étapes :" : "ℹ️ Pas encore autorisée — touche Réessayer puis « Autoriser »."; et.style.color = p.state === "granted" ? "#10b981" : p.state === "denied" ? "#ef4444" : ""; }).catch(() => {});
   f.addEventListener("click", (e) => { if (e.target === f) f.remove(); });
   f.querySelector("[data-re]").onclick = () => {
     const r = f.querySelector(".gp-res"); r.textContent = "Recherche de la position…";

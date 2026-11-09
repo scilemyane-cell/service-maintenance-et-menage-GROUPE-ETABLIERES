@@ -787,7 +787,7 @@
             <button class="logout-btn" id="logout-btn" style="margin-top:16px">Se déconnecter</button>
           </div>
         </div>`;
-      document.getElementById("logout-btn").addEventListener("click", () => logout());
+      document.getElementById("logout-btn").addEventListener("click", () => logout()); document.querySelectorAll("[data-ma-loc]").forEach(b => b.onclick = () => import("./geoloc-partage.js").then(m => m.aideLocalisation()));
     document.getElementById("theme-modules-btn")?.addEventListener("click", (e) => {
       const t = basculerThemeModules(); // appliqué tout de suite, sans redessiner (aucune saisie perdue)
       e.currentTarget.textContent = t === "sombre" ? "☀️ Clair" : "🌙 Sombre";
@@ -839,6 +839,7 @@
             ${currentUser.role === "super_admin" ? `<select id="apercu-select" class="apercu-select" title="Voir l'appli comme un autre utilisateur"><option value="">👁️ Aperçu en tant que…</option>${optionsApercu()}</select>` : ""}
             ${voitAdministration ? `<button class="nav-btn" id="admin-btn">⚙️ Administration</button>` : ""}
             ${currentUser.role === "super_admin" ? (CANAL_TEST ? `<a class="nav-btn canal-lien" href="/app.html">✅ Version validée</a>` : `<a class="nav-btn canal-lien" href="/beta/app.html">🧪 Version de test</a>`) : ""}
+            <button class="nav-btn" data-ma-loc>📍 Ma localisation</button>
             <button class="logout-btn" id="logout-btn">Se déconnecter</button>
           </div>
         </div>
@@ -870,6 +871,7 @@
           <button class="nav-btn theme-modules-btn" id="theme-modules-btn" title="Affichage clair ou sombre">${getThemeModules() === "sombre" ? "☀️ Clair" : "🌙 Sombre"}</button>
           ${voitAdministration ? `<button class="nav-btn gear-btn ${currentCategory === "administration" ? "active" : ""}" id="admin-btn" title="Administration">⚙️</button>` : ""}
           ${currentUser.role === "super_admin" ? (CANAL_TEST ? `<a class="nav-btn canal-lien" href="/app.html" title="Revenir à la version validée">✅ Validée</a>` : `<a class="nav-btn canal-lien" href="/beta/app.html" title="Ouvrir la version de test">🧪 Test</a>`) : ""}
+          <button class="nav-btn" data-ma-loc title="Activer / vérifier la localisation de cet appareil">📍</button>
           <button class="logout-btn" id="logout-btn">Se déconnecter</button>
         </div>
       </header>
@@ -884,7 +886,7 @@
       <main class="content" id="content"></main>
     `;
 
-    document.getElementById("logout-btn").addEventListener("click", () => logout());
+    document.getElementById("logout-btn").addEventListener("click", () => logout()); document.querySelectorAll("[data-ma-loc]").forEach(b => b.onclick = () => import("./geoloc-partage.js").then(m => m.aideLocalisation()));
     document.getElementById("theme-modules-btn")?.addEventListener("click", (e) => {
       const t = basculerThemeModules(); // appliqué tout de suite, sans redessiner (aucune saisie perdue)
       e.currentTarget.textContent = t === "sombre" ? "☀️ Clair" : "🌙 Sombre";
