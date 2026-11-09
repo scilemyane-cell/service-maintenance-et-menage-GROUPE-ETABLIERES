@@ -11,7 +11,7 @@ import { watchSitesDossiers } from "./site-dossier-data.js";
 import { tableauEVHTML } from "./espaces-verts-stats.js";
 import { toast, confirmDialog } from "./ui-feedback.js";
 import { db } from "./firebase-init.js";
-import { collection, query, where, getDocs } from "./firestore-compte.js";
+import { collection, query, where, getDocs, doc, onSnapshot, setDoc } from "./firestore-compte.js";
 import {
   GROUPES, TACHES, watchPassages, creerPassage, majPassage, supprimerPassage, effacerPassageComplet,
   watchPhotosPassage, ajouterPhotoEV, majPhotoEV, supprimerPhotoEV, dernieresDates, joursDepuis, retardsSite,
@@ -24,8 +24,19 @@ let conteneur = null, user = null, vue = "intervention";
 let sites = [], passages = null, erreur = "", sitesAssos = [], sitesDossiers = [];
 // Sites MNA : ceux des Dossiers de site (groupe / association / nom contenant « MNA ») ;
 // à défaut, ceux du groupe « MNA » dans Associations & Sites.
-const majSites = () => { sites = sitesDossiers.length ? sitesDossiers : sitesAssos; };
-let ui = { passageId: null, siteChoisi: "", date: dateKey(new Date()), ouvertsSuivi: new Set(), anneeImpr: new Date().getFullYear() };
+// + les sites ajoutés à la main dans l'appli (⚙️ Gérer la liste), moins ceux retirés.
+// Liste enregistrée dans config/espaces-verts-sites : modifiable sans toucher au code.
+let cfgEV = { ajoutes: [], masques: [] }, tousNomsSites = [], nomsDossiers = [], nomsAssos = [];
+const CFG_REF = () => doc(db, "config", "espaces-verts-sites");
+const majSites = () => {
+  const base = sitesDossiers.length ? sitesDossiers : sitesAssos;
+  const vus = new Set(), masques = new Set(cfgEV.masques || []);
+  sites = [...base, ...(cfgEV.ajoutes || []).map(a => ({ id: "mna-" + slug(a.nom), name: a.nom, association: a.association || "", ajoute: true }))]
+    .filter(x => x.name && !masques.has(x.id) && !vus.has(x.id) && vus.add(x.id))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"));
+  tousNomsSites = [...new Set([...nomsDossiers, ...nomsAssos])].sort((a, b) => a.localeCompare(b, "fr"));
+};
+let ui = { gererSites: false, passageId: null, siteChoisi: "", date: dateKey(new Date()), ouvertsSuivi: new Set(), anneeImpr: new Date().getFullYear() };
 let photos = [], photosPrec = [], unsubPhotos = null, unsubPhotosPrec = null, suiviPhotos = null, suiviPrecId = null;
 let unsubs = [], saveTimer = null, statut = "", enAttente = null, renduDiffere = false;
 
@@ -67,9 +78,19 @@ function monter(container, u, quelleVue) {
     container.dataset.evEcoute = "1";
   }
   container.innerHTML = `<div class="hint" style="padding:24px;text-align:center">Chargement…</div>`;
-  unsubs.push(watchAssociations(a => { sitesAssos = sitesDepuisAssociations(a); majSites(); render(); }));
+  unsubs.push(watchAssociations(a => {
+    sitesAssos = sitesDepuisAssociations(a);
+    nomsAssos = (a || []).flatMap(x => (x.sites || []).map(st => st.nom)).filter(Boolean);
+    majSites(); render();
+  }));
+  unsubs.push(onSnapshot(CFG_REF(), (snap) => {
+    const d = snap.exists() ? snap.data() : {};
+    cfgEV = { ajoutes: Array.isArray(d.ajoutes) ? d.ajoutes : [], masques: Array.isArray(d.masques) ? d.masques : [] };
+    majSites(); render();
+  }, (e) => { console.warn("Liste des sites espaces verts :", e); }));
   unsubs.push(watchSitesDossiers(l => {
     const vus = new Set();
+    nomsDossiers = (l || []).filter(d => !d.supprimeLe && d.nom).map(d => d.nom);
     sitesDossiers = (l || []).filter(d => !d.supprimeLe && (/MNA/i.test(d.groupe || "") || /MNA/i.test(d.association || "") || /MNA/i.test(d.nom || "")))
       .map(d => ({ id: "mna-" + slug(d.nom), name: d.nom, association: d.association || "Agropolis" }))
       .filter(x => x.name && !vus.has(x.id) && vus.add(x.id)).sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"));
@@ -135,6 +156,28 @@ async function envoyer() {
 }
 function majStatut() { const el = conteneur?.querySelector(".ev-statut"); if (el) el.textContent = statut; }
 
+// ---------- Gestion de la liste des sites (responsables) ----------
+function gestionSitesHTML() {
+  if (!ui.gererSites) return `<div><button type="button" class="nav-btn" data-ev-gerer>⚙️ Gérer la liste des sites</button></div>`;
+  const dispo = tousNomsSites.filter(n => !sites.some(s => s.id === "mna-" + slug(n)));
+  return `<div class="ev-gestion">
+    <b>⚙️ Sites du suivi espaces verts</b>
+    <div class="hint">Ajoute ou retire un site : le changement est visible tout de suite par l'agent. Les passages déjà faits sont conservés.</div>
+    <div class="ev-gest-liste">${sites.map(s => `<span class="ev-gest-site">🏡 ${esc(s.name)} <button type="button" class="del-btn" data-ev-retirer="${esc(s.id)}" title="Retirer de la liste">✕</button></span>`).join("") || `<span class="hint">Liste vide.</span>`}</div>
+    <div class="ev-gest-ajout">
+      <input class="ev-nv-site" list="ev-sites-dispo" placeholder="Nom du site (ex. Résidence Les Prêles)">
+      <datalist id="ev-sites-dispo">${dispo.map(n => `<option value="${esc(n)}">`).join("")}</datalist>
+      <button type="button" class="nav-btn" data-ev-ajouter>➕ Ajouter</button>
+    </div>
+    ${(cfgEV.masques || []).length ? `<div class="hint">Retirés : ${(cfgEV.masques || []).map(id => `<button type="button" class="ev-lien" data-ev-remettre="${esc(id)}">↩️ ${esc(id.replace(/^mna-/, "").replace(/-/g, " "))}</button>`).join(" ")}</div>` : ""}
+    <div><button type="button" class="nav-btn" data-ev-gerer>✔️ Terminé</button></div>
+  </div>`;
+}
+const sauverCfg = async (patch, msg) => {
+  try { await setDoc(CFG_REF(), { ...patch, majLe: Date.now(), majPar: user?.nom || user?.email || "" }, { merge: true }); toast(msg, "success"); }
+  catch (err) { toast("Échec de l'enregistrement : " + (err.message || err), "error"); }
+};
+
 // ---------- Rendu : intervention ----------
 function vueChoix() {
   const mna = sitesMNA();
@@ -146,8 +189,8 @@ function vueChoix() {
       <div class="ev-sites">${mna.map(s => {
         const ret = passages ? retardsSite(passages, s.id).filter(r => !r.jamais).length : 0;
         return `<button class="ev-site ${ui.siteChoisi === s.id ? "actif" : ""}" data-site="${esc(s.id)}">🏡 ${esc(s.name)}${ret ? ` <span class="ev-badge">${ret} en retard</span>` : ""}</button>`;
-      }).join("") || `<div class="hint">Aucun site MNA trouvé.</div>`}</div>
-      ${EDITEURS.includes(user?.role) ? `<div class="hint">Il manque un site ? Dans 🏠 Dossiers de site, mets « MNA » dans son groupe.</div>` : ""}
+      }).join("") || `<div class="hint">Aucun site dans la liste.</div>`}</div>
+      ${EDITEURS.includes(user?.role) ? gestionSitesHTML() : ""}
       <label class="hint">Date de l'intervention <input type="date" class="ev-date" value="${esc(ui.date)}" max="${dateKey(new Date())}"></label>
       <div><button class="nav-btn ev-gros" data-act="commencer" ${ui.siteChoisi ? "" : "disabled"}>📝 Ouvrir la feuille</button></div>
     </div>
@@ -247,7 +290,7 @@ function vueSuivi() {
     ${aVerifier.length ? `<div class="form-card ev-averifier"><b>⏳ ${aVerifier.length} feuille${aVerifier.length > 1 ? "s" : ""} à vérifier</b><div class="hint">Envoyées par l'agent. Ouvre-la, corrige si besoin, puis « ✅ Valider la feuille ».</div>
       ${aVerifier.map(p => `<div class="ev-ligne" data-ouvrir="${esc(p.id)}"><div><b>${esc(p.siteName || "")}</b> · ${esc(fmt(p.date))}<br><small class="hint">${esc(p.agentNom || "")} · ${tachesFaites(p).length} prestation(s) cochée(s)</small></div><span>👉</span></div>`).join("")}</div>` : ""}
     <div class="form-card ev-barre">
-      <b>🌿 Suivi des espaces verts — sites MNA</b>
+      <b>🌿 Suivi des espaces verts</b>
       <span class="ev-vues"><button type="button" class="${ui.suiviVue !== "detail" ? "actif" : ""}" data-ev-vue="stats">📊 Tableau de bord</button><button type="button" class="${ui.suiviVue === "detail" ? "actif" : ""}" data-ev-vue="detail">📜 Détail et impression</button></span>
       ${user?.role === "super_admin" && passages.length ? `<button type="button" class="del-btn ev-tout-effacer" data-ev-tout-effacer>🧹 Tout effacer (tests)</button>` : ""}
       <label class="hint">Année à imprimer <select class="ev-annee">${[0, 1, 2].map(k => new Date().getFullYear() - k).map(a => `<option ${a === annee ? "selected" : ""}>${a}</option>`).join("")}</select></label>
@@ -274,7 +317,7 @@ function vueSuivi() {
             </div>${user?.role === "super_admin" ? `<button class="del-btn" data-ev-del="${esc(p.id)}" title="Effacer ce passage">🗑️</button>` : `<span>›</span>`}
           </div>`).join("") : `<div class="hint">Aucun passage.</div>`) : ""}
       </div>`;
-    }).join("") || `<div class="hint">Aucun site MNA trouvé.</div>`}`;
+    }).join("") || `<div class="hint">Aucun site dans la liste.</div>`}`;
 }
 
 function render() {
@@ -314,6 +357,30 @@ async function surClic(e) {
   }
   const voir = t.closest("[data-voir]");
   if (voir) { const w = window.open(); if (w) w.document.write(`<title>Photo</title><body style="margin:0;background:#000"><img src="${voir.src}" style="max-width:100%;max-height:100vh;display:block;margin:auto">`); return; }
+  if (t.closest("[data-ev-gerer]")) { ui.gererSites = !ui.gererSites; render(); return; }
+  if (t.closest("[data-ev-ajouter]")) {
+    const nom = (conteneur.querySelector(".ev-nv-site")?.value || "").trim().replace(/\s+/g, " ");
+    if (!nom) { toast("Indique le nom du site", "error"); return; }
+    const id = "mna-" + slug(nom);
+    const masques = (cfgEV.masques || []).filter(x => x !== id);
+    if (sites.some(s => s.id === id)) { toast("Ce site est déjà dans la liste", "error"); return; }
+    const deja = (cfgEV.ajoutes || []).some(a => "mna-" + slug(a.nom) === id);
+    const ajoutes = deja ? cfgEV.ajoutes : [...(cfgEV.ajoutes || []), { nom, ajouteLe: Date.now(), ajoutePar: user?.nom || user?.email || "" }];
+    document.activeElement?.blur?.();
+    await sauverCfg({ ajoutes, masques }, `« ${nom} » ajouté`); return;
+  }
+  const retirer = t.closest("[data-ev-retirer]");
+  if (retirer) {
+    const id = retirer.dataset.evRetirer; const s = sites.find(x => x.id === id); if (!s) return;
+    if (!await confirmDialog(`Retirer « ${s.name} » de la liste ? Ses passages déjà enregistrés sont conservés.`, { danger: true, texteValider: "Retirer" })) return;
+    const ajoutes = (cfgEV.ajoutes || []).filter(a => "mna-" + slug(a.nom) !== id);
+    const masques = s.ajoute && ajoutes.length !== (cfgEV.ajoutes || []).length && !(sitesDossiers.length ? sitesDossiers : sitesAssos).some(x => x.id === id)
+      ? (cfgEV.masques || []) : [...new Set([...(cfgEV.masques || []), id])];
+    if (ui.siteChoisi === id) ui.siteChoisi = "";
+    await sauverCfg({ ajoutes, masques }, `« ${s.name} » retiré`); return;
+  }
+  const remettre = t.closest("[data-ev-remettre]");
+  if (remettre) { await sauverCfg({ masques: (cfgEV.masques || []).filter(x => x !== remettre.dataset.evRemettre) }, "Site remis dans la liste"); return; }
   const site = t.closest("[data-site]");
   if (site) { ui.siteChoisi = site.dataset.site; render(); return; }
   const ouvrir = t.closest("[data-ouvrir]");
@@ -438,6 +505,11 @@ async function imprimer(siteId) {
 
 const STYLE = `<style>
   .ev-sites{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .ev-gestion{margin:10px 0;padding:10px;border:1px dashed var(--border, #ccc);border-radius:10px;display:flex;flex-direction:column;gap:8px}
+  .ev-gest-liste{display:flex;flex-wrap:wrap;gap:6px}
+  .ev-gest-site{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:999px;background:var(--card-2, rgba(127,127,127,.12))}
+  .ev-gest-ajout{display:flex;gap:6px;flex-wrap:wrap}.ev-gest-ajout input{flex:1;min-width:180px}
+  .ev-lien{background:none;border:none;color:var(--gold, inherit);cursor:pointer;text-decoration:underline;padding:0 4px}
   .ev-site{background:var(--panel-alt);border:2px solid var(--border);color:var(--text);border-radius:12px;padding:12px 14px;font-weight:600;cursor:pointer;font-size:14px}
   .ev-site.actif{border-color:var(--teal);background:color-mix(in srgb,var(--teal) 18%,var(--panel-alt))}
   .ev-badge{display:inline-block;margin-left:6px;font-size:11px;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px}
