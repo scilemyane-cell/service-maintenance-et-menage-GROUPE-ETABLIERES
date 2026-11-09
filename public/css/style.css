@@ -4825,6 +4825,7 @@ html.va-ouvert,html.va-ouvert body{overflow:hidden}
 .clo-marques{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.clo-marques .clo-forfait{margin-left:0}
 .clo-marques .clo-badge{padding:2px 9px;font-size:11px}
 .year-cal-day.enfant{background:#8b5cf6;color:#fff;font-weight:700}
+.year-cal-day.mtt{background:#F97316;color:#fff;font-weight:700}
 /* Plan des compteurs : recherche d'adresse */
 .va-recherche{position:absolute;top:14px;left:14px;z-index:650;width:min(360px,calc(100% - 200px));min-width:200px}
 .va-recherche input{width:100%;padding:9px 12px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;color:#111827;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)}

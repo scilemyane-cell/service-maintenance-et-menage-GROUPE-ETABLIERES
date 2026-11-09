@@ -1,6 +1,7 @@
 // tableau-direct.js — « 🛰️ Tableau de bord direct » : tout voir d'un coup d'œil (superviseurs).
 // Uniquement des écoutes déjà partagées par l'appli (copies locales) : quasi aucune lecture en plus.
 // Tout se met à jour en direct ; chaque carte mène au bon endroit d'un clic.
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { esc, resolveDayN1, resolveDayN2, computeWeeklyTitulaires } from "./astreinte-logic.js";
 import { watchDemandes, watchPeople, watchAbsences, watchInterventionsACompleter } from "./firestore-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
@@ -108,8 +109,8 @@ function render() {
   const coulStatut = (s) => { const v = sa(s); return v.startsWith("realis") ? "#10b981" : v.startsWith("annul") ? "#94a3b8" : v.startsWith("planif") ? "#8b5cf6" : v.includes("commande") || v.includes("devis") ? "#f59e0b" : "#3b82f6"; };
 
   // Équipe.
-  const absents = st.absences.filter(a => String(a.start || "").slice(0, 10) <= auj && String(a.end || a.start || "").slice(0, 10) >= auj);
-  const TYP = { conge: "Congé", rtt: "RTT", arret: "Arrêt", enfant: "Enfant malade" };
+  const absents = st.absences.filter(a => String(a.start || "").slice(0, 10) <= auj && String(a.end || a.start || "").slice(0, 10) >= auj && compteCeJour(a, auj));
+  const TYP = { conge: "Congé", rtt: "RTT", arret: "Arrêt", enfant: "Enfant malade", mtt: "Mi-temps thérap." };
   const ast = astreinte();
 
   // Points à surveiller.

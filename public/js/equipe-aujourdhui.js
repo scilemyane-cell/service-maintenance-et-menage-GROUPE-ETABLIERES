@@ -1,13 +1,14 @@
 // equipe-aujourdhui.js — Tuile « 👥 Équipe & absences », onglet « Aujourd'hui » :
 // qui est là, qui est absent (type, jusqu'à quand), et les absences des 14 prochains jours.
 // Mêmes données que l'astreinte, l'écran atelier et les demandes (collection « absences »).
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { esc } from "./astreinte-logic.js";
 import { watchPeople, watchAbsences } from "./firestore-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
 
 let unsubs = [], conteneur = null;
 const st = { people: null, absences: [], coord: {} };
-const TYPES = { conge: ["🌴", "Congé"], rtt: ["🕒", "RTT"], arret: ["🤒", "Arrêt"], enfant: ["🧒", "Enfant malade"] };
+const TYPES = { conge: ["🌴", "Congé"], rtt: ["🕒", "RTT"], arret: ["🤒", "Arrêt"], enfant: ["🧒", "Enfant malade"], mtt: ["🩺", "Mi-temps thérapeutique"] };
 const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const frJ = (j, opt = { weekday: "short", day: "numeric", month: "short" }) => new Date(j + "T12:00").toLocaleDateString("fr-FR", opt);
 const sansAcc = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -25,7 +26,7 @@ function personnes() {
 function render() {
   if (!conteneur || !document.contains(conteneur)) return;
   const auj = iso(new Date()), dans14 = iso(new Date(Date.now() + 14 * 864e5));
-  const absDe = (n, j) => st.absences.find(a => sansAcc(a.person) === sansAcc(n) && String(a.start || "").slice(0, 10) <= j && String(a.end || a.start || "").slice(0, 10) >= j);
+  const absDe = (n, j) => st.absences.find(a => sansAcc(a.person) === sansAcc(n) && String(a.start || "").slice(0, 10) <= j && String(a.end || a.start || "").slice(0, 10) >= j && compteCeJour(a, j));
   const pers = personnes();
   const absents = pers.map(n => ({ n, a: absDe(n, auj) })).filter(x => x.a);
   const presents = pers.filter(n => !absDe(n, auj));

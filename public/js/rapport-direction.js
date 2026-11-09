@@ -6,6 +6,7 @@
 // énergie, stock, absences, prévisionnel). Graphiques en HTML/CSS pur pour
 // une impression nette, sans dépendance.
 
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { esc } from "./astreinte-logic.js";
 
 const fmtNb = (n, dec = 0) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: dec }).format(n || 0);
@@ -202,7 +203,7 @@ export function ouvrirRapportDirection(ctx) {
     ${sousSeuil.length ? `<h3>Produits sous le seuil minimum</h3>${table(["Produit", "Stock", "Seuil", "Module"], sousSeuil.slice(0, 20).map(([x, m]) => [esc(x.nom || "?"), `<b class="rouge">${fmtNb(x.stockActuel)}</b>`, fmtNb(x.stockMin), esc(m)]))}` : ""}
   </section>`;
 
-  const TYPES_ABS = { conge: "Congés", rtt: "RTT", arret: "Arrêts", enfant: "Enfant malade" };
+  const TYPES_ABS = { conge: "Congés", rtt: "RTT", arret: "Arrêts", enfant: "Enfant malade", mtt: "Mi-temps thérap." };
   const secAbsences = !v("astreinte") ? "" : `
   <section>
     <h2><span>5</span> Absences de l'équipe</h2>

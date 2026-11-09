@@ -2,6 +2,7 @@
 // pour les techniciens sur le terrain (téléphone) : on choisit un site, on
 // voit ses demandes en cartes, et on les traite en un geste (statut, date
 // d'intervention, intervenant, commentaire, « ✓ Réalisé aujourd'hui »).
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { esc } from "./astreinte-logic.js";
 import { ouvrirImpressionSite } from "./demandes-impression.js";
 import { preparerFenetre, ouvrirTicketMail, prechargerCaptureTicket } from "./demandes-ticket.js";
@@ -82,7 +83,7 @@ function estAbsentAujourdhui(u) {
   const auj = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const pers = personnesDuCompte(u).filter(Boolean);
   if (!pers.length) return false;
-  const absentes = abs.liste.filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj).map(a => normNom(a.person));
+  const absentes = abs.liste.filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj && compteCeJour(a, auj)).map(a => normNom(a.person));
   const absente = (p) => { const n = normNom(p), pr = n.split(/\s+/)[0]; return absentes.some(a => a === n || a === pr || a.split(/\s+/)[0] === pr && (a.split(/\s+/).length === 1 || n.split(/\s+/).length === 1)); };
   return pers.every(absente);
 }

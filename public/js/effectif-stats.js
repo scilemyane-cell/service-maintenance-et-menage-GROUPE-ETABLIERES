@@ -2,6 +2,7 @@
 // nombre de techniciens réellement présents (jours ouvrés, absences, fériés,
 // dates de début) mis en regard des demandes d'intervention clôturées.
 // Utilisé dans Statistiques et dans les statistiques du Suivi des demandes.
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { esc } from "./astreinte-logic.js";
 
 const pad = n => String(n).padStart(2, "0");
@@ -41,7 +42,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
   const feries = {}; const estFerie = (iso) => (feries[iso.slice(0, 4)] || (feries[iso.slice(0, 4)] = feriesAnnee(+iso.slice(0, 4)))).has(iso);
   // Nom de l'absence comparé sans accents ni majuscules (« kevin » = « Kevin »).
   const memePers = (a, t) => { const x = norm(a), y = norm(t); return x === y || (x && y && (x.split(/\s+/)[0] === y || y.split(/\s+/)[0] === x)); };
-  const absent = (t, iso) => (data.absences || []).some(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || ""));
+  const absent = (t, iso) => (data.absences || []).some(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || "") && compteCeJour(a, iso));
   const nomCle = (x) => norm(x).split(/[\s/.,-]+/)[0];
   // Petite faute de frappe tolérée sur le prénom (« Antony » = « Anthony », « Kevin » = « Kévin »).
   const proche = (a, b) => { if (a === b) return true; if (Math.min(a.length, b.length) < 4 || Math.abs(a.length - b.length) > 1) return false;
@@ -89,7 +90,7 @@ export function effectifEtClotures(data, p, demandesToutes) {
     return { f: 1, type: null };
   };
   const present = (t, iso) => jour(t, iso).f > 0;
-  const typeAbs = (t, iso) => { const a = (data.absences || []).find(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || "")); return a ? (["conge", "rtt", "arret"].includes(a.type) ? a.type : "autre") : null; };
+  const typeAbs = (t, iso) => { const a = (data.absences || []).find(a => memePers(a.person, t) && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || "") && compteCeJour(a, iso)); return a ? (["conge", "rtt", "arret"].includes(a.type) ? a.type : "autre") : null; };
   const jourParJour = []; // [{ iso, etat: { tech: "P" | "conge" | "rtt" | "arret" | "autre" | "H" }, clos: { tech: n } }]
   const binome = (t) => { const b = Object.entries(data.binomes || {}).find(([a]) => memePers(a, t))?.[1]; return b ? techs.find(x => memePers(b, x)) || null : null; };
   // Binôme qui clôture « sur le même espace » : pendant l'absence de l'un, ce qui est clôturé
@@ -252,7 +253,7 @@ export function heuresPerduesRepos(data, p) {
   const [hR, mR] = String(data.heureReprise || "08:00").split(":").map(Number);
   const JOURNEE = 7; // plafond : une journée de travail (35 h / 5)
   const feries = {}; const estFerie = (iso) => (feries[iso.slice(0, 4)] || (feries[iso.slice(0, 4)] = feriesAnnee(+iso.slice(0, 4)))).has(iso);
-  const absent = (t, iso) => (data.absences || []).some(a => a.person === t && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || ""));
+  const absent = (t, iso) => (data.absences || []).some(a => a.person === t && iso >= (versIso(a.start) || "9") && iso <= (versIso(a.end) || versIso(a.start) || "") && compteCeJour(a, iso));
   const hm = (t) => { const [h, m] = String(t).split(":").map(Number); return [h || 0, m || 0]; };
   const parCle = {};
   (data.interventions || []).forEach(i => {

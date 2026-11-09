@@ -1,3 +1,4 @@
+import { compteCeJour, joursAbsence, LIB_MTT, COUL_MTT, JOURS_MTT, libJoursOff } from "./absences-util.js";
 import { capturerAncre, restaurerAncre } from "./ancre-scroll.js";
 import { differerSiSaisieDate } from "./saisie-dates.js";
 import {
@@ -1163,7 +1164,7 @@ function moisScolaireIdxCourant() {
 const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 function absenceDuJour(person, dateStr) {
-  return state.absences.find(a => a.person === person && dateStr >= a.start && dateStr <= a.end) || null;
+  return state.absences.find(a => a.person === person && dateStr >= a.start && dateStr <= a.end && compteCeJour(a, dateStr)) || null;
 }
 
 // ---- Sélecteur association / sous-service / site, réutilisé par le
@@ -1466,7 +1467,7 @@ function renderVueMultiPersonnes(container, allPeople) {
                   const interv = interventionsParPersonneDate[`${p}|${k}`];
                   const weekend = d.getDay() === 0 || d.getDay() === 6;
                   let bg = "transparent", titre = "Présent";
-                  if (abs) { bg = abs.type === "arret" ? "var(--red)" : abs.type === "enfant" ? "var(--violet-abs, #8b5cf6)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
+                  if (abs) { bg = abs.type === "mtt" ? COUL_MTT : abs.type === "arret" ? "var(--red)" : abs.type === "enfant" ? "var(--violet-abs, #8b5cf6)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "mtt" ? LIB_MTT : abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
                   else if (j.ferie) { titre = j.ferie; }
                   else if (weekend) { titre = "Week-end"; }
                   const bordureCol = j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : "";
@@ -1548,10 +1549,10 @@ function renderPlanningIndividuel(container, perms) {
       const classes = ["year-cal-day"];
       if (horsMois) classes.push("hors-mois");
       else if (weekend) classes.push("weekend");
-      if (abs) classes.push(abs.type === "arret" ? "arret" : abs.type === "enfant" ? "enfant" : abs.type === "rtt" ? "rtt" : "conge");
+      if (abs) classes.push(abs.type === "mtt" ? "mtt" : abs.type === "arret" ? "arret" : abs.type === "enfant" ? "enfant" : abs.type === "rtt" ? "rtt" : "conge");
       if (k === todayKey) classes.push("today");
       if (cliquable) classes.push("clickable");
-      const titre = abs ? (abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : (cliquable ? (infoInterv ? "Cliquer pour voir/modifier l'intervention" : "Cliquer pour ajouter une intervention ponctuelle") : "");
+      const titre = abs ? (abs.type === "mtt" ? LIB_MTT : abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : (cliquable ? (infoInterv ? "Cliquer pour voir/modifier l'intervention" : "Cliquer pour ajouter une intervention ponctuelle") : "");
       const dotTitre = infoInterv ? (infoInterv.recurrente ? "Intervention programmée (récurrence)" : "Intervention") : "";
       return `<div class="${classes.join(" ")}" title="${esc(titre)}" ${cliquable ? `data-date="${k}"` : ""} style="${cliquable ? "cursor:pointer" : ""}">${d.getDate()}${infoInterv ? `<span class="year-cal-dot${infoInterv.recurrente ? " year-cal-dot-recur" : ""}" title="${esc(dotTitre)}"></span>` : ""}</div>`;
     }).join("");
@@ -1942,11 +1943,12 @@ function renderVueEnsembleAbsences(allPeople) {
                   dans.forEach(a => {
                     const debutEffectif = new Date(Math.max(new Date(a.start), m.debut));
                     const finEffective = new Date(Math.min(new Date(a.end), m.fin));
-                    const j = Math.round((finEffective - debutEffectif) / 86400000) + 1;
+                    const j = joursAbsence(a, dateKey(debutEffectif), dateKey(finEffective));
+                    if (!j) return;
                     parType[a.type] = (parType[a.type] || 0) + j;
                   });
-                  const couleur = parType.arret ? "var(--red)" : parType.enfant ? "var(--violet-abs, #8b5cf6)" : parType.conge ? "var(--gold)" : "var(--teal)";
-                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "conge" ? "congé" : t === "rtt" ? libelleRtt(p) : t === "enfant" ? "enfant malade" : "arrêt"}`).join(", ");
+                  const couleur = parType.arret ? "var(--red)" : parType.mtt ? COUL_MTT : parType.enfant ? "var(--violet-abs, #8b5cf6)" : parType.conge ? "var(--gold)" : "var(--teal)";
+                  const detail = Object.entries(parType).map(([t, j]) => `${j} ${t === "mtt" ? "mi-temps thérap." : t === "conge" ? "congé" : t === "rtt" ? libelleRtt(p) : t === "enfant" ? "enfant malade" : "arrêt"}`).join(", ");
                   return `<td style="color:${couleur};font-weight:700" title="${esc(detail)}">${Object.values(parType).reduce((s, v) => s + v, 0)}j</td>`;
                 }).join("")}
               </tr>
@@ -2010,7 +2012,7 @@ function renderAbsences(container, perms) {
   const totals = {}, totalsRtt = {};
   allPeople.forEach(p => {
     const joursAbs = state.absences.filter(a => a.person === p);
-    totals[p] = joursAbs.reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
+    totals[p] = joursAbs.reduce((s, a) => s + joursAbsence(a, a.start, a.end), 0);
     totalsRtt[p] = joursAbs.filter(a => a.type === "rtt").reduce((s, a) => s + ((new Date(a.end) - new Date(a.start)) / 86400000 + 1), 0);
   });
   // Origine "PRTT" : marquée par source:"prtt" sur les imports récents, ou
@@ -2034,10 +2036,11 @@ function renderAbsences(container, perms) {
       <div class="form-card">
         <div class="form-grid">
           <label>Personne<select id="a-person">${allPeople.map(p => `<option value="${esc(p)}" ${ui.absForm.person === p ? 'selected' : ''}>${esc(p)}</option>`).join("")}</select></label>
-          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>${libelleRtt(ui.absForm.person || allPeople[0])}</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option><option value="enfant" ${ui.absForm.type === 'enfant' ? 'selected' : ''}>Absence enfant malade</option></select></label>
+          <label>Type<select id="a-type"><option value="conge" ${ui.absForm.type === 'conge' ? 'selected' : ''}>Congé</option><option value="rtt" ${ui.absForm.type === 'rtt' ? 'selected' : ''}>${libelleRtt(ui.absForm.person || allPeople[0])}</option><option value="arret" ${ui.absForm.type === 'arret' ? 'selected' : ''}>Arrêt de travail</option><option value="enfant" ${ui.absForm.type === 'enfant' ? 'selected' : ''}>Absence enfant malade</option><option value="mtt" ${ui.absForm.type === 'mtt' ? 'selected' : ''}>🩺 Mi-temps thérapeutique</option></select></label>
           <label>Du<input type="date" id="a-start" value="${esc(ui.absForm.start)}"></label>
           <label>Au<input type="date" id="a-end" value="${esc(ui.absForm.end)}"></label>
           <label class="desc-field">Note<input id="a-note" value="${esc(ui.absForm.note)}" placeholder="optionnel"></label>
+          <div class="mtt-jours" ${ui.absForm.type === 'mtt' ? "" : "hidden"} style="grid-column:1/-1;font-size:12.5px"><b style="display:block;margin-bottom:4px">🩺 Jours NON travaillés <small style="font-weight:400;color:var(--text-dim)">(compté absent ces jours-là ; les autres jours il est présent à mi-temps — pas d'astreinte sur toute la période)</small></b>${JOURS_MTT.map(([n, l]) => `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:600"><input type="checkbox" data-mtt-j="${n}" ${(ui.absForm.joursOff || []).map(Number).includes(n) ? "checked" : ""}> ${l}</label>`).join("")}</div>
         </div>
         <button class="add-btn" id="add-abs">${ui.absEditingId ? "💾 Enregistrer les modifications" : "➕ Ajouter l'absence"}</button>
         ${ui.absEditingId ? `<button type="button" class="nav-btn" id="cancel-abs-edit" style="margin-left:8px">✕ Annuler</button>` : ""}
@@ -2059,8 +2062,8 @@ function renderAbsences(container, perms) {
                 const days = (new Date(a.end) - new Date(a.start)) / 86400000 + 1;
                 return `<tr ${ui.absEditingId === a.id ? 'style="outline:2px solid var(--gold);outline-offset:-2px"' : ""}>
                   <td>${esc(a.person)}</td>
-                  <td><span class="tag" style="background:${a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : a.type === 'enfant' ? 'var(--violet-abs, #8b5cf6)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? libelleRtt(a.person) : a.type === 'enfant' ? 'Enfant malade' : 'Arrêt'}</span></td>
-                  <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${days}</td>
+                  <td><span class="tag" style="background:${a.type === 'mtt' ? COUL_MTT : a.type === 'conge' ? 'var(--gold)' : a.type === 'rtt' ? 'var(--teal)' : a.type === 'enfant' ? 'var(--violet-abs, #8b5cf6)' : 'var(--red)'};${a.type !== 'conge' ? 'color:#fff' : ''}">${a.type === 'mtt' ? '🩺 Mi-temps thérap.' : a.type === 'conge' ? 'Congé' : a.type === 'rtt' ? libelleRtt(a.person) : a.type === 'enfant' ? 'Enfant malade' : 'Arrêt'}</span>${a.type === 'mtt' ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${esc(libJoursOff(a))}</div>` : ''}</td>
+                  <td>${fmtShort(new Date(a.start))}</td><td>${fmtShort(new Date(a.end))}</td><td>${a.type === 'mtt' ? joursAbsence(a, a.start, a.end) : days}</td>
                   <td>${esc(a.note || "")}${estPrtt(a) ? ` <span class="tag" style="font-size:9px">📥 PRTT</span>` : ""}</td>
                   ${perms.canManageAbsences ? `<td style="white-space:nowrap"><button class="nav-btn" data-edit-abs="${a.id}" style="padding:4px 8px;font-size:11px">✏️</button> <button class="del-btn" data-del="${a.id}">🗑️</button></td>` : ""}
                 </tr>`;
@@ -2075,8 +2078,9 @@ function renderAbsences(container, perms) {
     ["person", "type", "start", "end", "note"].forEach(f => {
       const el = document.getElementById("a-" + f);
       el.addEventListener("input", () => { ui.absForm[f] = el.value; });
-      el.addEventListener("change", () => { ui.absForm[f] = el.value; if (f === "person") renderAll(); });
+      el.addEventListener("change", () => { ui.absForm[f] = el.value; if (f === "person" || f === "type") renderAll(); });
     });
+    container.querySelectorAll("[data-mtt-j]").forEach(cb => cb.addEventListener("change", () => { ui.absForm.joursOff = [...container.querySelectorAll("[data-mtt-j]:checked")].map(x => +x.dataset.mttJ); }));
     document.getElementById("abs-filtre-personne")?.addEventListener("change", (e) => { ui.absFiltrePersonne = e.target.value; renderAll(); });
     document.getElementById("abs-filtre-origine")?.addEventListener("change", (e) => { ui.absFiltreOrigine = e.target.value; renderAll(); });
     document.getElementById("add-abs").addEventListener("click", async () => {
@@ -2087,10 +2091,10 @@ function renderAbsences(container, perms) {
       }
       if (ui.absForm.end < ui.absForm.start) { window.toast("La date de fin doit être après la date de début."); return; }
       if (ui.absEditingId) {
-        await updateAbsence(ui.absEditingId, { person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note });
+        await updateAbsence(ui.absEditingId, { person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, joursOff: ui.absForm.type === "mtt" ? (ui.absForm.joursOff || []) : [] });
         ui.absEditingId = null;
       } else {
-        await addAbsence({ person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, createdBy: mountedUser.uid });
+        await addAbsence({ person: ui.absForm.person, type: ui.absForm.type, start: ui.absForm.start, end: ui.absForm.end, note: ui.absForm.note, ...(ui.absForm.type === "mtt" ? { joursOff: ui.absForm.joursOff || [] } : {}), createdBy: mountedUser.uid });
       }
       ui.absForm.note = "";
       renderAll();
@@ -2110,18 +2114,20 @@ function renderAbsences(container, perms) {
         fond.innerHTML = `<div class="cd-fenetre" style="max-width:460px"><div class="cd-fenetre-tete"><div><b>✏️ Modifier l'absence</b><small>${esc(a.person)}</small></div><button class="cd-x" data-x>✕</button></div>
           <div class="stack" style="gap:10px">
             <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Personne<select data-f="person">${[...new Set(allPeople)].map(p => `<option value="${esc(p)}" ${p === a.person ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
-            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Type<select data-f="type"><option value="conge" ${a.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${a.type === "rtt" ? "selected" : ""}>${esc(libelleRtt(a.person))}</option><option value="arret" ${a.type === "arret" ? "selected" : ""}>Arrêt</option><option value="enfant" ${a.type === "enfant" ? "selected" : ""}>Enfant malade</option></select></label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Type<select data-f="type"><option value="conge" ${a.type === "conge" ? "selected" : ""}>Congé</option><option value="rtt" ${a.type === "rtt" ? "selected" : ""}>${esc(libelleRtt(a.person))}</option><option value="arret" ${a.type === "arret" ? "selected" : ""}>Arrêt</option><option value="enfant" ${a.type === "enfant" ? "selected" : ""}>Enfant malade</option><option value="mtt" ${a.type === "mtt" ? "selected" : ""}>Mi-temps thérapeutique</option></select></label>
             <div style="display:flex;gap:10px"><label style="flex:1;display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Du<input type="date" data-f="start" value="${esc(a.start)}"></label><label style="flex:1;display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Au<input type="date" data-f="end" value="${esc(a.end)}"></label></div>
             <label style="display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:13px">Note<input data-f="note" value="${esc(a.note || "")}" placeholder="optionnel"></label>
+            <div class="mtt-jours" ${a.type === "mtt" ? "" : "hidden"} style="grid-column:1/-1;font-size:12.5px"><b style="display:block;margin-bottom:4px">🩺 Jours NON travaillés <small style="font-weight:400;color:var(--text-dim)">(compté absent ces jours-là ; les autres jours il est présent à mi-temps — pas d'astreinte sur toute la période)</small></b>${JOURS_MTT.map(([n, l]) => `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-weight:600"><input type="checkbox" data-mj="${n}" ${(a.joursOff || []).map(Number).includes(n) ? "checked" : ""}> ${l}</label>`).join("")}</div>
             <div style="display:flex;gap:8px;justify-content:flex-end"><button class="nav-btn" data-x>Annuler</button><button class="add-btn" data-ok>💾 Enregistrer</button></div>
           </div></div>`;
         document.body.append(fond);
         const fermer = () => fond.remove();
         fond.querySelectorAll("[data-x]").forEach(b => b.onclick = fermer);
         fond.addEventListener("click", e => { if (e.target === fond) fermer(); });
+        fond.querySelector('[data-f="type"]').onchange = (e) => { fond.querySelector(".mtt-jours").hidden = e.target.value !== "mtt"; };
         fond.querySelector("[data-ok]").onclick = async (ev) => {
           const v = (k) => fond.querySelector(`[data-f="${k}"]`).value.trim();
-          const maj = { person: v("person"), type: v("type"), start: v("start"), end: v("end"), note: v("note") };
+          const maj = { person: v("person"), type: v("type"), start: v("start"), end: v("end"), note: v("note"), joursOff: v("type") === "mtt" ? [...fond.querySelectorAll("[data-mj]:checked")].map(x => +x.dataset.mj) : [] };
           if (!isPlausibleDate(maj.start) || !isPlausibleDate(maj.end)) { window.toast("Une des dates semble incorrecte — vérifie-la."); return; }
           if (maj.end < maj.start) { window.toast("La date de fin doit être après la date de début."); return; }
           const bouton = ev.currentTarget; bouton.disabled = true;

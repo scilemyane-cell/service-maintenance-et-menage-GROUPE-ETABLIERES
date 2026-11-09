@@ -1,3 +1,4 @@
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
 import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
@@ -336,7 +337,7 @@ function blocMonPlanningHTML(personne) {
   const abs = absences
     .filter(a => estMoi(a.person) && (a.end || a.start) >= auj && a.start <= fin)
     .sort((a, b) => (a.start || "").localeCompare(b.start || ""));
-  const LIB_ABS = { conge: "Congé", rtt: "RTT", arret: "Arrêt", enfant: "Enfant malade" };
+  const LIB_ABS = { conge: "Congé", rtt: "RTT", arret: "Arrêt", enfant: "Enfant malade", mtt: "Mi-temps thérapeutique" };
   return `
     <div class="gh-astreinte">
       <p class="gh-astreinte-titre">Mon planning — 15 prochains jours</p>

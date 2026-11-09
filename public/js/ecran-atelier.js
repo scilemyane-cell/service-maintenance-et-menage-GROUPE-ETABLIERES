@@ -6,6 +6,7 @@
 //   • astreinte du jour (N1 / N2 + téléphone) ;
 //   • horloge et date en grand.
 // Bouton « Plein écran » : l'écran garde l'appli affichée sans veille.
+import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { db } from "./firebase-init.js";
 import { collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, serverTimestamp } from "./firestore-compte.js";
 import { watchUrgencesOuvertes, watchNouvellesDemandes, watchPeople, watchAbsences, watchDemandes } from "./firestore-data.js";
@@ -161,7 +162,7 @@ function renderV2(now, actifsMemos, urgTri, nouv, plein) {
   const tel = (n) => coord[n]?.telephone ? `<em>${esc(coord[n].telephone)}</em>` : "";
   const memosAuj = actifsMemos.slice(0, 12);
   chargerExtrasV2();
-  const absentsAuj = [...new Set((absences || []).filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj).map(a => a.person).filter(Boolean))];
+  const absentsAuj = [...new Set((absences || []).filter(a => a.start && String(a.start).slice(0, 10) <= auj && String(a.end || a.start).slice(0, 10) >= auj && compteCeJour(a, auj)).map(a => a.person).filter(Boolean))];
   const logAuj = logementsV2.filter(r => r.date === auj), logProch = logementsV2.filter(r => r.date > auj);
   const maxT = Math.max(1, ...techs.map(x => x[1]));
   conteneur.innerHTML = `${STYLE}${STYLE_V2}<div class="ea-scene ${window.__modeTele ? "tele" : ""}"><div class="eb">
