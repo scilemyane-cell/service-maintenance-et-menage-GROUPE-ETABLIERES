@@ -64,6 +64,28 @@ function semaine(ws) {
 const heuresJour = (r, d) => (r.pointages?.[d] || []).length ? r.pointages[d].reduce((s, c) => s + duree(c), 0)
   : (r.lignes || []).reduce((s, l) => s + (parseFloat(l.jours?.[d]) || 0), 0);
 
+// Photos classées par passage (dans l'ordre de la tournée), puis par étape :
+// Bacs → Zone avant → Zone après (ou Avant → Après pour un ramassage).
+// « liste » = même ordre à plat, pour la visionneuse.
+function photosClassees(s) {
+  const liste = [], blocs = [];
+  s.passages.filter(x => x.ph.length).forEach(x => {
+    const etapes = [...COLS(x.t), ...[...new Set(x.ph.map(p => p.moment))].filter(m => !COLS(x.t).some(c => c[0] === m)).map(m => [m, LIB_MOMENT[m] || "Autre"])];
+    const fig = (contenu, l, h) => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;background:#fff;break-inside:avoid">
+      <figcaption style="font-size:9px;font-weight:700;margin:0 0 2px;text-transform:uppercase">${esc(l)}</figcaption>${contenu}
+      <div style="font-size:8.5px;color:#666;margin-top:2px">${h}</div></figure>`;
+    const cases = etapes.flatMap(([k, l]) => {
+      const ph = x.ph.filter(p => p.moment === k);
+      if (!ph.length) return [fig(`<div style="aspect-ratio:3/4;border:1px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#999">Pas de photo</div>`, l, "&nbsp;")];
+      return ph.map(p => { liste.push(p); return fig(`<img src="${p.data}" alt="" data-tp-voir="${liste.length - 1}" style="width:100%;aspect-ratio:3/4;object-fit:contain;background:#f3f3f3;border-radius:4px;display:block;cursor:zoom-in">`, l, p.le ? heure(p.le) : "&nbsp;"); });
+    }).join("");
+    blocs.push(`<div style="margin:0 0 10px">
+      <p style="font-size:11px;font-weight:700;margin:8px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px;break-after:avoid">${esc(new Date(x.d + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase())} — ${esc((TYPES[x.t] || TYPES.sortie).toUpperCase())}${x.le ? ` · ${heure(x.le)}` : ""}</p>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${cases}</div></div>`);
+  });
+  return { liste, blocs };
+}
+
 // Fiche imprimable (même présentation que les fiches MNA) -------------------
 function ficheHTML(s, suivi) {
   const coche = (x, k) => x.ph.some(p => p.moment === k) ? "✓" : "";
@@ -84,7 +106,7 @@ function ficheHTML(s, suivi) {
       ${jours.map(j => `<tr><td style="${TD}">${NOMS[j.i]}</td><td style="${TD}">${j.c.map(c => `${esc(c.a || "?")} → ${esc(c.d || "?")}`).join(" · ") || "—"}</td><td style="${TD};text-align:center">${fmtH(j.h)}</td></tr>`).join("") || `<tr><td colspan="3" style="${TD}">Aucune heure pointée.</td></tr>`}
       <tr><td colspan="2" style="${TD};text-align:right"><b>TOTAL SEMAINE</b>${prevu ? ` (prévu ${fmtH(prevu)})` : ""}</td><td style="${TD};text-align:center"><b>${fmtH(tot)}</b></td></tr></tbody></table>`;
   }).join("") || `<p style="font-size:11px">Aucune heure pointée cette semaine.</p>`;
-  const photos = s.passages.flatMap(x => x.ph.map(p => ({ ...p, titre: `${new Date(x.d + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · ${TYPES[x.t] || ""} · ${LIB_MOMENT[p.moment] || ""}` })));
+  const { blocs } = photosClassees(s);
   return `<div class="print-fiche print-trac" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
     <div style="margin-bottom:18px"><img src="img/logo-etablieres.png" alt="Groupe Établières" style="height:60px"></div>
     <p style="font-size:14px;margin:0 0 6px">FICHE DE TRAÇABILITÉ – AGENT D'ENTRETIEN (${esc(disp).toUpperCase()})</p>
@@ -98,10 +120,7 @@ function ficheHTML(s, suivi) {
     ${blocHeures}
     <p style="font-size:12px;margin-top:16px">OBSERVATIONS GÉNÉRALES : ${esc(suivi?.observations || "")}</p>
     ${suivi?.valideLe ? `<p style="font-size:11px;margin-top:6px;color:#11845b">Fiche vérifiée et validée le ${fmtShort(new Date(suivi.valideLe))}${suivi.validePar ? ` par ${esc(suivi.validePar)}` : ""}.</p>` : ""}
-    ${photos.length ? `<div class="trac-photos"><p style="font-size:13px;font-weight:700;margin:16px 0 6px">PHOTOS</p>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${photos.map((p, i) => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
-        <img src="${p.data}" alt="" data-tp-voir="${i}" style="width:100%;height:130px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in">
-        <figcaption style="font-size:9.5px;margin-top:2px">${esc(p.titre)}${p.le ? ` · ${heure(p.le)}` : ""}</figcaption></figure>`).join("")}</div></div>` : ""}
+    ${blocs.length ? `<div class="trac-photos"><p style="font-size:13px;font-weight:700;margin:16px 0 6px">PHOTOS</p>${blocs.join("")}</div>` : ""}
   </div>`;
 }
 
@@ -143,8 +162,8 @@ function brancher(s, suivi) {
   $$("[data-tp-sem]").forEach(b => b.onclick = () => { ui.semaine = dateKey(addDays(new Date(ui.semaine + "T12:00"), 7 * +b.dataset.tpSem)); render(); });
   $$("[data-tp-aller]").forEach(b => b.onclick = () => { ui.semaine = b.dataset.tpAller; render(); });
   $$("[data-tp-print]").forEach(b => b.onclick = () => imprimerFiche(b.dataset.tpPrint === "1"));
-  const photos = s.passages.flatMap(x => x.ph);
-  $$("[data-tp-voir]").forEach(im => im.onclick = () => voirPhotos(photos, +im.dataset.tpVoir));
+  const { liste } = photosClassees(s);
+  $$("[data-tp-voir]").forEach(im => im.onclick = () => voirPhotos(liste, +im.dataset.tpVoir));
   const obs = $("#tp-obs");
   if (obs) obs.onchange = async () => { try { await sauverSuivi({ observations: obs.value.trim() }); window.toast?.("Observations enregistrées"); } catch (e) { alert("Enregistrement impossible : " + (e?.message || e)); } };
   $("[data-tp-valider]")?.addEventListener("click", async (e) => {
