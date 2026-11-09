@@ -7,6 +7,7 @@ import { db, auth } from "./firebase-init.js";
 import { doc, setDoc, onSnapshot, collection, addDoc, deleteDoc, query, where } from "./firestore-compte.js";
 import { esc, dateKey, addDays, HOLIDAYS } from "./astreinte-logic.js";
 import { compresserImage, voirPhotos } from "./demandes-photos.js";
+import { listeVive } from "./listes-config.js";
 
 const TYPES = { sortie: ["⬆️", "Sortie des bacs"], rentree: ["⬇️", "Rentrée des bacs"], picking: ["🧤", "Ramassage des déchets (picking)"] };
 // Photos obligatoires selon l'action : bacs + zone, ou avant / après pour le ramassage.
@@ -15,7 +16,7 @@ const PHOTOS = (t) => t === "picking" ? [["avant", "📸 Avant (déchets au sol)
 // « Fait » : les anciens passages (avant l'ajout de la photo « zone avant ») restent comptés faits.
 const PHOTOS_FAIT = (t) => PHOTOS(t).filter(([k]) => k !== "zoneAvant");
 const LIB_MOMENT = { bacs: "Bacs", zoneAvant: "Zone de tri — avant", zone: "Zone de tri — après", avant: "Avant", apres: "Après" };
-const FLUX = ["Ordures ménagères", "Tri sélectif", "Verre", "Biodéchets", "Encombrants", "Autre"];
+const FLUX = listeVive("poubelles.flux", ["Ordures ménagères", "Tri sélectif", "Verre", "Biodéchets", "Encombrants", "Autre"]);
 const JS = [["1", "Lundi"], ["2", "Mardi"], ["3", "Mercredi"], ["4", "Jeudi"], ["5", "Vendredi"], ["6", "Samedi"], ["0", "Dimanche"]];
 const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const estEditeur = (u) => ["super_admin", "admin", "n1"].includes(u?.role);

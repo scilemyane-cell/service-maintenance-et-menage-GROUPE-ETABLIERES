@@ -11,14 +11,15 @@ import {
   doc, addDoc, updateDoc, getDocs, onSnapshot, deleteDoc,
   collection,
 } from "./firestore-compte.js";
+import { listeVive } from "./listes-config.js";
 
 const COLLECTION = "previsionnel-travaux";
 
-export const CATEGORIES_TRAVAUX = [
+export const CATEGORIES_TRAVAUX = listeVive("previsionnel.categories", [
   "Toiture", "Cuisine", "Salle de bain", "Chambres", "Extincteurs / Sécurité incendie",
   "VMC / Ventilation", "Chauffage", "Électricité", "Plomberie", "Menuiseries",
   "Peinture / Revêtements", "Espaces extérieurs", "Autre",
-];
+]);
 
 export const PRIORITES = { urgent: "🔴 Urgent", a_prevoir: "🟡 À prévoir", si_budget: "🟢 Si budget disponible" };
 export const STATUTS = { propose: "Proposé", valide: "✅ Validé", refuse: "❌ Refusé", reporte: "⏳ Reporté" };

@@ -5,6 +5,7 @@
 
 import { esc } from "./astreinte-logic.js";
 import { saveDossierGeo } from "./site-dossier-data.js";
+import { listeVive } from "./listes-config.js";
 
 export function chargerLeaflet() {
   if (window.L) return Promise.resolve();
@@ -46,13 +47,13 @@ function dansFranceMetro({ lat, lng }) {
 // re-géocodé et son marqueur déplacé automatiquement.
 // Couleur des repères par association, et une couleur à part pour les
 // dispositifs MNA (sous-groupe « MNA » ou nom contenant « MNA »).
-export const CATEGORIES_CARTE = [
+export const CATEGORIES_CARTE = listeVive("carte.categories", [
   { cle: "ecole", label: "École", couleur: "#2a78d6" },
   { cle: "agropolis", label: "Agropolis", couleur: "#1baf7a" },
   { cle: "mna", label: "MNA", couleur: "#eb6834" },
   { cle: "armonia", label: "Armonia", couleur: "#4a3aa7" },
   { cle: "autre", label: "Autres", couleur: "#8A8D93" },
-];
+], { type: "tableau", lignesFixes: true });
 const CAT = cle => CATEGORIES_CARTE.find(c => c.cle === cle);
 const sansAccent = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 export function categorieSite(d) {

@@ -12,9 +12,10 @@
 import { db } from "./firebase-init.js";
 import { engagementTexte, VERSION_ENGAGEMENT } from "./cles-attestation.js";
 import { collection, doc, addDoc, setDoc, updateDoc, getDoc, getDocs, onSnapshot, query, where, increment } from "./firestore-compte.js";
+import { listeVive } from "./listes-config.js";
 
 export const CLES = "cles", PRETS = "cles-prets", APPAREILS = "cles-appareils";
-export const TYPES_CLE = ["Clé", "Badge", "Télécommande", "Trousseau"];
+export const TYPES_CLE = listeVive("cles.types", ["Clé", "Badge", "Télécommande", "Trousseau"]);
 
 export function jeton(n = 28) {
   const a = new Uint8Array(n); crypto.getRandomValues(a);

@@ -16,6 +16,7 @@ import {
   collection, query, where,
 } from "./firestore-compte.js";
 import { getDossierUnique, saveDossier } from "./site-dossier-data.js";
+import { listeVive } from "./listes-config.js";
 
 const CODES = "masterlock-codes";
 const HISTORIQUE = "masterlock-historique";
@@ -139,10 +140,10 @@ export async function listerCodesPourSite(dossierId) {
   return list.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
 }
 
-export const CATEGORIES_BOITE = [
+export const CATEGORIES_BOITE = listeVive("masterlock.categories", [
   "Accès bâtiment", "Accès chaufferie", "Accès parking", "Accès atelier",
   "Accès salle de sport", "Accès local poubelles", "Accès poste HT", "Barrière",
-];
+]);
 
 export async function creerCode(dossierId, dossierNom, entry, user) {
   const ref = await addDoc(collection(db, CODES), {

@@ -1,23 +1,24 @@
 // fiches-poste-modeles.js — Propositions pour rédiger les fiches de poste
 // (formulaire RH 05 du Groupe Établières) : modèles de poste, bibliothèque de
 // missions par thème, savoir-faire et savoirs-être à cocher.
+import { listeVive } from "./listes-config.js";
 
-export const ASSOCIATIONS = ["Agropolis", "Ecole des Etablières", "Armonia", "Groupe Établières"];
-export const RESIDENCES = ["La Roche Sur Yon", "Cécile Sauvage", "Haras de Vendée", "Les Herbiers", "Blois"];
-export const MANAGERS = ["Responsable Maintenance et Entretien", "Coordinateur maintenance", "Directeur des services généraux", "Directeur de site"];
+export const ASSOCIATIONS = listeVive("fp.associations", ["Agropolis", "Ecole des Etablières", "Armonia", "Groupe Établières"]);
+export const RESIDENCES = listeVive("fp.residences", ["La Roche Sur Yon", "Cécile Sauvage", "Haras de Vendée", "Les Herbiers", "Blois"]);
+export const MANAGERS = listeVive("fp.managers", ["Responsable Maintenance et Entretien", "Coordinateur maintenance", "Directeur des services généraux", "Directeur de site"]);
 
 export const POSITIONNEMENT = `Le collaborateur rempli sa fonction dans le respect des textes en vigueur dans l'établissement (règlement intérieur, charte numérique, projet d'établissement, projet du groupe, notes de service, …), des textes officiels légaux (convention collective, code du travail, sécurité…) ainsi que des délégations autorisées par son Manager.`;
-export const CHAQUE_COLLABORATEUR = [
+export const CHAQUE_COLLABORATEUR = listeVive("fp.chaque", [
   "Fait preuve solidarité au sein de son équipe.",
   "Participe à l'amélioration continue de son poste et de son site en lien avec son Manager.",
   "Participe, sur la base du volontariat et après en avoir échangé avec son Manager, à l'amélioration continue globale en intégrant des groupes projets ponctuels ou en faisant remonter ses idées d'améliorations.",
   "S'attache à respecter en interne comme en externe nos valeurs et la charte graphique.",
-];
+]);
 export const TEXTE_MISSIONS = `La fiche de poste recense les missions principales du poste et non le détail des tâches qui elles peuvent évoluer au quotidien en fonction des besoins du site. La fiche de poste doit être mise à jour uniquement en cas d'évolution de(s) mission(s).
 Chaque collaborateur concerné en a eu connaissance des degrés des critères classants de son poste via l'annexe détaillée qui lui a été remise.`;
 
 // Bibliothèque de missions : { id, texte, niveau (1 = délégation totale, 2 = partage d'intention), sous? }
-export const MISSIONS = [
+export const MISSIONS = listeVive("fp.missions", [
   { theme: "🧽 Ménage & hygiène", liste: [
     { id: "m-communs-mna", texte: "Entretien et ménage des parties communes des maisons (cuisine, salon, couloirs, sanitaires).", niveau: 1 },
     { id: "m-communs-res", texte: "Entretien des locaux : ménage des parties communes, bureaux et sanitaires de la résidence.", niveau: 1 },
@@ -97,10 +98,10 @@ export const MISSIONS = [
     { id: "o-astreinte", texte: "Organiser et planifier l'astreinte technique.", niveau: 1 },
     { id: "o-prestataires", texte: "Consulter, choisir et suivre les entreprises extérieures et prestataires.", niveau: 2 },
   ] },
-];
+], { type: "groupes" });
 export const missionParId = (id) => MISSIONS.flatMap(t => t.liste).find(m => m.id === id);
 
-export const SAVOIR_FAIRE = [
+export const SAVOIR_FAIRE = listeVive("fp.savoirFaire", [
   "Connaissance des règles d'hygiène et de sécurité en milieu d'hébergement collectif.",
   "Connaissance des règles d'hygiène et de sécurité liées à la collecte des déchets.",
   "Maîtrise des gestes et postures de manutention.",
@@ -121,8 +122,8 @@ export const SAVOIR_FAIRE = [
   "Maîtrise des outils bureautiques (Excel, Word, messagerie) et des logiciels de gestion de maintenance.",
   "Capacité à rédiger et suivre des documents administratifs (bons de commande, courriers, tableaux de suivi).",
   "Connaissance des procédures de gestion de contrats et de la relation fournisseurs.",
-];
-export const SAVOIR_ETRE = [
+], { ordreFixe: true });
+export const SAVOIR_ETRE = listeVive("fp.savoirEtre", [
   "Travailler en équipe",
   "Avoir le sens de l'observation",
   "Avoir une bonne capacité d'adaptation et faire preuve de réactivité.",
@@ -135,7 +136,7 @@ export const SAVOIR_ETRE = [
   "Discrétion et respect de la confidentialité",
   "Sens du service",
   "Exemplarité et sens des responsabilités",
-];
+], { ordreFixe: true });
 
 // Modèles de poste : tout ce qui est coché par défaut.
 export const MODELES = [

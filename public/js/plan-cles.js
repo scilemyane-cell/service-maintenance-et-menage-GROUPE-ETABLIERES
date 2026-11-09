@@ -11,6 +11,7 @@ import { auth } from "./firebase-init.js";
 import { esc } from "./astreinte-logic.js";
 import { PDFJS, PDFJS_WORKER } from "./fiches-poste-import.js";
 import { groupesEtages, niveauDe, NIVEAUX } from "./plan-3d.js";
+import { listeVive } from "./listes-config.js";
 const nomNiveau = (n) => n < -1 ? `Sous-sol ${n}` : n < 0 ? "Sous-sol" : n === 0 ? "RDC" : `R+${n}`;
 
 const refMeta = (id) => doc(db, "config", `plancles-${id}`);
@@ -205,7 +206,7 @@ export const TYPES_R = {
   logement: { ic: "🏠", lib: "Logement", pl: "Logements", k: "#dc2626" },
   vanne: { ic: "🚰", lib: "Vanne", pl: "Vannes", k: "#2563eb" },
 };
-export const TYPES_TABLEAU = ["TGBT", "TD", "TDR", "TC", "Armoire", "Coffret"];
+export const TYPES_TABLEAU = listeVive("plan.tableaux", ["TGBT", "TD", "TDR", "TC", "Armoire", "Coffret"]);
 export const typeR = (r) => r.t || "cle";
 const couleurR = (r) => typeR(r) === "cle" ? (COULEURS[r.col] || COULEURS.rouge) : TYPES_R[typeR(r)].k;
 const libR = (r) => typeR(r) === "vanne" ? `🚰 ${r.c}` : typeR(r) === "logement" ? `🏠 ${r.c}` : typeR(r) === "tableau" ? `⚡ ${r.c}` : typeR(r) === "compteur" ? `🎛️ ${r.c}` : r.c;

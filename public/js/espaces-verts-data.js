@@ -3,6 +3,7 @@
 // faites, observations). Les photos sont à part (« espaces-verts-photos »,
 // ≈ 80 Ko chacune) pour ne pas alourdir la liste des passages.
 import { db } from "./firebase-init.js";
+import { listeVive } from "./listes-config.js";
 import {
   collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp, getDocs,
 } from "./firestore-compte.js";
@@ -13,7 +14,7 @@ const COL_PHOTOS = "espaces-verts-photos";
 // Prestations, regroupées comme sur la feuille. `jours` = intervalle attendu
 // entre deux passages pour cette prestation (alerte de retard au-delà) ;
 // `saison` = mois (1-12) où elle est attendue. Sans `jours` : pas d'alerte.
-export const GROUPES = [
+const GROUPES_CODE = [
   {
     nom: "Tonte et bordures", icone: "🌱", taches: [
       { cle: "tonte", label: "Tonte", jours: 14, saison: [3, 4, 5, 6, 7, 8, 9, 10] },
@@ -43,7 +44,29 @@ export const GROUPES = [
     ],
   },
 ];
-export const TACHES = GROUPES.flatMap(g => g.taches.map(t => ({ ...t, groupe: g.nom })));
+// Liste modifiable dans Administration > ⚙️ Paramétrage : on stocke les
+// prestations à plat (groupe en colonne) et on reconstruit GROUPES sur place.
+const ICONES_GROUPES = Object.fromEntries(GROUPES_CODE.map(g => [g.nom, g.icone]));
+export const GROUPES = [];
+const reconstruireGroupes = (taches) => {
+  const m = new Map();
+  for (const t of taches) {
+    const nom = t.groupe || "Autres prestations";
+    if (!m.has(nom)) m.set(nom, { nom, icone: ICONES_GROUPES[nom] || "🌿", taches: [] });
+    m.get(nom).taches.push(t);
+  }
+  GROUPES.splice(0, GROUPES.length, ...m.values());
+};
+const slugCle = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+export const TACHES = listeVive("ev.taches", GROUPES_CODE.flatMap(g => g.taches.map(t => ({ ...t, groupe: g.nom }))), {
+  type: "tableau",
+  versRuntime: (items) => items.filter(t => t.label).map(({ masque, ...t }) => ({
+    ...t, cle: t.cle || slugCle(t.label),
+    jours: Number(t.jours) > 0 ? Number(t.jours) : undefined,
+    saison: Array.isArray(t.saison) && t.saison.length ? t.saison.map(Number) : undefined,
+  })),
+  apresMaj: reconstruireGroupes,
+});
 
 export const estSiteMNA = (s) => /MNA/i.test(s?.dispositif || "Dispositif MNA") && !s?.supprimeLe;
 

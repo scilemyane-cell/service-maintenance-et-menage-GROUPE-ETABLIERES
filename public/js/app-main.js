@@ -96,6 +96,8 @@
   const mountAccesRemplacants = aLaDemande(charger_parametres, "mountAccesRemplacants");
   const mountParametresDispositif = aLaDemande(charger_parametres, "mountParametresDispositif");
   const mountAssociationsSites = aLaDemande(charger_parametres, "mountAssociationsSites");
+  const charger_parametrage = () => import("./parametrage.js");
+  const mountParametrage = aLaDemande(charger_parametrage, "mountParametrage");
   const charger_migration_tool = () => import("./migration-tool.js");
   const mountMigrationTool = aLaDemande(charger_migration_tool, "mountMigrationTool");
   const charger_export_sharepoint_admin = () => import("./export-sharepoint-admin.js");
@@ -396,11 +398,12 @@
         ],
       },
       {
-        id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès remplaçants",
+        id: "administration", label: "Administration", icon: "🛠️", desc: "Comptes, accès, paramétrage des listes",
         subtabs: [
           { id: "utilisateurs", label: "Utilisateurs",       icon: "👤", roles: ADMIN_ONLY, mount: mountUtilisateurs },
           { id: "connexions",   label: "Connexions",         icon: "🟢", roles: SUPER_ADMIN_ONLY, mount: mountConnexions },
           { id: "remplacants",  label: "Accès prestataires",  icon: "🔗", roles: ADMIN_ONLY, mount: mountAccesRemplacants },
+          { id: "parametrage", label: "Paramétrage", icon: "⚙️", roles: GESTION, mount: mountParametrage },
           { id: "associations", label: "Associations & Sites", icon: "🏫", roles: ADMIN_ONLY, mount: mountAssociationsSites },
           { id: "corbeille", label: "Corbeille", icon: "🗑️", roles: ADMIN_ONLY, mount: mountCorbeille },
           { id: "migration", label: "Migration photos", icon: "🔄", roles: ADMIN_ONLY, mount: mountMigrationTool },

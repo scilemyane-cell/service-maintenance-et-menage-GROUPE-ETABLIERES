@@ -25,9 +25,10 @@ import { imprimerFicheIsolee } from "./print-fiche.js";
 import { redigerCompteRendu, reformulerDecision } from "./ia.js";
 import { nomPropre } from "./sites-visuel.js";
 import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
+import { listeVive } from "./listes-config.js";
 export { genererOccurrencesRecurrence };
 
-const TYPE_SUGGESTIONS = ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"];
+const TYPE_SUGGESTIONS = listeVive("planning.types", ["Plomberie", "Électricité", "Chauffage / CVC", "Serrurerie / Accès", "Sécurité incendie", "Ascenseur", "Espaces verts", "Informatique / Réseau", "Autre"]);
 
 // Seuil "heure de nuit" indicatif (21h-6h) — à valider avec la convention
 // collective / le service RH, ce n'est pas un calcul juridiquement certifié.

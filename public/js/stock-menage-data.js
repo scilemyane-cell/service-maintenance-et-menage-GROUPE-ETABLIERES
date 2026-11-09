@@ -10,6 +10,7 @@ import {
   doc, addDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, setDoc, deleteField, serverTimestamp,
   collection, query, where, Timestamp
 } from "./firestore-compte.js";
+import { listeVive } from "./listes-config.js";
 
 const PRODUITS = "stock-menage-produits";
 const SORTIES = "stock-menage-sorties";
@@ -22,10 +23,10 @@ export const MNA_LABEL = "Dispositif MNA";
 
 export const ZONES = { ecole: "École", agropolis: "Agropolis" };
 
-export const CATEGORIES_MENAGE = [
+export const CATEGORIES_MENAGE = listeVive("stockmenage.categories", [
   "Papier toilette", "Savon / hygiène", "Produits d'entretien", "Sacs poubelle",
   "Essuie-mains / papier", "Désinfectants", "Autre",
-];
+]);
 
 export function nouveauProduit(zone) {
   return {
