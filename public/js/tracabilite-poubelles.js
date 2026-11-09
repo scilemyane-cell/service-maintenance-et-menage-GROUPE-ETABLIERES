@@ -81,7 +81,7 @@ function photosClassees(s) {
     }).join("");
     blocs.push(`<div style="margin:0 0 10px">
       <p style="font-size:11px;font-weight:700;margin:8px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px;break-after:avoid">${esc(new Date(x.d + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }).toUpperCase())} — ${esc((TYPES[x.t] || TYPES.sortie).toUpperCase())}${x.le ? ` · ${heure(x.le)}` : ""}</p>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${cases}</div></div>`);
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px">${cases}</div></div>`);
   });
   return { liste, blocs };
 }
