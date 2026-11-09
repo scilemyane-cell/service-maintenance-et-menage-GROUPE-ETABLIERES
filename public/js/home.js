@@ -207,7 +207,9 @@ const TUILES_MAINT = ["equipe", "astreinte", "compteurs", "masterlock", "cles", 
 const dansListe = (id, l) => l.some(x => x.endsWith("-") ? id.startsWith(x) : x === id);
 function espaceTuile(id) { return dansListe(id, TUILES_MENAGE) ? "menage" : dansListe(id, TUILES_MAINT) ? "maint" : "commun"; }
 const CLE_ESPACE = "etablieres-espace-tuiles";
-function espaceChoisi(role) { try { const v = localStorage.getItem(CLE_ESPACE); if (["maint", "menage", "tout", "travaux"].includes(v)) return v; } catch { /* */ } return ["menage", "mi_temps"].includes(role) ? "menage" : "maint"; }
+// Mahdi (agent poubelles) : uniquement l'espace Ménage, sans le choix Maintenance.
+const ménageSeul = () => /mahdi|daoud/i.test(`${mountedUser?.nom || ""} ${mountedUser?.email || ""}`) && !["super_admin", "admin", "n1", "direction"].includes(mountedUser?.role);
+function espaceChoisi(role) { if (ménageSeul()) return "menage"; try { const v = localStorage.getItem(CLE_ESPACE); if (["maint", "menage", "tout", "travaux"].includes(v)) return v; } catch { /* */ } return ["menage", "mi_temps"].includes(role) ? "menage" : "maint"; }
 const CLE_RECENTS = "etablieres-modules-recents";
 function recents() { try { return JSON.parse(localStorage.getItem(CLE_RECENTS) || "[]"); } catch { return []; } }
 function noterRecent(id) { try { const l = [id, ...recents().filter(x => x !== id)].slice(0, 6); localStorage.setItem(CLE_RECENTS, JSON.stringify(l)); } catch { /* */ } }
@@ -845,7 +847,7 @@ function render() {
           ${(() => { if (!window.__espacesTuiles || modeReorganisation) return "";
             const ok = catsRef.filter(c => !c.enConstruction), nT = catsRef.length - ok.length;
             const nM = ok.filter(c => espaceTuile(c.id) === "maint").length, nE = ok.filter(c => espaceTuile(c.id) === "menage").length;
-            if ((!nM || !nE) && !nT) return "";
+            if (((!nM || !nE) && !nT) || ménageSeul()) return "";
             let e = espaceChoisi(mountedUser?.role); if (e === "travaux" && !nT) e = "maint";
             return `<div class="gh-espaces" role="tablist"><button type="button" data-espace="maint" class="${e === "maint" ? "on" : ""}">🛠️ Maintenance</button><button type="button" data-espace="menage" class="${e === "menage" ? "on" : ""}">🧹 Ménage</button><button type="button" data-espace="tout" class="${e === "tout" ? "on" : ""}">Tout</button>${nT ? `<button type="button" data-espace="travaux" class="travaux ${e === "travaux" ? "on" : ""}">🚧 En travaux <small>${nT}</small></button>` : ""}</div>`; })()}
           ${catsRef.filter(c => { if (!window.__espacesTuiles || modeReorganisation) return true; let e = espaceChoisi(mountedUser?.role); if (e === "travaux" && !catsRef.some(x => x.enConstruction)) e = "maint";
