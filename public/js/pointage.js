@@ -2,6 +2,7 @@
 // Enregistré dans le même document que la « Répartition » (heures-repartition/{dispositif}_{lundi}_{uid})
 // pour rester compatible avec l'archive et les stats : jours[LUN…] = heures calculées depuis les créneaux.
 import { esc, dateKey, addDays } from "./astreinte-logic.js";
+import { auth } from "./firebase-init.js";
 import { watchDispositifSettings, templateFor } from "./dispositif-settings-data.js";
 import { watchRepartitions, saveRepartition, repartitionId } from "./heures-repartition-data.js";
 import { watchUsers } from "./users-data.js";
@@ -56,6 +57,9 @@ function enregistrer(f) {
   // Recalcule les heures du jour (une seule ligne : le total du jour) pour l'archive / stats.
   const jours = Object.fromEntries(DAYS.map(d => [d, Math.round(heuresJour(f.data, d) * 100) / 100]));
   f.data.lignes = [{ label: f.data.lignes?.[0]?.label || templateFor(st.settings, disp)[0]?.label || "Heures", prevu: f.prevu, jours }];
+  // Lien d'accès sans mot de passe : le document reste rangé sous le compte de l'agent,
+  // mais l'écriture se fait avec la session anonyme du lien (règle agentUid == auth.uid).
+  if (user?.invite) { f.data.agentUid = auth.currentUser?.uid || f.data.agentUid; f.data.agentCle = user.uid; f.data.viaLien = true; }
   clearTimeout(tSave);
   const etat = cont.querySelector(".pt-etat"); if (etat) etat.textContent = "⏳ Enregistrement…";
   tSave = setTimeout(async () => {

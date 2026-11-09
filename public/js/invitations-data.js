@@ -28,6 +28,16 @@ export async function createInvitation({ sites, debut, fin, weeks, label, teleph
   return token;
 }
 
+// Lien d'accès d'un agent (sans mot de passe) à son espace, valable du … au …
+export async function createLienAgent({ dispositif, agentUid, agentNom, debut, fin, telephone = "", createdBy }) {
+  const token = randomToken();
+  await setDoc(doc(db, "invitations", token), {
+    type: "agent", dispositif, agentUid, agentNom, label: agentNom, debut, fin, telephone, weeks: [], sites: [],
+    active: true, createdBy, createdAt: new Date().toISOString(),
+  });
+  return token;
+}
+
 export async function setInvitationActive(token, active) {
   await updateDoc(doc(db, "invitations", token), { active });
 }

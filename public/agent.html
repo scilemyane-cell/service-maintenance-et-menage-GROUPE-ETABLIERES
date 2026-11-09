@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon espace — Établières</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@500&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div class="login-screen"><div class="hint">Chargement…</div></div>
+</div>
+<script type="module">
+  // agent.html?acces=… — Lien d'accès sans mot de passe d'un agent (ex. Mahdi) à son espace :
+  // Poubelles + Mes heures, valable entre deux dates, coupable à tout moment depuis Paramètres.
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getInvitation } from "./js/invitations-data.js";
+  import { esc } from "./js/astreinte-logic.js";
+
+  const token = new URLSearchParams(location.search).get("acces");
+  const app = document.getElementById("app");
+  const erreur = (msg) => { app.innerHTML = `<div class="login-screen"><div class="login-card"><div class="login-eyebrow">Accès</div><h1>Impossible d'ouvrir</h1><p class="hint">${msg}</p></div></div>`; };
+  let monte = false;
+  if (!token) erreur("Ce lien ne contient pas de code d'accès. Demande un nouveau lien à ton responsable.");
+  else onAuthStateChanged(auth, async (u) => {
+    if (!u) { try { await signInAnonymously(auth); } catch { erreur("Connexion impossible. Réessaie plus tard."); } return; }
+    if (monte) return; monte = true;
+    let inv = null; try { inv = await getInvitation(token); } catch { /* */ }
+    if (!inv || inv.type !== "agent") return erreur("Ce lien n'existe pas ou plus.");
+    if (!inv.active) return erreur("Cet accès a été coupé. Contacte ton responsable.");
+    const d = new Date(), auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const fr = (iso) => new Date(iso + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+    if (inv.debut && auj < inv.debut) return erreur(`Cet accès s'ouvre le ${fr(inv.debut)}.`);
+    if (inv.fin && auj > inv.fin) return erreur(`Cet accès a expiré le ${fr(inv.fin)}. Demande un nouveau lien à ton responsable.`);
+    const agent = { uid: inv.agentUid, nom: inv.agentNom, role: "menage", invite: true };
+    let onglet = "poubelles"; try { onglet = localStorage.getItem("agent-onglet") || "poubelles"; } catch { /* */ }
+    app.innerHTML = `<header class="topbar"><div class="topbar-title"><span class="topbar-eyebrow">Groupe Établières · Mon espace</span><h1>${esc(inv.agentNom || "")}</h1></div>
+      <div class="topbar-user"><span>Accès jusqu'au <b>${fr(inv.fin)}</b></span></div></header>
+      <nav class="tabs" style="--nb-onglets:2"><button class="tab-btn" data-o="poubelles">🗑️ Poubelles</button><button class="tab-btn" data-o="pointage">⏱️ Mes heures</button></nav>
+      <main class="content" id="content"></main>`;
+    const ouvrir = async (o) => {
+      onglet = o; try { localStorage.setItem("agent-onglet", o); } catch { /* */ }
+      app.querySelectorAll("[data-o]").forEach(b => b.classList.toggle("active", b.dataset.o === o));
+      const c = document.getElementById("content"); c.innerHTML = `<p class="hint">Chargement…</p>`;
+      if (o === "poubelles") (await import("./js/poubelles.js")).mountPoubelles(c, agent, inv.dispositif);
+      else (await import("./js/pointage.js")).mountPointage(c, agent, inv.dispositif);
+    };
+    app.querySelectorAll("[data-o]").forEach(b => b.onclick = () => ouvrir(b.dataset.o));
+    ouvrir(onglet);
+  });
+</script>
+</body>
+</html>

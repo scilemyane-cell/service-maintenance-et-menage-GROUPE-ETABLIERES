@@ -1,7 +1,7 @@
 import { esc, addDays, dateKey, fmtShort, isPlausibleDate } from "./astreinte-logic.js";
 import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile, preparerCompteEnAttente } from "./users-data.js";
-import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
+import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation, createLienAgent } from "./invitations-data.js";
 import { watchAccess, setDispositifAccess } from "./access-data.js";
 import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate, setDispositifChamps } from "./dispositif-settings-data.js";
 import { watchAssociations, saveAssociations } from "./associations-data.js";
@@ -492,7 +492,7 @@ export function mountAccesRemplacants(container, user) {
   cleanup();
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { invState.sites = s; renderInvites(container, user); }));
-  unsubs.push(watchInvitations((i) => { invState.invitations = i; renderInvites(container, user); }));
+  unsubs.push(watchInvitations((i) => { invState.invitations = i.filter(x => x.type !== "agent"); renderInvites(container, user); }));
 }
 
 const frJ = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "";
@@ -585,6 +585,8 @@ function renderInvites(container, user) {
   });
 }
 
+const lienAgent = (token) => `${location.origin}${location.pathname.startsWith("/beta/") ? "/beta" : ""}/agent.html?acces=${token}`;
+const texteLienAgent = (l) => `Bonjour ${l.agentNom || ""}, voici ton accès à l'appli (poubelles et heures), sans mot de passe, valable jusqu'au ${new Date(l.fin + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${lienAgent(l.id)}\nAstuce : ajoute-le à l'écran d'accueil du téléphone.`;
 function guestLink(token) { return `${location.origin}/guest.html?invite=${token}`; }
 function copyLink(token, btn) {
   navigator.clipboard.writeText(guestLink(token)).then(() => {
@@ -637,6 +639,7 @@ export function mountParametresDispositif(container, user, dispositif) {
   unsubs.push(watchUsers((u) => { dpState.users = u.filter(x => MENAGE_ROLES.includes(x.role)); renderParametresDispositif(container, user, dispositif); }));
   unsubs.push(watchAccess((a) => { dpState.access = a; renderParametresDispositif(container, user, dispositif); }));
   unsubs.push(watchDispositifSettings((s) => { dpState.settings = s; renderParametresDispositif(container, user, dispositif); }));
+  if (/mahdi|daoud/i.test(dispositif)) unsubs.push(watchInvitations((i) => { dpState.liens = i.filter(x => x.type === "agent" && x.dispositif === dispositif); renderParametresDispositif(container, user, dispositif); }));
 }
 
 function renderParametresDispositif(container, user, dispositif) {
@@ -666,6 +669,7 @@ function renderGeneralEditor(container, user, dispositif) {
   const totalTemplate = template.reduce((s, t) => s + (t.heures || 0), 0);
   if (/mahdi|daoud/i.test(dispositif)) {
     const cfg = dpState.settings[dispositif] || {};
+    const agentsLien = dpState.users.filter(u => (dpState.access[dispositif] || []).includes(u.uid) || /mahdi|daoud/i.test(u.nom || u.email || ""));
     container.innerHTML = `<div class="stack"><div class="form-card">
       <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">⏱️ Heures prévues au contrat</h3>
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;max-width:320px"><input type="number" step="0.25" min="0" id="gen-contrat" value="${totalTemplate || ""}" placeholder="ex. 10" style="width:110px"> heures par semaine</label>
@@ -686,7 +690,38 @@ function renderGeneralEditor(container, user, dispositif) {
           <button class="add-btn" id="bl-ok">⛔ Bloquer</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">${(cfg.datesBloquees || []).slice().sort((a, b) => a.du.localeCompare(b.du)).map((b, i) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border);border-radius:10px"><span style="flex:1">⛔ <b>${new Date(b.du + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}${b.au && b.au !== b.du ? " → " + new Date(b.au + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : ""}</b>${b.motif ? ` · ${esc(b.motif)}` : ""}</span><button class="del-btn" data-bl-del="${esc(b.du + "|" + (b.au || "") + "|" + (b.motif || ""))}">🗑️</button></div>`).join("") || `<span class="hint">Aucune date bloquée.</span>`}</div>
+      </div>
+      <div class="form-card">
+        <h3 style="margin:0 0 6px;font-size:14px;color:var(--gold)">🔗 Lien d'accès sans mot de passe</h3>
+        <p class="hint" style="margin:0 0 10px">Comme pour un prestataire : un lien personnel, valable entre deux dates, qui ouvre directement son espace (Poubelles + Mes heures). Pratique s'il a du mal avec les mots de passe.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end">
+          <label style="display:flex;flex-direction:column;font-size:12px">Agent<select id="la-agent">${agentsLien.map(u => `<option value="${u.uid}">${esc(u.nom || u.email)}</option>`).join("") || `<option value="">(aucun compte autorisé — voir Accès)</option>`}</select></label>
+          <label style="display:flex;flex-direction:column;font-size:12px">Téléphone<input id="la-tel" type="tel" placeholder="06…" style="width:130px"></label>
+          <label style="display:flex;flex-direction:column;font-size:12px">Du<input type="date" id="la-du" value="${dateKey(new Date())}"></label>
+          <label style="display:flex;flex-direction:column;font-size:12px">Au (inclus)<input type="date" id="la-au" value="${dateKey(addDays(new Date(), 30))}"></label>
+          <button class="add-btn" id="la-ok">🔗 Créer le lien</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">${(dpState.liens || []).map(l => { const auj = dateKey(new Date()), etat = !l.active ? "⛔ Coupé" : auj < l.debut ? "⏳ À venir" : auj > l.fin ? "⌛ Expiré" : "✅ Actif", tel = String(l.telephone || "").replace(/[^0-9+]/g, "");
+          return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px"><span style="flex:1;min-width:180px"><b>${esc(l.agentNom || "")}</b> · ${new Date(l.debut + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} → ${new Date(l.fin + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })} <span class="tag">${etat}</span></span>
+            ${tel ? `<a class="nav-btn" style="text-decoration:none;padding:4px 10px;font-size:12px" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteLienAgent(l))}">📱 SMS</a>` : ""}
+            <button class="nav-btn" data-la-copie="${l.id}" style="padding:4px 10px;font-size:12px">📋 Copier</button>
+            <button class="nav-btn" data-la-ouvrir="${l.id}" style="padding:4px 10px;font-size:12px">↗️ Ouvrir</button>
+            <button class="nav-btn" data-la-toggle="${l.id}" style="padding:4px 10px;font-size:12px">${l.active ? "⛔ Couper" : "Réactiver"}</button>
+            <button class="del-btn" data-la-del="${l.id}">🗑️</button></div>`; }).join("") || `<span class="hint">Aucun lien créé.</span>`}</div>
       </div></div>`;
+    container.querySelector("#la-ok").onclick = async () => {
+      const uid = container.querySelector("#la-agent").value, du = container.querySelector("#la-du").value, au = container.querySelector("#la-au").value;
+      if (!uid) return window.toast?.("Aucun agent : autorise d'abord son compte dans l'onglet Accès.");
+      if (!du || !au || au < du) return window.toast?.("Vérifie les dates (la fin doit être après le début).");
+      const a = agentsLien.find(x => x.uid === uid);
+      const token = await createLienAgent({ dispositif, agentUid: uid, agentNom: a?.nom || a?.email || "", debut: du, fin: au, telephone: container.querySelector("#la-tel").value.trim(), createdBy: user.uid });
+      try { await navigator.clipboard.writeText(lienAgent(token)); window.toast?.("✓ Lien créé et copié"); } catch { window.toast?.("✓ Lien créé"); }
+    };
+    const lien = (id) => (dpState.liens || []).find(x => x.id === id);
+    container.querySelectorAll("[data-la-copie]").forEach(b => b.onclick = () => navigator.clipboard.writeText(texteLienAgent(lien(b.dataset.laCopie))).then(() => { b.textContent = "Copié !"; setTimeout(() => { b.textContent = "📋 Copier"; }, 1500); }));
+    container.querySelectorAll("[data-la-ouvrir]").forEach(b => b.onclick = () => window.open(lienAgent(b.dataset.laOuvrir), "_blank"));
+    container.querySelectorAll("[data-la-toggle]").forEach(b => b.onclick = () => setInvitationActive(b.dataset.laToggle, !lien(b.dataset.laToggle).active));
+    container.querySelectorAll("[data-la-del]").forEach(b => b.onclick = () => { if (confirm("Supprimer ce lien ? Il ne marchera plus.")) deleteInvitation(b.dataset.laDel); });
     container.querySelectorAll("[data-jour]").forEach(b => b.onclick = async () => {
       const n = +b.dataset.jour, off = cfg.joursOff ?? [6, 0];
       await setDispositifChamps(dispositif, { joursOff: off.includes(n) ? off.filter(x => x !== n) : [...off, n] });
