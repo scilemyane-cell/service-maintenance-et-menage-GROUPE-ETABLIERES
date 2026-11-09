@@ -24,6 +24,11 @@ const CHARGE_MNA = { maj: "2026-10-27", template: [
   { label: "Ménage — Maison MNA La Ferme", heures: 3 },
 ] };
 
+// Mahdi : réduction du temps de travail — il ne garde que la tournée poubelles de Cécile Sauvage.
+const CHARGE_MAHDI = { maj: "2026-11-09", template: [
+  { label: "Poubelles Cécile Sauvage — sortie / rentrée des bacs + nettoyage de la zone", heures: 0 },
+] };
+
 let syncing = false;
 
 // Structure : { [nomDispositif]: { heures: true|false, template: [{label, heures}] } }
@@ -40,6 +45,11 @@ export function watchDispositifSettings(callback) {
     if (data["Dispositif MNA"]?.chargeMaj !== CHARGE_MNA.maj && !syncing) {
       syncing = true;
       setDoc(REF(), { "Dispositif MNA": { ...(data["Dispositif MNA"] || {}), template: CHARGE_MNA.template, chargeMaj: CHARGE_MNA.maj } }, { merge: true }).finally(() => { syncing = false; });
+      return;
+    }
+    if (data["Daoud Mahdi"]?.chargeMaj !== CHARGE_MAHDI.maj && !syncing) {
+      syncing = true;
+      setDoc(REF(), { "Daoud Mahdi": { ...(data["Daoud Mahdi"] || {}), template: CHARGE_MAHDI.template, chargeMaj: CHARGE_MAHDI.maj } }, { merge: true }).finally(() => { syncing = false; });
       return;
     }
     const missing = Object.entries(DEFAULT_TEMPLATES).filter(([disp]) => data[disp]?.template === undefined);

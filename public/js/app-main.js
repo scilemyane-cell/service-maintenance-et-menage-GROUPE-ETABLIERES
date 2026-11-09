@@ -339,8 +339,8 @@
     return dispositifsList
       .filter(d => user.role === "direction" || hasAccess(accessMap, d, user) || (user.extraOnglets || []).includes("disp-" + d))
       .map(d => ({
-        id: "disp-" + d, label: d, icon: "🧽", desc: "Fiches, traçabilité",
-        subtabs: [
+        id: "disp-" + d, label: d, icon: /mahdi|daoud/i.test(d) ? "🗑️" : "🧽", desc: /mahdi|daoud/i.test(d) ? "Poubelles Cécile Sauvage, heures" : "Fiches, traçabilité",
+        subtabs: (dispositifSettings[d]?.ongletsMasques ?? (/mahdi|daoud/i.test(d) ? ["fiches", "planning", "tracabilite", "prestataire", "stats-menage"] : [])).reduce((l, m) => l.filter(t => t.id !== m), [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
           ...((dispositifSettings[d]?.poubelles ?? /mahdi|daoud/i.test(d)) ? [{ id: "poubelles", label: "Poubelles", icon: "🗑️", roles: MENAGE_ROLES, mount: (c, u) => mountPoubelles(c, u, d) }] : []),
           ...(heuresEnabled(dispositifSettings, d) ? [
@@ -353,7 +353,7 @@
           { id: "planning",    label: "Planning",    icon: "📅", roles: MENAGE_ROLES, mount: (c, u) => mountPlanningMenage(c, u, d) },
           { id: "stats-menage", label: "Statistiques", icon: "📊", roles: [...GESTION, "direction"], mount: (c, u) => mountStatsMenage(c, u, d) },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },
-        ],
+        ]),
       }));
   }
 
