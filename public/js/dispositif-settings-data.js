@@ -81,3 +81,7 @@ export function heuresEnabled(settingsMap, dispositif) {
 export function templateFor(settingsMap, dispositif) {
   return settingsMap[dispositif]?.template || [];
 }
+
+export async function setDispositifChamps(dispositif, champs) {
+  await setDoc(REF(), { [dispositif]: champs }, { merge: true });
+}

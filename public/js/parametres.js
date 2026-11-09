@@ -3,7 +3,7 @@ import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile, preparerCompteEnAttente } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation } from "./invitations-data.js";
 import { watchAccess, setDispositifAccess } from "./access-data.js";
-import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate } from "./dispositif-settings-data.js";
+import { watchDispositifSettings, setDispositifHeures, heuresEnabled, templateFor, setDispositifTemplate, setDispositifChamps } from "./dispositif-settings-data.js";
 import { watchAssociations, saveAssociations } from "./associations-data.js";
 import { roleLabel } from "./auth.js";
 import { watchPeople } from "./firestore-data.js";
@@ -665,11 +665,43 @@ function renderGeneralEditor(container, user, dispositif) {
   const template = templateFor(dpState.settings, dispositif);
   const totalTemplate = template.reduce((s, t) => s + (t.heures || 0), 0);
   if (/mahdi|daoud/i.test(dispositif)) {
+    const cfg = dpState.settings[dispositif] || {};
     container.innerHTML = `<div class="stack"><div class="form-card">
       <h3 style="margin:0 0 10px;font-size:14px;color:var(--gold)">⏱️ Heures prévues au contrat</h3>
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;max-width:320px"><input type="number" step="0.25" min="0" id="gen-contrat" value="${totalTemplate || ""}" placeholder="ex. 10" style="width:110px"> heures par semaine</label>
       <p class="hint" style="margin-top:8px">Sert à afficher l'écart dans « Mes heures » (total pointé de la semaine − contrat).</p>
-      <button class="add-btn" id="gen-contrat-ok" style="margin-top:8px">💾 Enregistrer</button></div></div>`;
+      <button class="add-btn" id="gen-contrat-ok" style="margin-top:8px">💾 Enregistrer</button></div>
+      <div class="form-card">
+        <h3 style="margin:0 0 6px;font-size:14px;color:var(--gold)">📅 Jours de présence</h3>
+        <p class="hint" style="margin:0 0 10px">Décoche les jours où il ne doit pas venir : ces jours-là, il ne peut pas pointer.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">${[[1, "Lun"], [2, "Mar"], [3, "Mer"], [4, "Jeu"], [5, "Ven"], [6, "Sam"], [0, "Dim"]].map(([n, l]) => { const on = !(cfg.joursOff ?? [6, 0]).includes(n); return `<button type="button" class="nav-btn ${on ? "active" : ""}" data-jour="${n}" style="min-width:58px;${on ? "background:#10b981;color:#fff;border-color:#10b981" : "opacity:.55;text-decoration:line-through"}">${l}</button>`; }).join("")}</div>
+      </div>
+      <div class="form-card">
+        <h3 style="margin:0 0 6px;font-size:14px;color:var(--gold)">⛔ Dates bloquées</h3>
+        <p class="hint" style="margin:0 0 10px">Fermeture, jour férié, vacances… Il ne pourra pas pointer ces jours-là.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end">
+          <label style="display:flex;flex-direction:column;font-size:12px">Du<input type="date" id="bl-du"></label>
+          <label style="display:flex;flex-direction:column;font-size:12px">Au <small>(facultatif)</small><input type="date" id="bl-au"></label>
+          <label style="display:flex;flex-direction:column;font-size:12px;flex:1;min-width:140px">Motif<input id="bl-motif" placeholder="ex. fermeture Noël"></label>
+          <button class="add-btn" id="bl-ok">⛔ Bloquer</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">${(cfg.datesBloquees || []).slice().sort((a, b) => a.du.localeCompare(b.du)).map((b, i) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border);border-radius:10px"><span style="flex:1">⛔ <b>${new Date(b.du + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}${b.au && b.au !== b.du ? " → " + new Date(b.au + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : ""}</b>${b.motif ? ` · ${esc(b.motif)}` : ""}</span><button class="del-btn" data-bl-del="${esc(b.du + "|" + (b.au || "") + "|" + (b.motif || ""))}">🗑️</button></div>`).join("") || `<span class="hint">Aucune date bloquée.</span>`}</div>
+      </div></div>`;
+    container.querySelectorAll("[data-jour]").forEach(b => b.onclick = async () => {
+      const n = +b.dataset.jour, off = cfg.joursOff ?? [6, 0];
+      await setDispositifChamps(dispositif, { joursOff: off.includes(n) ? off.filter(x => x !== n) : [...off, n] });
+    });
+    document.getElementById("bl-ok").onclick = async () => {
+      const du = document.getElementById("bl-du").value, au = document.getElementById("bl-au").value || du, motif = document.getElementById("bl-motif").value.trim();
+      if (!du) return window.toast?.("Choisis au moins la date de début.");
+      if (au < du) return window.toast?.("La date de fin doit être après le début.");
+      await setDispositifChamps(dispositif, { datesBloquees: [...(cfg.datesBloquees || []), { du, au, motif }] });
+      window.toast?.("⛔ Dates bloquées");
+    };
+    container.querySelectorAll("[data-bl-del]").forEach(b => b.onclick = async () => {
+      const k = b.dataset.blDel;
+      await setDispositifChamps(dispositif, { datesBloquees: (cfg.datesBloquees || []).filter(x => (x.du + "|" + (x.au || "") + "|" + (x.motif || "")) !== k) });
+    });
     document.getElementById("gen-contrat-ok").onclick = async () => {
       const h = parseFloat(document.getElementById("gen-contrat").value) || 0;
       await setDispositifTemplate(dispositif, [{ label: template[0]?.label || "Poubelles Cécile Sauvage", heures: h }]);

@@ -4942,3 +4942,4 @@ table.pm-t tbody th{font-size:11.5px;color:var(--text-dim)}
 .pt-cr{display:flex;align-items:center;gap:6px}.pt-cr input{width:auto;flex:1;max-width:130px;font-size:16px}.pt-cr button{border:0;background:none;color:var(--red);font-size:16px;cursor:pointer}
 .pt-add{align-self:flex-start;border:1px dashed var(--border);background:none;color:var(--text-dim);border-radius:10px;padding:6px 10px;cursor:pointer;font-size:13px}
 .pt-pied{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}.pt-etat{flex:1;font-size:12.5px;color:var(--text-dim)}
+.pt-j.off{opacity:.55;border-style:dashed}.pt-j.off .pt-j-t span{font-weight:600;font-size:12.5px}

@@ -73,15 +73,20 @@ function render() {
   const iAuj = DAYS.findIndex((_, i) => dateDe(i) === auj), dAuj = DAYS[iAuj];
   const enCours = dAuj ? (data.pointages[dAuj] || []).find(c => c.a && !c.d) : null;
   const verrou = data.valide && !estEditeur(user);
+  const cfg = st.settings[disp] || {}, off = cfg.joursOff ?? [6, 0];
+  const bloque = (iso) => { const b = (cfg.datesBloquees || []).find(x => iso >= x.du && iso <= (x.au || x.du)); if (b) return "⛔ " + (b.motif || "Date bloquée"); return off.includes(new Date(iso + "T12:00").getDay()) ? "Pas de présence prévue" : ""; };
+  const bAuj = dAuj ? bloque(auj) : "";
   const fr = (d, o) => new Date(d + "T12:00").toLocaleDateString("fr-FR", o);
   cont.innerHTML = `<div class="stack pt">
     ${estEditeur(user) && ag.liste?.length > 1 ? `<label class="pt-ag">Agent <select data-pt-agent>${ag.liste.map(a => `<option value="${a.uid}" ${a.uid === ag.uid ? "selected" : ""}>${esc(a.nom || a.email)}</option>`).join("")}</select></label>` : ""}
     <div class="pt-sem"><button class="nav-btn" data-pt-sem="-1">‹</button><div><b>Semaine du ${fr(ui.semaine, { day: "numeric", month: "long" })}</b><small>${esc(ag.nom)}</small></div><button class="nav-btn" data-pt-sem="1">›</button></div>
-    ${dAuj && !verrou ? `<div class="pt-gros">${enCours ? `<p>Arrivé à <b>${enCours.a.replace(":", "h")}</b></p><button class="pt-btn stop" data-pt-depart>⏹️ Je pars</button>` : `<button class="pt-btn go" data-pt-arrive>▶️ J'arrive</button>`}<small>Touche le bouton en arrivant et en partant : l'heure est notée toute seule.</small></div>`
+    ${dAuj && !verrou && bAuj && !enCours && !estEditeur(user) ? `<div class="pt-gros"><p>📅 Aujourd'hui : <b>${esc(bAuj)}</b></p></div>` : dAuj && !verrou ? `<div class="pt-gros">${enCours ? `<p>Arrivé à <b>${enCours.a.replace(":", "h")}</b></p><button class="pt-btn stop" data-pt-depart>⏹️ Je pars</button>` : `<button class="pt-btn go" data-pt-arrive>▶️ J'arrive</button>`}<small>Touche le bouton en arrivant et en partant : l'heure est notée toute seule.</small></div>`
       : ui.semaine !== dateKey(lundi(new Date())) ? `<button class="nav-btn" data-pt-auj style="align-self:center">↩️ Revenir à cette semaine</button>` : ""}
     <div class="pt-tot ${f.prevu && ecart < -0.01 ? "moins" : f.prevu && ecart > 0.01 ? "plus" : "ok"}"><div><span>Total semaine</span><b>${fmtH(total)}</b></div>${f.prevu ? `<div><span>Contrat</span><b>${fmtH(f.prevu)}</b></div><div><span>Écart</span><b>${ecart > 0 ? "+" : ecart < 0 ? "−" : ""}${fmtH(Math.abs(ecart))}</b></div>` : ""}</div>
     <div class="pt-jours">${DAYS.map((d, i) => { const cr = data.pointages[d] || [], h = heuresJour(data, d), iso = dateDe(i);
-      return `<div class="pt-j ${iso === auj ? "auj" : ""} ${h ? "plein" : ""}"><div class="pt-j-t"><b>${NOMS[i]}</b><small>${fr(iso, { day: "numeric", month: "short" })}</small><span>${h ? fmtH(h) : "—"}</span></div>
+      const bl = bloque(iso), ferme = bl && !estEditeur(user) && !cr.length;
+      if (ferme) return `<div class="pt-j off"><div class="pt-j-t"><b>${NOMS[i]}</b><small>${fr(iso, { day: "numeric", month: "short" })}</small><span>${esc(bl)}</span></div></div>`;
+      return `<div class="pt-j ${iso === auj ? "auj" : ""} ${h ? "plein" : ""} ${bl ? "off" : ""}"><div class="pt-j-t"><b>${NOMS[i]}</b><small>${fr(iso, { day: "numeric", month: "short" })}</small><span>${h ? fmtH(h) : bl ? esc(bl) : "—"}</span></div>
         ${cr.map((c, k) => `<div class="pt-cr"><input type="time" value="${esc(c.a || "")}" data-pt-a="${d}|${k}" ${verrou ? "disabled" : ""}><span>→</span><input type="time" value="${esc(c.d || "")}" data-pt-d="${d}|${k}" ${verrou ? "disabled" : ""}>${verrou ? "" : `<button data-pt-rm="${d}|${k}" title="Retirer">✕</button>`}</div>`).join("")}
         ${verrou ? "" : `<button class="pt-add" data-pt-add="${d}">＋ ${cr.length ? "Autre créneau" : "Ajouter des heures"}</button>`}</div>`; }).join("")}</div>
     <div class="pt-pied"><span class="pt-etat"></span>
