@@ -1,7 +1,7 @@
 // equipe-aujourdhui.js — Tuile « 👥 Équipe & absences », onglet « Aujourd'hui » :
 // qui est là, qui est absent (type, jusqu'à quand), et les absences des 14 prochains jours.
 // Mêmes données que l'astreinte, l'écran atelier et les demandes (collection « absences »).
-import { compteCeJour, joursAbsence } from "./absences-util.js";
+import { compteCeJour, joursAbsence, miTempsPresent, libHoraires } from "./absences-util.js";
 import { esc } from "./astreinte-logic.js";
 import { watchPeople, watchAbsences } from "./firestore-data.js";
 import { watchCoordonnees } from "./coordonnees-data.js";
@@ -44,7 +44,7 @@ function render() {
     </section>
     <section class="form-card eq-bloc">
       <h3>✅ Présents <b>${presents.length}</b></h3>
-      <div class="eq-pres">${presents.map(n => `<span class="eq-chip">${esc(n)}${tel(n) ? ` <small>${tel(n)}</small>` : ""}</span>`).join("")}</div>
+      <div class="eq-pres">${presents.map(n => { const m = miTempsPresent(st.absences, (p) => sansAcc(p) === sansAcc(n), auj); return `<span class="eq-chip">${esc(n)}${m ? ` <small style="color:#F97316">🩺 mi-temps${libHoraires(m) ? " " + esc(libHoraires(m)) : ""}</small>` : ""}${tel(n) ? ` <small>${tel(n)}</small>` : ""}</span>`; }).join("")}</div>
     </section>
     <section class="form-card eq-bloc">
       <h3>📅 Absences des 14 prochains jours <b>${aVenir.length}</b></h3>

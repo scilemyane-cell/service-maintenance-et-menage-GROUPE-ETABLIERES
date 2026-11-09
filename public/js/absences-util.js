@@ -19,4 +19,7 @@ export function joursAbsence(a, d1, d2) {
   let n = 0; for (let d = new Date(d1 + "T12:00"), f = new Date(d2 + "T12:00"); d <= f; d.setDate(d.getDate() + 1)) if (compteCeJour(a, d)) n++;
   return n;
 }
-export const libJoursOff = (a) => { const o = (a?.joursOff || []).map(Number); return o.length ? "absent le " + JOURS_MTT.filter(([n]) => o.includes(n)).map(([, l]) => l.toLowerCase()).join(", ") : "présent tous les jours (temps partiel)"; };
+export const libHoraires = (a) => a?.hDebut && a?.hFin ? `${a.hDebut.replace(":", "h")}–${a.hFin.replace(":", "h")}` + (a.hDebut2 && a.hFin2 ? ` et ${a.hDebut2.replace(":", "h")}–${a.hFin2.replace(":", "h")}` : "") : "";
+export const libJoursOff = (a) => { const o = (a?.joursOff || []).map(Number), h = libHoraires(a); return (o.length ? "absent le " + JOURS_MTT.filter(([n]) => o.includes(n)).map(([, l]) => l.toLowerCase()).join(", ") : "présent tous les jours (temps partiel)") + (h ? ` · présent ${h}` : ""); };
+// Mi-temps en cours ce jour-là et la personne travaille (pour afficher ses horaires)
+export const miTempsPresent = (absences, memePers, jour) => (absences || []).find(a => a.type === "mtt" && memePers(a.person) && String(a.start).slice(0, 10) <= jour && String(a.end || a.start).slice(0, 10) >= jour && !compteCeJour(a, jour));
