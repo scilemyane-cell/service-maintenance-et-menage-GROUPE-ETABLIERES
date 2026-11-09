@@ -97,6 +97,7 @@
   const mountParametresDispositif = aLaDemande(charger_parametres, "mountParametresDispositif");
   const mountAssociationsSites = aLaDemande(charger_parametres, "mountAssociationsSites");
   const charger_parametrage = () => import("./parametrage.js");
+  const mountTracabilitePoubelles = aLaDemande(() => import("./tracabilite-poubelles.js"), "mountTracabilitePoubelles");
   const mountParametrage = aLaDemande(charger_parametrage, "mountParametrage");
   const charger_migration_tool = () => import("./migration-tool.js");
   const mountMigrationTool = aLaDemande(charger_migration_tool, "mountMigrationTool");
@@ -343,7 +344,7 @@
       .filter(d => user.role === "direction" || hasAccess(accessMap, d, user) || (user.extraOnglets || []).includes("disp-" + d))
       .map(d => ({
         id: "disp-" + d, label: d, icon: /mahdi|daoud/i.test(d) ? "🗑️" : "🧽", desc: /mahdi|daoud/i.test(d) ? "Poubelles Cécile Sauvage, heures" : "Fiches, traçabilité",
-        subtabs: (dispositifSettings[d]?.ongletsMasques ?? (/mahdi|daoud/i.test(d) ? ["fiches", "planning", "tracabilite", "prestataire", "stats-menage"] : [])).reduce((l, m) => l.filter(t => t.id !== m), [
+        subtabs: (dispositifSettings[d]?.ongletsMasques ?? (/mahdi|daoud/i.test(d) ? ["fiches", "planning", "prestataire", "stats-menage"] : [])).reduce((l, m) => l.filter(t => t.id !== m), [
           { id: "fiches",      label: "Fiches",      icon: "📋", roles: MENAGE_ROLES,       mount: (c, u) => mountFichesForDispositif(c, u, d) },
           ...((dispositifSettings[d]?.poubelles ?? /mahdi|daoud/i.test(d)) ? [{ id: "poubelles", label: "Poubelles", icon: "🗑️", roles: MENAGE_ROLES, mount: (c, u) => mountPoubelles(c, u, d) }] : []),
           ...(/mahdi|daoud/i.test(d) ? [
@@ -354,7 +355,7 @@
             { id: "repartition", label: "Répartition", icon: "📊", roles: MENAGE_ROLES, mount: (c, u) => mountRepartitionForDispositif(c, u, d) },
             { id: "archive", label: "Archive", icon: "🗄️", roles: [...GESTION,"direction"], mount: (c, u) => mountArchiveForDispositif(c, u, d) },
           ] : []),
-          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: [...GESTION, "direction"],       mount: (c, u) => mountTracabiliteForDispositif(c, u, d) },
+          { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: [...GESTION, "direction"],       mount: (c, u) => /mahdi|daoud/i.test(d) ? mountTracabilitePoubelles(c, u, d) : mountTracabiliteForDispositif(c, u, d) },
           { id: "prestataire", label: "Accès prestataire", icon: "🔗", roles: GESTION, mount: mountAccesRemplacants },
           { id: "planning",    label: "Planning",    icon: "📅", roles: MENAGE_ROLES, mount: (c, u) => mountPlanningMenage(c, u, d) },
           { id: "stats-menage", label: "Statistiques", icon: "📊", roles: [...GESTION, "direction"], mount: (c, u) => mountStatsMenage(c, u, d) },
