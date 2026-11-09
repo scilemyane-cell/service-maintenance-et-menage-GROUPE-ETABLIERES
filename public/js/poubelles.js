@@ -11,8 +11,10 @@ import { compresserImage, voirPhotos } from "./demandes-photos.js";
 const TYPES = { sortie: ["⬆️", "Sortie des bacs"], rentree: ["⬇️", "Rentrée des bacs"], picking: ["🧤", "Ramassage des déchets (picking)"] };
 // Photos obligatoires selon l'action : bacs + zone, ou avant / après pour le ramassage.
 const PHOTOS = (t) => t === "picking" ? [["avant", "📸 Avant (déchets au sol)"], ["apres", "✨ Après (site propre)"]]
-  : [["bacs", t === "rentree" ? "🗑️ Bacs rentrés" : "🗑️ Bacs sortis"], ["zone", "🧽 Zone nettoyée (local / abords)"]];
-const LIB_MOMENT = { bacs: "Bacs", zone: "Zone nettoyée", avant: "Avant", apres: "Après" };
+  : [["bacs", t === "rentree" ? "🗑️ Bacs rentrés" : "🗑️ Bacs sortis"], ["zoneAvant", "📸 Zone de tri — AVANT"], ["zone", "✨ Zone de tri — APRÈS (propre)"]];
+// « Fait » : les anciens passages (avant l'ajout de la photo « zone avant ») restent comptés faits.
+const PHOTOS_FAIT = (t) => PHOTOS(t).filter(([k]) => k !== "zoneAvant");
+const LIB_MOMENT = { bacs: "Bacs", zoneAvant: "Zone de tri — avant", zone: "Zone de tri — après", avant: "Avant", apres: "Après" };
 const FLUX = ["Ordures ménagères", "Tri sélectif", "Verre", "Biodéchets", "Encombrants", "Autre"];
 const JS = [["1", "Lundi"], ["2", "Mardi"], ["3", "Mercredi"], ["4", "Jeudi"], ["5", "Vendredi"], ["6", "Samedi"], ["0", "Dimanche"]];
 const slug = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -37,7 +39,7 @@ const photosDe = (id) => st.photos.filter(p => p.dateId === id).sort((a, b) => (
 // Ramassages faits hors calendrier (« maintenant ») : reconstitués depuis leurs photos.
 const libres = () => { const m = {}; st.photos.filter(p => String(p.dateId).startsWith("libre-")).forEach(p => { m[p.dateId] = m[p.dateId] || { id: p.dateId, d: p.d, t: p.t || "picking", site: p.site, libre: true }; }); return Object.values(m); };
 const typeDe = (id) => (st.cal.dates.find(x => x.id === id) || libres().find(x => x.id === id))?.t || "sortie";
-const fait = (id) => { const p = photosDe(id); return PHOTOS(typeDe(id)).every(([k]) => p.some(x => x.moment === k)); };
+const fait = (id) => { const p = photosDe(id); return PHOTOS_FAIT(typeDe(id)).every(([k]) => p.some(x => x.moment === k)); };
 
 function carte(x, auj) {
   const [ic, lib] = TYPES[x.t] || TYPES.sortie, ok = fait(x.id), ph = photosDe(x.id), retard = !ok && x.d < auj;
@@ -64,7 +66,7 @@ function render() {
   cont.innerHTML = `<div class="stack pb">
     <div class="tabs" style="background:none;border:none;padding:0">${onglets.map(([k, l]) => `<button class="tab-btn ${ui.vue === k ? "active" : ""}" data-pb-vue="${k}">${l}</button>`).join("")}</div>
     ${ui.vue === "afaire" ? `
-      <p class="hint">Chaque passage se coche avec des photos <b>obligatoires</b> : bacs + zone nettoyée pour les poubelles, <b>avant / après</b> pour le ramassage des déchets.</p>
+      <p class="hint">Chaque passage se coche avec des photos <b>obligatoires</b> : bacs + zone de tri avant / après pour les poubelles, <b>avant / après</b> pour le ramassage des déchets.</p>
       <button class="add-btn pb-picking" data-pb-picking>🧤 Ramassage des déchets maintenant <small>photos avant / après</small></button>
       ${enRetard.length ? `<h3 class="pb-h rouge">⚠️ En retard (${enRetard.length})</h3><div class="pb-l">${enRetard.map(x => carte(x, auj)).join("")}</div>` : ""}
       <h3 class="pb-h">📅 Cette semaine et la suivante</h3>
@@ -174,7 +176,7 @@ function ouvrirValidation(x) {
     Object.entries(pris).forEach(([k, l]) => { fond.querySelector(`[data-z-l="${k}"]`).innerHTML = l.map((d, i) => `<span class="pb-mini"><img src="${d}" alt=""><button data-rm="${k}" data-i="${i}">✕</button></span>`).join("") || `<small class="hint">Aucune photo</small>`; });
     fond.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { pris[b.dataset.rm].splice(+b.dataset.i, 1); maj(); });
     const ok = req.every(([k]) => pris[k].length), bt = fond.querySelector("[data-ok]");
-    bt.disabled = !ok; bt.textContent = ok ? "✓ Valider le passage" : "📸 Ajoute les 2 photos pour valider";
+    bt.disabled = !ok; bt.textContent = ok ? "✓ Valider le passage" : `📸 Ajoute les ${req.length} photos pour valider`;
   };
   maj();
   fond.querySelectorAll("[data-z]").forEach(inp => inp.onchange = async () => {
