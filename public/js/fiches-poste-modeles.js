@@ -76,6 +76,7 @@ export const MISSIONS = [
     { id: "a-rh", texte: "Préparation des demandes de contrat et des avenants (RH01) : recueil des informations, saisie, calculs (heures, taux, points), transmission pour validation à la direction et suivi des signatures.", niveau: 2 },
     { id: "a-event", texte: "Gestion du stock alimentaire événementiel (réunions, accueils, portes ouvertes) : suivi des stocks, commandes et réassort, préparation des collations, contrôle des dates de consommation.", niveau: 2 },
     { id: "a-agenda", texte: "Gestion du planning du Responsable Maintenance et Entretien : prise de rendez-vous, organisation des réunions et des visites, suivi de l'agenda.", niveau: 1 },
+    { id: "a-relais", texte: "En l'absence de l'assistante des services généraux, reprise de ses missions :", niveau: 1, sous: ["déclaration d'assurance en cas de sinistre ;", "traitement des dossiers urgents en cours ;", "suivi de sa boîte mail."] },
     { id: "a-accueil", texte: "Accueil téléphonique du service, enregistrement des demandes d'intervention et information des demandeurs.", niveau: 1 },
   ] },
   { theme: "📋 Organisation & encadrement", liste: [
@@ -164,7 +165,7 @@ export const MODELES = [
     sf: [5, 6, 7, 8, 9, 10, 14], se: [0, 1, 2, 3, 4], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
   { id: "assistant", poste: "Assistant(e) Maintenance et Entretien", label: "Assistant(e) maintenance et entretien",
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, l'assistant(e) maintenance et entretien assure le support administratif et organisationnel du service : suivi des demandes d'intervention, coordination avec les prestataires et fournisseurs, gestion des commandes et des factures, ainsi que le suivi administratif des dossiers réglementaires et des contrats. Son activité contribue au bon fonctionnement et à la fluidité de l'activité du service maintenance.",
-    missions: ["a-achats", "a-presta", "a-registre", "a-rh", "a-event", "a-agenda", "a-classement", "a-plannings", "a-courant"],
+    missions: ["a-achats", "a-presta", "a-registre", "a-rh", "a-event", "a-agenda", "a-relais", "a-classement", "a-plannings", "a-courant"],
     sf: [17, 18, 19, 10, 13, 14], se: [0, 1, 2, 3, 5], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
   { id: "coordinateur", poste: "Coordinateur maintenance", label: "Coordinateur maintenance",
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, le coordinateur maintenance organise et répartit l'activité quotidienne des techniciens, suit le traitement des demandes d'intervention et participe aux interventions techniques. Il co-organise l'astreinte et assure le lien avec les entreprises extérieures.",
