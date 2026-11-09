@@ -18,7 +18,8 @@ export function suivreMaPosition(map, { onPremiere, bouton } = {}) {
     if (premiere) { premiere = false; onPremiere?.(pos); }
   };
   const erreur = (e) => {
-    if (e.code === 1) { refus = true; etat("📵 Localisation refusée", "ko"); }
+    if (e.code === 1) { refus = true; etat("📵 Activer la localisation", "ko");
+      if (bouton && !bouton.dataset.aide) { bouton.dataset.aide = "1"; bouton.addEventListener("click", (ev) => { if (!refus) return; ev.stopImmediatePropagation(); import("./geoloc-partage.js").then(m => m.aideLocalisation()); }, true); } }
     else if (!pos) etat("◉ Moi · recherche…", "");
   };
   etat("◉ Moi · recherche…");

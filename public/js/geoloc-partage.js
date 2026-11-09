@@ -56,7 +56,7 @@ function afficherUI() {
   if (user?.role !== "technicien") { retirerUI(); return; }
   const h = envoiLe ? new Date(envoiLe).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
   const etat = erreurEnvoi ? ` · ⚠️ non envoyée (${erreurEnvoi})` : envoiLe ? ` · envoyée à ${h}` : " · recherche GPS…";
-  const html = bloque ? `<span title="La localisation est désactivée pour l'appli sur cet appareil">📍 Localisation désactivée — à réactiver dans les réglages</span>`
+  const html = bloque ? `<button type="button" data-gp-aide style="color:#ef4444">📍 Localisation désactivée — <u>toucher ici pour l'activer</u></button>`
     : (user?.role === "technicien" ? `<span title="Ta position est visible par le responsable pendant que l'appli est ouverte">📍 Position visible par le responsable</span>` : `<span title="Ta position est visible sur « Équipe sur le terrain » pendant que l'appli est ouverte">📍 Position partagée avec l'équipe${etat}</span>`);
   if (chip && chip.innerHTML === html) return;
   retirerUI();
@@ -64,5 +64,37 @@ function afficherUI() {
   chip.className = "gp-chip" + (bloque ? " bloque" : "");
   chip.innerHTML = html;
   document.body.appendChild(chip);
+  chip.querySelector("[data-gp-aide]")?.addEventListener("click", aideLocalisation);
+}
+
+// Guide adapté à l'appareil (iPhone / Android, navigateur ou appli installée).
+export function aideLocalisation() {
+  const ua = navigator.userAgent || "", ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+  const installee = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const nav = /CriOS|Chrome/i.test(ua) ? "Chrome" : /Firefox|FxiOS/i.test(ua) ? "Firefox" : /SamsungBrowser/i.test(ua) ? "Samsung Internet" : ios ? "Safari" : "Chrome";
+  const etapes = ios ? [
+    "Ouvre <b>Réglages</b> ⚙️ du téléphone",
+    "<b>Confidentialité et sécurité</b> › <b>Service de localisation</b> : <b>activé</b>",
+    `Plus bas dans la liste, touche <b>${nav === "Safari" ? "Sites Safari" : nav}</b> › <b>Lorsque l'app est active</b> (et <b>Position exacte</b> activée)`,
+    "Reviens dans l'appli et touche <b>Réessayer</b> ci-dessous",
+  ] : [
+    "Glisse du <b>haut de l'écran vers le bas</b> et allume <b>📍 Localisation</b>",
+    installee ? `<b>Paramètres</b> › <b>Applications</b> › <b>${nav}</b> › <b>Autorisations</b> › <b>Position</b> › <b>Autoriser seulement pendant l'utilisation</b>`
+      : `Dans ${nav}, touche le <b>cadenas 🔒</b> à gauche de l'adresse › <b>Autorisations</b> › <b>Position</b> › <b>Autoriser</b>`,
+    "Touche <b>Réessayer</b> ci-dessous",
+  ];
+  const f = document.createElement("div"); f.className = "cd-fond"; f.style.zIndex = "9500";
+  f.innerHTML = `<div class="cd-fenetre" style="max-width:420px"><div class="cd-fenetre-tete"><div><b>📍 Activer la localisation</b><small>${ios ? "iPhone" : "Android"} · ${nav}</small></div><button class="cd-x" data-x>✕</button></div>
+    <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;line-height:1.4">${etapes.map(e => `<li>${e}</li>`).join("")}</ol>
+    <button class="add-btn" data-re style="margin-top:14px;width:100%">🔄 Réessayer</button><p class="gp-res" style="text-align:center;margin:8px 0 0;font-size:13px"></p></div>`;
+  document.body.append(f);
+  f.querySelector("[data-x]").onclick = () => f.remove();
+  f.addEventListener("click", (e) => { if (e.target === f) f.remove(); });
+  f.querySelector("[data-re]").onclick = () => {
+    const r = f.querySelector(".gp-res"); r.textContent = "Recherche de la position…";
+    navigator.geolocation.getCurrentPosition(() => { r.textContent = "✅ Localisation activée"; bloque = false; if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; } if (user) demarrer(); afficherUI(); setTimeout(() => f.remove(), 1200); },
+      (e) => { r.textContent = e.code === 1 ? "❌ Toujours bloquée — refais les étapes ci-dessus" : "⚠️ Position introuvable — vérifie que la localisation du téléphone est allumée"; },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  };
 }
 export function arreterPartagePosition() { arreter(false); retirerUI(); user = null; }
