@@ -9,12 +9,14 @@ import { voirPhotos } from "./demandes-photos.js";
 import { watchSites } from "./sites-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
+import { listerCodesPourSite } from "./masterlock-data.js";
 import {
-  creerMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
+  creerMission, modifierMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
   passageOuvert, minutesPassees, fmtMin, nbFaits, statutMission, heureFr, jourFr, dateFr, lienMission,
 } from "./menage-ponctuel-data.js";
 
 let st = { missions: [], invs: {}, photos: [] }, ui = { form: false, ouverte: null, draft: null };
+const codesCache = {}; // dossierId → codes boîte à clés
 let unsubs = [], unsubPh = null, phPour = null, cont = null, ctx = null;
 const auj = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const plus = (iso, j) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + j); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -36,7 +38,7 @@ const STYLE = `<style>
 .mp-piece{border-top:1px solid var(--border);padding:10px 0}.mp-piece:first-child{border-top:none}
 .mp-ph{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.mp-ph figure{margin:0;width:110px}.mp-ph img{width:110px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;display:block}
 .mp-ph figcaption{font-size:11px;color:var(--text-dim)}.mp-av{color:#a85d00;font-weight:700}.mp-ap{color:#11845b;font-weight:700}
-.mp-actions{display:flex;gap:8px;flex-wrap:wrap}
+.mp-actions{display:flex;gap:8px;flex-wrap:wrap}.mp-mini-act{display:flex;gap:4px}.mp-mini-act .nav-btn{padding:3px 8px;font-size:13px}
 @media (max-width:600px){.mp-f{grid-template-columns:1fr}}
 </style>`;
 
@@ -74,7 +76,7 @@ const sitesDispo = () => {
   const doss = /mna/i.test(ctx.dispositif || "") ? (ctx.dossiers || []).filter(d => /mna/i.test(d.groupe || "")) : [];
   if (doss.length) {
     const fiches = (ctx.sites || []).filter(estMna);
-    return doss.map(d => { const f = fiches.find(m => memeSite(m.name, d.nom)); return { id: f?.id || `dossier:${d.id}`, name: d.nom, groupe: ctx.dispositif, dispositif: ctx.dispositif, rooms: f?.rooms || [] }; })
+    return doss.map(d => { const f = fiches.find(m => memeSite(m.name, d.nom)); return { id: f?.id || `dossier:${d.id}`, dossierId: d.id, name: d.nom, groupe: ctx.dispositif, dispositif: ctx.dispositif, rooms: f?.rooms || [] }; })
       .sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
   }
   const menage = (ctx.sites || []).filter(s => s && s.id);
@@ -107,9 +109,9 @@ function liste() {
   const ms = missionsVisibles();
   const enCours = ms.filter(m => !m.validee), faits = ms.filter(m => m.validee);
   const carte = (m) => { const s = statutMission(m, actif(m)), tot = (m.pieces || []).length, f = nbFaits(m), mn = minutesPassees(m);
-    return `<button type="button" class="mp-carte" data-ouvrir="${m.id}"><span class="mp-badge ${s.cle}">${s.ic} ${s.lib}</span>
+    return `<div role="button" tabindex="0" class="mp-carte" data-ouvrir="${m.id}"><span style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span class="mp-badge ${s.cle}">${s.ic} ${s.lib}</span><span class="mp-mini-act">${m.validee ? "" : `<button type="button" class="nav-btn" data-modifier="${m.id}" title="Modifier">✏️</button>`}<button type="button" class="nav-btn" data-effacer="${m.id}" title="Supprimer">🗑️</button></span></span>
       <b>🏠 ${esc(m.siteName)}</b><span>🧽 ${esc(m.entreprise)}</span><small>Du ${dateFr(m.debut)} au ${dateFr(m.fin)}</small>
-      ${tot ? `<span class="mp-barre"><i style="width:${Math.round(f / tot * 100)}%"></i></span><small>${f}/${tot} pièces faites${mn ? ` · ⏱️ ${fmtMin(mn)}` : ""}</small>` : mn ? `<small>⏱️ ${fmtMin(mn)}</small>` : ""}</button>`; };
+      ${tot ? `<span class="mp-barre"><i style="width:${Math.round(f / tot * 100)}%"></i></span><small>${f}/${tot} pièces faites${mn ? ` · ⏱️ ${fmtMin(mn)}` : ""}</small>` : mn ? `<small>⏱️ ${fmtMin(mn)}</small>` : ""}</div>`; };
   return `<div class="mp-tete"><div><h3 style="margin:0">🧽 Ménage ponctuel par une entreprise</h3><p class="hint" style="margin:2px 0 0">Gros ménage sur un site : l'entreprise reçoit un lien, pointe ses heures, coche les pièces avec photos avant / après. Tu suis tout ici puis tu valides.</p></div>
       ${ui.form ? "" : `<button class="add-btn" data-nouveau>➕ Faire passer une entreprise</button>`}</div>
     ${ui.form ? formulaire() : ""}
@@ -124,7 +126,7 @@ function formulaire() {
   const site = sitesDispo().find(s => s.id === d.siteId);
   const nomsSite = [...new Set((site?.rooms || []).map(r => String(r.name || "").trim()).filter(Boolean))];
   if (!d.pieces || d.piecesPour !== d.siteId) { d.pieces = Object.fromEntries(nomsSite.map(n => [n, true])); d.piecesPour = d.siteId; }
-  return `<div class="form-card"><h3 style="margin:0 0 10px">➕ Nouveau ménage ponctuel</h3><form class="mp-f" id="mp-form">
+  return `<div class="form-card"><h3 style="margin:0 0 10px">${ui.edit ? "✏️ Modifier le ménage ponctuel" : "➕ Nouveau ménage ponctuel"}</h3><form class="mp-f" id="mp-form">
     <label class="plein">Site<select name="siteId" data-d>${optionsSites(d.siteId)}</select></label>
     <label>Entreprise<input name="entreprise" data-d required value="${esc(d.entreprise)}" placeholder="Nom de la société"></label>
     <label>Téléphone (pour le SMS)<input name="telephone" data-d type="tel" value="${esc(d.telephone)}" placeholder="06…"></label>
@@ -134,11 +136,25 @@ function formulaire() {
     <div class="plein"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Pièces à faire (une photo avant / après par pièce)</div>
       ${nomsSite.length ? `<div class="mp-pcs">${nomsSite.map(n => `<label><input type="checkbox" data-pc="${esc(n)}" ${d.pieces[n] ? "checked" : ""}> ${esc(n)}</label>`).join("")}</div>` : `<div class="hint">Pas de pièces enregistrées pour ce site : ajoute-les ci-dessous.</div>`}
       <label style="margin-top:8px">Autres pièces / zones (une par ligne)<textarea name="autres" data-d rows="2" placeholder="Ex. Vitres extérieures&#10;Garage">${esc(d.autres)}</textarea></label></div>
-    <div class="plein mp-actions"><button class="add-btn" type="submit">✓ Créer et obtenir le lien</button><button class="nav-btn" type="button" data-annuler>Annuler</button></div>
+    <div class="plein"><div style="font-size:13px;font-weight:600;margin-bottom:6px">🔐 Codes boîte à clés envoyés dans le SMS</div><div id="mp-codes">${codesHTML(site)}</div></div>
+    <div class="plein mp-actions"><button class="add-btn" type="submit">${ui.edit ? "✓ Enregistrer" : "✓ Créer et obtenir le lien"}</button><button class="nav-btn" type="button" data-annuler>Annuler</button></div>
   </form></div>`;
 }
 
-const smsTexte = (m) => `Bonjour, voici votre accès pour le ménage du site ${m.siteName} (Groupe Établières), du ${dateFr(m.debut)} au ${dateFr(m.fin)}. À l'arrivée, ouvrez ce lien, appuyez sur « J'arrive », prenez les photos avant / après de chaque pièce, puis « Terminer et envoyer » : ${lienMission(m.id)}`;
+// Codes boîte à clés du site (onglet Codes Masterlock), cochés par défaut.
+function codesHTML(site) {
+  if (!site?.dossierId) return `<div class="hint">Pas de dossier de site relié : aucun code à joindre.</div>`;
+  const l = codesCache[site.dossierId];
+  if (!l) { listerCodesPourSite(site.dossierId).then(c => { codesCache[site.dossierId] = (c || []).filter(x => x.code); const z = cont?.querySelector("#mp-codes"); if (z && ui.draft?.siteId === site.id) { z.innerHTML = codesHTML(site); brancherCodes(); } }).catch(() => { codesCache[site.dossierId] = []; }); return `<div class="hint">Chargement des codes…</div>`; }
+  if (!l.length) return `<div class="hint">Aucun code enregistré pour ce site (onglet Codes Masterlock).</div>`;
+  return `<div class="mp-pcs">${l.map(c => `<label><input type="checkbox" data-code="${esc(c.id)}" ${codeCoche(c) ? "checked" : ""}> ${esc(c.nom || "Boîte à clés")} : <b>${esc(c.code)}</b>${c.notes ? ` <small>(${esc(c.notes)})</small>` : ""}</label>`).join("")}</div>`;
+}
+// Coché par défaut ; en modification, on garde les codes déjà envoyés.
+const codeCoche = (c) => !(ui.draft?.codesOff || {})[c.id] && (!ui.draft?.codesGarder || ui.draft.codesGarder.includes(c.code));
+function brancherCodes() { cont?.querySelectorAll("[data-code]").forEach(cb => cb.addEventListener("change", () => {
+  const off = {}; cont.querySelectorAll("[data-code]").forEach(x => { off[x.dataset.code] = !x.checked; }); ui.draft.codesOff = off; ui.draft.codesGarder = null; })); }
+const texteCodes = (m) => (m.codes || []).length ? ` Boîte à clés : ${m.codes.map(c => `${c.nom || "boîte"} code ${c.code}${c.notes ? ` (${c.notes})` : ""}`).join(" ; ")}.` : "";
+const smsTexte = (m) => `Bonjour, voici votre accès pour le ménage du site ${m.siteName} (Groupe Établières), du ${dateFr(m.debut)} au ${dateFr(m.fin)}.${texteCodes(m)} À l'arrivée, ouvrez ce lien, appuyez sur « J'arrive », prenez les photos avant / après de chaque pièce, puis « Terminer et envoyer » : ${lienMission(m.id)}`;
 const smsHref = (m) => `sms:${String(m.telephone || "").replace(/[^0-9+]/g, "")}?&body=${encodeURIComponent(smsTexte(m))}`;
 
 function detail(m) {
@@ -150,10 +166,12 @@ function detail(m) {
     <div class="form-card"><span class="mp-badge ${s.cle}">${s.ic} ${s.lib}</span>
       <h3 style="margin:8px 0 2px">🏠 ${esc(m.siteName)} — 🧽 ${esc(m.entreprise)}</h3>
       <div class="hint">Du ${dateFr(m.debut)} au ${dateFr(m.fin)}${m.telephone ? ` · 📞 ${esc(m.telephone)}` : ""}${m.presta ? ` · intervenant : <b>${esc(`${m.presta.prenom || ""} ${m.presta.nom || ""}`.trim())}</b>${m.presta.societe ? ` (${esc(m.presta.societe)})` : ""}` : ""}</div>
+      ${(m.codes || []).length ? `<p style="margin:8px 0 0;font-size:13.5px"><b>🔐 Codes envoyés :</b> ${m.codes.map(c => `${esc(c.nom)} <b>${esc(c.code)}</b>${c.notes ? ` (${esc(c.notes)})` : ""}`).join(" · ")}</p>` : ""}
       ${m.consignes ? `<p style="white-space:pre-wrap;margin:8px 0 0;font-size:13.5px"><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
       <div class="mp-actions" style="margin-top:10px">
         <button class="nav-btn" data-copier="${m.id}">📋 Copier le lien</button>${m.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(m)}">📱 SMS</a>` : ""}
         <button class="nav-btn" data-acces="${actif(m) ? "0" : "1"}">${actif(m) ? "⛔ Couper l'accès" : "🔓 Rouvrir l'accès"}</button>
+        ${m.validee ? "" : `<button class="nav-btn" data-modif-detail>✏️ Modifier</button>`}
         <button class="nav-btn" data-imprimer>🖨️ Imprimer le compte rendu</button>
         ${m.validee ? `<button class="nav-btn" data-devalider>↩️ Annuler la validation</button>` : m.termine ? `<button class="add-btn" data-valider>✅ Valider le ménage</button><button class="nav-btn" data-renvoyer>↩️ Renvoyer à l'entreprise</button>` : ""}
         <button class="del-btn" data-supprimer>🗑️ Supprimer</button></div></div>
@@ -190,6 +208,22 @@ function imprimer(m) {
   w.document.close();
 }
 
+function effacer(id) {
+  const m = st.missions.find(x => x.id === id); if (!m) return;
+  if (!confirm(`Supprimer ce ménage ponctuel (${m.siteName}, ${m.entreprise}) et ses photos ? Le lien ne marchera plus.`)) return;
+  supprimerMission(id).then(() => { if (ui.ouverte === id) ui.ouverte = null; if (ui.cree === id) ui.cree = null; window.toast?.("🗑️ Supprimé"); render(); }).catch(e => alert(e.message));
+}
+// Ouvre le formulaire prérempli avec la mission (le lien ne change pas).
+function ouvrirModif(id) {
+  const m = st.missions.find(x => x.id === id); if (!m) return;
+  const site = sitesDispo().find(s => s.id === m.siteId);
+  const noms = (m.pieces || []).map(p => p.nom), duSite = new Set((site?.rooms || []).map(r => String(r.name || "").trim()));
+  ui.draft = { siteId: m.siteId, entreprise: m.entreprise || "", telephone: m.telephone || "", debut: m.debut, fin: m.fin, consignes: m.consignes || "",
+    pieces: Object.fromEntries([...duSite].filter(Boolean).map(n => [n, noms.includes(n)])), piecesPour: m.siteId,
+    autres: noms.filter(n => !duSite.has(n)).join("\n"), codesGarder: (m.codes || []).map(c => c.code) };
+  ui.edit = id; ui.form = true; ui.ouverte = null; ui.cree = null; render();
+}
+
 function copier(id, btn) {
   const m = st.missions.find(x => x.id === id);
   navigator.clipboard.writeText(m ? smsTexte(m) : lienMission(id)).then(() => { const o = btn.textContent; btn.textContent = "Copié !"; setTimeout(() => { btn.textContent = o; }, 1500); })
@@ -198,8 +232,10 @@ function copier(id, btn) {
 
 function brancher() {
   const q = (s) => cont.querySelector(s), qa = (s) => cont.querySelectorAll(s);
-  q("[data-nouveau]")?.addEventListener("click", () => { ui.form = true; ui.cree = null; ui.draft = null; render(); });
-  q("[data-annuler]")?.addEventListener("click", () => { ui.form = false; ui.draft = null; render(); });
+  q("[data-nouveau]")?.addEventListener("click", () => { ui.form = true; ui.edit = null; ui.cree = null; ui.draft = null; render(); });
+  q("[data-annuler]")?.addEventListener("click", () => { ui.form = false; ui.draft = null; ui.edit = null; render(); });
+  qa("[data-modifier]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); ouvrirModif(b.dataset.modifier); }));
+  qa("[data-effacer]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); effacer(b.dataset.effacer); }));
   q("[data-fermer-cree]")?.addEventListener("click", () => { ui.cree = null; render(); });
   qa("[data-copier]").forEach(b => b.addEventListener("click", () => copier(b.dataset.copier, b)));
   qa("[data-ouvrir]").forEach(b => b.addEventListener("click", () => { ui.ouverte = b.dataset.ouvrir; render(); }));
@@ -211,6 +247,7 @@ function brancher() {
       el.addEventListener("input", () => { ui.draft[el.name] = el.value; });
       el.addEventListener("change", () => { ui.draft[el.name] = el.value; if (el.name === "siteId") { el.blur(); render(); } });
     });
+    brancherCodes();
     form.querySelectorAll("[data-pc]").forEach(cb => cb.addEventListener("change", () => { ui.draft.pieces[cb.dataset.pc] = cb.checked; }));
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -219,11 +256,19 @@ function brancher() {
       if (!d.entreprise.trim()) { alert("Indique le nom de l'entreprise."); return; }
       if (d.fin < d.debut) { alert("La date de fin est avant la date de début."); return; }
       const pieces = [...Object.keys(d.pieces || {}).filter(n => d.pieces[n]), ...String(d.autres || "").split("\n").map(x => x.trim()).filter(Boolean)];
+      const codes = (codesCache[site.dossierId] || []).filter(codeCoche).map(c => ({ nom: c.nom || "Boîte à clés", code: c.code, notes: c.notes || "" }));
       const btn = form.querySelector("[type=submit]"); btn.disabled = true; btn.textContent = "⏳ Création…";
+      if (ui.edit) {
+        try {
+          await modifierMission(ui.edit, { siteId: site.id, siteName: site.name, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)].map(nom => ({ nom })), codes });
+          ui.form = false; ui.draft = null; ui.edit = null; document.activeElement?.blur(); window.toast?.("✓ Modifié — le lien reste le même"); render();
+        } catch (err) { btn.disabled = false; btn.textContent = "✓ Enregistrer"; alert("Modification impossible : " + (err?.message || err)); }
+        return;
+      }
       try {
-        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)], createdBy: ctx.user?.uid || "" });
+        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)], codes, createdBy: ctx.user?.uid || "" });
         ui.form = false; ui.draft = null; ui.cree = id;
-        try { await navigator.clipboard.writeText(smsTexte({ id, siteName: site.name, debut: d.debut, fin: d.fin })); window.toast?.("✓ Mission créée, message avec le lien copié"); } catch { window.toast?.("✓ Mission créée"); }
+        try { await navigator.clipboard.writeText(smsTexte({ id, siteName: site.name, debut: d.debut, fin: d.fin, codes })); window.toast?.("✓ Mission créée, message avec le lien copié"); } catch { window.toast?.("✓ Mission créée"); }
         document.activeElement?.blur(); render();
       } catch (err) { btn.disabled = false; btn.textContent = "✓ Créer et obtenir le lien"; alert("Création impossible : " + (err?.message || err)); }
     });
@@ -236,5 +281,6 @@ function brancher() {
   q("[data-devalider]")?.addEventListener("click", () => { if (confirm("Annuler la validation ?")) majMission(m.id, { validee: false, valideePar: "", valideeLe: null }).catch(e => alert(e.message)); });
   q("[data-renvoyer]")?.addEventListener("click", () => { if (confirm("Rouvrir la fiche pour que l'entreprise complète ? (pense à lui dire quoi reprendre)")) majMission(m.id, { termine: null }).then(() => accesMission(m.id, true)).catch(e => alert(e.message)); });
   q("[data-acces]")?.addEventListener("click", (e) => accesMission(m.id, e.currentTarget.dataset.acces === "1").catch(err => alert(err.message)));
-  q("[data-supprimer]")?.addEventListener("click", () => { if (confirm(`Supprimer ce ménage ponctuel (${m.siteName}, ${m.entreprise}) et ses photos ? Le lien ne marchera plus.`)) supprimerMission(m.id).then(() => { ui.ouverte = null; render(); }).catch(e => alert(e.message)); });
+  q("[data-supprimer]")?.addEventListener("click", () => effacer(m.id));
+  q("[data-modif-detail]")?.addEventListener("click", () => ouvrirModif(m.id));
 }

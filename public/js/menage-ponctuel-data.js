@@ -21,7 +21,7 @@ function randomToken() {
 }
 
 // Création (responsable) : mission + lien prestataire, même code.
-export async function creerMission({ site, dispositif, entreprise, telephone = "", debut, fin, consignes = "", pieces = [], createdBy }) {
+export async function creerMission({ site, dispositif, entreprise, telephone = "", debut, fin, consignes = "", pieces = [], codes = [], createdBy }) {
   const token = randomToken(), now = new Date().toISOString();
   await setDoc(doc(db, "invitations", token), {
     type: "ponctuel", ponctuelId: token, sites: [{ id: site.id, name: site.name }], siteId: site.id, siteName: site.name,
@@ -29,7 +29,7 @@ export async function creerMission({ site, dispositif, entreprise, telephone = "
   });
   await setDoc(doc(db, COL_PONCTUEL, token), {
     siteId: site.id, siteName: site.name, dispositif: dispositif || "", entreprise, telephone, debut, fin, consignes,
-    pieces: pieces.map(nom => ({ nom })), faits: {}, obs: {}, passages: [], observations: "",
+    pieces: pieces.map(nom => ({ nom })), codes, faits: {}, obs: {}, passages: [], observations: "",
     presta: null, termine: null, validee: false, createdBy, createdAt: now, majLe: Date.now(),
   });
   return token;
@@ -47,6 +47,13 @@ export function ecouterMission(id, cb) {
 }
 export const majMission = (id, champs) => updateDoc(doc(db, COL_PONCTUEL, id), { ...champs, majLe: Date.now() });
 
+// Modification (responsable) : mission + lien (dates, entreprise, site).
+export async function modifierMission(id, champs) {
+  await updateDoc(doc(db, COL_PONCTUEL, id), { ...champs, majLe: Date.now() });
+  const inv = { debut: champs.debut, fin: champs.fin, label: champs.entreprise, telephone: champs.telephone || "" };
+  if (champs.siteId) Object.assign(inv, { sites: [{ id: champs.siteId, name: champs.siteName }], siteId: champs.siteId, siteName: champs.siteName });
+  await updateDoc(doc(db, "invitations", id), inv).catch(e => console.warn("Lien ménage ponctuel :", e));
+}
 // Couper / rouvrir le lien du prestataire.
 export const accesMission = (id, active) => updateDoc(doc(db, "invitations", id), { active });
 

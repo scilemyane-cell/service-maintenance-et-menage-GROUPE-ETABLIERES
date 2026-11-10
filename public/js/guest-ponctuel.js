@@ -78,6 +78,7 @@ function render() {
     <div class="gp-qui"><span>👤 ${esc(nom())}${identite.societe ? ` · ${esc(identite.societe)}` : ""}</span>${verrou ? "" : `<button data-chg-id>Ce n'est pas moi</button>`}</div>
     <div class="gp-card"><h3>🧽 Gros ménage — ${esc(m.siteName)}</h3>
       <div class="hint" style="margin:0 0 8px">Du ${dateFr(m.debut)} au ${dateFr(m.fin)}</div>
+      ${(m.codes || []).length && !m.validee ? `<div class="gp-cons" style="margin-bottom:8px">🔐 <b>Boîte à clés</b><br>${m.codes.map(c => `${esc(c.nom)} : <b style="font-size:17px;letter-spacing:1px">${esc(c.code)}</b>${c.notes ? ` <small>(${esc(c.notes)})</small>` : ""}`).join("<br>")}</div>` : ""}
       ${m.consignes ? `<div class="gp-cons">${esc(m.consignes)}</div>` : ""}</div>
     ${m.validee ? `<div class="gp-ok">✅ Ménage vérifié et validé par le Groupe Établières. Merci !</div>`
       : m.termine ? `<div class="gp-ok">📨 Envoyé le ${jourFr(m.termine)} à ${heureFr(m.termine)}. Merci ! Le responsable va vérifier.<br><button class="nav-btn" data-rouvrir style="margin-top:8px">✏️ J'ai oublié quelque chose</button></div>` : `
