@@ -179,49 +179,77 @@ const sauverCfg = async (patch, msg) => {
 };
 
 // ---------- Rendu : intervention ----------
+// Accueil au même format que les poubelles : Ma journée / Toute la semaine / Historique.
+const NJ_EV = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const lundiEV = (iso) => { const d = new Date(iso + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return dateKey(d); };
+const plusJ = (iso, n) => { const d = new Date(iso + "T12:00"); d.setDate(d.getDate() + n); return dateKey(d); };
+const SVG_EV = `<span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>`;
 function vueChoix() {
-  const mna = sitesMNA(), ed = EDITEURS.includes(user?.role);
-  const miens = (passages || []).filter(p => ed || p.agentUid === user?.uid).sort(tri).slice(0, 30);
-  const infos = mna.map(s => {
-    const l = (passages || []).filter(p => p.siteId === s.id).sort(tri), der = l[0];
-    return { s, der, ret: passages ? retardsSite(passages, s.id).filter(r => !r.jamais).length : 0 };
-  });
-  const totRet = infos.reduce((n, x) => n + x.ret, 0), aJour = infos.filter(x => x.der && !x.ret).length;
-  const pct = infos.length ? Math.round(aJour / infos.length * 100) : 0, r = 40, circ = 2 * Math.PI * r;
+  const mna = sitesMNA(), ed = EDITEURS.includes(user?.role), auj = dateKey(new Date());
+  if (!["jour", "semaine", "historique"].includes(ui.vueEV)) ui.vueEV = "jour";
+  if (!ui.jourEV) ui.jourEV = auj;
+  const lun = lundiEV(ui.jourEV), jours = NJ_EV.map((_, i) => plusJ(lun, i));
+  const tous = passages || [];
+  const duJour = (iso) => tous.filter(p => p.date === iso);
+  const visites = new Set(tous.filter(p => jours.includes(p.date)).map(p => p.siteId));
+  const nbSem = mna.filter(s => visites.has(s.id)).length, pct = mna.length ? Math.round(nbSem / mna.length * 100) : 0, r = 40, circ = 2 * Math.PI * r;
   const prenom = (String(user?.nom || "").trim().split(/[\s@]+/)[0] || "").replace(/^./, m => m.toUpperCase());
   const etat = (p) => p.valide ? `<span class="ev-etat ok">✅ Validée</span>` : p.envoye ? `<span class="ev-etat att">⏳ Envoyée</span>` : `<span class="ev-etat cours">✏️ En cours</span>`;
-  return `
-    <div class="fj"><div class="fj-hero"><div class="fj-hero-txt">
-        <div class="fj-bonjour">Bonjour ${esc(prenom)} 👋</div>
-        <div class="fj-date">${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · Espaces verts</div>
-        <div class="fj-msg">${totRet ? `${totRet} prestation${totRet > 1 ? "s" : ""} en retard sur les sites.` : "Tous les sites sont à jour 🌿"}</div>
-        <div class="fj-sem">Sites à jour : <b>${aJour}/${infos.length}</b><span class="fj-sem-barre"><span style="width:${pct}%"></span></span></div>
-      </div>
-      <div class="fj-hero-anneau"><svg class="fj-anneau" viewBox="0 0 100 100" width="92" height="92" aria-hidden="true"><circle cx="50" cy="50" r="${r}" class="fj-anneau-fond"/><circle cx="50" cy="50" r="${r}" class="fj-anneau-val" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - pct / 100)}"/></svg>
-        <div class="fj-anneau-txt"><b>${pct}%</b><span>${aJour}/${infos.length}</span></div></div></div></div>
-
-    <div class="fj-piece">
-      <div class="fj-piece-tete"><div class="fj-piece-nom">➕ Nouvelle intervention</div></div>
-      <div class="hint" style="margin:2px 0 6px">1. Touche le site · 2. Vérifie la date · 3. Ouvre la feuille</div>
-      ${infos.map(({ s, der, ret }) => `<div class="fj-tache ev-site-l ${ui.siteChoisi === s.id ? "faite" : ""}" data-site="${esc(s.id)}">
-        <button class="fj-coche" aria-pressed="${ui.siteChoisi === s.id}"><span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
-          <span class="fj-label">🏡 ${esc(s.name)}<small class="fj-derniere ${ret ? "ev-retard" : ""}">${der ? `Dernier passage ${ilYa(joursDepuis(der.date))} (${fmtCourt(der.date)})` : "Jamais d'intervention"}${ret ? ` · ⚠️ ${ret} en retard` : ""}</small></span></button>
-      </div>`).join("") || `<div class="hint">Aucun site dans la liste.</div>`}
+  const derDe = (id) => tous.filter(p => p.siteId === id).sort(tri)[0];
+  const retDe = (id) => passages ? retardsSite(passages, id).filter(x => !x.jamais).length : 0;
+  const possible = ui.jourEV <= auj;
+  const ligneSite = (s, iso) => {
+    const faits = duJour(iso).filter(p => p.siteId === s.id), ret = retDe(s.id), der = derDe(s.id);
+    if (faits.length) return faits.map(p => { const n = tachesFaites(p).length;
+      return `<div class="fj-tache pb-t faite" data-ouvrir="${esc(p.id)}"><button class="fj-coche" aria-pressed="true">${SVG_EV}
+        <span class="fj-label">🏡 ${esc(s.name)}<small class="fj-derniere">${n ? tachesFaites(p).map(t => esc(t.label)).join(", ") : "rien de coché"} · ${esc(p.agentNom || "")}</small></span></button>${etat(p)}</div>`; }).join("");
+    const info = (der ? `Dernier passage ${ilYa(joursDepuis(der.date))} (${fmtCourt(der.date)})` : "Jamais d'intervention") + (ret ? ` · ${ret} prestation${ret > 1 ? "s" : ""} en retard` : "");
+    return `<div class="fj-tache pb-t ${ret ? "pb-retard" : ""}"><button class="fj-coche" ${possible ? `data-ev-faire="${esc(s.id)}"` : ""} aria-pressed="false">${SVG_EV}
+      <span class="fj-label">🏡 ${esc(s.name)}<small class="fj-derniere">${info}</small></span></button>
+      ${possible ? `<button class="pb-cam" data-ev-faire="${esc(s.id)}">📝 Faire</button>` : ""}</div>`;
+  };
+  const navSem = `<div class="pt-sem"><button class="nav-btn" data-ev-sem="-1">‹</button><div><b>Semaine du ${new Date(lun + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</b>${lun !== lundiEV(auj) ? `<small><a href="#" data-ev-auj>↩ revenir à aujourd'hui</a></small>` : ""}</div><button class="nav-btn" data-ev-sem="1">›</button></div>`;
+  let corps = "";
+  if (ui.vueEV === "jour") {
+    const faitsJ = mna.filter(s => duJour(ui.jourEV).some(p => p.siteId === s.id));
+    const enRetard = mna.filter(s => retDe(s.id) && !faitsJ.includes(s));
+    const autres = mna.filter(s => !faitsJ.includes(s) && !enRetard.includes(s));
+    const dj = new Date(ui.jourEV + "T12:00");
+    corps = `<div class="fj">
+      <div class="fj-hero"><div class="fj-hero-txt">
+          <div class="fj-bonjour">Bonjour ${esc(prenom)} 👋</div>
+          <div class="fj-date">${dj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · Espaces verts MNA</div>
+          <div class="fj-msg">${faitsJ.length ? `${faitsJ.length} site${faitsJ.length > 1 ? "s" : ""} fait${faitsJ.length > 1 ? "s" : ""} ce jour-là 💪` : possible ? "Touche « Faire » sur le site où tu interviens." : "Jour à venir."}</div>
+          <div class="fj-sem">Sites passés cette semaine : <b>${nbSem}/${mna.length}</b><span class="fj-sem-barre"><span style="width:${pct}%"></span></span></div>
+        </div>
+        <div class="fj-hero-anneau"><svg class="fj-anneau" viewBox="0 0 100 100" width="92" height="92" aria-hidden="true"><circle cx="50" cy="50" r="${r}" class="fj-anneau-fond"/><circle cx="50" cy="50" r="${r}" class="fj-anneau-val" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - pct / 100)}"/></svg>
+          <div class="fj-anneau-txt"><b>${pct}%</b><span>${nbSem}/${mna.length}</span></div></div></div>
+      ${navSem}
+      <div class="fj-jours" style="grid-template-columns:repeat(7,1fr)">${jours.map((j, i) => { const n = new Set(duJour(j).map(p => p.siteId)).size;
+        return `<button class="fj-jour ${j === ui.jourEV ? "actif" : ""} ${n ? "fini" : ""}" data-ev-j="${j}"><span>${NJ_EV[i]}</span><small>${n ? `${n} site${n > 1 ? "s" : ""}` : "—"}</small></button>`; }).join("")}</div>
+      ${faitsJ.length ? `<div class="fj-piece finie"><div class="fj-piece-tete"><div class="fj-piece-nom">✅ Faits ce jour</div><div class="fj-piece-compte">${faitsJ.length}</div></div>${faitsJ.map(s => ligneSite(s, ui.jourEV)).join("")}</div>` : ""}
+      ${enRetard.length ? `<div class="fj-piece pb-piece-retard"><div class="fj-piece-tete"><div class="fj-piece-nom">⚠️ En retard</div><div class="fj-piece-compte">${enRetard.length}</div></div>${enRetard.map(s => ligneSite(s, ui.jourEV)).join("")}</div>` : ""}
+      <div class="fj-piece"><div class="fj-piece-tete"><div class="fj-piece-nom">🏡 Autres sites</div><div class="fj-piece-compte">${autres.length}</div></div>${autres.map(s => ligneSite(s, ui.jourEV)).join("") || `<div class="hint">—</div>`}</div>
       ${ed ? gestionSitesHTML() : ""}
-      <div class="ev-go">
-        <label class="hint">Date <input type="date" class="ev-date" value="${esc(ui.date)}" max="${dateKey(new Date())}"></label>
-        <button class="add-btn ev-gros" data-act="commencer" ${ui.siteChoisi ? "" : "disabled"}>📝 Ouvrir la feuille${ui.siteChoisi ? ` — ${esc(mna.find(x => x.id === ui.siteChoisi)?.name || "")}` : ""}</button>
-      </div>
-    </div>
-
-    <div class="fj-piece">
-      <div class="fj-piece-tete"><div class="fj-piece-nom">🗂️ ${ed ? "Dernières interventions" : "Mes dernières interventions"}</div><div class="fj-piece-compte">${miens.length}</div></div>
+      <p class="hint">📝 « Faire » ouvre la feuille du site pour ce jour : tu coches les prestations et tu ajoutes les photos avant / après.</p>
+    </div>`;
+  } else if (ui.vueEV === "semaine") {
+    corps = `${navSem}<div class="form-card"><h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">🌿 Espaces verts MNA</h3>
+      <div class="table-wrap" style="border:none"><table class="pb-tab"><thead><tr><th>Site</th>${jours.map((j, i) => `<th style="text-align:center">${NJ_EV[i]}<br><small>${new Date(j + "T12:00").getDate()}</small></th>`).join("")}</tr></thead>
+      <tbody>${mna.map(s => `<tr><td>${esc(s.name)}${retDe(s.id) ? " ⚠️" : ""}</td>${jours.map(j => { const l = duJour(j).filter(p => p.siteId === s.id);
+        if (l.length) return `<td style="text-align:center">${l.map(p => `<button class="pb-case ok" data-ouvrir="${esc(p.id)}" title="${esc(tachesFaites(p).map(t => t.label).join(", "))}">✅</button>`).join("")}</td>`;
+        return `<td style="text-align:center">${j <= auj ? `<button class="pb-case" data-ev-faire="${esc(s.id)}" data-ev-date="${j}" title="Faire une feuille ce jour-là">⬜</button>` : `<span style="color:var(--text-dim)">—</span>`}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+      <p class="hint" style="margin:8px 0 0">✅ intervention faite (touche pour l'ouvrir) · ⬜ touche pour faire une feuille ce jour-là · ⚠️ prestations en retard.</p></div>`;
+  } else {
+    const miens = tous.filter(p => ed || p.agentUid === user?.uid).sort(tri).slice(0, 40);
+    corps = `<div class="fj-piece"><div class="fj-piece-tete"><div class="fj-piece-nom">🗂️ ${ed ? "Dernières interventions" : "Mes dernières interventions"}</div><div class="fj-piece-compte">${miens.length}</div></div>
       ${miens.length ? miens.map(p => { const n = tachesFaites(p).length;
         return `<div class="ev-ligne" data-ouvrir="${esc(p.id)}">
           <div><b>${esc(p.siteName || "")}</b> · ${esc(fmt(p.date))} ${etat(p)}<br><small class="hint">${ed ? esc(p.agentNom || "") + " · " : ""}${n ? `${n} prestation${n > 1 ? "s" : ""} : ${tachesFaites(p).map(t => esc(t.label)).join(", ")}` : "rien de coché"}</small></div>
           ${user?.role === "super_admin" ? `<button class="del-btn" data-ev-del="${esc(p.id)}" title="Effacer ce passage">🗑️</button>` : `<span>›</span>`}
-        </div>`; }).join("") : `<div class="hint">Aucune intervention pour l'instant.</div>`}
-    </div>`;
+        </div>`; }).join("") : `<div class="hint">Aucune intervention pour l'instant.</div>`}</div>`;
+  }
+  return `<div class="stack pb"><div class="fj-vues">${[["jour", "📱 Ma journée"], ["semaine", "📋 Toute la semaine"], ["historique", "🗂️ Historique"]].map(([k, l]) => `<button class="${ui.vueEV === k ? "actif" : ""}" data-ev-v="${k}">${l}</button>`).join("")}</div>${corps}</div>`;
 }
 
 function blocPrecedent(prec) {
@@ -401,6 +429,22 @@ async function surClic(e) {
   }
   const remettre = t.closest("[data-ev-remettre]");
   if (remettre) { await sauverCfg({ masques: (cfgEV.masques || []).filter(x => x !== remettre.dataset.evRemettre) }, "Site remis dans la liste"); return; }
+  const evv = t.closest("[data-ev-v]"); if (evv) { ui.vueEV = evv.dataset.evV; render(); return; }
+  const evj = t.closest("[data-ev-j]"); if (evj) { ui.jourEV = evj.dataset.evJ; render(); return; }
+  const evs = t.closest("[data-ev-sem]"); if (evs) { ui.jourEV = plusJ(lundiEV(ui.jourEV || dateKey(new Date())), 7 * Number(evs.dataset.evSem)); render(); return; }
+  if (t.closest("[data-ev-auj]")) { e?.preventDefault?.(); ui.jourEV = dateKey(new Date()); render(); return; }
+  const faire = t.closest("[data-ev-faire]");
+  if (faire) {
+    const s = sitesMNA().find(x => x.id === faire.dataset.evFaire); if (!s) return;
+    const date = faire.dataset.evDate || ui.jourEV || dateKey(new Date());
+    if (date > dateKey(new Date())) return;
+    faire.disabled = true;
+    try {
+      const id = await creerPassage({ siteId: s.id, siteName: s.name, date, agentUid: user.uid, agentNom: user.nom || user.email || "" });
+      ui.passageId = id; statut = ""; suiviPrecId = null; suivrePhotos(id, false); render(); window.scrollTo?.(0, 0);
+    } catch (err) { console.error(err); toast("Impossible de créer la feuille : " + (err.message || err), "error"); faire.disabled = false; }
+    return;
+  }
   const site = t.closest("[data-site]");
   if (site) { ui.siteChoisi = site.dataset.site; render(); return; }
   const ouvrir = t.closest("[data-ouvrir]");
