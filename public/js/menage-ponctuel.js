@@ -8,6 +8,7 @@ import { watchInvitations } from "./invitations-data.js";
 import { voirPhotos } from "./demandes-photos.js";
 import { watchSites } from "./sites-data.js";
 import { watchAssociations } from "./associations-data.js";
+import { watchSitesDossiers } from "./site-dossier-data.js";
 import {
   creerMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
   passageOuvert, minutesPassees, fmtMin, nbFaits, statutMission, heureFr, jourFr, dateFr, lienMission,
@@ -52,6 +53,7 @@ export function mountMenagePonctuelDispositif(container, user, dispositif) {
   // Tous les sites : maisons / sites ménage (avec leurs pièces) + sites des associations.
   mountMenagePonctuel(container, { dispositif, sites: [], assoc: [], user, tous: true });
   unsubs.push(watchSites((l) => { ctx.sites = (l || []).map(s => ({ ...s, groupe: s.dispositif || "Dispositif MNA" })); render(); }));
+  unsubs.push(watchSitesDossiers((l) => { ctx.dossiers = l || []; render(); }));
   unsubs.push(watchAssociations((as) => { ctx.assoc = (as || []).flatMap(a => (a.sites || []).map(x => ({ id: `assoc:${a.nom}|${x.nom}`, name: x.nom, groupe: a.nom, sousGroupe: x.groupe || "", dispositif: a.nom, rooms: [] }))); render(); }));
 }
 
@@ -62,11 +64,19 @@ function suivrePhotos(id) {
 }
 
 // Comparaison souple des noms : « Maison MNA Saint Vincent de Paul » = « SVDP ».
-const norm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(maison|mna|la|le|les)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+const norm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(maison|mna|la|le|les)\b/g, " ").replace(/[^a-z0-9]+/g, " ").replace(/\bst\b/g, "saint").replace(/\bste\b/g, "sainte").trim();
 const sigle = (t) => norm(t).split(" ").filter(Boolean).map(w => w[0]).join("");
 const memeSite = (a, b) => { const x = norm(a), y = norm(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x) || sigle(a) === y.replace(/ /g, "") || sigle(b) === x.replace(/ /g, "")); };
 const estMna = (s) => /mna/i.test(s.groupe || "") || /mna/i.test(s.dispositif || "");
 const sitesDispo = () => {
+  // Maisons MNA : la liste de référence est celle des Dossiers de site (groupe « MNA »).
+  // On reprend les pièces de la fiche ménage correspondante quand elle existe.
+  const doss = /mna/i.test(ctx.dispositif || "") ? (ctx.dossiers || []).filter(d => /mna/i.test(d.groupe || "")) : [];
+  if (doss.length) {
+    const fiches = (ctx.sites || []).filter(estMna);
+    return doss.map(d => { const f = fiches.find(m => memeSite(m.name, d.nom)); return { id: f?.id || `dossier:${d.id}`, name: d.nom, groupe: ctx.dispositif, dispositif: ctx.dispositif, rooms: f?.rooms || [] }; })
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
+  }
   const menage = (ctx.sites || []).filter(s => s && s.id);
   // Sites des associations absents des fiches ménage ; ceux du groupe « MNA » rejoignent le dispositif MNA.
   const autres = (ctx.assoc || []).filter(s => !menage.some(m => memeSite(m.name, s.name)))
