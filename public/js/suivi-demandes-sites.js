@@ -773,7 +773,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       ${q.length >= 3 ? (() => {
         // Recherche aussi dans les demandes (N°, descriptif, local), même traitées ou reliées.
-        const trouvees = lignes.filter(l => sa(l.n).includes(q) || sa(l.descr).includes(q) || sa(l.local).includes(q)).slice(0, 30);
+        const qc = q.replace(/[\s\-_.\/]+/g, ""), cp = (x) => sa(x).replace(/[\s\-_.\/]+/g, ""); const trouvees = lignes.filter(l => sa(l.n).includes(q) || sa(l.descr).includes(q) || sa(l.local).includes(q) || (qc.length >= 2 && cp(l.local).includes(qc))).slice(0, 60);
         const etat = (l) => l.lieeA ? `🔗 doublon de ${esc(l.lieeANumero || "?")}` : TRAITE(l.statut) ? `✓ ${esc(l.statut)}` : EN_ATTENTE_VALID(l.statut) ? "⏳ à valider" : `à traiter · ${esc(l.statut)}`;
         return `<section class="dps-trouvees"><h3>📄 Demandes trouvées <small>${trouvees.length}${trouvees.length === 30 ? "+" : ""}</small></h3>
           ${trouvees.length ? `<div class="dps-trouvees-liste">${trouvees.map(l => `<button type="button" class="dps-trouvee" data-ouvrir-dem="${esc(l.id)}" data-ouvrir-site="${esc(l.site)}"><b>${esc(l.n)}</b><span>${esc(l.site)}${l.local ? ` · ${esc(l.local)}` : ""} — ${esc((l.descr || "").slice(0, 70))}</span><em class="${TRAITE(l.statut) || l.lieeA ? "fini" : ""}">${etat(l)}</em></button>`).join("")}</div>`
@@ -834,10 +834,12 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const tousDuSite = lignes.filter(l => l.site === st.site);
   const enValidation = duSite.filter(l => EN_ATTENTE_VALID(l.statut));
   const qS = sa(st.qSite.trim());
-  const filtreQ = (l) => !qS || sa(`${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type}`).includes(qS);
+  const compact = (x) => sa(x).replace(/[\s\-_.\/]+/g, "");
+  const qC = compact(qS);
+  const filtreQ = (l) => { if (!qS) return true; const t = `${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type} ${l.commentaireTech || ""} ${l.intervenant || ""}`; return sa(t).includes(qS) || (qC.length >= 2 && compact(t).includes(qC)); };
   const ouvertesToutes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l));
   const ouvertes = ouvertesToutes.filter(l => !st.ie || ieDe(l) === st.ie).sort((TRIS[st.tri] || TRIS.urgence)[1]);
-  const traitees = duSite.filter(l => TRAITE(l.statut)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
+  const traitees = duSite.filter(l => TRAITE(l.statut) && filtreQ(l)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
   // Bloc des demandes liées, affiché en haut de la carte principale.
   const lieesHTML = (l) => {
     const liees = lieesDe(l.id); if (!liees.length) return "";
@@ -993,7 +995,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       const groupes = []; ouvertes.forEach(l => { const k = cle(l); let g = groupes.find(x => x.k === k); if (!g) groupes.push(g = { k, l: [] }); g.l.push(l); });
       return groupes.length ? groupes.map(g => `<h4 class="dps-groupe-titre">${st.tri === "local" ? "🚪" : "⏩"} ${esc(g.k)} <small>${g.l.length}</small></h4><div class="dps-cartes">${g.l.map(carte).join("")}</div>`).join("") : `<div class="dps-vide">Aucune demande${qS ? " ne correspond" : " à traiter sur ce site"}.</div>`;
     })() : ouvertes.length ? `<div class="dps-cartes">${ouvertes.map(carte).join("")}</div>` : `<div class="dps-vide">${qS ? "Aucune demande ne correspond à la recherche." : "✓ Aucune demande à traiter sur ce site."}</div>`}
-    ${traitees.length ? `<details class="dps-historique"><summary>Historique : ${traitees.length} demande${traitees.length > 1 ? "s" : ""} traitée${traitees.length > 1 ? "s" : ""}</summary><div class="dps-cartes">${traitees.slice(0, 40).map(carte).join("")}</div></details>` : ""}
+    ${traitees.length ? `<details class="dps-historique" ${qS ? "open" : ""}><summary>${qS ? "✅ Déjà fait — " : "Historique : "}${traitees.length} demande${traitees.length > 1 ? "s" : ""} traitée${traitees.length > 1 ? "s" : ""}${qS ? ` pour « ${esc(st.qSite.trim())} »` : ""}</summary><div class="dps-cartes">${traitees.slice(0, qS ? 300 : 40).map(carte).join("")}</div></details>` : qS ? `<div class="dps-vide">Rien de traité pour « ${esc(st.qSite.trim())} ».</div>` : ""}
   </div>`;
   onToggle();
   container.querySelector("#dps-retour").addEventListener("click", () => {

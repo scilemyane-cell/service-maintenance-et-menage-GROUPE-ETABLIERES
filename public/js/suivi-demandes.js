@@ -792,9 +792,11 @@ function lignesFiltrees() {
     if (ui.filtreSites.length > 0 && !ui.filtreSites.includes(l.site)) return false;
     if (ui.filtreAssociation && l.association !== ui.filtreAssociation) return false;
     if (ui.recherche) {
-      const q = ui.recherche.toLowerCase();
-      const hay = `${l.n} ${l.site} ${l.descr} ${l.type} ${l.intervenant}`.toLowerCase();
-      if (!hay.includes(q)) return false;
+      const sa = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const cp = (x) => sa(x).replace(/[\s\-_.\/]+/g, "");
+      const q = sa(ui.recherche.trim()), qc = cp(q);
+      const hay = `${l.n} ${l.site} ${l.local} ${l.descr} ${l.type} ${l.intervenant} ${l.demandeur} ${l.commentaireTech || ""}`;
+      if (!sa(hay).includes(q) && !(qc.length >= 2 && cp(hay).includes(qc))) return false;
     }
     return true;
   }).sort((a, b) => {
@@ -905,7 +907,7 @@ function renderTableau(container) {
         <label class="demandes-filtre" style="flex-direction:row;align-items:center;gap:6px;align-self:end"><input type="checkbox" id="demandes-voir-doublons" ${ui.voirDoublons ? "checked" : ""}> <span>Afficher les doublons reliés 🔗</span></label>
         <label class="demandes-filtre demandes-filtre-recherche">
           <span>🔎 Recherche</span>
-          <input type="text" id="demandes-recherche" placeholder="N°, site, description, intervenant…" value="${esc(ui.recherche)}">
+          <input type="text" id="demandes-recherche" placeholder="N°, site, logement, description, intervenant…" value="${esc(ui.recherche)}">
         </label>
         <label class="demandes-filtre">
           <span>Statut</span>
@@ -939,7 +941,7 @@ function renderTableau(container) {
                 <td class="mono">${fmtDateFR(l.date)}</td>
                 <td>${esc(l.site)}</td>
                 <td>${esc(l.association)}</td>
-                <td class="demandes-table-descr" title="${esc(l.descr)}${l.type ? " — " + esc(l.type) : ""}${l.commentaireTech ? " — Note : " + esc(l.commentaireTech) : ""}">${esc(l.descr) || "<span class=\"text-dim\">—</span>"}${l.commentaireTech ? ` <span class="demandes-note-flag" title="${esc(l.commentaireTech)}">📝</span>` : ""}</td>
+                <td class="demandes-table-descr" title="${esc(l.descr)}${l.type ? " — " + esc(l.type) : ""}${l.commentaireTech ? " — Note : " + esc(l.commentaireTech) : ""}">${l.local ? `<small class="dps-local" style="display:inline-block;margin-bottom:2px">📍 ${esc(l.local)}</small><br>` : ""}${esc(l.descr) || "<span class=\"text-dim\">—</span>"}${l.commentaireTech ? ` <span class="demandes-note-flag" title="${esc(l.commentaireTech)}">📝</span>` : ""}</td>
                 <td>${badgeUrgence(l.urgence)}</td>
                 <td>${perms.isEditor ? `<select class="demandes-cell-input demandes-input-categorie" aria-label="Intervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === (l.categorieIntervenant || "") ? "selected" : ""}>${o || "—"}</option>`).join("")}${l.categorieIntervenant && !["Interne SG", "Externe SG", "Interne site", "Externe site"].includes(l.categorieIntervenant) ? `<option selected>${esc(l.categorieIntervenant)}</option>` : ""}</select>` : (esc(l.categorieIntervenant) || "<span class=\"text-dim\">—</span>")}</td>
                 <td>${perms.isEditor ? `<input type="text" class="demandes-cell-input demandes-input-intervenant" id="interv-${esc(l.id)}" value="${esc(l.intervenant)}" placeholder="—">` : (esc(l.intervenant) || "<span class=\"text-dim\">—</span>")}</td>
