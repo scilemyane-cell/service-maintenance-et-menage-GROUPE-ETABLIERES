@@ -13,12 +13,27 @@ export function watchPlans(cb) {
 export const savePlan = (cle, plan) => setDoc(REF(), { plans: { [cle]: { niveaux: plan.niveaux || [], majLe: Date.now() } } }, { merge: true });
 export const clePlan = (site) => site ? (site.dossierId || site.id) : "";
 
-// Liste à plat : { cle (unique, sert aussi aux photos), nom, niveau }.
+// ---- Tâches à cocher par pièce (gros ménage), par défaut selon le type de pièce ----
+const BASE = ["Toiles d'araignées & plafond", "Portes, poignées & interrupteurs", "Surfaces : dépoussiérage", "Radiateurs", "Vitres & encadrements", "Plinthes", "Sols : aspirateur & lavage"];
+const MODELES = [
+  [/cuisine|kitchenette/i, ["Toiles d'araignées & plafond", "Hotte & filtres", "Placards : intérieur & extérieur", "Crédence & faïence", "Plan de travail", "Évier & robinetterie", "Four", "Micro-ondes", "Frigo (intérieur)", "Électroménager : extérieur", "Poubelles (bacs lavés)", "Portes, poignées & interrupteurs", "Vitres & encadrements", "Plinthes", "Sols : aspirateur & lavage"]],
+  [/salle de bain|sdb|douche|salle d.eau/i, ["Toiles d'araignées & plafond", "VMC / aérations", "Faïence & joints", "Douche / baignoire : détartrage", "Lavabo & robinetterie", "Miroir", "Meuble & rangements", "WC (si présent)", "Portes, poignées & interrupteurs", "Plinthes", "Sols : aspirateur & lavage"]],
+  [/^wc|toilette/i, ["VMC / aérations", "Cuvette, abattant & pied", "Lave-mains", "Faïence & murs", "Portes, poignées & interrupteurs", "Plinthes", "Sols : lavage & désinfection"]],
+  [/chambre|studio/i, ["Toiles d'araignées & plafond", "Placards / armoire : intérieur & extérieur", "Lit & sommier (dessous)", "Bureau & étagères", "Portes, poignées & interrupteurs", "Radiateurs", "Vitres & encadrements", "Plinthes", "Sols : aspirateur & lavage"]],
+  [/escalier/i, ["Rampe & main courante", "Marches & contremarches", "Toiles d'araignées & plafond", "Plinthes", "Interrupteurs"]],
+  [/garage|cellier|buanderie|local/i, ["Toiles d'araignées & plafond", "Étagères & rangements", "Machines : extérieur", "Évacuation des déchets", "Sols : balayage & lavage"]],
+  [/terrasse|ext[ée]rieur|jardin|balcon/i, ["Balayage", "Mobilier extérieur", "Évacuation des déchets", "Vitres extérieures"]],
+];
+export const TACHES_RAPIDES = [...new Set([...BASE, "Placards : intérieur & extérieur", "Four", "Frigo (intérieur)", "Hotte & filtres", "Faïence & joints", "Douche / baignoire : détartrage", "VMC / aérations", "Miroir", "Lit & sommier (dessous)", "Volets", "Luminaires"])];
+export function tachesParDefaut(nom) { const m = MODELES.find(([re]) => re.test(String(nom || "").trim())); return [...(m ? m[1] : BASE)]; }
+export const normPiece = (p) => typeof p === "string" ? { nom: p, taches: tachesParDefaut(p) } : { nom: String(p?.nom || ""), taches: Array.isArray(p?.taches) ? p.taches : tachesParDefaut(p?.nom) };
+
+// Liste à plat : { cle (unique, sert aussi aux photos), nom, niveau, taches }.
 export function piecesDuPlan(plan) {
   const out = [];
-  (plan?.niveaux || []).forEach(n => (n.pieces || []).forEach(p => {
-    const nom = String(p || "").trim(); if (!nom) return;
-    out.push({ cle: n.nom ? `${n.nom} · ${nom}` : nom, nom, niveau: n.nom || "" });
+  (plan?.niveaux || []).forEach(n => (n.pieces || []).forEach(x => {
+    const p = normPiece(x), nom = p.nom.trim(); if (!nom) return;
+    out.push({ cle: n.nom ? `${n.nom} · ${nom}` : nom, nom, niveau: n.nom || "", taches: p.taches });
   }));
   return out;
 }
@@ -40,18 +55,30 @@ export const STYLE_PLAN = `<style>
 .pl-rap{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.pl-rap button{border:1px dashed var(--border);background:transparent;color:var(--text);border-radius:999px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
 .pl-rap button:hover{border-color:#2f6fd6;color:#2f6fd6}
 .pl-vide{text-align:center;padding:20px}
+.pl-pc b{cursor:pointer;font-weight:600}.pl-pc small{color:var(--text-dim);font-size:11px;cursor:pointer}.pl-pc.ouv{border-color:#2f6fd6;background:#e3edff;color:#1f4fa8}
+.pl-tch{margin-top:10px;border:1px solid #2f6fd6;border-radius:12px;padding:10px;background:var(--panel-alt)}
+.pl-tch h4{margin:0 0 8px;font-size:14px}.pl-tl{display:flex;flex-direction:column;gap:4px}
+.pl-t{display:flex;align-items:center;gap:6px;font-size:13.5px;padding:4px 6px;border-radius:8px;background:var(--panel)}
+.pl-t span{flex:1}.pl-t button{border:none;background:transparent;cursor:pointer;color:var(--text-dim);font-size:13px;padding:2px 5px}
 </style>`;
 
 // Éditeur. opts : { site, plan, fiches (pièces de la fiche ménage), onSave(plan) }
+let ouvert = null; // "i|j" : pièce dont on édite les tâches
 export function editeurPlanHTML({ site, plan, fiches = [] }) {
-  const nivs = plan?.niveaux || [];
+  const nivs = (plan?.niveaux || []).map(n => ({ ...n, pieces: (n.pieces || []).map(normPiece) }));
   const libres = NIVEAUX.filter(n => !nivs.some(x => x.nom === n));
   return `${STYLE_PLAN}<div class="pl">
     ${nivs.length ? nivs.map((n, i) => `<div class="pl-niv">
       <div class="pl-niv-t"><input value="${esc(n.nom)}" data-pl-ren="${i}" title="Renommer le niveau">
         <button class="nav-btn" data-pl-up="${i}" ${i ? "" : "disabled"} title="Monter">↑</button><button class="nav-btn" data-pl-down="${i}" ${i < nivs.length - 1 ? "" : "disabled"} title="Descendre">↓</button>
         <button class="nav-btn" data-pl-delniv="${i}" title="Supprimer ce niveau">🗑️</button></div>
-      <div class="pl-pcs">${(n.pieces || []).map((p, j) => `<span class="pl-pc">${esc(p)}<button data-pl-delpc="${i}|${j}" title="Retirer">✕</button></span>`).join("") || `<span class="hint">Aucune pièce : ajoute-les ci-dessous.</span>`}</div>
+      <div class="pl-pcs">${n.pieces.map((p, j) => `<span class="pl-pc ${ouvert === `${i}|${j}` ? "ouv" : ""}"><b data-pl-tch="${i}|${j}" title="Voir / modifier les tâches">${esc(p.nom)}</b><small data-pl-tch="${i}|${j}">☑ ${p.taches.length}</small><button data-pl-delpc="${i}|${j}" title="Retirer">✕</button></span>`).join("") || `<span class="hint">Aucune pièce : ajoute-les ci-dessous.</span>`}</div>
+      ${(() => { const [oi, oj] = String(ouvert || "").split("|").map(Number); const p = oi === i ? n.pieces[oj] : null; if (!p) return "";
+        return `<div class="pl-tch"><h4>☑ Tâches à cocher — ${esc(p.nom)} <small class="hint">(${p.taches.length})</small></h4>
+          <div class="pl-tl">${p.taches.map((t, k) => `<div class="pl-t"><span>☐ ${esc(t)}</span><button data-pl-tup="${k}" ${k ? "" : "disabled"} title="Monter">↑</button><button data-pl-tdel="${k}" title="Retirer">✕</button></div>`).join("") || `<span class="hint">Aucune tâche : l'entreprise cochera seulement la pièce.</span>`}</div>
+          <div class="pl-add"><input data-pl-ttxt placeholder="Nouvelle tâche (ex. Nettoyer les volets)"><button class="add-btn" data-pl-tadd>＋ Ajouter</button></div>
+          <div class="pl-rap">${TACHES_RAPIDES.filter(t => !p.taches.includes(t)).map(t => `<button data-pl-trap="${esc(t)}">＋ ${esc(t)}</button>`).join("")}</div>
+          <div class="pl-rap"><button data-pl-tdef>↺ Tâches par défaut (${esc(p.nom)})</button><button data-pl-tclose>✓ Fermer</button></div></div>`; })()}
       <div class="pl-add"><input data-pl-txt="${i}" placeholder="Nom de la pièce (ex. Chambre 3, Salle de bain étage)"><button class="add-btn" data-pl-addpc="${i}">＋ Ajouter</button></div>
       <div class="pl-rap">${RAPIDES.map(r => `<button data-pl-rap="${i}|${esc(r)}">＋ ${esc(r)}</button>`).join("")}</div>
     </div>`).join("") : `<div class="form-card pl-vide"><p>Aucune pièce programmée pour <b>${esc(site?.name || "cette maison")}</b>.</p>
@@ -62,24 +89,37 @@ export function editeurPlanHTML({ site, plan, fiches = [] }) {
 
 // Branche l'éditeur ; chaque modification est enregistrée tout de suite.
 export function brancherEditeurPlan(zone, { site, plan, fiches = [], onChange }) {
-  const p = { niveaux: JSON.parse(JSON.stringify(plan?.niveaux || [])) };
+  const p = { niveaux: (plan?.niveaux || []).map(n => ({ nom: n.nom, pieces: (n.pieces || []).map(normPiece) })) };
   const sauver = () => { onChange?.(p); savePlan(clePlan(site), p).catch(e => alert("Enregistrement impossible : " + (e?.message || e))); };
-  const numeroChambre = () => { let max = 0; p.niveaux.forEach(n => n.pieces.forEach(x => { const m = /^chambre\s*(\d+)/i.exec(x); if (m) max = Math.max(max, +m[1]); })); return max + 1; };
+  const numeroChambre = () => { let max = 0; p.niveaux.forEach(n => n.pieces.forEach(x => { const m = /^chambre\s*(\d+)/i.exec(x.nom); if (m) max = Math.max(max, +m[1]); })); return max + 1; };
   const ajouter = (i, nom) => {
     nom = String(nom || "").trim(); if (!nom) return;
     if (/^chambre$/i.test(nom)) nom = `Chambre ${numeroChambre()}`;
     const n = p.niveaux[i]; let final = nom, k = 2;
-    while (n.pieces.some(x => x.toLowerCase() === final.toLowerCase())) final = `${nom} ${k++}`;
-    n.pieces.push(final); sauver();
+    while (n.pieces.some(x => x.nom.toLowerCase() === final.toLowerCase())) final = `${nom} ${k++}`;
+    n.pieces.push({ nom: final, taches: tachesParDefaut(final) }); sauver();
   };
   zone.querySelectorAll("[data-pl-addpc]").forEach(b => b.onclick = () => { const i = +b.dataset.plAddpc, inp = zone.querySelector(`[data-pl-txt="${i}"]`); const v = inp.value; inp.value = ""; inp.blur(); ajouter(i, v); });
   zone.querySelectorAll("[data-pl-txt]").forEach(inp => inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = inp.value; inp.value = ""; inp.blur(); ajouter(+inp.dataset.plTxt, v); } }));
   zone.querySelectorAll("[data-pl-rap]").forEach(b => b.onclick = () => { const [i, nom] = b.dataset.plRap.split("|"); ajouter(+i, nom); });
-  zone.querySelectorAll("[data-pl-delpc]").forEach(b => b.onclick = () => { const [i, j] = b.dataset.plDelpc.split("|").map(Number); p.niveaux[i].pieces.splice(j, 1); sauver(); });
+  zone.querySelectorAll("[data-pl-delpc]").forEach(b => b.onclick = () => { const [i, j] = b.dataset.plDelpc.split("|").map(Number); p.niveaux[i].pieces.splice(j, 1); ouvert = null; sauver(); });
+  // Tâches de la pièce ouverte.
+  zone.querySelectorAll("[data-pl-tch]").forEach(b => b.onclick = () => { ouvert = ouvert === b.dataset.plTch ? null : b.dataset.plTch; onChange?.(p); });
+  const [oi, oj] = String(ouvert || "").split("|").map(Number), po = p.niveaux[oi]?.pieces[oj];
+  if (po) {
+    const ajT = (t) => { t = String(t || "").trim(); if (!t || po.taches.includes(t)) return; po.taches.push(t); sauver(); };
+    zone.querySelector("[data-pl-tadd]")?.addEventListener("click", () => { const inp = zone.querySelector("[data-pl-ttxt]"); const v = inp.value; inp.value = ""; inp.blur(); ajT(v); });
+    zone.querySelector("[data-pl-ttxt]")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = e.target.value; e.target.value = ""; e.target.blur(); ajT(v); } });
+    zone.querySelectorAll("[data-pl-trap]").forEach(b => b.onclick = () => ajT(b.dataset.plTrap));
+    zone.querySelectorAll("[data-pl-tdel]").forEach(b => b.onclick = () => { po.taches.splice(+b.dataset.plTdel, 1); sauver(); });
+    zone.querySelectorAll("[data-pl-tup]").forEach(b => b.onclick = () => { const k = +b.dataset.plTup; [po.taches[k - 1], po.taches[k]] = [po.taches[k], po.taches[k - 1]]; sauver(); });
+    zone.querySelector("[data-pl-tdef]")?.addEventListener("click", () => { if (confirm("Remplacer les tâches de cette pièce par celles par défaut ?")) { po.taches = tachesParDefaut(po.nom); sauver(); } });
+    zone.querySelector("[data-pl-tclose]")?.addEventListener("click", () => { ouvert = null; onChange?.(p); });
+  }
   zone.querySelectorAll("[data-pl-ren]").forEach(inp => inp.addEventListener("change", () => { const v = inp.value.trim(); if (!v) { inp.value = p.niveaux[+inp.dataset.plRen].nom; return; } p.niveaux[+inp.dataset.plRen].nom = v; inp.blur(); sauver(); }));
   zone.querySelectorAll("[data-pl-up]").forEach(b => b.onclick = () => { const i = +b.dataset.plUp; [p.niveaux[i - 1], p.niveaux[i]] = [p.niveaux[i], p.niveaux[i - 1]]; sauver(); });
   zone.querySelectorAll("[data-pl-down]").forEach(b => b.onclick = () => { const i = +b.dataset.plDown; [p.niveaux[i + 1], p.niveaux[i]] = [p.niveaux[i], p.niveaux[i + 1]]; sauver(); });
-  zone.querySelectorAll("[data-pl-delniv]").forEach(b => b.onclick = () => { const i = +b.dataset.plDelniv, n = p.niveaux[i]; if (!confirm(`Supprimer le niveau « ${n.nom} »${n.pieces.length ? ` et ses ${n.pieces.length} pièce(s)` : ""} ?`)) return; p.niveaux.splice(i, 1); sauver(); });
+  zone.querySelectorAll("[data-pl-delniv]").forEach(b => b.onclick = () => { const i = +b.dataset.plDelniv, n = p.niveaux[i]; if (!confirm(`Supprimer le niveau « ${n.nom} »${n.pieces.length ? ` et ses ${n.pieces.length} pièce(s)` : ""} ?`)) return; p.niveaux.splice(i, 1); ouvert = null; sauver(); });
   zone.querySelectorAll("[data-pl-addniv]").forEach(b => b.onclick = () => {
     let nom = b.dataset.plAddniv; if (!nom) { nom = (prompt("Nom du niveau (ex. Mezzanine, Annexe) :") || "").trim(); if (!nom) return; }
     if (p.niveaux.some(n => n.nom.toLowerCase() === nom.toLowerCase())) { alert("Ce niveau existe déjà."); return; }
@@ -88,5 +128,6 @@ export function brancherEditeurPlan(zone, { site, plan, fiches = [], onChange })
     const pos = p.niveaux.findIndex(n => rang(n.nom) > rang(nom));
     p.niveaux.splice(pos < 0 ? p.niveaux.length : pos, 0, { nom, pieces: [] }); sauver();
   });
-  zone.querySelector("[data-pl-import]")?.addEventListener("click", () => { p.niveaux = [{ nom: "RDC", pieces: [...fiches] }]; sauver(); });
+  // fiches : [{ nom, taches }] (pièces et tâches de la fiche ménage du site).
+  zone.querySelector("[data-pl-import]")?.addEventListener("click", () => { p.niveaux = [{ nom: "RDC", pieces: fiches.map(f => typeof f === "string" ? normPiece(f) : { nom: f.nom, taches: f.taches?.length ? [...f.taches] : tachesParDefaut(f.nom) }) }]; sauver(); });
 }

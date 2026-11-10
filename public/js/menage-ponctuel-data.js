@@ -82,7 +82,10 @@ export function minutesPassees(m) {
   return Math.round((m?.passages || []).reduce((t, p) => t + ((p.d || (p.a ? Date.now() : 0)) - (p.a || 0)), 0) / 60000);
 }
 export const fmtMin = (mn) => mn <= 0 ? "0 min" : `${Math.floor(mn / 60) ? Math.floor(mn / 60) + " h " : ""}${String(mn % 60).padStart(Math.floor(mn / 60) ? 2 : 1, "0")} min`;
-export const nbFaits = (m) => (m?.pieces || []).filter((_, i) => m.faits?.[i]).length;
+// Une pièce avec des tâches est faite quand toutes ses tâches sont cochées (faits["i-k"]).
+export const tachesFaites = (m, i) => (m?.pieces?.[i]?.taches || []).filter((_, k) => m.faits?.[`${i}-${k}`]).length;
+export const pieceFaite = (m, i) => { const t = m?.pieces?.[i]?.taches || []; return t.length ? tachesFaites(m, i) === t.length : !!m?.faits?.[i]; };
+export const nbFaits = (m) => (m?.pieces || []).filter((_, i) => pieceFaite(m, i)).length;
 export function statutMission(m, actif = true) {
   if (m.validee) return { cle: "validee", ic: "✅", lib: "Validé" };
   if (m.termine) return { cle: "averifier", ic: "📨", lib: "Terminé — à vérifier" };

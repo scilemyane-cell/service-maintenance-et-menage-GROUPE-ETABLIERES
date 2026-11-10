@@ -6,7 +6,7 @@ import { esc } from "./astreinte-logic.js";
 import { compresserImage, voirPhotos } from "./demandes-photos.js";
 import {
   ecouterMission, ecouterPhotosMission, majMission, ajouterPhotoMission, supprimerPhotoMission,
-  passageOuvert, minutesPassees, fmtMin, nbFaits, heureFr, jourFr, dateFr,
+  passageOuvert, minutesPassees, fmtMin, nbFaits, pieceFaite, tachesFaites, heureFr, jourFr, dateFr,
 } from "./menage-ponctuel-data.js";
 
 let m = null, photos = [], unsubs = [], cont = null, user = null, inv = null, identite = null, envoiEnCours = 0, saveTimer = null;
@@ -28,6 +28,10 @@ const STYLE = `<style>
 .gp-ph{display:flex;align-items:center;gap:10px}
 .gp-ph input[type=checkbox]{width:28px;height:28px;accent-color:#1baf7a;flex:none}
 .gp-ph label{flex:1;font-size:15.5px;font-weight:700}.gp-piece.fait .gp-ph label{color:#11845b}
+.gp-ph-t .nav-btn{padding:6px 10px;font-size:12.5px;flex:none}
+.gp-taches{display:flex;flex-direction:column;margin-top:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.gp-tache{display:flex;align-items:center;gap:12px;padding:10px 10px;border-top:1px solid var(--border);font-size:14.5px;cursor:pointer}.gp-tache:first-child{border-top:none}
+.gp-tache input{width:24px;height:24px;accent-color:#1baf7a;flex:none}.gp-tache.ok span{text-decoration:line-through;color:var(--text-dim)}
 .gp-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .gp-btns label{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border:1px dashed var(--border);border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:700;background:var(--panel-alt)}
 .gp-btns label small{font-weight:500;color:var(--text-dim);font-size:11px}.gp-btns label.ok{border-style:solid;border-color:#1baf7a}
@@ -89,13 +93,15 @@ function render() {
       ${(m.passages || []).length ? `<div class="gp-pass">${(m.passages || []).map(p => `${jourFr(p.a)} : ${heureFr(p.a)} → ${p.d ? heureFr(p.d) : "en cours"}`).join(" · ")} — total ${fmtMin(minutesPassees(m))}</div>` : `<div class="gp-pass">Appuie en arrivant, puis « Je pars » en partant : tes heures sont notées automatiquement.</div>`}
     </div>`}
     <div class="gp-card"><h3>Pièces à faire <small class="hint">${faits}/${total}</small></h3>
-      <p class="hint" style="margin:0 0 6px">Pour chaque pièce : une photo <b>avant</b>, une photo <b>après</b>, puis coche quand c'est fait.</p>
-      ${(() => { let niv = null; return (m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = !!m.faits?.[i];
+      <p class="hint" style="margin:0 0 6px">Pour chaque pièce : une photo <b>avant</b>, coche chaque tâche quand elle est faite, puis une photo <b>après</b>.</p>
+      ${(() => { let niv = null; return (m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = pieceFaite(m, i), tt = p.taches || [], nt = tachesFaites(m, i);
         const titre = p.niveau && p.niveau !== niv ? `<div class="gp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || "";
         return `${titre}<div class="gp-piece ${fait ? "fait" : ""}">
-          <div class="gp-ph"><input type="checkbox" id="gp-c${i}" data-fait="${i}" ${fait ? "checked" : ""} ${verrou ? "disabled" : ""}><label for="gp-c${i}">${esc(p.libelle || p.nom)}</label></div>
+          ${tt.length ? `<div class="gp-ph gp-ph-t"><label>${fait ? "✅ " : ""}${esc(p.libelle || p.nom)} <small class="hint">${nt}/${tt.length}</small></label>${verrou || fait ? "" : `<button class="nav-btn" data-toutfait="${i}">✓ Tout fait</button>`}</div>`
+            : `<div class="gp-ph"><input type="checkbox" id="gp-c${i}" data-fait="${i}" ${fait ? "checked" : ""} ${verrou ? "disabled" : ""}><label for="gp-c${i}">${esc(p.libelle || p.nom)}</label></div>`}
           ${verrou ? "" : `<div class="gp-btns"><label class="${av.length ? "ok" : ""}">📷 Avant<small>${av.length ? `${av.length} photo${av.length > 1 ? "s" : ""}` : "à prendre"}</small><input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="avant"></label>
             <label class="${ap.length ? "ok" : ""}">📷 Après<small>${ap.length ? `${ap.length} photo${ap.length > 1 ? "s" : ""}` : "à prendre"}</small><input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="apres"></label></div>`}
+          ${tt.length ? `<div class="gp-taches">${tt.map((t, k) => { const ok = !!m.faits?.[`${i}-${k}`]; return `<label class="gp-tache ${ok ? "ok" : ""}"><input type="checkbox" data-tache="${i}-${k}" ${ok ? "checked" : ""} ${verrou ? "disabled" : ""}><span>${esc(t)}</span></label>`; }).join("")}</div>` : ""}
           ${vignettes([...av, ...ap], !verrou)}
           ${verrou ? (m.obs?.[i] ? `<div class="hint" style="margin-top:6px">📝 ${esc(m.obs[i])}</div>` : "") : `<input class="gp-note" type="text" data-obs="${i}" placeholder="Remarque sur cette pièce (facultatif)" value="${esc(m.obs?.[i] || "")}">`}
         </div>`; }).join(""); })() || `<div class="hint">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
@@ -125,6 +131,8 @@ function brancher() {
   cont.querySelector("[data-chg-id]")?.addEventListener("click", () => { if (confirm("Changer de personne ?")) { identite = null; ecrireId(null); render(); } });
   cont.querySelector("[data-arrivee]")?.addEventListener("click", () => enregistrer({ passages: [...(m.passages || []), { a: Date.now(), d: null }] }));
   cont.querySelector("[data-depart]")?.addEventListener("click", () => enregistrer({ passages: (m.passages || []).map(p => p.a && !p.d ? { ...p, d: Date.now() } : p) }));
+  cont.querySelectorAll("[data-tache]").forEach(cb => cb.addEventListener("change", () => enregistrer({ faits: { ...(m.faits || {}), [cb.dataset.tache]: cb.checked } })));
+  cont.querySelectorAll("[data-toutfait]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.toutfait, f = { ...(m.faits || {}) }; (m.pieces[i].taches || []).forEach((_, k) => { f[`${i}-${k}`] = true; }); enregistrer({ faits: f }); }));
   cont.querySelectorAll("[data-fait]").forEach(cb => cb.addEventListener("change", () => enregistrer({ faits: { ...(m.faits || {}), [cb.dataset.fait]: cb.checked } })));
   cont.querySelectorAll("[data-obs],[data-obs-gen]").forEach(el => { el.addEventListener("input", enregistrerTextes); el.addEventListener("blur", () => setTimeout(render, 50)); });
   cont.querySelectorAll("[data-voir]").forEach(img => img.addEventListener("click", () => { const i = photos.findIndex(p => p.id === img.dataset.voir); voirPhotos(photos, Math.max(0, i)); }));
@@ -141,8 +149,8 @@ function brancher() {
   cont.querySelector("[data-rouvrir]")?.addEventListener("click", () => enregistrer({ termine: null }));
   cont.querySelector("[data-terminer]")?.addEventListener("click", () => {
     if (envoiEnCours) { alert("Attends la fin de l'envoi des photos."); return; }
-    const manquent = (m.pieces || []).filter((_, i) => !m.faits?.[i]).map(p => p.libelle || p.nom);
-    const sansApres = (m.pieces || []).filter((p, i) => m.faits?.[i] && !phDe(p.nom, "apres").length).map(p => p.libelle || p.nom);
+    const manquent = (m.pieces || []).filter((_, i) => !pieceFaite(m, i)).map(p => p.libelle || p.nom);
+    const sansApres = (m.pieces || []).filter((p, i) => pieceFaite(m, i) && !phDe(p.nom, "apres").length).map(p => p.libelle || p.nom);
     let msg = "Envoyer le ménage au responsable ?";
     if (manquent.length) msg += `\n\nPièces non cochées : ${manquent.join(", ")}`;
     if (sansApres.length) msg += `\n\nSans photo « après » : ${sansApres.join(", ")}`;

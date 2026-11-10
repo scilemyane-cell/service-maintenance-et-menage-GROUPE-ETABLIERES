@@ -10,10 +10,10 @@ import { watchSites } from "./sites-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { listerCodesPourSite } from "./masterlock-data.js";
-import { watchPlans, piecesDuPlan, clePlan, editeurPlanHTML, brancherEditeurPlan } from "./maison-plan.js";
+import { watchPlans, piecesDuPlan, clePlan, tachesParDefaut, editeurPlanHTML, brancherEditeurPlan } from "./maison-plan.js";
 import {
   creerMission, modifierMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
-  passageOuvert, minutesPassees, fmtMin, nbFaits, statutMission, heureFr, jourFr, dateFr, lienMission,
+  passageOuvert, minutesPassees, fmtMin, nbFaits, pieceFaite, tachesFaites, statutMission, heureFr, jourFr, dateFr, lienMission,
 } from "./menage-ponctuel-data.js";
 
 let st = { missions: [], invs: {}, photos: [], plans: {} }, ui = { form: false, ouverte: null, draft: null };
@@ -109,10 +109,15 @@ function render() {
 }
 
 // Pièces proposées pour un site : celles programmées (par niveau), sinon celles de la fiche ménage.
-const fichePieces = (site) => [...new Set((site?.rooms || []).map(r => String(r.name || "").trim()).filter(Boolean))];
+// Pièces de la fiche ménage du site, avec leurs tâches : [{ nom, taches }].
+function fichePieces(site) {
+  const m = new Map();
+  (site?.rooms || []).forEach(r => { const nom = String(r.name || "").trim(); if (!nom) return; const t = (r.tasks || []).map(x => String(x?.label || x || "").trim()).filter(Boolean); m.set(nom, [...new Set([...(m.get(nom) || []), ...t])]); });
+  return [...m].map(([nom, taches]) => ({ nom, taches }));
+}
 function sitePieces(site) {
   const pl = piecesDuPlan(st.plans[clePlan(site)]);
-  return pl.length ? pl : fichePieces(site).map(n => ({ cle: n, nom: n, niveau: "" }));
+  return pl.length ? pl : fichePieces(site).map(f => ({ cle: f.nom, nom: f.nom, niveau: "", taches: f.taches.length ? f.taches : tachesParDefaut(f.nom) }));
 }
 const aUnPlan = (site) => piecesDuPlan(st.plans[clePlan(site)]).length > 0;
 // Rendu groupé par niveau (titre quand le niveau change).
@@ -167,7 +172,7 @@ function formulaire() {
     <label>Au (le lien s'arrête après)<input name="fin" data-d type="date" required value="${d.fin}"></label>
     <label class="plein">Consignes pour l'entreprise<textarea name="consignes" data-d rows="3" placeholder="Ex. gros ménage complet avant l'arrivée d'un jeune : vitres, sols, cuisine (four, frigo), sanitaires détartrés…">${esc(d.consignes)}</textarea></label>
     <div class="plein"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Pièces à faire (une photo avant / après par pièce)</div>
-      ${pcs.length ? `<div class="mp-pcs">${parNiveau(pcs, (p) => `<label><input type="checkbox" data-pc="${esc(p.cle)}" ${d.pieces[p.cle] ? "checked" : ""}> ${esc(p.nom)}</label>`)}</div>` : `<div class="hint">Pas encore de pièces programmées pour cette maison.</div>`}
+      ${pcs.length ? `<div class="mp-pcs">${parNiveau(pcs, (p) => `<label title="${esc((p.taches || []).join(" · "))}"><input type="checkbox" data-pc="${esc(p.cle)}" ${d.pieces[p.cle] ? "checked" : ""}> ${esc(p.nom)} <small class="hint">☑ ${(p.taches || []).length}</small></label>`)}</div>` : `<div class="hint">Pas encore de pièces programmées pour cette maison.</div>`}
       <button type="button" class="nav-btn" data-prog style="margin-top:8px">🏠 ${aUnPlan(site) ? "Modifier les pièces de cette maison" : "Programmer les pièces de cette maison (niveaux, chambres…)"}</button>
       <label style="margin-top:8px">Autres pièces / zones (une par ligne)<textarea name="autres" data-d rows="2" placeholder="Ex. Vitres extérieures&#10;Garage">${esc(d.autres)}</textarea></label></div>
     <div class="plein"><div style="font-size:13px;font-weight:600;margin-bottom:6px">🔐 Codes boîte à clés envoyés dans le SMS</div><div id="mp-codes">${codesHTML(site)}</div></div>
@@ -214,7 +219,9 @@ function detail(m) {
       ${m.termine ? `<p class="hint" style="margin:6px 0 0">Envoyé le ${jourFr(m.termine)} à ${heureFr(m.termine)}${m.validee ? ` · validé${m.valideePar ? ` par ${esc(m.valideePar)}` : ""}${m.valideeLe ? ` le ${jourFr(m.valideeLe)}` : ""}` : ""}</p>` : ""}</div>
     <div class="form-card"><h3 style="margin:0 0 6px">🧹 Pièces ${tot ? `<small class="hint">${f}/${tot} faites</small>` : ""}</h3>
       ${parNiveau(m.pieces || [], (p, i) => { const av = de(p.nom, "avant"), ap = de(p.nom, "apres");
-        return `<div class="mp-piece"><b>${m.faits?.[i] ? "✅" : "⬜"} ${esc(p.libelle || p.nom)}</b>${!av.length || !ap.length ? ` <small class="hint">${!av.length ? "· pas de photo avant " : ""}${!ap.length ? "· pas de photo après" : ""}</small>` : ""}
+        const tt = p.taches || [], nt = tachesFaites(m, i);
+        return `<div class="mp-piece"><b>${pieceFaite(m, i) ? "✅" : nt ? "🟡" : "⬜"} ${esc(p.libelle || p.nom)}</b>${tt.length ? ` <small class="hint">${nt}/${tt.length} tâches</small>` : ""}
+          ${tt.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;margin-top:4px">${tt.map((t, k) => `<span style="${m.faits?.[`${i}-${k}`] ? "color:#11845b" : "color:var(--text-dim)"}">${m.faits?.[`${i}-${k}`] ? "☑" : "☐"} ${esc(t)}</span>`).join("")}</div>` : ""}${!av.length || !ap.length ? ` <small class="hint">${!av.length ? "· pas de photo avant " : ""}${!ap.length ? "· pas de photo après" : ""}</small>` : ""}
           ${m.obs?.[i] ? `<div style="font-size:13px;margin-top:4px">📝 ${esc(m.obs[i])}</div>` : ""}
           ${av.length || ap.length ? `<div class="mp-ph">${[...av, ...ap].map(fig).join("")}</div>` : ""}</div>`; }) || `<div class="hint">Aucune pièce listée.</div>`}</div>
     ${autres.length ? `<div class="form-card"><h3 style="margin:0 0 6px">📷 Autres photos</h3><div class="mp-ph">${autres.map(fig).join("")}</div></div>` : ""}
@@ -234,7 +241,7 @@ function imprimer(m) {
     ${m.consignes ? `<p><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
     <h2>Présence sur place</h2>${(m.passages || []).length ? `<table><tr><th>Jour</th><th>Arrivée</th><th>Départ</th><th>Durée</th></tr>${m.passages.map(p => `<tr><td>${jourFr(p.a)}</td><td>${heureFr(p.a)}</td><td>${p.d ? heureFr(p.d) : "—"}</td><td>${p.d ? fmtMin(Math.round((p.d - p.a) / 60000)) : "—"}</td></tr>`).join("")}<tr><th colspan="3">Total</th><th>${fmtMin(minutesPassees(m))}</th></tr></table>` : "<p>Aucun pointage.</p>"}
     <h2>Pièces (${nbFaits(m)}/${(m.pieces || []).length} faites)</h2>
-    ${parNiveau(m.pieces || [], (p, i) => `<div class="piece"><b>${m.faits?.[i] ? "☑" : "☐"} ${esc(p.libelle || p.nom)}</b>${m.obs?.[i] ? ` — ${esc(m.obs[i])}` : ""}<div class="ph">${de(p.nom, "avant").map(x => img(x, "Avant")).join("")}${de(p.nom, "apres").map(x => img(x, "Après")).join("")}</div></div>`).replace(/class="mp-niv"/g, 'class="niv"')}
+    ${parNiveau(m.pieces || [], (p, i) => `<div class="piece"><b>${pieceFaite(m, i) ? "☑" : "☐"} ${esc(p.libelle || p.nom)}</b>${(p.taches || []).length ? `<div style="font-size:11px;margin:2px 0 4px">${p.taches.map((t, k) => `${m.faits?.[`${i}-${k}`] ? "☑" : "☐"} ${esc(t)}`).join(" &nbsp; ")}</div>` : ""}${m.obs?.[i] ? ` — ${esc(m.obs[i])}` : ""}<div class="ph">${de(p.nom, "avant").map(x => img(x, "Avant")).join("")}${de(p.nom, "apres").map(x => img(x, "Après")).join("")}</div></div>`).replace(/class="mp-niv"/g, 'class="niv"')}
     ${autres.length ? `<h2>Autres photos</h2><div class="ph">${autres.map(x => img(x, "Photo")).join("")}</div>` : ""}
     <h2>Observations de l'entreprise</h2><p style="white-space:pre-wrap">${esc(m.observations || "—")}</p>
     <p style="margin-top:14px">${m.termine ? `Envoyé par l'entreprise le ${jourFr(m.termine)} à ${heureFr(m.termine)}.` : "Non terminé par l'entreprise."} ${m.validee ? `Validé${m.valideePar ? ` par ${esc(m.valideePar)}` : ""}${m.valideeLe ? ` le ${jourFr(m.valideeLe)}` : ""}.` : "Non validé."}</p>
@@ -291,8 +298,8 @@ function brancher() {
       if (!site) { alert("Choisis un site."); return; }
       if (!d.entreprise.trim()) { alert("Indique le nom de l'entreprise."); return; }
       if (d.fin < d.debut) { alert("La date de fin est avant la date de début."); return; }
-      const vus = new Set(), pieces = [...sitePieces(site).filter(p => d.pieces?.[p.cle]).map(p => ({ nom: p.cle, libelle: p.nom, niveau: p.niveau })),
-        ...String(d.autres || "").split("\n").map(x => x.trim()).filter(Boolean).map(nom => ({ nom }))].filter(p => !vus.has(p.nom) && vus.add(p.nom));
+      const vus = new Set(), pieces = [...sitePieces(site).filter(p => d.pieces?.[p.cle]).map(p => ({ nom: p.cle, libelle: p.nom, niveau: p.niveau, taches: p.taches || [] })),
+        ...String(d.autres || "").split("\n").map(x => x.trim()).filter(Boolean).map(nom => ({ nom, taches: tachesParDefaut(nom) }))].filter(p => !vus.has(p.nom) && vus.add(p.nom));
       const codes = (codesCache[site.dossierId] || []).filter(codeCoche).map(c => ({ nom: c.nom || "Boîte à clés", code: c.code, notes: c.notes || "" }));
       const btn = form.querySelector("[type=submit]"); btn.disabled = true; btn.textContent = "⏳ Création…";
       if (ui.edit) {
