@@ -9,6 +9,7 @@ import { db } from "./firebase-init.js";
 import { doc, setDoc, onSnapshot, collection, query, where } from "./firestore-compte.js";
 import { esc, dateKey, addDays, fmtShort } from "./astreinte-logic.js";
 import { watchRepartitions } from "./heures-repartition-data.js";
+import { watchUsers } from "./users-data.js";
 import { imprimerFiche } from "./tracabilite-rendu.js";
 import { voirPhotos } from "./demandes-photos.js";
 
@@ -27,7 +28,7 @@ const fmtH = (h) => { const t = Math.round(h * 60); return `${Math.floor(t / 60)
 const heure = (t) => t ? new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
 const TD = "border:1px solid #999;padding:4px 6px;font-size:11px";
 
-let st = { cal: { sites: [], dates: [] }, photos: [], reps: [], suivi: {} }, ui = { semaine: null }, unsubs = [], cont = null, user = null, disp = "";
+let st = { cal: { sites: [], dates: [] }, photos: [], reps: [], suivi: {}, chefs: new Set() }, ui = { semaine: null }, unsubs = [], cont = null, user = null, disp = "";
 const refSuivi = () => doc(db, "config", "tracabilite-poubelles-" + slug(disp));
 
 export function mountTracabilitePoubelles(container, u, dispositif) {
@@ -39,6 +40,8 @@ export function mountTracabilitePoubelles(container, u, dispositif) {
   unsubs.push(onSnapshot(query(collection(db, "fiches-photos"), where("type", "==", "poubelles")),
     (s) => { st.photos = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.dispositif === dispositif); render(); }, (e) => console.warn("Photos poubelles :", e)));
   unsubs.push(watchRepartitions((r) => { st.reps = (r || []).filter(x => x.dispositif === dispositif); render(); }));
+  // Les responsables (super admin / admin / N1) n'ont pas leurs heures sur la fiche de l'agent.
+  unsubs.push(watchUsers((l) => { st.chefs = new Set((l || []).filter(u => estEditeur(u)).map(u => u.uid)); render(); }));
   unsubs.push(onSnapshot(refSuivi(), (s) => { st.suivi = s.exists() ? (s.data().semaines || {}) : {}; render(); }, (e) => console.warn("Suivi traçabilité poubelles :", e)));
 }
 
@@ -56,7 +59,7 @@ function semaine(ws) {
       const ph = photos.filter(p => p.dateId === x.id).sort((a, b) => (a.le || 0) - (b.le || 0));
       return { ...x, ph, fait: REQUIS(x.t).every(k => ph.some(p => p.moment === k)), le: ph.at(-1)?.le, agent: ph[0]?.agentNom || "" };
     });
-  const reps = st.reps.filter(r => r.weekStart === ws);
+  const reps = st.reps.filter(r => r.weekStart === ws && !st.chefs.has(r.agentUid) && !st.chefs.has(r.agentCle));
   const agents = [...new Set([...passages.map(p => p.agent), ...reps.map(r => r.agentNom)].filter(Boolean))];
   return { ws, we, passages, reps, agents };
 }
