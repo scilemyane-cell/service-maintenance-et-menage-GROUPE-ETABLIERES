@@ -4959,3 +4959,16 @@ table.pm-t tbody th{font-size:11.5px;color:var(--text-dim)}
 .pb-c.auj:not(.ok){animation:pbClignote 1.1s ease-in-out infinite}
 .pb-c.auj:not(.ok) .pb-go{animation:pbClignoteBtn 1.1s ease-in-out infinite}
 .pb-c.auj:not(.ok) .pb-d{color:#f59e0b}
+
+/* Poubelles — présentation façon fiches MNA */
+.pb .fj-piece{margin-top:0}.pb-t .fj-coche{flex:1}.pb-t .pb-ph{width:100%;padding-left:44px}
+.pb-cam{border:0;border-radius:10px;background:#b8860b;color:#fff;font-weight:800;padding:9px 12px;cursor:pointer;white-space:nowrap}
+.pb-retard .fj-rond{border-color:var(--red)}.pb-retard .fj-derniere{color:var(--red);font-weight:700}
+.pb-piece-retard{border-color:var(--red)!important}.pb-piece-retard .fj-piece-nom{color:var(--red)}
+.pb-tab td:first-child{font-weight:700;white-space:nowrap}.pb-case{border:0;background:none;font-size:20px;cursor:pointer;padding:2px}
+@media (max-width:520px){.pb .fj-jours{gap:3px}.pb .fj-jour{padding:6px 0;font-size:12px}.pb-t .pb-ph{padding-left:0}}
+
+/* Espaces verts — accueil façon fiches MNA */
+.ev-site-l{cursor:pointer}.ev-site-l .fj-coche{flex:1}.ev-site-l.faite .fj-label{text-decoration:none;color:var(--text);font-weight:800}
+.ev-go{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}.ev-go .add-btn{flex:1;min-width:200px}
+.ev-etat{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px}.ev-etat.ok{background:#d8f3e3;color:#11845b}.ev-etat.att{background:#fff1d6;color:#8a5a00}.ev-etat.cours{background:#e8edf6;color:#33449a}

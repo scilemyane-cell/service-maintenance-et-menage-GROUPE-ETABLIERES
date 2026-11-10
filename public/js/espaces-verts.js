@@ -180,27 +180,47 @@ const sauverCfg = async (patch, msg) => {
 
 // ---------- Rendu : intervention ----------
 function vueChoix() {
-  const mna = sitesMNA();
-  const miens = (passages || []).filter(p => EDITEURS.includes(user?.role) || p.agentUid === user?.uid).sort(tri).slice(0, 30);
+  const mna = sitesMNA(), ed = EDITEURS.includes(user?.role);
+  const miens = (passages || []).filter(p => ed || p.agentUid === user?.uid).sort(tri).slice(0, 30);
+  const infos = mna.map(s => {
+    const l = (passages || []).filter(p => p.siteId === s.id).sort(tri), der = l[0];
+    return { s, der, ret: passages ? retardsSite(passages, s.id).filter(r => !r.jamais).length : 0 };
+  });
+  const totRet = infos.reduce((n, x) => n + x.ret, 0), aJour = infos.filter(x => x.der && !x.ret).length;
+  const pct = infos.length ? Math.round(aJour / infos.length * 100) : 0, r = 40, circ = 2 * Math.PI * r;
+  const prenom = (String(user?.nom || "").trim().split(/[\s@]+/)[0] || "").replace(/^./, m => m.toUpperCase());
+  const etat = (p) => p.valide ? `<span class="ev-etat ok">✅ Validée</span>` : p.envoye ? `<span class="ev-etat att">⏳ Envoyée</span>` : `<span class="ev-etat cours">✏️ En cours</span>`;
   return `
-    <div class="form-card">
-      <b>➕ Nouvelle intervention</b>
-      <div class="hint">Choisis le site, puis coche ce qui a été fait.</div>
-      <div class="ev-sites">${mna.map(s => {
-        const ret = passages ? retardsSite(passages, s.id).filter(r => !r.jamais).length : 0;
-        return `<button class="ev-site ${ui.siteChoisi === s.id ? "actif" : ""}" data-site="${esc(s.id)}">🏡 ${esc(s.name)}${ret ? ` <span class="ev-badge">${ret} en retard</span>` : ""}</button>`;
-      }).join("") || `<div class="hint">Aucun site dans la liste.</div>`}</div>
-      ${EDITEURS.includes(user?.role) ? gestionSitesHTML() : ""}
-      <label class="hint">Date de l'intervention <input type="date" class="ev-date" value="${esc(ui.date)}" max="${dateKey(new Date())}"></label>
-      <div><button class="nav-btn ev-gros" data-act="commencer" ${ui.siteChoisi ? "" : "disabled"}>📝 Ouvrir la feuille</button></div>
+    <div class="fj"><div class="fj-hero"><div class="fj-hero-txt">
+        <div class="fj-bonjour">Bonjour ${esc(prenom)} 👋</div>
+        <div class="fj-date">${new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · Espaces verts</div>
+        <div class="fj-msg">${totRet ? `${totRet} prestation${totRet > 1 ? "s" : ""} en retard sur les sites.` : "Tous les sites sont à jour 🌿"}</div>
+        <div class="fj-sem">Sites à jour : <b>${aJour}/${infos.length}</b><span class="fj-sem-barre"><span style="width:${pct}%"></span></span></div>
+      </div>
+      <div class="fj-hero-anneau"><svg class="fj-anneau" viewBox="0 0 100 100" width="92" height="92" aria-hidden="true"><circle cx="50" cy="50" r="${r}" class="fj-anneau-fond"/><circle cx="50" cy="50" r="${r}" class="fj-anneau-val" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - pct / 100)}"/></svg>
+        <div class="fj-anneau-txt"><b>${pct}%</b><span>${aJour}/${infos.length}</span></div></div></div></div>
+
+    <div class="fj-piece">
+      <div class="fj-piece-tete"><div class="fj-piece-nom">➕ Nouvelle intervention</div></div>
+      <div class="hint" style="margin:2px 0 6px">1. Touche le site · 2. Vérifie la date · 3. Ouvre la feuille</div>
+      ${infos.map(({ s, der, ret }) => `<div class="fj-tache ev-site-l ${ui.siteChoisi === s.id ? "faite" : ""}" data-site="${esc(s.id)}">
+        <button class="fj-coche" aria-pressed="${ui.siteChoisi === s.id}"><span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+          <span class="fj-label">🏡 ${esc(s.name)}<small class="fj-derniere ${ret ? "ev-retard" : ""}">${der ? `Dernier passage ${ilYa(joursDepuis(der.date))} (${fmtCourt(der.date)})` : "Jamais d'intervention"}${ret ? ` · ⚠️ ${ret} en retard` : ""}</small></span></button>
+      </div>`).join("") || `<div class="hint">Aucun site dans la liste.</div>`}
+      ${ed ? gestionSitesHTML() : ""}
+      <div class="ev-go">
+        <label class="hint">Date <input type="date" class="ev-date" value="${esc(ui.date)}" max="${dateKey(new Date())}"></label>
+        <button class="add-btn ev-gros" data-act="commencer" ${ui.siteChoisi ? "" : "disabled"}>📝 Ouvrir la feuille${ui.siteChoisi ? ` — ${esc(mna.find(x => x.id === ui.siteChoisi)?.name || "")}` : ""}</button>
+      </div>
     </div>
-    <div class="form-card">
-      <b>${EDITEURS.includes(user?.role) ? "Dernières interventions" : "Mes dernières interventions"}</b>
-      ${miens.length ? miens.map(p => `
-        <div class="ev-ligne" data-ouvrir="${esc(p.id)}">
-          <div><b>${esc(p.siteName || "")}</b> · ${esc(fmt(p.date))}<br><small class="hint">${esc(p.agentNom || "")} · ${tachesFaites(p).map(t => t.label).join(", ") || "rien de coché"}</small></div>
+
+    <div class="fj-piece">
+      <div class="fj-piece-tete"><div class="fj-piece-nom">🗂️ ${ed ? "Dernières interventions" : "Mes dernières interventions"}</div><div class="fj-piece-compte">${miens.length}</div></div>
+      ${miens.length ? miens.map(p => { const n = tachesFaites(p).length;
+        return `<div class="ev-ligne" data-ouvrir="${esc(p.id)}">
+          <div><b>${esc(p.siteName || "")}</b> · ${esc(fmt(p.date))} ${etat(p)}<br><small class="hint">${ed ? esc(p.agentNom || "") + " · " : ""}${n ? `${n} prestation${n > 1 ? "s" : ""} : ${tachesFaites(p).map(t => esc(t.label)).join(", ")}` : "rien de coché"}</small></div>
           ${user?.role === "super_admin" ? `<button class="del-btn" data-ev-del="${esc(p.id)}" title="Effacer ce passage">🗑️</button>` : `<span>›</span>`}
-        </div>`).join("") : `<div class="hint">Aucune intervention pour l'instant.</div>`}
+        </div>`; }).join("") : `<div class="hint">Aucune intervention pour l'instant.</div>`}
     </div>`;
 }
 

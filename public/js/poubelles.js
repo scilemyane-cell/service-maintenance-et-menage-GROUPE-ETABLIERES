@@ -28,7 +28,7 @@ const ref = () => doc(db, "config", "poubelles-" + slug(disp));
 
 export function mountPoubelles(container, u, dispositif) {
   unsubs.forEach(f => f()); unsubs = [];
-  cont = container; user = u; disp = dispositif; ui = { vue: "afaire", ...(ui.disp === dispositif ? ui : {}), disp: dispositif };
+  cont = container; user = u; disp = dispositif; ui = { vue: "jour", ...(ui.disp === dispositif ? ui : {}), disp: dispositif };
   container.innerHTML = `<p class="hint">Chargement…</p>`;
   unsubs.push(onSnapshot(ref(), (s) => { const d = s.exists() ? s.data() : {}; st.cal = { sites: d.sites || ["Cécile Sauvage"], dates: d.dates || [] }; render(); }, () => render()));
   unsubs.push(onSnapshot(query(collection(db, "fiches-photos"), where("type", "==", "poubelles")),
@@ -55,26 +55,82 @@ function carte(x, auj) {
   </div>`;
 }
 
+// ---- Présentation « comme les fiches MNA » : Ma journée / Toute la semaine ----
+const SVG_COCHE = `<span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>`;
+const NJ = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const lundiDe = (iso) => { const d = new Date(iso + "T12:00"); return dateKey(addDays(d, -((d.getDay() + 6) % 7))); };
+const heureFait = (id) => { const l = photosDe(id).at(-1)?.le; return l ? new Date(l).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", "h") : ""; };
+function motivation(f, t) {
+  if (!t) return "Rien de prévu ce jour-là ☕";
+  if (f === t) return "Tout est fait, super travail ! 💪";
+  if (f === 0) return "C'est parti ! Touche un passage quand il est fait.";
+  return `Bien lancé ! Encore ${t - f} passage${t - f > 1 ? "s" : ""}.`;
+}
+function ligne(x, auj) {
+  const [ic, lib] = TYPES[x.t] || TYPES.sortie, ok = fait(x.id), ph = photosDe(x.id), retard = !ok && x.d < auj;
+  const info = [x.site, x.flux].filter(Boolean).map(esc).join(" · ")
+    + (ok ? ` · fait à ${heureFait(x.id)}${ph[0]?.agentNom ? " par " + esc(ph[0].agentNom) : ""}` : retard ? ` · en retard (${frJ(x.d)})` : "");
+  return `<div class="fj-tache pb-t ${ok ? "faite" : ""} ${retard ? "pb-retard" : ""}">
+    <button class="fj-coche" ${ok ? "" : `data-pb-faire="${x.id}"`} aria-pressed="${ok}">${SVG_COCHE}
+      <span class="fj-label">${ic} ${lib.replace(" (picking)", "")}<small class="fj-derniere">${info}</small></span></button>
+    ${ok ? "" : `<button class="pb-cam" data-pb-faire="${x.id}">📸 Faire</button>`}
+    ${ph.length ? `<div class="pb-ph">${ph.map((p, i) => `<img src="${p.data}" alt="" data-pb-voir="${x.id}" data-i="${i}" title="${LIB_MOMENT[p.moment] || ""}">`).join("")}</div>` : ""}
+    ${ph.length && estEditeur(user) ? `<button class="del-btn" data-pb-annuler="${x.id}" style="font-size:12px">🗑️ Effacer ce passage</button>` : ""}
+  </div>`;
+}
+
 function render() {
   if (!cont || !document.contains(cont)) { unsubs.forEach(f => f()); unsubs = []; return; }
   const auj = dateKey(new Date()), ed = estEditeur(user);
+  if (!["jour", "semaine", "historique", "programmer"].includes(ui.vue)) ui.vue = "jour";
+  if (!ui.jourSel) ui.jourSel = auj;
+  const lun = lundiDe(ui.jourSel), jours = NJ.map((_, i) => dateKey(addDays(new Date(lun + "T12:00"), i)));
   const dates = [...st.cal.dates, ...libres()].sort((a, b) => a.d.localeCompare(b.d) || (a.t === "sortie" ? -1 : 1));
-  const d0 = dateKey(addDays(new Date(), -14)), d1 = dateKey(addDays(new Date(), 7));
-  const enRetard = dates.filter(x => x.d < auj && x.d >= d0 && !fait(x.id));
-  const prochains = dates.filter(x => x.d >= auj && x.d <= d1 && !(x.libre && fait(x.id)));
-  const faits = dates.filter(x => (x.d < auj || (x.libre && x.d === auj)) && x.d >= d0 && fait(x.id)).reverse();
-  const onglets = [["afaire", "✅ À faire"], ["historique", "🗂️ Historique"], ...(ed ? [["programmer", "📅 Programmer l'année"]] : [])];
+  const duJour = (iso) => dates.filter(x => x.d === iso);
+  const cpt = (iso) => { const l = duJour(iso); return { t: l.length, f: l.filter(x => fait(x.id)).length }; };
+  const d0 = dateKey(addDays(new Date(), -14));
+  const enRetard = dates.filter(x => x.d < auj && x.d >= d0 && !x.libre && !fait(x.id));
+  const onglets = [["jour", "📱 Ma journée"], ["semaine", "📋 Toute la semaine"], ["historique", "🗂️ Historique"], ...(ed ? [["programmer", "📅 Programmer"]] : [])];
+  const navSem = `<div class="pt-sem"><button class="nav-btn" data-pb-sem="-1">‹</button><div><b>Semaine du ${frJ(lun, { day: "numeric", month: "long" })}</b>${lun !== lundiDe(auj) ? `<small><a href="#" data-pb-auj>↩ revenir à aujourd'hui</a></small>` : ""}</div><button class="nav-btn" data-pb-sem="1">›</button></div>`;
+  let corps = "";
+  if (ui.vue === "jour") {
+    const c = cpt(ui.jourSel), pct = c.t ? Math.round(c.f / c.t * 100) : 0, r = 40, circ = 2 * Math.PI * r;
+    const sem = jours.reduce((a, j) => { const x = cpt(j); a.t += x.t; a.f += x.f; return a; }, { t: 0, f: 0 });
+    const prenom = (String(user?.nom || "").trim().split(/\s+/)[0] || "").replace(/^./, m => m.toUpperCase());
+    const dj = new Date(ui.jourSel + "T12:00");
+    corps = `<div class="fj">
+      <div class="fj-hero"><div class="fj-hero-txt">
+          <div class="fj-bonjour">Bonjour ${esc(prenom)} 👋</div>
+          <div class="fj-date">${dj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · ${esc(st.cal.sites.join(", "))}</div>
+          <div class="fj-msg">${motivation(c.f, c.t)}</div>
+          <div class="fj-sem">Semaine : <b>${sem.f}/${sem.t}</b><span class="fj-sem-barre"><span style="width:${sem.t ? sem.f / sem.t * 100 : 0}%"></span></span></div>
+        </div>
+        <div class="fj-hero-anneau"><svg class="fj-anneau" viewBox="0 0 100 100" width="92" height="92" aria-hidden="true"><circle cx="50" cy="50" r="${r}" class="fj-anneau-fond"/><circle cx="50" cy="50" r="${r}" class="fj-anneau-val" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - pct / 100)}"/></svg>
+          <div class="fj-anneau-txt"><b>${pct}%</b><span>${c.f}/${c.t}</span></div></div></div>
+      ${navSem}
+      <div class="fj-jours" style="grid-template-columns:repeat(7,1fr)">${jours.map((j, i) => { const x = cpt(j), fini = x.t && x.f === x.t;
+        return `<button class="fj-jour ${j === ui.jourSel ? "actif" : ""} ${fini ? "fini" : ""}" data-pb-jour="${j}"><span>${NJ[i]}</span><small>${x.t ? (fini ? "✓" : `${x.f}/${x.t}`) : "—"}</small></button>`; }).join("")}</div>
+      ${enRetard.length ? `<div class="fj-piece pb-piece-retard"><div class="fj-piece-tete"><div class="fj-piece-nom">⚠️ En retard</div><div class="fj-piece-compte">${enRetard.length}</div></div>${enRetard.map(x => ligne(x, auj)).join("")}</div>` : ""}
+      ${c.t ? `<div class="fj-piece ${c.f === c.t ? "finie" : ""}"><div class="fj-piece-tete"><div class="fj-piece-nom">🗑️ Passages du jour</div><div class="fj-piece-compte">${c.f}/${c.t}</div></div>
+          <div class="fj-piece-barre"><span style="width:${pct}%"></span></div>${duJour(ui.jourSel).map(x => ligne(x, auj)).join("")}</div>`
+        : `<div class="fj-vide">☕ ${dates.length ? "Aucun passage prévu ce jour-là." : "Aucune date programmée pour l'instant" + (ed ? " — va dans « 📅 Programmer »." : ".")}</div>`}
+      ${c.t && c.f === c.t ? `<div class="fj-bravo visible"><span class="fj-bravo-emo">🎉</span><div><b>Bravo ! Journée terminée</b><br><small>Tous les passages sont faits. Merci ✨</small></div></div>` : ""}
+      ${ui.jourSel === auj ? `<button class="add-btn pb-picking" data-pb-picking>🧤 Ramassage des déchets en plus <small>photos avant / après</small></button>` : ""}
+      <p class="hint">📸 Chaque passage se coche avec ses photos : bacs + zone de tri avant / après, ou avant / après pour le ramassage.</p>
+    </div>`;
+  } else if (ui.vue === "semaine") {
+    const types = Object.keys(TYPES).filter(t => dates.some(x => x.t === t && jours.includes(x.d)));
+    corps = `${navSem}<div class="form-card"><h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">🗑️ ${esc(st.cal.sites.join(", "))}</h3>
+      <div class="table-wrap" style="border:none"><table class="pb-tab"><thead><tr><th>Passage</th>${jours.map((j, i) => `<th style="text-align:center">${NJ[i]}<br><small>${new Date(j + "T12:00").getDate()}</small></th>`).join("")}</tr></thead>
+      <tbody>${types.map(t => `<tr><td>${TYPES[t][0]} ${TYPES[t][1].replace(" (picking)", "")}</td>${jours.map(j => { const l = dates.filter(x => x.t === t && x.d === j);
+        if (!l.length) return `<td style="text-align:center;color:var(--text-dim)">—</td>`;
+        return `<td style="text-align:center">${l.map(x => fait(x.id) ? `<button class="pb-case ok" data-pb-voirj="${j}" title="Fait à ${heureFait(x.id)}">✅</button>` : `<button class="pb-case ${j < auj ? "retard" : ""}" data-pb-faire="${x.id}" title="À faire">${j < auj ? "⚠️" : "⬜"}</button>`).join("")}</td>`; }).join("")}</tr>`).join("")
+        || `<tr><td colspan="8" class="hint">Aucun passage cette semaine.</td></tr>`}</tbody></table></div>
+      <p class="hint" style="margin:8px 0 0">✅ fait · ⬜ à faire · ⚠️ en retard — touche une case pour la cocher avec photos.</p></div>`;
+  } else corps = ui.vue === "historique" ? historique(dates, auj) : programmer(dates, auj);
   cont.innerHTML = `<div class="stack pb">
-    <div class="tabs" style="background:none;border:none;padding:0">${onglets.map(([k, l]) => `<button class="tab-btn ${ui.vue === k ? "active" : ""}" data-pb-vue="${k}">${l}</button>`).join("")}</div>
-    ${ui.vue === "afaire" ? `
-      <p class="hint">Chaque passage se coche avec des photos <b>obligatoires</b> : bacs + zone de tri avant / après pour les poubelles, <b>avant / après</b> pour le ramassage des déchets.</p>
-      <button class="add-btn pb-picking" data-pb-picking>🧤 Ramassage des déchets maintenant <small>photos avant / après</small></button>
-      ${enRetard.length ? `<h3 class="pb-h rouge">⚠️ En retard (${enRetard.length})</h3><div class="pb-l">${enRetard.map(x => carte(x, auj)).join("")}</div>` : ""}
-      <h3 class="pb-h">📅 Cette semaine et la suivante</h3>
-      <div class="pb-l">${prochains.map(x => carte(x, auj)).join("") || `<p class="hint">${dates.length ? "Rien de prévu dans les 7 prochains jours." : "Aucune date programmée pour l'instant" + (ed ? " — va dans « 📅 Programmer l'année »." : ".")}</p>`}</div>
-      ${faits.length ? `<h3 class="pb-h">✔️ Faits ces 2 dernières semaines</h3><div class="pb-l">${faits.map(x => carte(x, auj)).join("")}</div>` : ""}`
-    : ui.vue === "historique" ? historique(dates, auj) : programmer(dates, auj)}
-  </div>`;
+    <div class="fj-vues">${onglets.map(([k, l]) => `<button class="${ui.vue === k ? "actif" : ""}" data-pb-vue="${k}">${l}</button>`).join("")}</div>
+    ${corps}</div>`;
   brancher();
 }
 
@@ -132,6 +188,10 @@ function brancher() {
     b.disabled = true; try { for (const p of l) await deleteDoc(doc(db, "fiches-photos", p.id)); window.toast?.("🗑️ Passage effacé"); } catch (e) { alert("Effacement impossible : " + (e?.message || e)); b.disabled = false; }
   });
   $$("[data-pb-faire]").forEach(b => b.onclick = () => ouvrirValidation(st.cal.dates.find(x => x.id === b.dataset.pbFaire)));
+  $$("[data-pb-jour]").forEach(b => b.onclick = () => { ui.jourSel = b.dataset.pbJour; render(); });
+  $$("[data-pb-voirj]").forEach(b => b.onclick = () => { ui.jourSel = b.dataset.pbVoirj; ui.vue = "jour"; render(); });
+  $$("[data-pb-sem]").forEach(b => b.onclick = () => { ui.jourSel = dateKey(addDays(new Date(lundiDe(ui.jourSel) + "T12:00"), 7 * +b.dataset.pbSem)); render(); });
+  cont.querySelector("[data-pb-auj]")?.addEventListener("click", (e) => { e.preventDefault(); ui.jourSel = dateKey(new Date()); render(); });
   cont.querySelector("[data-pb-picking]")?.addEventListener("click", () => ouvrirValidation({ id: "libre-" + Date.now().toString(36) + uid(), d: dateKey(new Date()), t: "picking", site: st.cal.sites[0] || "", libre: true }));
   $$("[data-r]").forEach(el => el.onchange = () => { ui.regle[el.dataset.r] = el.value; });
   cont.querySelector("[data-pb-site-add]")?.addEventListener("click", () => { const v = cont.querySelector("#pb-site-nv").value.trim(); if (v && !st.cal.sites.includes(v)) sauver({ sites: [...st.cal.sites, v] }); });
