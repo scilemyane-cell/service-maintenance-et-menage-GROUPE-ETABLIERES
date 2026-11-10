@@ -97,6 +97,7 @@
   const mountParametresDispositif = aLaDemande(charger_parametres, "mountParametresDispositif");
   const mountAssociationsSites = aLaDemande(charger_parametres, "mountAssociationsSites");
   const charger_parametrage = () => import("./parametrage.js");
+  const mountMenagePonctuelDispositif = aLaDemande(() => import("./menage-ponctuel.js"), "mountMenagePonctuelDispositif");
   const mountTracabilitePoubelles = aLaDemande(() => import("./tracabilite-poubelles.js"), "mountTracabilitePoubelles");
   const mountParametrage = aLaDemande(charger_parametrage, "mountParametrage");
   const charger_migration_tool = () => import("./migration-tool.js");
@@ -357,6 +358,7 @@
           ] : []),
           { id: "tracabilite", label: "Traçabilité", icon: "🧾", roles: [...GESTION, "direction"],       mount: (c, u) => /mahdi|daoud/i.test(d) ? mountTracabilitePoubelles(c, u, d) : mountTracabiliteForDispositif(c, u, d) },
           { id: "prestataire", label: "Accès prestataire", icon: "🔗", roles: GESTION, mount: mountAccesRemplacants },
+          ...(/mahdi|daoud/i.test(d) ? [] : [{ id: "gros-menage", label: "Gros ménage", icon: "🧽", roles: GESTION, mount: (c, u) => mountMenagePonctuelDispositif(c, u, d) }]),
           { id: "planning",    label: "Planning",    icon: "📅", roles: MENAGE_ROLES, mount: (c, u) => mountPlanningMenage(c, u, d) },
           { id: "stats-menage", label: "Statistiques", icon: "📊", roles: [...GESTION, "direction"], mount: (c, u) => mountStatsMenage(c, u, d) },
           { id: "parametres",  label: "Paramètres",  icon: "⚙️", roles: GESTION,     mount: (c, u) => mountParametresDispositif(c, u, d) },

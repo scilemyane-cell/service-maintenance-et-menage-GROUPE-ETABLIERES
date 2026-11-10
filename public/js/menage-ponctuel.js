@@ -6,6 +6,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchInvitations } from "./invitations-data.js";
 import { voirPhotos } from "./demandes-photos.js";
+import { watchSites } from "./sites-data.js";
 import {
   creerMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
   passageOuvert, minutesPassees, fmtMin, nbFaits, statutMission, heureFr, jourFr, dateFr, lienMission,
@@ -43,6 +44,12 @@ export function mountMenagePonctuel(container, contexte) {
   unsubs.push(watchMissions((l) => { st.missions = l; render(); }));
   unsubs.push(watchInvitations((l) => { st.invs = Object.fromEntries(l.filter(x => x.type === "ponctuel").map(x => [x.id, x])); render(); }));
   render();
+}
+
+// Onglet « 🧽 Gros ménage » d'un dispositif (ex. Dispositif MNA) : ses sites seulement.
+export function mountMenagePonctuelDispositif(container, user, dispositif) {
+  mountMenagePonctuel(container, { dispositif, sites: [], user });
+  unsubs.push(watchSites((l) => { ctx.sites = (l || []).filter(s => (s.dispositif || "Dispositif MNA") === dispositif); render(); }));
 }
 
 function suivrePhotos(id) {
