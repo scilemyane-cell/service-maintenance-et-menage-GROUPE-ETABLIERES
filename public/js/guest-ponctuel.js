@@ -25,6 +25,8 @@ const STYLE = `<style>
 .gp-big{width:100%;padding:16px;border:none;border-radius:14px;font:inherit;font-size:18px;font-weight:800;color:#fff;cursor:pointer}
 .gp-go{background:#1baf7a}.gp-stop{background:#d9534f}.gp-send{background:#2f6fd6}
 .gp-pass{font-size:13px;color:var(--text-dim);margin-top:8px}
+.gp .fj-piece{margin:0}.gp-infos .fj-piece-nom{font-size:15px}.gp-code{font-size:15px;margin-top:6px}.gp-code b{font-size:20px;letter-spacing:1.5px}
+.gp-phb{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 4px}
 .gp-niv{margin:14px 0 2px;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#2f6fd6}
 .gp-piece{border-top:1px solid var(--border);padding:12px 0}.gp-piece:first-of-type{border-top:none}
 .gp-ph{display:flex;align-items:center;gap:10px}
@@ -53,6 +55,7 @@ const STYLE = `<style>
 export function mountGuestPonctuel(container, u, invitation) {
   unsubs.forEach(f => f()); unsubs = [];
   cont = container; user = u; inv = invitation; identite = lireId();
+  document.documentElement.dataset.theme = "clair"; // même visuel que les fiches MNA
   cont.innerHTML = `<div class="hint">Chargement…</div>`;
   const id = inv.ponctuelId || inv.id;
   unsubs.push(ecouterMission(id, (x) => { m = x; render(); }));
@@ -84,31 +87,43 @@ function render() {
   cont.innerHTML = `${STYLE}<div class="gp">
     ${APERCU ? `<div class="gp-att">👁️ Aperçu — c'est la fiche que l'entreprise remplira sur son téléphone. Rien n'est modifiable ici.</div>` : ""}
     <div class="gp-qui" ${APERCU ? 'style="display:none"' : ""}><span>👤 ${esc(nom())}${identite.societe ? ` · ${esc(identite.societe)}` : ""}</span>${verrou ? "" : `<button data-chg-id>Ce n'est pas moi</button>`}</div>
-    <div class="gp-card"><h3>🧽 Gros ménage — ${esc(m.siteName)}</h3>
-      <div class="hint" style="margin:0 0 8px">Du ${dateFr(m.debut)} au ${dateFr(m.fin)}</div>
-      ${(m.codes || []).length && !m.validee ? `<div class="gp-cons" style="margin-bottom:8px">🔐 <b>Boîte à clés</b><br>${m.codes.map(c => `${esc(c.nom)} : <b style="font-size:17px;letter-spacing:1px">${esc(c.code)}</b>${c.notes ? ` <small>(${esc(c.notes)})</small>` : ""}`).join("<br>")}</div>` : ""}
-      ${m.consignes ? `<div class="gp-cons">${esc(m.consignes)}</div>` : ""}</div>
+    ${(() => { // Bandeau vert + anneau, comme les fiches MNA.
+      const tot = (m.pieces || []).reduce((a, p, i) => a + ((p.taches || []).length || 1), 0);
+      const fa = (m.pieces || []).reduce((a, p, i) => a + ((p.taches || []).length ? tachesFaites(m, i) : (m.faits?.[i] ? 1 : 0)), 0);
+      const pct = tot ? Math.round(fa / tot * 100) : 0, r = 40, c = 2 * Math.PI * r;
+      const msg = !fa ? "C'est parti ! Touche une tâche quand elle est faite." : fa === tot ? "Tout est fait, bravo ! Pense aux photos « après » puis envoie." : pct >= 50 ? "Plus de la moitié, continue comme ça 💪" : "Bien lancé, continue !";
+      return `<div class="fj-hero"><div class="fj-hero-txt"><div class="fj-bonjour">Bonjour ${esc(identite?.prenom || "")} 👋</div>
+        <div class="fj-date">Gros ménage · ${esc(m.siteName)} · du ${dateFr(m.debut)} au ${dateFr(m.fin)}</div>
+        <div class="fj-msg">${msg}</div>
+        <div class="fj-sem">Pièces : <b>${faits}/${total}</b><span class="fj-sem-barre"><span style="width:${total ? faits / total * 100 : 0}%"></span></span></div></div>
+        <div class="fj-hero-anneau"><svg class="fj-anneau" viewBox="0 0 100 100" width="92" height="92"><circle cx="50" cy="50" r="${r}" class="fj-anneau-fond"/><circle cx="50" cy="50" r="${r}" class="fj-anneau-val" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct / 100)}"/></svg>
+          <div class="fj-anneau-txt"><b>${pct}%</b><span>${fa}/${tot}</span></div></div></div>`; })()}
+    ${(m.codes || []).length && !m.validee ? `<div class="fj-piece gp-infos"><div class="fj-piece-nom">🔐 Boîte à clés</div>${m.codes.map(c => `<div class="gp-code">${esc(c.nom)} : <b>${esc(c.code)}</b>${c.notes ? ` <small>(${esc(c.notes)})</small>` : ""}</div>`).join("")}</div>` : ""}
+    ${m.consignes ? `<div class="fj-piece gp-infos"><div class="fj-piece-nom">📋 Consignes</div><div style="white-space:pre-wrap;font-size:14.5px;margin-top:6px">${esc(m.consignes)}</div></div>` : ""}
     ${m.validee ? `<div class="gp-ok">✅ Ménage vérifié et validé par le Groupe Établières. Merci !</div>`
       : m.termine ? `<div class="gp-ok">📨 Envoyé le ${jourFr(m.termine)} à ${heureFr(m.termine)}. Merci ! Le responsable va vérifier.<br><button class="nav-btn" data-rouvrir style="margin-top:8px">✏️ J'ai oublié quelque chose</button></div>` : `
-    <div class="gp-card">${ouvert
+    <div>${ouvert
       ? `<button class="gp-big gp-stop" data-depart>🔴 Je pars <small style="font-weight:600">(arrivé à ${heureFr(ouvert.a)})</small></button>`
       : `<button class="gp-big gp-go" data-arrivee>🟢 J'arrive sur place</button>`}
       ${(m.passages || []).length ? `<div class="gp-pass">${(m.passages || []).map(p => `${jourFr(p.a)} : ${heureFr(p.a)} → ${p.d ? heureFr(p.d) : "en cours"}`).join(" · ")} — total ${fmtMin(minutesPassees(m))}</div>` : `<div class="gp-pass">Appuie en arrivant, puis « Je pars » en partant : tes heures sont notées automatiquement.</div>`}
     </div>`}
-    <div class="gp-card"><h3>Pièces à faire <small class="hint">${faits}/${total}</small></h3>
-      <p class="hint" style="margin:0 0 6px">Pour chaque pièce : une photo <b>avant</b>, coche chaque tâche quand elle est faite, puis une photo <b>après</b>.</p>
-      ${(() => { let niv = null; return (m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = pieceFaite(m, i), tt = p.taches || [], nt = tachesFaites(m, i);
+    <div class="fj-bravo ${total && faits === total ? "visible" : ""}"><span class="fj-bravo-emo">🎉</span><div><b>Bravo ! Toutes les pièces sont faites</b><br><small>Vérifie les photos « après », puis « Terminer le ménage et envoyer ».</small></div></div>
+    ${(() => { let niv = null; return (m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = pieceFaite(m, i), tt = p.taches || [], nt = tachesFaites(m, i);
         const titre = p.niveau && p.niveau !== niv ? `<div class="gp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || "";
-        return `${titre}<div class="gp-piece ${fait ? "fait" : ""}">
-          ${tt.length ? `<div class="gp-ph gp-ph-t"><label>${fait ? "✅ " : ""}${esc(p.libelle || p.nom)} <small class="hint">${nt}/${tt.length}</small></label>${verrou || fait ? "" : `<button class="nav-btn" data-toutfait="${i}">✓ Tout fait</button>`}</div>`
-            : `<div class="gp-ph"><input type="checkbox" id="gp-c${i}" data-fait="${i}" ${fait ? "checked" : ""} ${verrou ? "disabled" : ""}><label for="gp-c${i}">${esc(p.libelle || p.nom)}</label></div>`}
-          ${verrou ? "" : `<div class="gp-btns"><label class="${av.length ? "ok" : ""}">📷 Avant<small>${av.length ? `${av.length} photo${av.length > 1 ? "s" : ""}` : "à prendre"}</small><input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="avant"></label>
-            <label class="${ap.length ? "ok" : ""}">📷 Après<small>${ap.length ? `${ap.length} photo${ap.length > 1 ? "s" : ""}` : "à prendre"}</small><input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="apres"></label></div>`}
-          ${tt.length ? `<div class="gp-taches">${tt.map((t, k) => { const ok = !!m.faits?.[`${i}-${k}`]; return `<label class="gp-tache ${ok ? "ok" : ""}"><input type="checkbox" data-tache="${i}-${k}" ${ok ? "checked" : ""} ${verrou ? "disabled" : ""}><span>${esc(t)}</span></label>`; }).join("")}</div>` : ""}
+        const n = tt.length || 1, f = tt.length ? nt : (fait ? 1 : 0);
+        const ligne = (cle, lib, ok) => { const obs = m.obs?.[cle] || ""; return `<div class="fj-tache ${ok ? "faite" : ""}">
+            <button class="fj-coche" data-coche="${cle}" aria-pressed="${ok}" ${verrou ? "disabled" : ""}><span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span class="fj-label">${esc(lib)}</span></button>
+            ${verrou ? (obs ? `<div class="fj-obs ouverte"><small>💬 ${esc(obs)}</small></div>` : "") : `<button class="fj-obs-btn ${obs ? "a-obs" : ""}" data-obs-btn="${cle}" title="Ajouter une remarque">💬</button>
+            <div class="fj-obs ${obs ? "ouverte" : ""}" data-obs-zone="${cle}"><input type="text" data-obs="${cle}" value="${esc(obs)}" placeholder="Une remarque ? (dégât, produit manquant…)"></div>`}</div>`; };
+        return `${titre}<div class="fj-piece ${fait ? "finie" : ""}">
+          <div class="fj-piece-tete"><div class="fj-piece-nom">${esc(p.libelle || p.nom)}</div><div class="fj-piece-compte">${f}/${n}</div>
+            ${verrou || !tt.length ? "" : `<button class="fj-tout" data-toutfait="${i}">${fait ? "↺ Tout décocher" : "✓ Tout fait"}</button>`}</div>
+          <div class="fj-piece-barre"><span style="width:${f / n * 100}%"></span></div>
+          ${tt.length ? tt.map((t, k) => ligne(`${i}-${k}`, t, !!m.faits?.[`${i}-${k}`])).join("") : ligne(String(i), "Pièce faite", fait)}
+          ${verrou ? "" : `<div class="gp-phb"><label class="fc-ph-add petit avant">📷 Avant${av.length ? ` (${av.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="avant" hidden></label>
+            <label class="fc-ph-add petit apres">📷 Après${ap.length ? ` (${ap.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="apres" hidden></label></div>`}
           ${vignettes([...av, ...ap], !verrou)}
-          ${verrou ? (m.obs?.[i] ? `<div class="hint" style="margin-top:6px">📝 ${esc(m.obs[i])}</div>` : "") : `<input class="gp-note" type="text" data-obs="${i}" placeholder="Remarque sur cette pièce (facultatif)" value="${esc(m.obs?.[i] || "")}">`}
-        </div>`; }).join(""); })() || `<div class="hint">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
-    </div>
+        </div>`; }).join(""); })() || `<div class="fj-vide">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
     <div class="gp-card"><h3>📷 Autres photos</h3>
       ${verrou ? "" : `<div class="gp-btns"><label>📷 Ajouter des photos<small>dégâts, problème constaté…</small><input type="file" accept="image/*" capture="environment" multiple data-ph="-1" data-moment=""></label></div>`}
       ${vignettes(autres, !verrou)}</div>
@@ -139,8 +154,9 @@ function brancher() {
   cont.querySelector("[data-chg-id]")?.addEventListener("click", () => { if (confirm("Changer de personne ?")) { identite = null; ecrireId(null); render(); } });
   cont.querySelector("[data-arrivee]")?.addEventListener("click", () => enregistrer({ passages: [...(m.passages || []), { a: Date.now(), d: null }] }));
   cont.querySelector("[data-depart]")?.addEventListener("click", () => enregistrer({ passages: (m.passages || []).map(p => p.a && !p.d ? { ...p, d: Date.now() } : p) }));
-  cont.querySelectorAll("[data-tache]").forEach(cb => cb.addEventListener("change", () => enregistrer({ faits: { ...(m.faits || {}), [cb.dataset.tache]: cb.checked } })));
-  cont.querySelectorAll("[data-toutfait]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.toutfait, f = { ...(m.faits || {}) }; (m.pieces[i].taches || []).forEach((_, k) => { f[`${i}-${k}`] = true; }); enregistrer({ faits: f }); }));
+  cont.querySelectorAll("[data-coche]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.coche; enregistrer({ faits: { ...(m.faits || {}), [k]: !m.faits?.[k] } }); }));
+  cont.querySelectorAll("[data-obs-btn]").forEach(b => b.addEventListener("click", () => { const z = cont.querySelector(`[data-obs-zone="${b.dataset.obsBtn}"]`); z?.classList.toggle("ouverte"); z?.querySelector("input")?.focus(); }));
+  cont.querySelectorAll("[data-toutfait]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.toutfait, f = { ...(m.faits || {}) }; const tous = pieceFaite(m, i); (m.pieces[i].taches || []).forEach((_, k) => { f[`${i}-${k}`] = !tous; }); enregistrer({ faits: f }); }));
   cont.querySelectorAll("[data-fait]").forEach(cb => cb.addEventListener("change", () => enregistrer({ faits: { ...(m.faits || {}), [cb.dataset.fait]: cb.checked } })));
   cont.querySelectorAll("[data-obs],[data-obs-gen]").forEach(el => { el.addEventListener("input", enregistrerTextes); el.addEventListener("blur", () => setTimeout(render, 50)); });
   cont.querySelectorAll("[data-voir]").forEach(img => img.addEventListener("click", () => { const i = photos.findIndex(p => p.id === img.dataset.voir); voirPhotos(photos, Math.max(0, i)); }));
