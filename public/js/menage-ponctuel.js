@@ -7,6 +7,7 @@ import { esc } from "./astreinte-logic.js";
 import { watchInvitations } from "./invitations-data.js";
 import { voirPhotos } from "./demandes-photos.js";
 import { watchSites } from "./sites-data.js";
+import { watchAssociations } from "./associations-data.js";
 import {
   creerMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
   passageOuvert, minutesPassees, fmtMin, nbFaits, statutMission, heureFr, jourFr, dateFr, lienMission,
@@ -48,8 +49,10 @@ export function mountMenagePonctuel(container, contexte) {
 
 // Onglet « 🧽 Gros ménage » d'un dispositif (ex. Dispositif MNA) : ses sites seulement.
 export function mountMenagePonctuelDispositif(container, user, dispositif) {
-  mountMenagePonctuel(container, { dispositif, sites: [], user });
-  unsubs.push(watchSites((l) => { ctx.sites = (l || []).filter(s => (s.dispositif || "Dispositif MNA") === dispositif); render(); }));
+  // Tous les sites : maisons / sites ménage (avec leurs pièces) + sites des associations.
+  mountMenagePonctuel(container, { dispositif, sites: [], assoc: [], user, tous: true });
+  unsubs.push(watchSites((l) => { ctx.sites = (l || []).map(s => ({ ...s, groupe: s.dispositif || "Dispositif MNA" })); render(); }));
+  unsubs.push(watchAssociations((as) => { ctx.assoc = (as || []).flatMap(a => (a.sites || []).map(x => ({ id: `assoc:${a.nom}|${x.nom}`, name: x.nom, groupe: a.nom, dispositif: a.nom, rooms: [] }))); render(); }));
 }
 
 function suivrePhotos(id) {
@@ -58,8 +61,18 @@ function suivrePhotos(id) {
   if (id) unsubPh = ecouterPhotosMission(id, (p) => { st.photos = p; render(); });
 }
 
-const sitesDispo = () => (ctx.sites || []).filter(s => s && s.id).sort((a, b) => String(a.name).localeCompare(String(b.name), "fr"));
-const missionsVisibles = () => st.missions.filter(m => !ctx.dispositif || !m.dispositif || m.dispositif === ctx.dispositif);
+const sitesDispo = () => {
+  const menage = (ctx.sites || []).filter(s => s && s.id), noms = new Set(menage.map(s => String(s.name).trim().toLowerCase()));
+  const autres = (ctx.assoc || []).filter(s => !noms.has(String(s.name).trim().toLowerCase()));
+  const tri = (a, b) => String(a.name).localeCompare(String(b.name), "fr");
+  return [...menage.filter(s => s.groupe === ctx.dispositif).sort(tri), ...menage.filter(s => s.groupe !== ctx.dispositif).sort(tri), ...autres];
+};
+const missionsVisibles = () => ctx.tous ? st.missions : st.missions.filter(m => !ctx.dispositif || !m.dispositif || m.dispositif === ctx.dispositif);
+// Liste déroulante groupée (dispositif courant d'abord, puis les autres, puis les associations).
+function optionsSites(sel) {
+  const g = []; sitesDispo().forEach(s => { let x = g.find(y => y.n === (s.groupe || "Autres")); if (!x) g.push(x = { n: s.groupe || "Autres", l: [] }); x.l.push(s); });
+  return g.map(x => `<optgroup label="${esc(x.n)}">${x.l.map(s => `<option value="${esc(s.id)}" ${s.id === sel ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</optgroup>`).join("");
+}
 const actif = (m) => st.invs[m.id] ? st.invs[m.id].active !== false : true;
 
 function render() {
@@ -89,11 +102,12 @@ function liste() {
 
 function formulaire() {
   const d = ui.draft || (ui.draft = { siteId: sitesDispo()[0]?.id || "", entreprise: "", telephone: "", debut: auj(), fin: plus(auj(), 7), consignes: "", pieces: null, autres: "" });
+  if (!sitesDispo().some(s => s.id === d.siteId)) d.siteId = sitesDispo()[0]?.id || "";
   const site = sitesDispo().find(s => s.id === d.siteId);
   const nomsSite = [...new Set((site?.rooms || []).map(r => String(r.name || "").trim()).filter(Boolean))];
   if (!d.pieces || d.piecesPour !== d.siteId) { d.pieces = Object.fromEntries(nomsSite.map(n => [n, true])); d.piecesPour = d.siteId; }
   return `<div class="form-card"><h3 style="margin:0 0 10px">➕ Nouveau ménage ponctuel</h3><form class="mp-f" id="mp-form">
-    <label class="plein">Site<select name="siteId" data-d>${sitesDispo().map(s => `<option value="${s.id}" ${s.id === d.siteId ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label>
+    <label class="plein">Site<select name="siteId" data-d>${optionsSites(d.siteId)}</select></label>
     <label>Entreprise<input name="entreprise" data-d required value="${esc(d.entreprise)}" placeholder="Nom de la société"></label>
     <label>Téléphone (pour le SMS)<input name="telephone" data-d type="tel" value="${esc(d.telephone)}" placeholder="06…"></label>
     <label>Du<input name="debut" data-d type="date" required value="${d.debut}"></label>
@@ -189,7 +203,7 @@ function brancher() {
       const pieces = [...Object.keys(d.pieces || {}).filter(n => d.pieces[n]), ...String(d.autres || "").split("\n").map(x => x.trim()).filter(Boolean)];
       const btn = form.querySelector("[type=submit]"); btn.disabled = true; btn.textContent = "⏳ Création…";
       try {
-        const id = await creerMission({ site, dispositif: site.dispositif || ctx.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)], createdBy: ctx.user?.uid || "" });
+        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)], createdBy: ctx.user?.uid || "" });
         ui.form = false; ui.draft = null; ui.cree = id;
         try { await navigator.clipboard.writeText(smsTexte({ id, siteName: site.name, debut: d.debut, fin: d.fin })); window.toast?.("✓ Mission créée, message avec le lien copié"); } catch { window.toast?.("✓ Mission créée"); }
         document.activeElement?.blur(); render();
