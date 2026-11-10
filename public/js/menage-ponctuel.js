@@ -52,7 +52,7 @@ export function mountMenagePonctuelDispositif(container, user, dispositif) {
   // Tous les sites : maisons / sites ménage (avec leurs pièces) + sites des associations.
   mountMenagePonctuel(container, { dispositif, sites: [], assoc: [], user, tous: true });
   unsubs.push(watchSites((l) => { ctx.sites = (l || []).map(s => ({ ...s, groupe: s.dispositif || "Dispositif MNA" })); render(); }));
-  unsubs.push(watchAssociations((as) => { ctx.assoc = (as || []).flatMap(a => (a.sites || []).map(x => ({ id: `assoc:${a.nom}|${x.nom}`, name: x.nom, groupe: a.nom, dispositif: a.nom, rooms: [] }))); render(); }));
+  unsubs.push(watchAssociations((as) => { ctx.assoc = (as || []).flatMap(a => (a.sites || []).map(x => ({ id: `assoc:${a.nom}|${x.nom}`, name: x.nom, groupe: a.nom, sousGroupe: x.groupe || "", dispositif: a.nom, rooms: [] }))); render(); }));
 }
 
 function suivrePhotos(id) {
@@ -61,16 +61,24 @@ function suivrePhotos(id) {
   if (id) unsubPh = ecouterPhotosMission(id, (p) => { st.photos = p; render(); });
 }
 
+// Comparaison souple des noms : « Maison MNA Saint Vincent de Paul » = « SVDP ».
+const norm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(maison|mna|la|le|les)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+const sigle = (t) => norm(t).split(" ").filter(Boolean).map(w => w[0]).join("");
+const memeSite = (a, b) => { const x = norm(a), y = norm(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x) || sigle(a) === y.replace(/ /g, "") || sigle(b) === x.replace(/ /g, "")); };
+const estMna = (s) => /mna/i.test(s.groupe || "") || /mna/i.test(s.dispositif || "");
 const sitesDispo = () => {
-  const menage = (ctx.sites || []).filter(s => s && s.id), noms = new Set(menage.map(s => String(s.name).trim().toLowerCase()));
-  const autres = (ctx.assoc || []).filter(s => !noms.has(String(s.name).trim().toLowerCase()));
-  const tri = (a, b) => String(a.name).localeCompare(String(b.name), "fr");
-  return [...menage.filter(s => s.groupe === ctx.dispositif).sort(tri), ...menage.filter(s => s.groupe !== ctx.dispositif).sort(tri), ...autres];
+  const menage = (ctx.sites || []).filter(s => s && s.id);
+  // Sites des associations absents des fiches ménage ; ceux du groupe « MNA » rejoignent le dispositif MNA.
+  const autres = (ctx.assoc || []).filter(s => !menage.some(m => memeSite(m.name, s.name)))
+    .map(s => /mna/i.test(s.sousGroupe || "") ? { ...s, groupe: menage.find(estMna)?.groupe || "Dispositif MNA" } : s);
+  const tous = [...menage, ...autres], tri = (a, b) => String(a.name).localeCompare(String(b.name), "fr");
+  const ici = tous.filter(s => s.groupe === ctx.dispositif || (/mna/i.test(ctx.dispositif || "") && estMna(s)));
+  return [...ici.sort(tri), ...tous.filter(s => !ici.includes(s))];
 };
 const missionsVisibles = () => ctx.tous ? st.missions : st.missions.filter(m => !ctx.dispositif || !m.dispositif || m.dispositif === ctx.dispositif);
 // Liste déroulante groupée (dispositif courant d'abord, puis les autres, puis les associations).
 function optionsSites(sel) {
-  const g = []; sitesDispo().forEach(s => { let x = g.find(y => y.n === (s.groupe || "Autres")); if (!x) g.push(x = { n: s.groupe || "Autres", l: [] }); x.l.push(s); });
+  const g = []; sitesDispo().forEach(s => { const n = (/mna/i.test(ctx.dispositif || "") && estMna(s)) ? ctx.dispositif : (s.groupe || "Autres"); let x = g.find(y => y.n === n); if (!x) g.push(x = { n, l: [] }); x.l.push(s); });
   return g.map(x => `<optgroup label="${esc(x.n)}">${x.l.map(s => `<option value="${esc(s.id)}" ${s.id === sel ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</optgroup>`).join("");
 }
 const actif = (m) => st.invs[m.id] ? st.invs[m.id].active !== false : true;
