@@ -25,6 +25,7 @@ export function mountPointage(container, u, dispositif) {
   cont = container; user = u; disp = dispositif; brouillon = null;
   if (!ui.semaine) ui.semaine = dateKey(lundi(new Date()));
   container.innerHTML = `<p class="hint">Chargement…</p>`;
+  chargerMeteo(); // pré-chargée pour que le message s'affiche tout de suite
   unsubs.push(watchDispositifSettings((s) => { st.settings = s; render(); }));
   unsubs.push(watchRepartitions((r) => { st.reps = r; if (!tSave) brouillon = null; render(); }));
   if (estEditeur(u)) {
@@ -104,8 +105,18 @@ function render() {
   $$("[data-pt-sem]").forEach(b => b.onclick = () => { ui.semaine = dateKey(addDays(new Date(ui.semaine + "T12:00"), 7 * +b.dataset.ptSem)); brouillon = null; render(); });
   cont.querySelector("[data-pt-auj]")?.addEventListener("click", () => { ui.semaine = dateKey(lundi(new Date())); brouillon = null; render(); });
   cont.querySelector("[data-pt-agent]")?.addEventListener("change", (e) => { ui.agent = e.target.value; brouillon = null; render(); });
-  cont.querySelector("[data-pt-arrive]")?.addEventListener("click", () => { (data.pointages[dAuj] = data.pointages[dAuj] || []).push({ a: maintenant(), d: "" }); enregistrer(f); render(); });
-  cont.querySelector("[data-pt-depart]")?.addEventListener("click", () => { enCours.d = maintenant(); enregistrer(f); render(); });
+  cont.querySelector("[data-pt-arrive]")?.addEventListener("click", async (e) => {
+    e.currentTarget.disabled = true;
+    if (!(await confirmerPointage(true))) { render(); return; }
+    const premiere = !(data.pointages[dAuj] || []).length;
+    (data.pointages[dAuj] = data.pointages[dAuj] || []).push({ a: maintenant(), d: "" }); enregistrer(f); render();
+    if (premiere && !estEditeur(user)) afficherMeteo(ag.nom);
+  });
+  cont.querySelector("[data-pt-depart]")?.addEventListener("click", async (e) => {
+    e.currentTarget.disabled = true;
+    if (!(await confirmerPointage(false))) { render(); return; }
+    enCours.d = maintenant(); enregistrer(f); render();
+  });
   $$("[data-pt-add]").forEach(b => b.onclick = () => { (data.pointages[b.dataset.ptAdd] = data.pointages[b.dataset.ptAdd] || []).push({ a: "", d: "" }); render(); cont.querySelector(`[data-pt-a="${b.dataset.ptAdd}|${data.pointages[b.dataset.ptAdd].length - 1}"]`)?.focus(); });
   $$("[data-pt-rm]").forEach(b => b.onclick = () => { const [d, k] = cle(b.dataset.ptRm); data.pointages[d].splice(+k, 1); enregistrer(f); render(); });
   $$("[data-pt-a],[data-pt-d]").forEach(inp => inp.onchange = () => { const [d, k] = cle(inp.dataset.ptA || inp.dataset.ptD); const c = data.pointages[d][+k]; c[inp.dataset.ptA ? "a" : "d"] = inp.value;
@@ -117,4 +128,64 @@ function render() {
     try { await deleteDoc(doc(db, "heures-repartition", f.id)); brouillon = null; window.toast?.("🗑️ Semaine effacée"); render(); } catch (e) { alert("Effacement impossible : " + (e?.message || e)); }
   });
   cont.querySelector("[data-pt-valide]")?.addEventListener("click", () => { data.valide = !data.valide; if (data.valide) data.submitted = true; enregistrer(f); render(); });
+}
+
+// ---- Double validation « J'arrive » / « Je pars » (évite les touches accidentelles) ----
+function confirmerPointage(arrivee) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "pt-conf";
+    ov.innerHTML = `<div class="pt-conf-box">
+      <div class="pt-conf-ico">${arrivee ? "▶️" : "⏹️"}</div>
+      <h3>${arrivee ? "Tu arrives ?" : "Tu pars ?"}</h3>
+      <p>Heure notée : <b>${maintenant().replace(":", "h")}</b></p>
+      <div class="pt-conf-btns"><button class="non">Annuler</button><button class="oui ${arrivee ? "go" : "stop"}">${arrivee ? "Oui, j'arrive" : "Oui, je pars"}</button></div>
+    </div>`;
+    const fin = (v) => { ov.remove(); resolve(v); };
+    ov.querySelector(".non").onclick = () => fin(false);
+    ov.querySelector(".oui").onclick = () => fin(true);
+    ov.onclick = (e) => { if (e.target === ov) fin(false); };
+    document.body.appendChild(ov);
+  });
+}
+
+// ---- Petit message météo au début de la journée (Open-Meteo, gratuit, sans clé) ----
+const METEO_LAT = 46.67, METEO_LON = -1.43; // La Roche-sur-Yon (résidence Cécile Sauvage)
+let meteo = null, meteoJour = "";
+function chargerMeteo() {
+  const j = dateKey(new Date());
+  if (meteo && meteoJour === j) return Promise.resolve(meteo);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${METEO_LAT}&longitude=${METEO_LON}`
+    + "&current=temperature_2m,weather_code,wind_speed_10m"
+    + "&daily=temperature_2m_min,temperature_2m_max,precipitation_probability_max&timezone=Europe%2FParis&forecast_days=1";
+  return fetch(url).then(r => r.json()).then(d => { meteo = d; meteoJour = j; return d; }).catch(() => null);
+}
+function messageMeteo(d, prenom) {
+  const salut = new Date().getHours() < 12 ? "Bonjour" : "Salut";
+  if (!d?.current || !d?.daily) return { ico: "👋", titre: `${salut} ${prenom} !`, txt: "Bonne journée et bon courage." };
+  const t = Math.round(d.current.temperature_2m), code = d.current.weather_code, vent = d.current.wind_speed_10m,
+    pluie = d.daily.precipitation_probability_max?.[0] ?? 0, tmin = d.daily.temperature_2m_min?.[0] ?? 10, tmax = Math.round(d.daily.temperature_2m_max?.[0] ?? t);
+  let ico = "☀️", txt = "Beau temps, bonne journée dehors !";
+  if ([71, 73, 75, 77, 85, 86].includes(code)) { ico = "❄️"; txt = "Neige annoncée : attention aux glissades avec les bacs."; }
+  else if (code >= 95) { ico = "⛈️"; txt = "Orage possible : mets-toi à l'abri si ça gronde."; }
+  else if (code >= 51 || pluie >= 60) { ico = "🌧️"; txt = "Pluie prévue : pense au K-way."; }
+  else if (vent >= 40) { ico = "💨"; txt = "Gros vent : attention aux couvercles et aux bacs qui s'envolent."; }
+  else if (tmin <= 2) { ico = "🥶"; txt = "Risque de gel : sol glissant, pense aux gants."; }
+  else if (tmax >= 28) { ico = "🥵"; txt = "Il va faire chaud : bois bien de l'eau."; }
+  else if (code >= 1 && code <= 3) { ico = "⛅"; txt = "Temps calme, bonne journée !"; }
+  return { ico, titre: `${salut} ${prenom} ! ${t}°C`, txt: `${txt} (max ${tmax}°C)` };
+}
+function afficherMeteo(nom) {
+  const p = String(nom || "").trim().split(/\s+/)[0] || "";
+  const prenom = p ? p[0].toUpperCase() + p.slice(1).toLowerCase() : "";
+  chargerMeteo().then(d => {
+    const m = messageMeteo(d, prenom);
+    document.querySelector(".pt-meteo")?.remove();
+    const el = document.createElement("div");
+    el.className = "pt-meteo";
+    el.innerHTML = `<div class="ico">${m.ico}</div><div><b>${esc(m.titre)}</b><span>${esc(m.txt)}</span></div><button aria-label="Fermer">✕</button>`;
+    el.querySelector("button").onclick = () => el.remove();
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 10000);
+  });
 }
