@@ -26,12 +26,17 @@ const MODELES = [
 ];
 export const TACHES_RAPIDES = [...new Set([...BASE, "Placards : intérieur & extérieur", "Four", "Frigo (intérieur)", "Hotte & filtres", "Faïence & joints", "Douche / baignoire : détartrage", "VMC / aérations", "Miroir", "Lit & sommier (dessous)", "Volets", "Luminaires"])];
 export function tachesParDefaut(nom) { const m = MODELES.find(([re]) => re.test(String(nom || "").trim())); return [...(m ? m[1] : BASE)]; }
+// Ordre logique dans un niveau : entrée / pièces de vie, cuisine, chambres (par numéro), salles d'eau, WC, circulations, annexes.
+const ORDRE = [/entr[ée]e|hall/i, /s[ée]jour|salon/i, /salle . manger/i, /cuisine/i, /bureau/i, /chambre|studio/i, /salle de bain|sdb|douche|salle d.eau/i, /^wc|toilette/i, /couloir|d[ée]gagement|palier/i, /escalier/i, /placard|dressing/i, /buanderie|cellier|local/i, /garage/i, /terrasse|balcon|jardin|ext/i];
+const rangPiece = (nom) => { const i = ORDRE.findIndex(re => re.test(nom)); return i < 0 ? 99 : i; };
+const numero = (nom) => +((/(\d+)/.exec(nom) || [])[1] || 0);
+export const trierPieces = (l) => [...l].sort((a, b) => { const x = typeof a === "string" ? a : a.nom, y = typeof b === "string" ? b : b.nom; return rangPiece(x) - rangPiece(y) || numero(x) - numero(y) || x.localeCompare(y, "fr"); });
 export const normPiece = (p) => typeof p === "string" ? { nom: p, taches: tachesParDefaut(p) } : { nom: String(p?.nom || ""), taches: Array.isArray(p?.taches) ? p.taches : tachesParDefaut(p?.nom) };
 
 // Liste à plat : { cle (unique, sert aussi aux photos), nom, niveau, taches }.
 export function piecesDuPlan(plan) {
   const out = [];
-  (plan?.niveaux || []).forEach(n => (n.pieces || []).forEach(x => {
+  (plan?.niveaux || []).forEach(n => trierPieces(n.pieces || []).forEach(x => {
     const p = normPiece(x), nom = p.nom.trim(); if (!nom) return;
     out.push({ cle: n.nom ? `${n.nom} · ${nom}` : nom, nom, niveau: n.nom || "", taches: p.taches });
   }));
@@ -65,7 +70,7 @@ export const STYLE_PLAN = `<style>
 // Éditeur. opts : { site, plan, fiches (pièces de la fiche ménage), onSave(plan) }
 let ouvert = null; // "i|j" : pièce dont on édite les tâches
 export function editeurPlanHTML({ site, plan, fiches = [] }) {
-  const nivs = (plan?.niveaux || []).map(n => ({ ...n, pieces: (n.pieces || []).map(normPiece) }));
+  const nivs = (plan?.niveaux || []).map(n => ({ ...n, pieces: trierPieces((n.pieces || []).map(normPiece)) }));
   const libres = NIVEAUX.filter(n => !nivs.some(x => x.nom === n));
   return `${STYLE_PLAN}<div class="pl">
     ${nivs.length ? nivs.map((n, i) => `<div class="pl-niv">
@@ -89,15 +94,15 @@ export function editeurPlanHTML({ site, plan, fiches = [] }) {
 
 // Branche l'éditeur ; chaque modification est enregistrée tout de suite.
 export function brancherEditeurPlan(zone, { site, plan, fiches = [], onChange }) {
-  const p = { niveaux: (plan?.niveaux || []).map(n => ({ nom: n.nom, pieces: (n.pieces || []).map(normPiece) })) };
-  const sauver = () => { onChange?.(p); savePlan(clePlan(site), p).catch(e => alert("Enregistrement impossible : " + (e?.message || e))); };
+  const p = { niveaux: (plan?.niveaux || []).map(n => ({ nom: n.nom, pieces: trierPieces((n.pieces || []).map(normPiece)) })) };
+  const sauver = () => { p.niveaux.forEach(n => { n.pieces = trierPieces(n.pieces); }); onChange?.(p); savePlan(clePlan(site), p).catch(e => alert("Enregistrement impossible : " + (e?.message || e))); };
   const numeroChambre = () => { let max = 0; p.niveaux.forEach(n => n.pieces.forEach(x => { const m = /^chambre\s*(\d+)/i.exec(x.nom); if (m) max = Math.max(max, +m[1]); })); return max + 1; };
   const ajouter = (i, nom) => {
     nom = String(nom || "").trim(); if (!nom) return;
     if (/^chambre$/i.test(nom)) nom = `Chambre ${numeroChambre()}`;
     const n = p.niveaux[i]; let final = nom, k = 2;
     while (n.pieces.some(x => x.nom.toLowerCase() === final.toLowerCase())) final = `${nom} ${k++}`;
-    n.pieces.push({ nom: final, taches: tachesParDefaut(final) }); sauver();
+    n.pieces.push({ nom: final, taches: tachesParDefaut(final) }); ouvert = null; sauver();
   };
   zone.querySelectorAll("[data-pl-addpc]").forEach(b => b.onclick = () => { const i = +b.dataset.plAddpc, inp = zone.querySelector(`[data-pl-txt="${i}"]`); const v = inp.value; inp.value = ""; inp.blur(); ajouter(i, v); });
   zone.querySelectorAll("[data-pl-txt]").forEach(inp => inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = inp.value; inp.value = ""; inp.blur(); ajouter(+inp.dataset.plTxt, v); } }));

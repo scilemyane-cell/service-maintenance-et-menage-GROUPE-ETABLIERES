@@ -11,6 +11,7 @@ import {
 
 // Aperçu responsable (…&apercu=1) : la fiche telle que l'entreprise la voit, sans rien enregistrer.
 const APERCU = new URLSearchParams(location.search).get("apercu") === "1";
+let nivSel = null; // niveau affiché (onglets)
 let m = null, photos = [], unsubs = [], cont = null, user = null, inv = null, identite = null, envoiEnCours = 0, saveTimer = null;
 const cleId = () => `ponctuel-${inv.id}`;
 const lireId = () => { try { return JSON.parse(localStorage.getItem(cleId()) || "null"); } catch { return null; } };
@@ -27,6 +28,8 @@ const STYLE = `<style>
 .gp-pass{font-size:13px;color:var(--text-dim);margin-top:8px}
 .gp .fj-piece{margin:0}.gp-infos .fj-piece-nom{font-size:15px}.gp-code{font-size:15px;margin-top:6px}.gp-code b{font-size:20px;letter-spacing:1.5px}
 .gp-phb{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 4px}
+.gp-niv-tete{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#128077;color:#fff;font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:.5px}
+.gp-niv-tete span{font-size:12px;font-weight:600;text-transform:none;letter-spacing:0;opacity:.95}
 .gp-niv{margin:14px 0 2px;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#2f6fd6}
 .gp-piece{border-top:1px solid var(--border);padding:12px 0}.gp-piece:first-of-type{border-top:none}
 .gp-ph{display:flex;align-items:center;gap:10px}
@@ -108,8 +111,20 @@ function render() {
       ${(m.passages || []).length ? `<div class="gp-pass">${(m.passages || []).map(p => `${jourFr(p.a)} : ${heureFr(p.a)} → ${p.d ? heureFr(p.d) : "en cours"}`).join(" · ")} — total ${fmtMin(minutesPassees(m))}</div>` : `<div class="gp-pass">Appuie en arrivant, puis « Je pars » en partant : tes heures sont notées automatiquement.</div>`}
     </div>`}
     <div class="fj-bravo ${total && faits === total ? "visible" : ""}"><span class="fj-bravo-emo">🎉</span><div><b>Bravo ! Toutes les pièces sont faites</b><br><small>Vérifie les photos « après », puis « Terminer le ménage et envoyer ».</small></div></div>
-    ${(() => { let niv = null; return (m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = pieceFaite(m, i), tt = p.taches || [], nt = tachesFaites(m, i);
-        const titre = p.niveau && p.niveau !== niv ? `<div class="gp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || "";
+    ${(() => { // Onglets par niveau (comme les jours des fiches MNA) : un seul niveau affiché à la fois.
+      const nivs = [...new Set((m.pieces || []).map(p => p.niveau || ""))];
+      if (nivs.length < 2) return "";
+      const st = (n) => { const idx = (m.pieces || []).map((p, i) => i).filter(i => (m.pieces[i].niveau || "") === n); return { t: idx.length, f: idx.filter(i => pieceFaite(m, i)).length }; };
+      if (!nivs.includes(nivSel)) nivSel = nivs.find(n => { const x = st(n); return x.f < x.t; }) ?? nivs[0];
+      return `<div class="fj-jours" style="grid-template-columns:repeat(${Math.min(nivs.length, 4)},1fr)">${nivs.map(n => { const x = st(n), fini = x.t && x.f === x.t;
+        return `<button class="fj-jour ${n === nivSel ? "actif" : ""} ${fini ? "fini" : ""}" data-niv="${esc(n)}"><span>${esc(n || "Autres")}</span><small>${fini ? "✓" : `${x.f}/${x.t}`}</small></button>`; }).join("")}</div>`; })()}
+    ${(() => { const nivs = [...new Set((m.pieces || []).map(p => p.niveau || ""))], tabs = nivs.length > 1;
+      const ici = (m.pieces || []).map((p, i) => i).filter(i => !tabs || (m.pieces[i].niveau || "") === nivSel);
+      if (!tabs || !ici.length) return "";
+      const f = ici.filter(i => pieceFaite(m, i)).length;
+      return `<div class="gp-niv-tete">🏠 ${esc(nivSel || "Autres")} <span>${f}/${ici.length} pièce${ici.length > 1 ? "s" : ""} faite${f > 1 ? "s" : ""}</span></div>`; })()}
+    ${(() => { let niv = null; const tabs = new Set((m.pieces || []).map(p => p.niveau || "")).size > 1; return (m.pieces || []).map((p, i) => { if (tabs && (p.niveau || "") !== nivSel) return ""; const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = pieceFaite(m, i), tt = p.taches || [], nt = tachesFaites(m, i);
+        const titre = !tabs && p.niveau && p.niveau !== niv ? `<div class="gp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || "";
         const n = tt.length || 1, f = tt.length ? nt : (fait ? 1 : 0);
         const ligne = (cle, lib, ok) => { const obs = m.obs?.[cle] || ""; return `<div class="fj-tache ${ok ? "faite" : ""}">
             <button class="fj-coche" data-coche="${cle}" aria-pressed="${ok}" ${verrou ? "disabled" : ""}><span class="fj-rond"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span class="fj-label">${esc(lib)}</span></button>
@@ -123,7 +138,9 @@ function render() {
           ${verrou ? "" : `<div class="gp-phb"><label class="fc-ph-add petit avant">📷 Avant${av.length ? ` (${av.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="avant" hidden></label>
             <label class="fc-ph-add petit apres">📷 Après${ap.length ? ` (${ap.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="apres" hidden></label></div>`}
           ${vignettes([...av, ...ap], !verrou)}
-        </div>`; }).join(""); })() || `<div class="fj-vide">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
+        </div>`; }).join("") + (() => { // Niveau terminé → passer au suivant.
+          if (!tabs) return ""; const nivs = [...new Set(m.pieces.map(p => p.niveau || ""))], k = nivs.indexOf(nivSel), ici = m.pieces.map((p, i) => i).filter(i => (m.pieces[i].niveau || "") === nivSel);
+          return ici.every(i => pieceFaite(m, i)) && k < nivs.length - 1 ? `<button class="gp-big gp-go" data-niv="${esc(nivs[k + 1])}">➡️ Passer au niveau « ${esc(nivs[k + 1] || "Autres")} »</button>` : ""; })(); })() || `<div class="fj-vide">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
     <div class="gp-card"><h3>📷 Autres photos</h3>
       ${verrou ? "" : `<div class="gp-btns"><label>📷 Ajouter des photos<small>dégâts, problème constaté…</small><input type="file" accept="image/*" capture="environment" multiple data-ph="-1" data-moment=""></label></div>`}
       ${vignettes(autres, !verrou)}</div>
@@ -148,12 +165,14 @@ function enregistrerTextes() {
 function brancher() {
   if (APERCU) {
     cont.querySelectorAll("[data-voir]").forEach(img => img.addEventListener("click", () => { const i = photos.findIndex(p => p.id === img.dataset.voir); voirPhotos(photos, Math.max(0, i)); }));
-    cont.querySelectorAll("button, input, textarea").forEach(x => { x.disabled = true; });
+    cont.querySelectorAll("button, input, textarea").forEach(x => { if (!x.dataset.niv) x.disabled = true; });
+    cont.querySelectorAll("[data-niv]").forEach(b => b.addEventListener("click", () => { nivSel = b.dataset.niv; render(); }));
     return;
   }
   cont.querySelector("[data-chg-id]")?.addEventListener("click", () => { if (confirm("Changer de personne ?")) { identite = null; ecrireId(null); render(); } });
   cont.querySelector("[data-arrivee]")?.addEventListener("click", () => enregistrer({ passages: [...(m.passages || []), { a: Date.now(), d: null }] }));
   cont.querySelector("[data-depart]")?.addEventListener("click", () => enregistrer({ passages: (m.passages || []).map(p => p.a && !p.d ? { ...p, d: Date.now() } : p) }));
+  cont.querySelectorAll("[data-niv]").forEach(b => b.addEventListener("click", () => { nivSel = b.dataset.niv; render(); window.scrollTo({ top: (cont.querySelector(".fj-jours")?.getBoundingClientRect().top || 0) + window.scrollY - 10, behavior: "smooth" }); }));
   cont.querySelectorAll("[data-coche]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.coche; enregistrer({ faits: { ...(m.faits || {}), [k]: !m.faits?.[k] } }); }));
   cont.querySelectorAll("[data-obs-btn]").forEach(b => b.addEventListener("click", () => { const z = cont.querySelector(`[data-obs-zone="${b.dataset.obsBtn}"]`); z?.classList.toggle("ouverte"); z?.querySelector("input")?.focus(); }));
   cont.querySelectorAll("[data-toutfait]").forEach(b => b.addEventListener("click", () => { const i = +b.dataset.toutfait, f = { ...(m.faits || {}) }; const tous = pieceFaite(m, i); (m.pieces[i].taches || []).forEach((_, k) => { f[`${i}-${k}`] = !tous; }); enregistrer({ faits: f }); }));

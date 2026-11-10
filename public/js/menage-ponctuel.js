@@ -39,7 +39,9 @@ const STYLE = `<style>
 .mp-piece{border-top:1px solid var(--border);padding:10px 0}.mp-piece:first-child{border-top:none}
 .mp-ph{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.mp-ph figure{margin:0;width:110px}.mp-ph img{width:110px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;display:block}
 .mp-ph figcaption{font-size:11px;color:var(--text-dim)}.mp-av{color:#a85d00;font-weight:700}.mp-ap{color:#11845b;font-weight:700}
-.mp-actions{display:flex;gap:8px;flex-wrap:wrap}.mp-niv{flex-basis:100%;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#2f6fd6;margin-top:6px}.mp-mini-act{display:flex;gap:4px}.mp-mini-act .nav-btn{padding:3px 8px;font-size:13px}
+.mp-actions{display:flex;gap:8px;flex-wrap:wrap}.mp-nivbox{flex-basis:100%;border:1px solid var(--border);border-left:5px solid #2f6fd6;border-radius:12px;padding:8px 10px;margin:6px 0;background:var(--panel)}
+.mp-niv{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#2f6fd6;margin-bottom:6px}.mp-niv small{text-transform:none;font-weight:600;color:var(--text-dim);letter-spacing:0}
+.mp-pcs .mp-nivlist{display:flex;flex-wrap:wrap;gap:6px}.mp-mini-act{display:flex;gap:4px}.mp-mini-act .nav-btn{padding:3px 8px;font-size:13px}
 @media (max-width:600px){.mp-f{grid-template-columns:1fr}}
 </style>`;
 
@@ -122,8 +124,9 @@ function sitePieces(site) {
 const aUnPlan = (site) => piecesDuPlan(st.plans[clePlan(site)]).length > 0;
 // Rendu groupé par niveau (titre quand le niveau change).
 export function parNiveau(pieces, rendu) {
-  let niv = null;
-  return pieces.map((p, i) => { const t = (p.niveau || "") !== niv && p.niveau ? `<div class="mp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || ""; return t + rendu(p, i); }).join("");
+  // Un bloc par niveau (titre + ses pièces), dans l'ordre des pièces.
+  const g = []; pieces.forEach((p, i) => { const n = p.niveau || ""; let x = g.at(-1); if (!x || x.n !== n) g.push(x = { n, h: [] }); x.h.push(rendu(p, i)); });
+  return g.map(x => x.n ? `<div class="mp-nivbox"><div class="mp-niv">🏠 ${esc(x.n)} <small>${x.h.length} pièce${x.h.length > 1 ? "s" : ""}</small></div><div class="mp-nivlist">${x.h.join("")}</div></div>` : x.h.join("")).join("");
 }
 
 function planVue() {
@@ -237,12 +240,12 @@ function imprimer(m) {
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Ménage ponctuel — ${esc(m.siteName)}</title><style>
     @page{size:A4 portrait;margin:10mm}body{font:12px/1.4 Arial,sans-serif;color:#111}h1{font-size:18px;margin:0}h2{font-size:14px;margin:14px 0 6px;border-bottom:1px solid #999}
     table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px 6px;text-align:left}.ph{display:flex;flex-wrap:wrap;gap:6px}figure{margin:0;width:150px;break-inside:avoid}
-    figure img{width:150px;height:115px;object-fit:cover}.niv{font-weight:bold;text-transform:uppercase;margin:10px 0 4px;color:#2f6fd6}figcaption{font-size:10px}.piece{break-inside:avoid;margin-bottom:8px}</style></head><body>
+    figure img{width:150px;height:115px;object-fit:cover}.niv{font-weight:bold;text-transform:uppercase;margin:12px 0 6px;color:#2f6fd6;border-bottom:2px solid #2f6fd6}.niv small{text-transform:none;color:#666}.nivbox{break-inside:auto}figcaption{font-size:10px}.piece{break-inside:avoid;margin-bottom:8px}</style></head><body>
     <h1>Compte rendu — ménage ponctuel</h1><p><b>Groupe Établières</b>${m.dispositif ? ` · ${esc(m.dispositif)}` : ""}<br>Site : <b>${esc(m.siteName)}</b> · Entreprise : <b>${esc(m.entreprise)}</b>${m.presta ? ` · Intervenant : ${esc(`${m.presta.prenom || ""} ${m.presta.nom || ""}`.trim())}` : ""}<br>Période prévue : du ${dateFr(m.debut)} au ${dateFr(m.fin)}</p>
     ${m.consignes ? `<p><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
     <h2>Présence sur place</h2>${(m.passages || []).length ? `<table><tr><th>Jour</th><th>Arrivée</th><th>Départ</th><th>Durée</th></tr>${m.passages.map(p => `<tr><td>${jourFr(p.a)}</td><td>${heureFr(p.a)}</td><td>${p.d ? heureFr(p.d) : "—"}</td><td>${p.d ? fmtMin(Math.round((p.d - p.a) / 60000)) : "—"}</td></tr>`).join("")}<tr><th colspan="3">Total</th><th>${fmtMin(minutesPassees(m))}</th></tr></table>` : "<p>Aucun pointage.</p>"}
     <h2>Pièces (${nbFaits(m)}/${(m.pieces || []).length} faites)</h2>
-    ${parNiveau(m.pieces || [], (p, i) => `<div class="piece"><b>${pieceFaite(m, i) ? "☑" : "☐"} ${esc(p.libelle || p.nom)}</b>${(p.taches || []).length ? `<div style="font-size:11px;margin:2px 0 4px">${p.taches.map((t, k) => `${m.faits?.[`${i}-${k}`] ? "☑" : "☐"} ${esc(t)}${m.obs?.[`${i}-${k}`] ? ` (💬 ${esc(m.obs[`${i}-${k}`])})` : ""}`).join(" &nbsp; ")}</div>` : ""}${m.obs?.[i] ? ` — ${esc(m.obs[i])}` : ""}<div class="ph">${de(p.nom, "avant").map(x => img(x, "Avant")).join("")}${de(p.nom, "apres").map(x => img(x, "Après")).join("")}</div></div>`).replace(/class="mp-niv"/g, 'class="niv"')}
+    ${parNiveau(m.pieces || [], (p, i) => `<div class="piece"><b>${pieceFaite(m, i) ? "☑" : "☐"} ${esc(p.libelle || p.nom)}</b>${(p.taches || []).length ? `<div style="font-size:11px;margin:2px 0 4px">${p.taches.map((t, k) => `${m.faits?.[`${i}-${k}`] ? "☑" : "☐"} ${esc(t)}${m.obs?.[`${i}-${k}`] ? ` (💬 ${esc(m.obs[`${i}-${k}`])})` : ""}`).join(" &nbsp; ")}</div>` : ""}${m.obs?.[i] ? ` — ${esc(m.obs[i])}` : ""}<div class="ph">${de(p.nom, "avant").map(x => img(x, "Avant")).join("")}${de(p.nom, "apres").map(x => img(x, "Après")).join("")}</div></div>`).replace(/class="mp-niv"/g, 'class="niv"').replace(/class="mp-nivbox"/g, 'class="nivbox"')}
     ${autres.length ? `<h2>Autres photos</h2><div class="ph">${autres.map(x => img(x, "Photo")).join("")}</div>` : ""}
     <h2>Observations de l'entreprise</h2><p style="white-space:pre-wrap">${esc(m.observations || "—")}</p>
     <p style="margin-top:14px">${m.termine ? `Envoyé par l'entreprise le ${jourFr(m.termine)} à ${heureFr(m.termine)}.` : "Non terminé par l'entreprise."} ${m.validee ? `Validé${m.valideePar ? ` par ${esc(m.valideePar)}` : ""}${m.valideeLe ? ` le ${jourFr(m.valideeLe)}` : ""}.` : "Non validé."}</p>
