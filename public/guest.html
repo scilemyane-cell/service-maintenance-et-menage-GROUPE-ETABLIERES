@@ -46,11 +46,13 @@
       }
       const invitation = await getInvitation(token);
       if (!invitation) { showError("Ce lien n'existe pas ou plus."); return; }
-      if (!invitation.active) { showError("Cet accès a été coupé. Contacte le Groupe Établières."); return; }
+      // Aperçu par un responsable connecté (…&apercu=1) : pas de contrôle de dates ni d'accès coupé.
+      const apercu = params.get("apercu") === "1" && !user.isAnonymous && invitation.type === "ponctuel";
+      if (!apercu && !invitation.active) { showError("Cet accès a été coupé. Contacte le Groupe Établières."); return; }
       const d = new Date(), auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const fr = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-      if (invitation.debut && auj < invitation.debut) { showError(`Cet accès sera ouvert à partir du ${fr(invitation.debut)}.`); return; }
-      if (invitation.fin && auj > invitation.fin) { showError(`Cet accès a expiré le ${fr(invitation.fin)}. Contacte le Groupe Établières si tu as encore des fiches à remplir.`); return; }
+      if (!apercu && invitation.debut && auj < invitation.debut) { showError(`Cet accès sera ouvert à partir du ${fr(invitation.debut)}.`); return; }
+      if (!apercu && invitation.fin && auj > invitation.fin) { showError(`Cet accès a expiré le ${fr(invitation.fin)}. Contacte le Groupe Établières si tu as encore des fiches à remplir.`); return; }
       if (invitation.type === "ponctuel") {
         app.innerHTML = `
         <header class="topbar"><div class="topbar-title"><span class="topbar-eyebrow">Groupe Établières · Ménage ponctuel</span><h1>${(invitation.siteName || "").replace(/[<>&"]/g, "")}</h1></div>

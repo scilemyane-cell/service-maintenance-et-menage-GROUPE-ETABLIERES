@@ -147,7 +147,7 @@ function liste() {
   const ms = missionsVisibles();
   const enCours = ms.filter(m => !m.validee), faits = ms.filter(m => m.validee);
   const carte = (m) => { const s = statutMission(m, actif(m)), tot = (m.pieces || []).length, f = nbFaits(m), mn = minutesPassees(m);
-    return `<div role="button" tabindex="0" class="mp-carte" data-ouvrir="${m.id}"><span style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span class="mp-badge ${s.cle}">${s.ic} ${s.lib}</span><span class="mp-mini-act">${m.validee ? "" : `<button type="button" class="nav-btn" data-modifier="${m.id}" title="Modifier">✏️</button>`}<button type="button" class="nav-btn" data-effacer="${m.id}" title="Supprimer">🗑️</button></span></span>
+    return `<div role="button" tabindex="0" class="mp-carte" data-ouvrir="${m.id}"><span style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span class="mp-badge ${s.cle}">${s.ic} ${s.lib}</span><span class="mp-mini-act"><a class="nav-btn" href="${lienMission(m.id)}&apercu=1" target="_blank" rel="noopener" title="Voir la fiche de l'entreprise" onclick="event.stopPropagation()" style="text-decoration:none">👁️</a>${m.validee ? "" : `<button type="button" class="nav-btn" data-modifier="${m.id}" title="Modifier">✏️</button>`}<button type="button" class="nav-btn" data-effacer="${m.id}" title="Supprimer">🗑️</button></span></span>
       <b>🏠 ${esc(m.siteName)}</b><span>🧽 ${esc(m.entreprise)}</span><small>Du ${dateFr(m.debut)} au ${dateFr(m.fin)}</small>
       ${tot ? `<span class="mp-barre"><i style="width:${Math.round(f / tot * 100)}%"></i></span><small>${f}/${tot} pièces faites${mn ? ` · ⏱️ ${fmtMin(mn)}` : ""}</small>` : mn ? `<small>⏱️ ${fmtMin(mn)}</small>` : ""}</div>`; };
   return `<div class="mp-tete"><div><h3 style="margin:0">🧽 Ménage ponctuel par une entreprise</h3><p class="hint" style="margin:2px 0 0">Gros ménage sur un site : l'entreprise reçoit un lien, pointe ses heures, coche les pièces avec photos avant / après. Tu suis tout ici puis tu valides.</p></div>
@@ -208,6 +208,7 @@ function detail(m) {
       ${(m.codes || []).length ? `<p style="margin:8px 0 0;font-size:13.5px"><b>🔐 Codes envoyés :</b> ${m.codes.map(c => `${esc(c.nom)} <b>${esc(c.code)}</b>${c.notes ? ` (${esc(c.notes)})` : ""}`).join(" · ")}</p>` : ""}
       ${m.consignes ? `<p style="white-space:pre-wrap;margin:8px 0 0;font-size:13.5px"><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
       <div class="mp-actions" style="margin-top:10px">
+        <a class="add-btn" style="text-decoration:none" href="${lienMission(m.id)}&apercu=1" target="_blank" rel="noopener">👁️ Voir la fiche de l'entreprise</a>
         <button class="nav-btn" data-copier="${m.id}">📋 Copier le lien</button>${m.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(m)}">📱 SMS</a>` : ""}
         <button class="nav-btn" data-acces="${actif(m) ? "0" : "1"}">${actif(m) ? "⛔ Couper l'accès" : "🔓 Rouvrir l'accès"}</button>
         ${m.validee ? "" : `<button class="nav-btn" data-modif-detail>✏️ Modifier</button>`}

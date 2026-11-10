@@ -9,6 +9,8 @@ import {
   passageOuvert, minutesPassees, fmtMin, nbFaits, pieceFaite, tachesFaites, heureFr, jourFr, dateFr,
 } from "./menage-ponctuel-data.js";
 
+// Aperçu responsable (…&apercu=1) : la fiche telle que l'entreprise la voit, sans rien enregistrer.
+const APERCU = new URLSearchParams(location.search).get("apercu") === "1";
 let m = null, photos = [], unsubs = [], cont = null, user = null, inv = null, identite = null, envoiEnCours = 0, saveTimer = null;
 const cleId = () => `ponctuel-${inv.id}`;
 const lireId = () => { try { return JSON.parse(localStorage.getItem(cleId()) || "null"); } catch { return null; } };
@@ -66,7 +68,7 @@ function render() {
   const actif = document.activeElement;
   if (actif && cont.contains(actif) && (actif.tagName === "TEXTAREA" || (actif.tagName === "INPUT" && actif.type === "text"))) return;
   if (!m) { cont.innerHTML = `${STYLE}<div class="gp"><div class="gp-att">Cette mission n'existe plus. Contacte le Groupe Établières.</div></div>`; return; }
-  if (!identite) {
+  if (!identite && !APERCU) {
     cont.innerHTML = `${STYLE}<div class="gp"><div class="gp-card gp-id"><h3>👋 Bonjour</h3><p class="hint" style="margin:0 0 10px">Avant de commencer, indique qui intervient. Ton téléphone s'en souviendra.</p>
       <form id="gp-idf"><label>Prénom<input name="prenom" type="text" required autocomplete="given-name"></label><label>Nom<input name="nom" type="text" required autocomplete="family-name"></label>
       <label>Société<input name="societe" type="text" value="${esc(m.entreprise || "")}"></label><button class="gp-big gp-go" type="submit">Continuer</button></form></div></div>`;
@@ -77,10 +79,11 @@ function render() {
     };
     return;
   }
-  const ouvert = passageOuvert(m), verrou = !!m.termine || !!m.validee, total = (m.pieces || []).length, faits = nbFaits(m);
+  const ouvert = passageOuvert(m), verrou = APERCU || !!m.termine || !!m.validee, total = (m.pieces || []).length, faits = nbFaits(m);
   const autres = photos.filter(p => !(m.pieces || []).some(x => x.nom === p.piece));
   cont.innerHTML = `${STYLE}<div class="gp">
-    <div class="gp-qui"><span>👤 ${esc(nom())}${identite.societe ? ` · ${esc(identite.societe)}` : ""}</span>${verrou ? "" : `<button data-chg-id>Ce n'est pas moi</button>`}</div>
+    ${APERCU ? `<div class="gp-att">👁️ Aperçu — c'est la fiche que l'entreprise remplira sur son téléphone. Rien n'est modifiable ici.</div>` : ""}
+    <div class="gp-qui" ${APERCU ? 'style="display:none"' : ""}><span>👤 ${esc(nom())}${identite.societe ? ` · ${esc(identite.societe)}` : ""}</span>${verrou ? "" : `<button data-chg-id>Ce n'est pas moi</button>`}</div>
     <div class="gp-card"><h3>🧽 Gros ménage — ${esc(m.siteName)}</h3>
       <div class="hint" style="margin:0 0 8px">Du ${dateFr(m.debut)} au ${dateFr(m.fin)}</div>
       ${(m.codes || []).length && !m.validee ? `<div class="gp-cons" style="margin-bottom:8px">🔐 <b>Boîte à clés</b><br>${m.codes.map(c => `${esc(c.nom)} : <b style="font-size:17px;letter-spacing:1px">${esc(c.code)}</b>${c.notes ? ` <small>(${esc(c.notes)})</small>` : ""}`).join("<br>")}</div>` : ""}
@@ -128,6 +131,11 @@ function enregistrerTextes() {
 }
 
 function brancher() {
+  if (APERCU) {
+    cont.querySelectorAll("[data-voir]").forEach(img => img.addEventListener("click", () => { const i = photos.findIndex(p => p.id === img.dataset.voir); voirPhotos(photos, Math.max(0, i)); }));
+    cont.querySelectorAll("button, input, textarea").forEach(x => { x.disabled = true; });
+    return;
+  }
   cont.querySelector("[data-chg-id]")?.addEventListener("click", () => { if (confirm("Changer de personne ?")) { identite = null; ecrireId(null); render(); } });
   cont.querySelector("[data-arrivee]")?.addEventListener("click", () => enregistrer({ passages: [...(m.passages || []), { a: Date.now(), d: null }] }));
   cont.querySelector("[data-depart]")?.addEventListener("click", () => enregistrer({ passages: (m.passages || []).map(p => p.a && !p.d ? { ...p, d: Date.now() } : p) }));
