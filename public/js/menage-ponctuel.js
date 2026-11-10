@@ -10,12 +10,13 @@ import { watchSites } from "./sites-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { listerCodesPourSite } from "./masterlock-data.js";
+import { watchPlans, piecesDuPlan, clePlan, editeurPlanHTML, brancherEditeurPlan } from "./maison-plan.js";
 import {
   creerMission, modifierMission, watchMissions, ecouterPhotosMission, majMission, accesMission, supprimerMission,
   passageOuvert, minutesPassees, fmtMin, nbFaits, statutMission, heureFr, jourFr, dateFr, lienMission,
 } from "./menage-ponctuel-data.js";
 
-let st = { missions: [], invs: {}, photos: [] }, ui = { form: false, ouverte: null, draft: null };
+let st = { missions: [], invs: {}, photos: [], plans: {} }, ui = { form: false, ouverte: null, draft: null };
 const codesCache = {}; // dossierId → codes boîte à clés
 let unsubs = [], unsubPh = null, phPour = null, cont = null, ctx = null;
 const auj = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -38,7 +39,7 @@ const STYLE = `<style>
 .mp-piece{border-top:1px solid var(--border);padding:10px 0}.mp-piece:first-child{border-top:none}
 .mp-ph{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.mp-ph figure{margin:0;width:110px}.mp-ph img{width:110px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;display:block}
 .mp-ph figcaption{font-size:11px;color:var(--text-dim)}.mp-av{color:#a85d00;font-weight:700}.mp-ap{color:#11845b;font-weight:700}
-.mp-actions{display:flex;gap:8px;flex-wrap:wrap}.mp-mini-act{display:flex;gap:4px}.mp-mini-act .nav-btn{padding:3px 8px;font-size:13px}
+.mp-actions{display:flex;gap:8px;flex-wrap:wrap}.mp-niv{flex-basis:100%;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#2f6fd6;margin-top:6px}.mp-mini-act{display:flex;gap:4px}.mp-mini-act .nav-btn{padding:3px 8px;font-size:13px}
 @media (max-width:600px){.mp-f{grid-template-columns:1fr}}
 </style>`;
 
@@ -46,6 +47,7 @@ export function mountMenagePonctuel(container, contexte) {
   unsubs.forEach(f => f()); unsubs = [];
   cont = container; ctx = contexte;
   unsubs.push(watchMissions((l) => { st.missions = l; render(); }));
+  unsubs.push(watchPlans((p) => { st.plans = p || {}; render(); }));
   unsubs.push(watchInvitations((l) => { st.invs = Object.fromEntries(l.filter(x => x.type === "ponctuel").map(x => [x.id, x])); render(); }));
   render();
 }
@@ -101,8 +103,39 @@ function render() {
   if (a && cont.contains(a) && ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName) && a.type !== "checkbox") return;
   const ouverte = ui.ouverte ? st.missions.find(m => m.id === ui.ouverte) : null;
   suivrePhotos(ouverte?.id || null);
+  if (ui.plan) { cont.innerHTML = STYLE + `<div class="mp">${planVue()}</div>`; brancherPlanVue(); return; }
   cont.innerHTML = STYLE + `<div class="mp">${ouverte ? detail(ouverte) : liste()}</div>`;
   brancher();
+}
+
+// Pièces proposées pour un site : celles programmées (par niveau), sinon celles de la fiche ménage.
+const fichePieces = (site) => [...new Set((site?.rooms || []).map(r => String(r.name || "").trim()).filter(Boolean))];
+function sitePieces(site) {
+  const pl = piecesDuPlan(st.plans[clePlan(site)]);
+  return pl.length ? pl : fichePieces(site).map(n => ({ cle: n, nom: n, niveau: "" }));
+}
+const aUnPlan = (site) => piecesDuPlan(st.plans[clePlan(site)]).length > 0;
+// Rendu groupé par niveau (titre quand le niveau change).
+export function parNiveau(pieces, rendu) {
+  let niv = null;
+  return pieces.map((p, i) => { const t = (p.niveau || "") !== niv && p.niveau ? `<div class="mp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || ""; return t + rendu(p, i); }).join("");
+}
+
+function planVue() {
+  const site = sitesDispo().find(s => s.id === ui.plan) || sitesDispo()[0];
+  if (!site) return `<button class="nav-btn" data-pl-retour>← Retour</button><div class="form-card hint">Aucune maison.</div>`;
+  ui.plan = site.id;
+  return `<div class="mp-actions"><button class="nav-btn" data-pl-retour>← ${ui.planRetour === "form" ? "Retour au formulaire" : "Retour"}</button></div>
+    <div class="form-card"><h3 style="margin:0 0 4px">🏠 Pièces des maisons</h3><p class="hint" style="margin:0 0 10px">Programme une fois les niveaux et les pièces de chaque maison : ils seront proposés à chaque gros ménage. Tout est enregistré automatiquement.</p>
+      <label class="mp-f" style="display:block"><select data-pl-site style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font:inherit">${sitesDispo().map(x => `<option value="${esc(x.id)}" ${x.id === site.id ? "selected" : ""}>${aUnPlan(x) ? "✅" : "⬜"} ${esc(x.name)}</option>`).join("")}</select></label></div>
+    <div id="mp-plan">${editeurPlanHTML({ site, plan: st.plans[clePlan(site)], fiches: fichePieces(site) })}</div>`;
+}
+function brancherPlanVue() {
+  const site = sitesDispo().find(s => s.id === ui.plan);
+  cont.querySelector("[data-pl-retour]")?.addEventListener("click", () => { ui.form = ui.planRetour === "form"; ui.plan = null; ui.planRetour = null; render(); });
+  cont.querySelector("[data-pl-site]")?.addEventListener("change", (e) => { ui.plan = e.target.value; e.target.blur(); render(); });
+  const z = cont.querySelector("#mp-plan");
+  if (z && site) brancherEditeurPlan(z, { site, plan: st.plans[clePlan(site)], fiches: fichePieces(site), onChange: (p) => { st.plans[clePlan(site)] = { niveaux: p.niveaux }; render(); } });
 }
 
 function liste() {
@@ -113,7 +146,7 @@ function liste() {
       <b>🏠 ${esc(m.siteName)}</b><span>🧽 ${esc(m.entreprise)}</span><small>Du ${dateFr(m.debut)} au ${dateFr(m.fin)}</small>
       ${tot ? `<span class="mp-barre"><i style="width:${Math.round(f / tot * 100)}%"></i></span><small>${f}/${tot} pièces faites${mn ? ` · ⏱️ ${fmtMin(mn)}` : ""}</small>` : mn ? `<small>⏱️ ${fmtMin(mn)}</small>` : ""}</div>`; };
   return `<div class="mp-tete"><div><h3 style="margin:0">🧽 Ménage ponctuel par une entreprise</h3><p class="hint" style="margin:2px 0 0">Gros ménage sur un site : l'entreprise reçoit un lien, pointe ses heures, coche les pièces avec photos avant / après. Tu suis tout ici puis tu valides.</p></div>
-      ${ui.form ? "" : `<button class="add-btn" data-nouveau>➕ Faire passer une entreprise</button>`}</div>
+      <span class="mp-actions"><button class="nav-btn" data-plans>🏠 Pièces des maisons</button>${ui.form ? "" : `<button class="add-btn" data-nouveau>➕ Faire passer une entreprise</button>`}</span></div>
     ${ui.form ? formulaire() : ""}
     ${ui.cree ? `<div class="mp-lien">✓ Mission créée — envoie le lien à l'entreprise : <button class="nav-btn" data-copier="${ui.cree}">📋 Copier le lien</button>${st.missions.find(m => m.id === ui.cree)?.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(st.missions.find(m => m.id === ui.cree))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-fermer-cree>OK</button></div>` : ""}
     ${enCours.length ? `<div class="mp-grille">${enCours.map(carte).join("")}</div>` : (ui.form ? "" : `<div class="form-card hint">Aucun ménage ponctuel en cours.</div>`)}
@@ -124,8 +157,8 @@ function formulaire() {
   const d = ui.draft || (ui.draft = { siteId: sitesDispo()[0]?.id || "", entreprise: "", telephone: "", debut: auj(), fin: plus(auj(), 7), consignes: "", pieces: null, autres: "" });
   if (!sitesDispo().some(s => s.id === d.siteId)) d.siteId = sitesDispo()[0]?.id || "";
   const site = sitesDispo().find(s => s.id === d.siteId);
-  const nomsSite = [...new Set((site?.rooms || []).map(r => String(r.name || "").trim()).filter(Boolean))];
-  if (!d.pieces || d.piecesPour !== d.siteId) { d.pieces = Object.fromEntries(nomsSite.map(n => [n, true])); d.piecesPour = d.siteId; }
+  const pcs = sitePieces(site), sig = d.siteId + "|" + pcs.map(p => p.cle).join("¦");
+  if (!d.pieces || d.piecesPour !== sig) { const avant = d.piecesPour?.startsWith(d.siteId + "|") ? (d.pieces || {}) : {}; d.pieces = Object.fromEntries(pcs.map(p => [p.cle, avant[p.cle] ?? true])); d.piecesPour = sig; }
   return `<div class="form-card"><h3 style="margin:0 0 10px">${ui.edit ? "✏️ Modifier le ménage ponctuel" : "➕ Nouveau ménage ponctuel"}</h3><form class="mp-f" id="mp-form">
     <label class="plein">Site<select name="siteId" data-d>${optionsSites(d.siteId)}</select></label>
     <label>Entreprise<input name="entreprise" data-d required value="${esc(d.entreprise)}" placeholder="Nom de la société"></label>
@@ -134,7 +167,8 @@ function formulaire() {
     <label>Au (le lien s'arrête après)<input name="fin" data-d type="date" required value="${d.fin}"></label>
     <label class="plein">Consignes pour l'entreprise<textarea name="consignes" data-d rows="3" placeholder="Ex. gros ménage complet avant l'arrivée d'un jeune : vitres, sols, cuisine (four, frigo), sanitaires détartrés…">${esc(d.consignes)}</textarea></label>
     <div class="plein"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Pièces à faire (une photo avant / après par pièce)</div>
-      ${nomsSite.length ? `<div class="mp-pcs">${nomsSite.map(n => `<label><input type="checkbox" data-pc="${esc(n)}" ${d.pieces[n] ? "checked" : ""}> ${esc(n)}</label>`).join("")}</div>` : `<div class="hint">Pas de pièces enregistrées pour ce site : ajoute-les ci-dessous.</div>`}
+      ${pcs.length ? `<div class="mp-pcs">${parNiveau(pcs, (p) => `<label><input type="checkbox" data-pc="${esc(p.cle)}" ${d.pieces[p.cle] ? "checked" : ""}> ${esc(p.nom)}</label>`)}</div>` : `<div class="hint">Pas encore de pièces programmées pour cette maison.</div>`}
+      <button type="button" class="nav-btn" data-prog style="margin-top:8px">🏠 ${aUnPlan(site) ? "Modifier les pièces de cette maison" : "Programmer les pièces de cette maison (niveaux, chambres…)"}</button>
       <label style="margin-top:8px">Autres pièces / zones (une par ligne)<textarea name="autres" data-d rows="2" placeholder="Ex. Vitres extérieures&#10;Garage">${esc(d.autres)}</textarea></label></div>
     <div class="plein"><div style="font-size:13px;font-weight:600;margin-bottom:6px">🔐 Codes boîte à clés envoyés dans le SMS</div><div id="mp-codes">${codesHTML(site)}</div></div>
     <div class="plein mp-actions"><button class="add-btn" type="submit">${ui.edit ? "✓ Enregistrer" : "✓ Créer et obtenir le lien"}</button><button class="nav-btn" type="button" data-annuler>Annuler</button></div>
@@ -179,10 +213,10 @@ function detail(m) {
       ${(m.passages || []).length ? `<ul style="margin:0;padding-left:18px">${m.passages.map(p => `<li>${jourFr(p.a)} : arrivée ${heureFr(p.a)} → ${p.d ? `départ ${heureFr(p.d)} (${fmtMin(Math.round((p.d - p.a) / 60000))})` : "<b>toujours sur place</b>"}</li>`).join("")}</ul><p style="margin:6px 0 0"><b>Total : ${fmtMin(minutesPassees(m))}</b>${ouvert ? " (en cours)" : ""}</p>` : `<div class="hint">Pas encore arrivé.</div>`}
       ${m.termine ? `<p class="hint" style="margin:6px 0 0">Envoyé le ${jourFr(m.termine)} à ${heureFr(m.termine)}${m.validee ? ` · validé${m.valideePar ? ` par ${esc(m.valideePar)}` : ""}${m.valideeLe ? ` le ${jourFr(m.valideeLe)}` : ""}` : ""}</p>` : ""}</div>
     <div class="form-card"><h3 style="margin:0 0 6px">🧹 Pièces ${tot ? `<small class="hint">${f}/${tot} faites</small>` : ""}</h3>
-      ${(m.pieces || []).map((p, i) => { const av = de(p.nom, "avant"), ap = de(p.nom, "apres");
-        return `<div class="mp-piece"><b>${m.faits?.[i] ? "✅" : "⬜"} ${esc(p.nom)}</b>${!av.length || !ap.length ? ` <small class="hint">${!av.length ? "· pas de photo avant " : ""}${!ap.length ? "· pas de photo après" : ""}</small>` : ""}
+      ${parNiveau(m.pieces || [], (p, i) => { const av = de(p.nom, "avant"), ap = de(p.nom, "apres");
+        return `<div class="mp-piece"><b>${m.faits?.[i] ? "✅" : "⬜"} ${esc(p.libelle || p.nom)}</b>${!av.length || !ap.length ? ` <small class="hint">${!av.length ? "· pas de photo avant " : ""}${!ap.length ? "· pas de photo après" : ""}</small>` : ""}
           ${m.obs?.[i] ? `<div style="font-size:13px;margin-top:4px">📝 ${esc(m.obs[i])}</div>` : ""}
-          ${av.length || ap.length ? `<div class="mp-ph">${[...av, ...ap].map(fig).join("")}</div>` : ""}</div>`; }).join("") || `<div class="hint">Aucune pièce listée.</div>`}</div>
+          ${av.length || ap.length ? `<div class="mp-ph">${[...av, ...ap].map(fig).join("")}</div>` : ""}</div>`; }) || `<div class="hint">Aucune pièce listée.</div>`}</div>
     ${autres.length ? `<div class="form-card"><h3 style="margin:0 0 6px">📷 Autres photos</h3><div class="mp-ph">${autres.map(fig).join("")}</div></div>` : ""}
     <div class="form-card"><h3 style="margin:0 0 6px">📝 Observations de l'entreprise</h3><div style="white-space:pre-wrap;font-size:13.5px">${esc(m.observations || "—")}</div></div>`;
 }
@@ -195,12 +229,12 @@ function imprimer(m) {
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Ménage ponctuel — ${esc(m.siteName)}</title><style>
     @page{size:A4 portrait;margin:10mm}body{font:12px/1.4 Arial,sans-serif;color:#111}h1{font-size:18px;margin:0}h2{font-size:14px;margin:14px 0 6px;border-bottom:1px solid #999}
     table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px 6px;text-align:left}.ph{display:flex;flex-wrap:wrap;gap:6px}figure{margin:0;width:150px;break-inside:avoid}
-    figure img{width:150px;height:115px;object-fit:cover}figcaption{font-size:10px}.piece{break-inside:avoid;margin-bottom:8px}</style></head><body>
+    figure img{width:150px;height:115px;object-fit:cover}.niv{font-weight:bold;text-transform:uppercase;margin:10px 0 4px;color:#2f6fd6}figcaption{font-size:10px}.piece{break-inside:avoid;margin-bottom:8px}</style></head><body>
     <h1>Compte rendu — ménage ponctuel</h1><p><b>Groupe Établières</b>${m.dispositif ? ` · ${esc(m.dispositif)}` : ""}<br>Site : <b>${esc(m.siteName)}</b> · Entreprise : <b>${esc(m.entreprise)}</b>${m.presta ? ` · Intervenant : ${esc(`${m.presta.prenom || ""} ${m.presta.nom || ""}`.trim())}` : ""}<br>Période prévue : du ${dateFr(m.debut)} au ${dateFr(m.fin)}</p>
     ${m.consignes ? `<p><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
     <h2>Présence sur place</h2>${(m.passages || []).length ? `<table><tr><th>Jour</th><th>Arrivée</th><th>Départ</th><th>Durée</th></tr>${m.passages.map(p => `<tr><td>${jourFr(p.a)}</td><td>${heureFr(p.a)}</td><td>${p.d ? heureFr(p.d) : "—"}</td><td>${p.d ? fmtMin(Math.round((p.d - p.a) / 60000)) : "—"}</td></tr>`).join("")}<tr><th colspan="3">Total</th><th>${fmtMin(minutesPassees(m))}</th></tr></table>` : "<p>Aucun pointage.</p>"}
     <h2>Pièces (${nbFaits(m)}/${(m.pieces || []).length} faites)</h2>
-    ${(m.pieces || []).map((p, i) => `<div class="piece"><b>${m.faits?.[i] ? "☑" : "☐"} ${esc(p.nom)}</b>${m.obs?.[i] ? ` — ${esc(m.obs[i])}` : ""}<div class="ph">${de(p.nom, "avant").map(x => img(x, "Avant")).join("")}${de(p.nom, "apres").map(x => img(x, "Après")).join("")}</div></div>`).join("")}
+    ${parNiveau(m.pieces || [], (p, i) => `<div class="piece"><b>${m.faits?.[i] ? "☑" : "☐"} ${esc(p.libelle || p.nom)}</b>${m.obs?.[i] ? ` — ${esc(m.obs[i])}` : ""}<div class="ph">${de(p.nom, "avant").map(x => img(x, "Avant")).join("")}${de(p.nom, "apres").map(x => img(x, "Après")).join("")}</div></div>`).replace(/class="mp-niv"/g, 'class="niv"')}
     ${autres.length ? `<h2>Autres photos</h2><div class="ph">${autres.map(x => img(x, "Photo")).join("")}</div>` : ""}
     <h2>Observations de l'entreprise</h2><p style="white-space:pre-wrap">${esc(m.observations || "—")}</p>
     <p style="margin-top:14px">${m.termine ? `Envoyé par l'entreprise le ${jourFr(m.termine)} à ${heureFr(m.termine)}.` : "Non terminé par l'entreprise."} ${m.validee ? `Validé${m.valideePar ? ` par ${esc(m.valideePar)}` : ""}${m.valideeLe ? ` le ${jourFr(m.valideeLe)}` : ""}.` : "Non validé."}</p>
@@ -217,9 +251,9 @@ function effacer(id) {
 function ouvrirModif(id) {
   const m = st.missions.find(x => x.id === id); if (!m) return;
   const site = sitesDispo().find(s => s.id === m.siteId);
-  const noms = (m.pieces || []).map(p => p.nom), duSite = new Set((site?.rooms || []).map(r => String(r.name || "").trim()));
+  const noms = (m.pieces || []).map(p => p.nom), pcs = sitePieces(site), duSite = new Set(pcs.map(p => p.cle));
   ui.draft = { siteId: m.siteId, entreprise: m.entreprise || "", telephone: m.telephone || "", debut: m.debut, fin: m.fin, consignes: m.consignes || "",
-    pieces: Object.fromEntries([...duSite].filter(Boolean).map(n => [n, noms.includes(n)])), piecesPour: m.siteId,
+    pieces: Object.fromEntries(pcs.map(p => [p.cle, noms.includes(p.cle)])), piecesPour: m.siteId + "|" + pcs.map(p => p.cle).join("¦"),
     autres: noms.filter(n => !duSite.has(n)).join("\n"), codesGarder: Array.isArray(m.codes) ? m.codes.map(c => c.code) : null };
   ui.edit = id; ui.form = true; ui.ouverte = null; ui.cree = null; render();
 }
@@ -237,6 +271,8 @@ function brancher() {
   qa("[data-modifier]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); ouvrirModif(b.dataset.modifier); }));
   qa("[data-effacer]").forEach(b => b.addEventListener("click", (e) => { e.stopPropagation(); effacer(b.dataset.effacer); }));
   q("[data-fermer-cree]")?.addEventListener("click", () => { ui.cree = null; render(); });
+  q("[data-plans]")?.addEventListener("click", () => { ui.plan = ui.draft?.siteId || sitesDispo()[0]?.id; ui.planRetour = ui.form ? "form" : null; render(); });
+  q("[data-prog]")?.addEventListener("click", () => { ui.plan = ui.draft?.siteId; ui.planRetour = "form"; render(); });
   qa("[data-copier]").forEach(b => b.addEventListener("click", () => copier(b.dataset.copier, b)));
   qa("[data-ouvrir]").forEach(b => b.addEventListener("click", () => { ui.ouverte = b.dataset.ouvrir; render(); }));
   q("[data-retour]")?.addEventListener("click", () => { ui.ouverte = null; render(); });
@@ -255,18 +291,19 @@ function brancher() {
       if (!site) { alert("Choisis un site."); return; }
       if (!d.entreprise.trim()) { alert("Indique le nom de l'entreprise."); return; }
       if (d.fin < d.debut) { alert("La date de fin est avant la date de début."); return; }
-      const pieces = [...Object.keys(d.pieces || {}).filter(n => d.pieces[n]), ...String(d.autres || "").split("\n").map(x => x.trim()).filter(Boolean)];
+      const vus = new Set(), pieces = [...sitePieces(site).filter(p => d.pieces?.[p.cle]).map(p => ({ nom: p.cle, libelle: p.nom, niveau: p.niveau })),
+        ...String(d.autres || "").split("\n").map(x => x.trim()).filter(Boolean).map(nom => ({ nom }))].filter(p => !vus.has(p.nom) && vus.add(p.nom));
       const codes = (codesCache[site.dossierId] || []).filter(codeCoche).map(c => ({ nom: c.nom || "Boîte à clés", code: c.code, notes: c.notes || "" }));
       const btn = form.querySelector("[type=submit]"); btn.disabled = true; btn.textContent = "⏳ Création…";
       if (ui.edit) {
         try {
-          await modifierMission(ui.edit, { siteId: site.id, siteName: site.name, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)].map(nom => ({ nom })), codes });
+          await modifierMission(ui.edit, { siteId: site.id, siteName: site.name, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces, codes });
           ui.form = false; ui.draft = null; ui.edit = null; document.activeElement?.blur(); window.toast?.("✓ Modifié — le lien reste le même"); render();
         } catch (err) { btn.disabled = false; btn.textContent = "✓ Enregistrer"; alert("Modification impossible : " + (err?.message || err)); }
         return;
       }
       try {
-        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces: [...new Set(pieces)], codes, createdBy: ctx.user?.uid || "" });
+        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces, codes, createdBy: ctx.user?.uid || "" });
         ui.form = false; ui.draft = null; ui.cree = id;
         try { await navigator.clipboard.writeText(smsTexte({ id, siteName: site.name, debut: d.debut, fin: d.fin, codes })); window.toast?.("✓ Mission créée, message avec le lien copié"); } catch { window.toast?.("✓ Mission créée"); }
         document.activeElement?.blur(); render();

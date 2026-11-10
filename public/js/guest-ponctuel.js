@@ -23,6 +23,7 @@ const STYLE = `<style>
 .gp-big{width:100%;padding:16px;border:none;border-radius:14px;font:inherit;font-size:18px;font-weight:800;color:#fff;cursor:pointer}
 .gp-go{background:#1baf7a}.gp-stop{background:#d9534f}.gp-send{background:#2f6fd6}
 .gp-pass{font-size:13px;color:var(--text-dim);margin-top:8px}
+.gp-niv{margin:14px 0 2px;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#2f6fd6}
 .gp-piece{border-top:1px solid var(--border);padding:12px 0}.gp-piece:first-of-type{border-top:none}
 .gp-ph{display:flex;align-items:center;gap:10px}
 .gp-ph input[type=checkbox]{width:28px;height:28px;accent-color:#1baf7a;flex:none}
@@ -89,14 +90,15 @@ function render() {
     </div>`}
     <div class="gp-card"><h3>Pièces à faire <small class="hint">${faits}/${total}</small></h3>
       <p class="hint" style="margin:0 0 6px">Pour chaque pièce : une photo <b>avant</b>, une photo <b>après</b>, puis coche quand c'est fait.</p>
-      ${(m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = !!m.faits?.[i];
-        return `<div class="gp-piece ${fait ? "fait" : ""}">
-          <div class="gp-ph"><input type="checkbox" id="gp-c${i}" data-fait="${i}" ${fait ? "checked" : ""} ${verrou ? "disabled" : ""}><label for="gp-c${i}">${esc(p.nom)}</label></div>
+      ${(() => { let niv = null; return (m.pieces || []).map((p, i) => { const av = phDe(p.nom, "avant"), ap = phDe(p.nom, "apres"), fait = !!m.faits?.[i];
+        const titre = p.niveau && p.niveau !== niv ? `<div class="gp-niv">${esc(p.niveau)}</div>` : ""; niv = p.niveau || "";
+        return `${titre}<div class="gp-piece ${fait ? "fait" : ""}">
+          <div class="gp-ph"><input type="checkbox" id="gp-c${i}" data-fait="${i}" ${fait ? "checked" : ""} ${verrou ? "disabled" : ""}><label for="gp-c${i}">${esc(p.libelle || p.nom)}</label></div>
           ${verrou ? "" : `<div class="gp-btns"><label class="${av.length ? "ok" : ""}">📷 Avant<small>${av.length ? `${av.length} photo${av.length > 1 ? "s" : ""}` : "à prendre"}</small><input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="avant"></label>
             <label class="${ap.length ? "ok" : ""}">📷 Après<small>${ap.length ? `${ap.length} photo${ap.length > 1 ? "s" : ""}` : "à prendre"}</small><input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="apres"></label></div>`}
           ${vignettes([...av, ...ap], !verrou)}
           ${verrou ? (m.obs?.[i] ? `<div class="hint" style="margin-top:6px">📝 ${esc(m.obs[i])}</div>` : "") : `<input class="gp-note" type="text" data-obs="${i}" placeholder="Remarque sur cette pièce (facultatif)" value="${esc(m.obs?.[i] || "")}">`}
-        </div>`; }).join("") || `<div class="hint">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
+        </div>`; }).join(""); })() || `<div class="hint">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
     </div>
     <div class="gp-card"><h3>📷 Autres photos</h3>
       ${verrou ? "" : `<div class="gp-btns"><label>📷 Ajouter des photos<small>dégâts, problème constaté…</small><input type="file" accept="image/*" capture="environment" multiple data-ph="-1" data-moment=""></label></div>`}
@@ -139,8 +141,8 @@ function brancher() {
   cont.querySelector("[data-rouvrir]")?.addEventListener("click", () => enregistrer({ termine: null }));
   cont.querySelector("[data-terminer]")?.addEventListener("click", () => {
     if (envoiEnCours) { alert("Attends la fin de l'envoi des photos."); return; }
-    const manquent = (m.pieces || []).filter((_, i) => !m.faits?.[i]).map(p => p.nom);
-    const sansApres = (m.pieces || []).filter((p, i) => m.faits?.[i] && !phDe(p.nom, "apres").length).map(p => p.nom);
+    const manquent = (m.pieces || []).filter((_, i) => !m.faits?.[i]).map(p => p.libelle || p.nom);
+    const sansApres = (m.pieces || []).filter((p, i) => m.faits?.[i] && !phDe(p.nom, "apres").length).map(p => p.libelle || p.nom);
     let msg = "Envoyer le ménage au responsable ?";
     if (manquent.length) msg += `\n\nPièces non cochées : ${manquent.join(", ")}`;
     if (sansApres.length) msg += `\n\nSans photo « après » : ${sansApres.join(", ")}`;

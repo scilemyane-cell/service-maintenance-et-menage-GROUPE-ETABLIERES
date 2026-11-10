@@ -29,7 +29,7 @@ export async function creerMission({ site, dispositif, entreprise, telephone = "
   });
   await setDoc(doc(db, COL_PONCTUEL, token), {
     siteId: site.id, siteName: site.name, dispositif: dispositif || "", entreprise, telephone, debut, fin, consignes,
-    pieces: pieces.map(nom => ({ nom })), codes, faits: {}, obs: {}, passages: [], observations: "",
+    pieces: pieces.map(p => typeof p === "string" ? { nom: p } : p), codes, faits: {}, obs: {}, passages: [], observations: "",
     presta: null, termine: null, validee: false, createdBy, createdAt: now, majLe: Date.now(),
   });
   return token;
