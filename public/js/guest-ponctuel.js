@@ -27,7 +27,14 @@ const STYLE = `<style>
 .gp-go{background:#1baf7a}.gp-stop{background:#d9534f}.gp-send{background:#2f6fd6}
 .gp-pass{font-size:13px;color:var(--text-dim);margin-top:8px}
 .gp .fj-piece{margin:0}.gp-infos .fj-piece-nom{font-size:15px}.gp-code{font-size:15px;margin-top:6px}.gp-code b{font-size:20px;letter-spacing:1.5px}
-.gp-phb{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 4px}
+.gp-aa{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 0 6px;border-top:1px solid var(--border);margin-top:4px}
+.gp-aa-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.gp-aa-col figure{margin:0;position:relative}.gp-aa-col img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;display:block;cursor:pointer}
+.gp-aa-col figcaption{font-size:11px;color:var(--text-dim);text-align:center}
+.gp-aa-col figure button{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;border:none;background:#d9534f;color:#fff;cursor:pointer}
+.gp-aa-add{display:flex;align-items:center;justify-content:center;text-align:center;min-height:70px;border:2px dashed;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;padding:8px}
+.gp-aa-add.avant{border-color:#e07a1f;color:#b85f10;background:#fff4e8}.gp-aa-add.apres{border-color:#1baf7a;color:#128077;background:#eaf8f1}
+.gp-aa-vide{color:var(--text-dim);text-align:center}
 .gp-niv-tete{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#128077;color:#fff;font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:.5px}
 .gp-niv-tete span{font-size:12px;font-weight:600;text-transform:none;letter-spacing:0;opacity:.95}
 .gp-niv{margin:14px 0 2px;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#2f6fd6}
@@ -66,6 +73,15 @@ export function mountGuestPonctuel(container, u, invitation) {
 }
 
 const phDe = (piece, moment) => photos.filter(p => p.piece === piece && (moment == null || p.moment === moment));
+// Photos d'une pièce en deux colonnes Avant | Après (comme les fiches MNA).
+function colonnesAA(i, av, ap, verrou) {
+  const col = (moment, liste) => `<div class="gp-aa-col ${moment}">
+    <b class="fc-ph-moment ${moment}">${moment === "avant" ? "📷 Avant" : "📷 Après"}</b>
+    ${liste.map(p => `<figure><img src="${p.data}" data-voir="${p.id}" alt="">${!verrou && p.agentUid === user.uid ? `<button data-del-ph="${p.id}" title="Retirer">✕</button>` : ""}<figcaption>${heureFr(p.le)}</figcaption></figure>`).join("")}
+    ${verrou ? (liste.length ? "" : `<span class="gp-aa-vide">—</span>`) : `<label class="gp-aa-add ${moment}">${liste.length ? "＋ Ajouter" : `Prendre la photo ${moment === "avant" ? "avant" : "après"}`}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="${moment}" hidden></label>`}
+  </div>`;
+  return `<div class="gp-aa">${col("avant", av)}${col("apres", ap)}</div>`;
+}
 const vignettes = (liste, modifiable) => liste.length ? `<div class="gp-mini">${liste.map(p => `<figure><img src="${p.data}" data-voir="${p.id}" alt="">${modifiable && p.agentUid === user.uid ? `<button data-del-ph="${p.id}" title="Retirer">✕</button>` : ""}<figcaption>${p.moment === "avant" ? "Avant" : p.moment === "apres" ? "Après" : ""} ${heureFr(p.le)}</figcaption></figure>`).join("")}</div>` : "";
 
 function render() {
@@ -135,9 +151,7 @@ function render() {
             ${verrou || !tt.length ? "" : `<button class="fj-tout" data-toutfait="${i}">${fait ? "↺ Tout décocher" : "✓ Tout fait"}</button>`}</div>
           <div class="fj-piece-barre"><span style="width:${f / n * 100}%"></span></div>
           ${tt.length ? tt.map((t, k) => ligne(`${i}-${k}`, t, !!m.faits?.[`${i}-${k}`])).join("") : ligne(String(i), "Pièce faite", fait)}
-          ${verrou ? "" : `<div class="gp-phb"><label class="fc-ph-add petit avant">📷 Avant${av.length ? ` (${av.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="avant" hidden></label>
-            <label class="fc-ph-add petit apres">📷 Après${ap.length ? ` (${ap.length})` : ""}<input type="file" accept="image/*" capture="environment" multiple data-ph="${i}" data-moment="apres" hidden></label></div>`}
-          ${vignettes([...av, ...ap], !verrou)}
+          ${colonnesAA(i, av, ap, verrou)}
         </div>`; }).join("") + (() => { // Niveau terminé → passer au suivant.
           if (!tabs) return ""; const nivs = [...new Set(m.pieces.map(p => p.niveau || ""))], k = nivs.indexOf(nivSel), ici = m.pieces.map((p, i) => i).filter(i => (m.pieces[i].niveau || "") === nivSel);
           return ici.every(i => pieceFaite(m, i)) && k < nivs.length - 1 ? `<button class="gp-big gp-go" data-niv="${esc(nivs[k + 1])}">➡️ Passer au niveau « ${esc(nivs[k + 1] || "Autres")} »</button>` : ""; })(); })() || `<div class="fj-vide">Aucune pièce listée : utilise les photos ci-dessous.</div>`}
