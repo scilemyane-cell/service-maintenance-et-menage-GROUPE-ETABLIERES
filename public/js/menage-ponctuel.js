@@ -73,7 +73,7 @@ const sitesDispo = () => {
     .map(s => /mna/i.test(s.sousGroupe || "") ? { ...s, groupe: menage.find(estMna)?.groupe || "Dispositif MNA" } : s);
   const tous = [...menage, ...autres], tri = (a, b) => String(a.name).localeCompare(String(b.name), "fr");
   const ici = tous.filter(s => s.groupe === ctx.dispositif || (/mna/i.test(ctx.dispositif || "") && estMna(s)));
-  return [...ici.sort(tri), ...tous.filter(s => !ici.includes(s))];
+  return ici.sort(tri); // uniquement les sites du dispositif (ex. les maisons MNA)
 };
 const missionsVisibles = () => ctx.tous ? st.missions : st.missions.filter(m => !ctx.dispositif || !m.dispositif || m.dispositif === ctx.dispositif);
 // Liste déroulante groupée (dispositif courant d'abord, puis les autres, puis les associations).
