@@ -269,6 +269,15 @@ service cloud.firestore {
       allow read: if isEditor();
       allow update, delete: if isSuperAdmin();
     }
+    // ---- Ménage ponctuel (gros ménage par une entreprise, avec suivi) ----
+    // Identifiant = code secret du lien prestataire : lecture par ce code seulement.
+    // Le prestataire (anonyme) ne remplit que ses champs, tant que ce n'est pas validé.
+    match /menage-ponctuel/{docId} {
+      allow get: if isSignedIn();
+      allow list, create, delete: if isEditor();
+      allow update: if isEditor() || (isSignedIn() && resource.data.get('validee', false) == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['presta', 'prestaUid', 'passages', 'faits', 'obs', 'observations', 'termine', 'majLe']));
+    }
     match /fiches-photos/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (isEditor() || request.resource.data.agentUid == request.auth.uid)

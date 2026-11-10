@@ -51,6 +51,15 @@
       const fr = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
       if (invitation.debut && auj < invitation.debut) { showError(`Cet accès sera ouvert à partir du ${fr(invitation.debut)}.`); return; }
       if (invitation.fin && auj > invitation.fin) { showError(`Cet accès a expiré le ${fr(invitation.fin)}. Contacte le Groupe Établières si tu as encore des fiches à remplir.`); return; }
+      if (invitation.type === "ponctuel") {
+        app.innerHTML = `
+        <header class="topbar"><div class="topbar-title"><span class="topbar-eyebrow">Groupe Établières · Ménage ponctuel</span><h1>${(invitation.siteName || "").replace(/[<>&"]/g, "")}</h1></div>
+          <div class="topbar-user"><span>${invitation.fin ? `Accès jusqu'au <b>${fr(invitation.fin)}</b>` : ""}</span></div></header>
+        <main class="content" id="content"></main>`;
+        const { mountGuestPonctuel } = await import("./js/guest-ponctuel.js");
+        mountGuestPonctuel(document.getElementById("content"), user, invitation);
+        return;
+      }
       const noms = sitesInvitation(invitation).map(s => s.name).join(" · ");
       app.innerHTML = `
         <header class="topbar">
