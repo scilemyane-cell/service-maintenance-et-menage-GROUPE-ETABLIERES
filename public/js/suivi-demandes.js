@@ -177,7 +177,7 @@ export function mountSuiviDemandesTab(container, user) {
   mountedUser = user;
   state = { demandes: null };
   // À chaque ouverture de la tuile : vue « Par site », liste de tous les sites.
-  ui.vue = "sites"; ui.retourActions = false; resetVueSites();
+  ui.vue = "sites"; ui.retourActions = false; ui.retourTableau = null; resetVueSites();
   const raccourci = window.__suiviRaccourci; window.__suiviRaccourci = null;
   if (raccourci === "actions") ui.vue = "actions";
   if (raccourci === "valider") ui.allerValidation = true;
@@ -547,7 +547,11 @@ function renderVue(container) {
       uid: identite().uid || null,
       favLectureSeule: !!mountedUser?.postePartage,
       rafraichir: () => render(container),
-      quitterFocus: ui.retourActions ? () => { ui.retourActions = false; ui.vue = "actions"; render(container); } : null,
+      quitterFocus: ui.retourTableau ? () => {
+        const r = ui.retourTableau; ui.retourTableau = null; Object.assign(ui, { filtreStatut: r.filtreStatut, filtreUrgence: r.filtreUrgence, filtreSites: r.filtreSites, filtreAssociation: r.filtreAssociation, recherche: r.recherche });
+        ui.vue = "tableau"; render(container); setTimeout(() => window.scrollTo({ top: r.y || 0 }), 30);
+      } : ui.retourActions ? () => { ui.retourActions = false; ui.vue = "actions"; render(container); } : null,
+      libelleRetour: ui.retourTableau ? "📋 Retour au tableau" : "",
       utilisateurs,
       apres: () => {
         try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
@@ -724,7 +728,7 @@ function attacherToggleVue(container) {
   container.querySelectorAll("[data-vue]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (btn.dataset.vue === "sites") resetVueSites(); // « Par site » ramène toujours à la liste des sites
-      ui.vue = btn.dataset.vue; ui.vueChoisie = true; ui.retourActions = false;
+      ui.vue = btn.dataset.vue; ui.vueChoisie = true; ui.retourActions = false; ui.retourTableau = null;
       if (ui.vue === "stats") ui.moisOuvert = null;
       render(container);
     });
@@ -931,7 +935,7 @@ function renderTableau(container) {
           <tbody>
             ${lignes.length === 0 ? `<tr><td colspan="12" class="demandes-table-empty">Aucune demande ne correspond à ces filtres.</td></tr>` : lignes.map(l => `
               <tr data-id="${esc(l.id)}">
-                <td class="mono">${esc(l.n)}${l.actionPour && l.actionTexte && !l.actionFaiteLe ? `<br><small class="badge-action ${l.actionImmediate ? "imm" : ""}" title="${esc(l.actionTexte)}">${l.actionImmediate ? "🚨" : "📌"} ${esc(l.actionPourNom || "")}</small>` : ""}${l.lieeANumero ? `<br><small class="badge-lien">🔗 doublon de ${esc(l.lieeANumero)}</small>` : ""}${(n => n ? `<br><small class="badge-lien">🔗 +${n} doublon${n > 1 ? "s" : ""}</small>` : "")((state.demandes || []).filter(d => d.lieeA === l.id).length)}</td>
+                <td class="mono"><button type="button" class="dem-ouvrir-ticket" data-ouvrir-ticket="${esc(l.id)}" data-ouvrir-site="${esc(l.site)}" title="Ouvrir la fiche de la demande">${esc(l.n) || "—"} ↗</button>${l.actionPour && l.actionTexte && !l.actionFaiteLe ? `<br><small class="badge-action ${l.actionImmediate ? "imm" : ""}" title="${esc(l.actionTexte)}">${l.actionImmediate ? "🚨" : "📌"} ${esc(l.actionPourNom || "")}</small>` : ""}${l.lieeANumero ? `<br><small class="badge-lien">🔗 doublon de ${esc(l.lieeANumero)}</small>` : ""}${(n => n ? `<br><small class="badge-lien">🔗 +${n} doublon${n > 1 ? "s" : ""}</small>` : "")((state.demandes || []).filter(d => d.lieeA === l.id).length)}</td>
                 <td class="mono">${fmtDateFR(l.date)}</td>
                 <td>${esc(l.site)}</td>
                 <td>${esc(l.association)}</td>
@@ -953,6 +957,13 @@ function renderTableau(container) {
   `;
 
   attacherToggleVue(container);
+  // N° de la demande → ouvre sa fiche (ticket) ; « ← Retour » revient au tableau.
+  container.querySelectorAll("[data-ouvrir-ticket]").forEach(b => b.onclick = () => {
+    ui.retourTableau = { filtreStatut: ui.filtreStatut, filtreUrgence: ui.filtreUrgence, filtreSites: [...(ui.filtreSites || [])], filtreAssociation: ui.filtreAssociation, recherche: ui.recherche, y: window.scrollY };
+    ouvrirDemandeSeule(b.dataset.ouvrirTicket, b.dataset.ouvrirSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
+    container.scrollIntoView({ block: "start" });
+  });
+  if (!document.getElementById("dem-ouvrir-ticket-style")) document.head.insertAdjacentHTML("beforeend", `<style id="dem-ouvrir-ticket-style">.dem-ouvrir-ticket{background:none;border:0;padding:2px 0;font:inherit;color:var(--teal,#2a9d8f);font-weight:700;text-decoration:underline;cursor:pointer;white-space:nowrap}</style>`);
   document.getElementById("demandes-voir-doublons")?.addEventListener("change", e => { ui.voirDoublons = e.target.checked; render(container); });
   document.getElementById("demandes-recherche").addEventListener("input", e => {
     ui.recherche = e.target.value;

@@ -527,7 +527,7 @@ function badgeAge(j) {
   return `<span class="dps-age ${cls}" title="Ancienneté de la demande">${j === 0 ? "aujourd'hui" : `il y a ${j} j`}</span>`;
 }
 
-export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null, quitterFocus = null }) {
+export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, maj, utilisateur = "", uid = null, utilisateurs = [], apres = null, favLectureSeule = false, rafraichir = null, quitterFocus = null, libelleRetour = "" }) {
   const saisies = capturerSaisies(container);
   // Préchargement de l'IA dès qu'on commence à écrire (✨ plus rapide ensuite).
   if (!container.__iaPrechargee) { container.__iaPrechargee = true; container.addEventListener("focusin", (e) => { if (e.target.matches("textarea, [data-act-texte], [data-edit-texte]") && !window.__iaPrete) { window.__iaPrete = true; import("./ia.js").then(m => m.prechargerIA()).catch(() => {}); } }); }
@@ -537,7 +537,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
   const toutesLignes = lignes;
-  const rerender = () => renderParSite(container, toutesLignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir, quitterFocus });
+  const rerender = () => renderParSite(container, toutesLignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir, quitterFocus, libelleRetour });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
   ent.rerender = () => { if (container.isConnected && perms.isEditor) rerender(); };
@@ -959,7 +959,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   <div class="stack dps">
     ${toggleHTML}
     <div class="dps-site-entete">
-      <button class="dps-retour" id="dps-retour">← ${quitterFocus ? "Retour à mes actions" : "Retour au site"}</button>
+      <button class="dps-retour" id="dps-retour">← ${quitterFocus ? (libelleRetour || "Retour à mes actions") : "Retour au site"}</button>
       <div><h2>${esc(lf.n)} · ${esc(st.site)}</h2><p>${lf.local ? `📍 ${esc(lf.local)} · ` : ""}${esc(lf.statut)}</p></div>
       <button type="button" class="dps-voir-site" id="dps-voir-site">Voir tout le site →</button>
     </div>
@@ -1000,7 +1000,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     if (st.focusId) { st.focusId = null; if (quitterFocus) { st.site = null; quitterFocus(); } else rerender(); return; }
     st.site = null; st.qSite = ""; st.ie = ""; rerender();
   });
-  { const f = document.createElement("button"); f.type = "button"; f.id = "dps-retour-flottant"; f.className = "dps-retour-flottant"; f.textContent = st.focusId && quitterFocus ? "← 📌 Mes actions" : st.focusId ? "← Retour au site" : "← 🏠 Tous les sites"; (container.querySelector(".stack") || container).append(f); }
+  { const f = document.createElement("button"); f.type = "button"; f.id = "dps-retour-flottant"; f.className = "dps-retour-flottant"; f.textContent = st.focusId && quitterFocus ? `← ${libelleRetour || "📌 Mes actions"}` : st.focusId ? "← Retour au site" : "← 🏠 Tous les sites"; (container.querySelector(".stack") || container).append(f); }
   container.querySelector("#dps-retour-flottant")?.addEventListener("click", () => { container.querySelector("#dps-retour")?.click(); window.scrollTo({ top: 0 }); });
   container.querySelector("#dps-imprimer")?.addEventListener("click", () => ouvrirImpressionSite({
     site: st.site, techs: techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "),
