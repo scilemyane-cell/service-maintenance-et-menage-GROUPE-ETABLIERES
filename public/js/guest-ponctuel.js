@@ -152,6 +152,22 @@ function render() {
   brancher();
 }
 
+// Double validation « J'arrive » / « Je pars » (comme le pointage des agents) : évite les touches accidentelles.
+function confirmerPointage(arrivee) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div"); ov.className = "pt-conf";
+    ov.innerHTML = `<div class="pt-conf-box"><div class="pt-conf-ico">${arrivee ? "▶️" : "⏹️"}</div>
+      <h3>${arrivee ? "Tu arrives ?" : "Tu pars ?"}</h3>
+      <p>${esc(m.siteName)}<br>Heure notée : <b>${heureFr(Date.now())}</b></p>
+      <div class="pt-conf-btns"><button class="non">Annuler</button><button class="oui ${arrivee ? "go" : "stop"}">${arrivee ? "Oui, j'arrive" : "Oui, je pars"}</button></div></div>`;
+    const fin = (v) => { ov.remove(); resolve(v); };
+    ov.querySelector(".non").onclick = () => fin(false);
+    ov.querySelector(".oui").onclick = () => fin(true);
+    ov.onclick = (e) => { if (e.target === ov) fin(false); };
+    document.body.appendChild(ov);
+  });
+}
+
 function enregistrer(champs) { majMission(m.id, { presta: { ...identite, uid: user.uid }, prestaUid: user.uid, ...champs }).catch(e => alert("Enregistrement impossible : " + (e?.message || e))); }
 function enregistrerTextes() {
   clearTimeout(saveTimer);
@@ -170,8 +186,8 @@ function brancher() {
     return;
   }
   cont.querySelector("[data-chg-id]")?.addEventListener("click", () => { if (confirm("Changer de personne ?")) { identite = null; ecrireId(null); render(); } });
-  cont.querySelector("[data-arrivee]")?.addEventListener("click", () => enregistrer({ passages: [...(m.passages || []), { a: Date.now(), d: null }] }));
-  cont.querySelector("[data-depart]")?.addEventListener("click", () => enregistrer({ passages: (m.passages || []).map(p => p.a && !p.d ? { ...p, d: Date.now() } : p) }));
+  cont.querySelector("[data-arrivee]")?.addEventListener("click", async () => { if (await confirmerPointage(true)) enregistrer({ passages: [...(m.passages || []), { a: Date.now(), d: null }] }); });
+  cont.querySelector("[data-depart]")?.addEventListener("click", async () => { if (await confirmerPointage(false)) enregistrer({ passages: (m.passages || []).map(p => p.a && !p.d ? { ...p, d: Date.now() } : p) }); });
   cont.querySelectorAll("[data-niv]").forEach(b => b.addEventListener("click", () => { nivSel = b.dataset.niv; render(); window.scrollTo({ top: (cont.querySelector(".fj-jours")?.getBoundingClientRect().top || 0) + window.scrollY - 10, behavior: "smooth" }); }));
   cont.querySelectorAll("[data-coche]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.coche; enregistrer({ faits: { ...(m.faits || {}), [k]: !m.faits?.[k] } }); }));
   cont.querySelectorAll("[data-obs-btn]").forEach(b => b.addEventListener("click", () => { const z = cont.querySelector(`[data-obs-zone="${b.dataset.obsBtn}"]`); z?.classList.toggle("ouverte"); z?.querySelector("input")?.focus(); }));
