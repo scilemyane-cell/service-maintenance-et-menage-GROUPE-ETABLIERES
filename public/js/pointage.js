@@ -78,7 +78,7 @@ function render() {
   const total = DAYS.reduce((s, d) => s + heuresJour(data, d), 0), ecart = total - f.prevu;
   const iAuj = DAYS.findIndex((_, i) => dateDe(i) === auj), dAuj = DAYS[iAuj];
   const enCours = dAuj ? (data.pointages[dAuj] || []).find(c => c.a && !c.d) : null;
-  const verrou = data.valide && !estEditeur(user);
+  const ed = estEditeur(user), verrou = data.valide && !ed;
   const cfg = st.settings[disp] || {}, off = cfg.joursOff ?? [6, 0];
   const bloque = (iso) => { const b = (cfg.datesBloquees || []).find(x => iso >= x.du && iso <= (x.au || x.du)); if (b) return "⛔ " + (b.motif || "Date bloquée"); return off.includes(new Date(iso + "T12:00").getDay()) ? "Pas de présence prévue" : ""; };
   const bAuj = dAuj ? bloque(auj) : "";
@@ -93,7 +93,8 @@ function render() {
       const bl = bloque(iso), ferme = bl && !estEditeur(user) && !cr.length;
       if (ferme) return `<div class="pt-j off"><div class="pt-j-t"><b>${NOMS[i]}</b><small>${fr(iso, { day: "numeric", month: "short" })}</small><span>${esc(bl)}</span></div></div>`;
       return `<div class="pt-j ${iso === auj ? "auj" : ""} ${h ? "plein" : ""} ${bl ? "off" : ""}"><div class="pt-j-t"><b>${NOMS[i]}</b><small>${fr(iso, { day: "numeric", month: "short" })}</small><span>${h ? fmtH(h) : bl ? esc(bl) : "—"}</span></div>
-        ${cr.map((c, k) => `<div class="pt-cr"><input type="time" value="${esc(c.a || "")}" data-pt-a="${d}|${k}" ${verrou ? "disabled" : ""}><span>→</span><input type="time" value="${esc(c.d || "")}" data-pt-d="${d}|${k}" ${verrou ? "disabled" : ""}>${verrou ? "" : `<button data-pt-rm="${d}|${k}" title="Retirer">✕</button>`}</div>`).join("")}
+        ${cr.map((c, k) => { const fa = verrou || (c.b && !ed), fd = verrou || (c.bd && !ed) || (c.b && !c.d && !ed);
+          return `<div class="pt-cr"><input type="time" value="${esc(c.a || "")}" data-pt-a="${d}|${k}" ${fa ? "disabled" : ""}><span>→</span><input type="time" value="${esc(c.d || "")}" data-pt-d="${d}|${k}" ${fd ? "disabled" : ""}>${verrou || (c.b && !ed) ? (c.b && !verrou ? `<span class="pt-lock" title="Heure pointée avec le bouton : seul le responsable peut la corriger">🔒</span>` : "") : `<button data-pt-rm="${d}|${k}" title="Retirer">✕</button>`}</div>`; }).join("")}
         ${verrou ? "" : `<button class="pt-add" data-pt-add="${d}">＋ ${cr.length ? "Autre créneau" : "Ajouter des heures"}</button>`}</div>`; }).join("")}</div>
     <div class="pt-pied"><span class="pt-etat"></span>
       ${data.valide ? `<span class="stat-chip ok">✅ Semaine validée</span>` : data.submitted ? `<span class="stat-chip ok">📨 Envoyée au responsable</span>` : ""}
@@ -109,17 +110,18 @@ function render() {
     e.currentTarget.disabled = true;
     if (!(await confirmerPointage(true))) { render(); return; }
     const premiere = !(data.pointages[dAuj] || []).length;
-    (data.pointages[dAuj] = data.pointages[dAuj] || []).push({ a: maintenant(), d: "" }); enregistrer(f); render();
+    (data.pointages[dAuj] = data.pointages[dAuj] || []).push({ a: maintenant(), d: "", b: 1 }); enregistrer(f); render();
     if (premiere && !estEditeur(user)) afficherMeteo(ag.nom);
   });
   cont.querySelector("[data-pt-depart]")?.addEventListener("click", async (e) => {
     e.currentTarget.disabled = true;
     if (!(await confirmerPointage(false))) { render(); return; }
-    enCours.d = maintenant(); enregistrer(f); render();
+    enCours.d = maintenant(); enCours.bd = 1; enregistrer(f); render();
   });
   $$("[data-pt-add]").forEach(b => b.onclick = () => { (data.pointages[b.dataset.ptAdd] = data.pointages[b.dataset.ptAdd] || []).push({ a: "", d: "" }); render(); cont.querySelector(`[data-pt-a="${b.dataset.ptAdd}|${data.pointages[b.dataset.ptAdd].length - 1}"]`)?.focus(); });
-  $$("[data-pt-rm]").forEach(b => b.onclick = () => { const [d, k] = cle(b.dataset.ptRm); data.pointages[d].splice(+k, 1); enregistrer(f); render(); });
-  $$("[data-pt-a],[data-pt-d]").forEach(inp => inp.onchange = () => { const [d, k] = cle(inp.dataset.ptA || inp.dataset.ptD); const c = data.pointages[d][+k]; c[inp.dataset.ptA ? "a" : "d"] = inp.value;
+  const bloqueModif = (c, champ) => !estEditeur(user) && (data.valide || (champ === "d" ? c?.bd || (c?.b && !c?.d) : c?.b));
+  $$("[data-pt-rm]").forEach(b => b.onclick = () => { const [d, k] = cle(b.dataset.ptRm); if (bloqueModif(data.pointages[d][+k], "a")) return; data.pointages[d].splice(+k, 1); enregistrer(f); render(); });
+  $$("[data-pt-a],[data-pt-d]").forEach(inp => inp.onchange = () => { const [d, k] = cle(inp.dataset.ptA || inp.dataset.ptD); const c = data.pointages[d][+k]; if (bloqueModif(c, inp.dataset.ptA ? "a" : "d")) { render(); return; } c[inp.dataset.ptA ? "a" : "d"] = inp.value;
     if (c.a && c.d && min(c.d) <= min(c.a)) window.toast?.("⚠️ L'heure de départ doit être après l'arrivée"); enregistrer(f); render(); });
   cont.querySelector("[data-pt-envoi]")?.addEventListener("click", () => { data.submitted = !data.submitted; enregistrer(f); render(); });
   cont.querySelector("[data-pt-effacer]")?.addEventListener("click", async () => {

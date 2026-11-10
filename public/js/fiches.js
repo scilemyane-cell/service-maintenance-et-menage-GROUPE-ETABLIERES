@@ -198,6 +198,7 @@ function currentFiche() {
 }
 
 function scheduleSave(id, data) {
+  if (data?.validee && !isEditorUser(mountedUser)) { window.toast?.("🔒 Fiche validée : elle ne peut plus être modifiée"); return; }
   setSaveStatus("saving");
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
@@ -768,6 +769,11 @@ function renderInterne() {
     try { await sauverFiche(id, data); setSaveStatus("ok"); }
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
   });
+  // Fiche validée par le responsable : lecture seule pour l'agent (rien à cocher, effacer ou corriger).
+  if (data.validee && !isEditorUser(mountedUser)) {
+    mountedContainer.querySelectorAll("input, textarea, select").forEach(el => { if (el.id !== "fc-site") el.disabled = true; });
+    mountedContainer.querySelectorAll("#fc-save, #fc-add-chambre, [data-ph-del], [data-del-chambre], [data-fj-obs-btn]").forEach(el => el.remove());
+  }
   document.getElementById("fc-corr-date")?.addEventListener("click", () => { const f = document.getElementById("fc-corr-form"); const ouvrir = f.style.display === "none"; f.style.display = ouvrir ? "flex" : "none"; if (ouvrir) f.m.focus(); });
   document.getElementById("fc-corr-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
