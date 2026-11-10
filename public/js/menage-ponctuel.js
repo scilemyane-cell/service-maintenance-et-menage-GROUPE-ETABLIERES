@@ -220,7 +220,7 @@ function ouvrirModif(id) {
   const noms = (m.pieces || []).map(p => p.nom), duSite = new Set((site?.rooms || []).map(r => String(r.name || "").trim()));
   ui.draft = { siteId: m.siteId, entreprise: m.entreprise || "", telephone: m.telephone || "", debut: m.debut, fin: m.fin, consignes: m.consignes || "",
     pieces: Object.fromEntries([...duSite].filter(Boolean).map(n => [n, noms.includes(n)])), piecesPour: m.siteId,
-    autres: noms.filter(n => !duSite.has(n)).join("\n"), codesGarder: (m.codes || []).map(c => c.code) };
+    autres: noms.filter(n => !duSite.has(n)).join("\n"), codesGarder: Array.isArray(m.codes) ? m.codes.map(c => c.code) : null };
   ui.edit = id; ui.form = true; ui.ouverte = null; ui.cree = null; render();
 }
 
