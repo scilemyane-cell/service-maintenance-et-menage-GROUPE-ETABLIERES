@@ -59,6 +59,59 @@ export async function renderQrWithLogo(container, text, size = 220, sansLogo = f
   }
 }
 
+// Convertit un QR rendu en SVG en image matricielle (<img>, PNG) : étape
+// nécessaire juste avant impression à cause d'un bug du moteur
+// d'impression de Chrome, indépendant de cette appli (reproduit hors
+// appli, avec la seule librairie qr-code-styling). Le QR est dessiné avec
+// deux rectangles 100%×100% (fond blanc, pavés noirs) chacun découpé par
+// un clip-path — celui des pavés contient un <rect> par module du QR, soit
+// souvent plus de 1000 formes. Ce clip-path s'affiche parfaitement à
+// l'écran mais ne survit pas au pipeline d'impression/export PDF de
+// Chrome : constaté en sortant tantôt entièrement noir (clip ignoré, pavé
+// affiché plein), tantôt entièrement blanc (clip résolu à une zone vide),
+// selon le contexte — jamais le motif réel. Une image matricielle n'a pas
+// de clip-path à résoudre, donc pas ce problème ; on sur-échantillonne
+// (×3) pour rester net au tirage papier.
+async function rasterizeSvg(svg, displaySize) {
+  const SCALE = 3;
+  const xml = new XMLSerializer().serializeToString(svg);
+  const svg64 = btoa(unescape(encodeURIComponent(xml)));
+  const img = new Image();
+  await new Promise((ok, ko) => {
+    img.onload = ok; img.onerror = ko;
+    img.src = "data:image/svg+xml;base64," + svg64;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = displaySize * SCALE;
+  canvas.height = displaySize * SCALE;
+  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  const out = document.createElement("img");
+  out.src = canvas.toDataURL("image/png");
+  out.style.width = displaySize + "px";
+  out.style.height = displaySize + "px";
+  out.style.display = "block";
+  out.style.margin = "0 auto";
+  return out;
+}
+
+// Remplace, dans un conteneur donné, chaque <svg> de QR par sa version
+// rasterisée (voir rasterizeSvg ci-dessus) — à appeler juste avant
+// window.print(). displaySize : taille d'affichage en px si tous les QR du
+// conteneur font la même taille (sinon on relit la largeur de chaque SVG).
+export async function rasterizeQrSvgsIn(root, displaySize = null) {
+  const svgs = [...root.querySelectorAll("svg")];
+  await Promise.all(svgs.map(async (svg) => {
+    const size = displaySize ?? parseFloat(svg.getAttribute("width")) ?? 220;
+    try {
+      const img = await rasterizeSvg(svg, size);
+      svg.replaceWith(img);
+    } catch (e) {
+      // repli : on imprime le SVG tel quel si la rasterisation échoue
+      // (ex. navigateur qui bloque data: dans un <img> — rare)
+    }
+  }));
+}
+
 // Imprime UNIQUEMENT la carte QR passée en paramètre (élément portant la
 // classe .qr-print-card), même si l'écran contient par ailleurs une fiche
 // imprimable cachée (ex. dossier de site) ou énormément de contenu au-
@@ -68,10 +121,7 @@ export async function renderQrWithLogo(container, text, size = 220, sansLogo = f
 // la carte dans un conteneur dédié ajouté directement à <body>, et on
 // masque le reste de l'application via #app pendant l'impression — une
 // seule page, propre, quelle que soit la taille de l'écran d'origine.
-// Le QR étant un <svg> (contrairement à l'ancien <canvas>), il se clone
-// tel quel sans perdre son contenu — plus besoin de le convertir en image
-// avant le clonage.
-export function printQrCard(card) {
+export async function printQrCard(card) {
   if (!card) { window.print(); return; }
 
   // Sécurité : si un précédent appel n'a pas été nettoyé à temps (double
@@ -99,6 +149,11 @@ export function printQrCard(card) {
     img.style.margin = "0 auto";
     cloneCanvas.replaceWith(img);
   }
+
+  // QR en SVG : on le rasterise en image avant impression (voir
+  // rasterizeQrSvgsIn plus haut) — sinon le clip-path du QR (un par
+  // module, souvent 1000+) ne s'imprime pas de façon fiable.
+  await rasterizeQrSvgsIn(clone);
 
   const printRoot = document.createElement("div");
   printRoot.id = "qr-print-root";

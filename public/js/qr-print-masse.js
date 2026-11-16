@@ -6,7 +6,7 @@
 // niveau de correction d'erreur) pour un rendu identique.
 
 import { esc } from "./astreinte-logic.js";
-import { renderQrWithLogo } from "./qr-logo.js";
+import { renderQrWithLogo, rasterizeQrSvgsIn } from "./qr-logo.js";
 import { getImageDisplayUrl } from "./sharepoint-storage.js";
 import { watchStockProduits } from "./stock-data.js";
 import { qrPayloadFor } from "./stock.js";
@@ -207,6 +207,12 @@ async function genererEtImprimer() {
     ...items.map((it, i) => renderQrWithLogo(document.getElementById(`qm-qr-${i}`), payloadPour(it), photoDe(it) ? tailleAvecPhoto : taille)),
     Promise.race([Promise.all(photos), new Promise(ok => setTimeout(ok, 30000))]),
   ]);
+
+  // QR en SVG : rasterisés en image avant impression — un clip-path SVG
+  // avec un rect par module du QR (souvent 1000+) ne s'imprime pas de
+  // façon fiable avec Chrome (voir rasterizeQrSvgsIn dans qr-logo.js),
+  // d'autant plus visible ici avec plusieurs QR sur la même feuille.
+  await rasterizeQrSvgsIn(printRoot);
 
   statusEl.innerHTML = "";
   window.print();
