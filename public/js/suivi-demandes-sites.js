@@ -836,7 +836,13 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   const qS = sa(st.qSite.trim());
   const compact = (x) => sa(x).replace(/[\s\-_.\/]+/g, "");
   const qC = compact(qS);
-  const filtreQ = (l) => { if (!qS) return true; const t = `${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type} ${l.commentaireTech || ""} ${l.intervenant || ""}`; return sa(t).includes(qS) || (qC.length >= 2 && compact(t).includes(qC)); };
+  // Recherche d'un nombre seul (ex. « 31 ») : on cherche le logement / local
+  // n° 31 (ou la demande SG-0031), pas « 31 » dans le texte (31/08, 1310…).
+  const qNum = /^\d{1,4}$/.test(qS) ? Number(qS) : null;
+  const nums = (x) => (String(x || "").match(/\d+/g) || []).map(Number);
+  const filtreQ = (l) => { if (!qS) return true;
+    if (qNum != null) return nums(l.local).includes(qNum) || nums(l.n).includes(qNum);
+    const t = `${l.local} ${l.n} ${l.descr} ${l.demandeur} ${l.type} ${l.commentaireTech || ""} ${l.intervenant || ""}`; return sa(t).includes(qS) || (qC.length >= 2 && compact(t).includes(qC)); };
   const ouvertesToutes = duSite.filter(l => A_TRAITER(l.statut) && filtreQ(l));
   const ouvertes = ouvertesToutes.filter(l => !st.ie || ieDe(l) === st.ie).sort((TRIS[st.tri] || TRIS.urgence)[1]);
   const traitees = duSite.filter(l => TRAITE(l.statut) && filtreQ(l)).sort((a, b) => (b.dateIntervention || b.dateStatut || b.date || "").localeCompare(a.dateIntervention || a.dateStatut || a.date || ""));
@@ -985,7 +991,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       : techsDuSite(st.site).length ? `<div class="dps-affect"><span>👷 ${esc(techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "))}</span></div>` : ""}
     ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Réalisations et annulations déclarées par les techniciens — vérifie puis valide ou refuse." : "Envoyées au superviseur : en attente de sa validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
     <div class="dps-tri-barre">
-      <label class="dps-recherche"><span>🔎</span><input id="dps-qsite" type="search" placeholder="Logement, local, N°, mot du descriptif…" value="${esc(st.qSite)}"></label>
+      <label class="dps-recherche"><span>🔎</span><input id="dps-qsite" type="search" placeholder="N° de logement (ex. 31), local, SG-…, mot du descriptif…" title="Un nombre seul (ex. 31) cherche ce logement / local précis. Pour chercher un nombre dans le texte, ajoute autre chose (ex. 31/08)." value="${esc(st.qSite)}"></label>
       <div class="dps-ie-filtre">${[["", "Toutes"], ["interne", "🔧 Interne"], ["externe", "🏢 Externe"], ["nd", "❔ Non défini"]].map(([k, lib]) => { const n = k ? ouvertesToutes.filter(l => ieDe(l) === k).length : ouvertesToutes.length; return (k && !n && st.ie !== k) ? "" : `<button type="button" data-ie-filtre="${k}" class="${st.ie === k ? "on" : ""}">${lib} <small>${n}</small></button>`; }).join("")}</div>
       <label class="dps-tri">Trier par<select id="dps-tri">${Object.entries(TRIS).map(([k, [lib]]) => `<option value="${k}" ${st.tri === k ? "selected" : ""}>${lib}</option>`).join("")}</select></label>
     </div>
