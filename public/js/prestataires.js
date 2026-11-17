@@ -256,7 +256,7 @@ export function renderPrestataires(container, lignes, { toggleHTML, onToggle, ma
   $("[data-pst-imprimer]")?.addEventListener("click", () => {
     const b = courant; if (!b) return;
     const coord = [b.e.metier, b.e.contact, b.e.tel, b.e.email].filter(Boolean).map(esc).join(" · ");
-    imprimerListe({ titre: `🏢 ${b.e.nom}`, sousTitre: coord, pourEntreprise: true, sections: [{ titre: "À faire", liste: b.aFaire }, { titre: "En attente de validation", liste: b.enValid }, { titre: "Réalisées (30 derniers jours)", liste: b.faites.filter(l => (jours(l.dateIntervention || l.dateStatut) ?? 99) <= 30) }] });
+    imprimerListe({ titre: `🏢 ${b.e.nom}`, sousTitre: coord, pourEntreprise: true, sections: [{ titre: "À faire", liste: b.aFaire }] }); // les demandes déjà réalisées ne s'impriment pas
   });
   $("[data-pst-mail]")?.addEventListener("click", () => {
     const b = courant; if (!b) return;

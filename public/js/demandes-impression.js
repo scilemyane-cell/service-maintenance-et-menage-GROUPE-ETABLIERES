@@ -141,7 +141,7 @@ export function ouvrirImpressionSite({ site, techs, ouvertes, enValidation, trai
   m.innerHTML = `<div class="ndm imp-modal" role="dialog" aria-modal="true">
     <div class="ndm-tete"><h3>🖨 Récapitulatif — ${esc(site)}</h3></div>
     <label class="imp-ch"><input type="checkbox" data-imp="ouvertes" checked> À traiter <b>(${ouvertes.length})</b></label>
-    <label class="imp-ch"><input type="checkbox" data-imp="valid" ${enValidation.length ? "checked" : ""}> En attente de validation <b>(${enValidation.length})</b></label>
+    <label class="imp-ch"><input type="checkbox" data-imp="valid"> Réalisées, en attente de validation <b>(${enValidation.length})</b></label>
     <label class="imp-ch"><input type="checkbox" data-imp="traitees"> Traitées (30 derniers jours) <b>(${traitees.filter(recente).length})</b></label>
     <label class="imp-ch">Classer par <select data-imp="ordre"><option value="local">Logement / local</option><option value="urgence">Urgence</option></select></label>
     <div class="ndm-btns"><button type="button" class="dps-annuler" data-imp-annuler>Annuler</button><button type="button" class="dps-enregistrer" data-imp-go>🖨 Imprimer</button></div>
