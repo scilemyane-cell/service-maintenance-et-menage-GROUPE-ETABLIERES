@@ -1246,8 +1246,8 @@ async function genererInterventionsRecurrence(rec, user) {
 // Tournées hebdomadaires sur site (planning « présence sur site » du 18/11/2026).
 // Créées en un clic depuis le planning individuel ; jours = 0 lundi … 4 vendredi.
 const TOURNEES_SITES = {
-  yann: [[0, "bois blanc", 1, "2026-11-23"], [1, "relais", 1, "2026-11-24"], [2, "le mail", 1, "2026-11-25"], [3, "trois portes", 1, "2026-11-26"]],
-  kevin: [[0, "preles", 2, "2026-11-23"], [0, "le cap", 2, "2026-11-30"], [1, "la yole", 1, "2026-11-24"], [3, "agro rs", 1, "2026-11-26"], [4, "cecile sauvage", 1, "2026-11-27"]],
+  yann: [[0, "bois blanc", 1, "2026-11-23"], [1, "relais", 1, "2026-11-24"], [2, "le mail", 1, "2026-11-25"], [3, "3 portes", 1, "2026-11-26"]],
+  kevin: [[0, "preles", 2, "2026-11-23"], [0, "le cap", 2, "2026-11-30"], [1, "la yole", 1, "2026-11-24"], [3, "resagropolisrs", 1, "2026-11-26"], [4, "cecile sauvage", 1, "2026-11-27"]],
 };
 function tourneesPrevues(person) {
   const p = sansAccentSite(person), cle = Object.keys(TOURNEES_SITES).find(k => p.split(/\s+/).includes(k) || p.startsWith(k));
@@ -1258,9 +1258,11 @@ function tourneesPrevues(person) {
     let trouve = null;
     for (const a of state.associations) {
       // On préfère le site « RS - … » (résidences) si plusieurs correspondent.
-      const cands = (a.sites || []).filter(s => sansAccentSite(s.nom).includes(motCle));
-      const s = cands.find(x => /^rs\b/i.test(sansAccentSite(x.nom))) || cands[0];
-      if (s && (!trouve || (/^rs\b/i.test(sansAccentSite(s.nom)) && !/^rs\b/i.test(sansAccentSite(trouve.site))))) trouve = { association: a.nom, groupe: s.groupe || "", site: s.nom };
+      // Sites effectifs (association + fiches « Dossiers de site »), sous-service Résidence en priorité.
+      const res = (x) => /^r(s|esidence)\b/.test(sansAccentSite(x.groupe));
+      const cands = ((associationEffective(a.nom) || a).sites || []).filter(s => sansAccentSite(s.nom).includes(motCle));
+      const s = cands.find(res) || cands[0];
+      if (s && (!trouve || (res(s) && !res({ groupe: trouve.groupe })))) trouve = { association: a.nom, groupe: s.groupe || "", site: s.nom };
     }
     return { jour, motCle, freq, debut, ...(trouve || {}) };
   });
