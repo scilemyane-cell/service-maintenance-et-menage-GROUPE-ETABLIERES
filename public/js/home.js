@@ -774,7 +774,8 @@ function render() {
   const toutesPersonnes = [...new Set([...(people.n1 || []), ...(people.n2 || [])])];
   const maPersonne = personnePlanning(mountedUser, toutesPersonnes);
   const horsAstreinte = !!maPersonne && !peopleAstreinte.n1.includes(maPersonne) && !peopleAstreinte.n2.includes(maPersonne);
-  if (horsAstreinte && !interventionsUnsub) {
+  // Aussi pour ceux d'astreinte : le bloc « Où je vais » a besoin de leurs tournées.
+  if (maPersonne && !interventionsUnsub) {
     const u1 = watchInterventionsDepuis(dateKey(new Date()), (l) => { interventions = l; scheduleRender(); });
     const u2 = watchRecurrences((l) => { recurrences = l; scheduleRender(); });
     interventionsUnsub = () => { u1(); u2(); };
