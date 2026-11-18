@@ -1243,6 +1243,28 @@ async function genererInterventionsRecurrence(rec, user) {
   return aCreer.length;
 }
 
+// Tournées hebdomadaires sur site (planning « présence sur site » du 18/11/2026).
+// Créées en un clic depuis le planning individuel ; jours = 0 lundi … 4 vendredi.
+const TOURNEES_SITES = {
+  yann: [[0, "bois blanc", 1, "2026-11-23"], [1, "relais", 1, "2026-11-24"], [2, "le mail", 1, "2026-11-25"], [3, "trois portes", 1, "2026-11-26"]],
+  kevin: [[0, "preles", 2, "2026-11-23"], [0, "le cap", 2, "2026-11-30"], [1, "la yole", 1, "2026-11-24"], [3, "agro rs", 1, "2026-11-26"], [4, "cecile sauvage", 1, "2026-11-27"]],
+};
+function tourneesPrevues(person) {
+  const p = sansAccentSite(person), cle = Object.keys(TOURNEES_SITES).find(k => p.split(/\s+/).includes(k) || p.startsWith(k));
+  if (!cle) return null;
+  const dejaLa = state.recurrences.some(r => r.person === person && /tourn/i.test(r.type || ""));
+  if (dejaLa) return null;
+  return TOURNEES_SITES[cle].map(([jour, motCle, freq, debut]) => {
+    let trouve = null;
+    for (const a of state.associations) {
+      // On préfère le site « RS - … » (résidences) si plusieurs correspondent.
+      const cands = (a.sites || []).filter(s => sansAccentSite(s.nom).includes(motCle));
+      const s = cands.find(x => /^rs\b/i.test(sansAccentSite(x.nom))) || cands[0];
+      if (s && (!trouve || (/^rs\b/i.test(sansAccentSite(s.nom)) && !/^rs\b/i.test(sansAccentSite(trouve.site))))) trouve = { association: a.nom, groupe: s.groupe || "", site: s.nom };
+    }
+    return { jour, motCle, freq, debut, ...(trouve || {}) };
+  });
+}
 function renderRecurrencesPanel(person) {
   const recs = state.recurrences.filter(r => r.person === person);
   const f = ui.recurForm;
@@ -1257,6 +1279,12 @@ function renderRecurrencesPanel(person) {
   return `
     <details id="rf-details" class="names-editor" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 15px" ${isOpen ? "open" : ""}>
       <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">🔁 Planning récurrent — entretiens réguliers de ${esc(person)}</summary>
+      ${(() => { const t = tourneesPrevues(person); if (!t) return ""; const ko = t.filter(x => !x.site);
+        return `<div style="margin:10px 0;padding:10px 12px;border-radius:10px;background:rgba(184,134,11,.12);border-left:4px solid var(--gold)">
+          <b>🗓️ Tournées sur site de ${esc(person)}</b> (une journée par site et par semaine, sauf congés)<br>
+          <span style="font-size:12px">${t.map(x => `${JOURS_SEMAINE[x.jour]}${x.freq > 1 ? " (1 sem./2)" : ""} : ${esc(x.site || "⚠️ site « " + x.motCle + " » introuvable")}`).join(" · ")}</span><br>
+          <button type="button" class="add-btn" id="rf-tournees" style="margin-top:8px" ${ko.length ? "disabled" : ""}>➕ Créer ces tournées dans son planning</button>
+        </div>`; })()}
       <p style="font-size:11px;color:var(--text-dim);margin:10px 0">Définis une règle (ex. "toutes les 2 semaines, le mardi, tonte de la Résidence Le Mail") puis clique "Générer" pour créer les interventions à venir (~4 mois) — elles apparaissent ensuite normalement dans l'onglet Interventions et ici (pastille violette). Reclique "Générer" de temps en temps pour prolonger le planning. Pour un entretien ponctuel hors récurrence, clique directement une date du calendrier ci-dessous.</p>
       ${recs.length ? `
       <div class="table-wrap" style="margin-bottom:12px">
@@ -1657,6 +1685,21 @@ function renderPlanningIndividuel(container, perms) {
       if (!(await window.confirmDialog("Supprimer cette récurrence ? Les interventions déjà générées ne sont pas supprimées.", { danger: true, texteValider: "Supprimer" }))) return;
       await deleteRecurrence(btn.dataset.recurDel);
     }));
+    document.getElementById("rf-tournees")?.addEventListener("click", async (e) => {
+      const person = ui.planningIndivPerson || document.getElementById("pi-personne")?.value || "";
+      const t = tourneesPrevues(person); if (!t || t.some(x => !x.site)) return;
+      const b = e.currentTarget; b.disabled = true; b.textContent = "⏳ Création…";
+      let n = 0;
+      try {
+        for (const x of t) {
+          const rec = { person, association: x.association, groupe: x.groupe, site: x.site, type: "Tournée", heureDebut: "08:00", heureFin: "16:30",
+            description: "Tournée hebdomadaire sur site", frequenceSemaines: x.freq, jourSemaine: x.jour, dateDebut: x.debut, dateFin: "" };
+          const ref = await addRecurrence({ ...rec, createdBy: mountedUser.uid, createdByName: mountedUser.nom || mountedUser.email });
+          n += await genererInterventionsRecurrence({ ...rec, id: ref?.id || ref }, mountedUser);
+        }
+        window.toast(`Tournées créées : ${t.length} sites, ${n} journées planifiées (congés exclus).`);
+      } catch (err) { console.error(err); window.toast("Échec de la création des tournées : " + (err.message || err)); b.disabled = false; b.textContent = "➕ Créer ces tournées dans son planning"; }
+    });
     container.querySelectorAll("[data-recur-generer]").forEach(btn => btn.addEventListener("click", async () => {
       const rec = state.recurrences.find(r => r.id === btn.dataset.recurGenerer); if (!rec) return;
       btn.disabled = true; const texteInitial = btn.textContent; btn.textContent = "⏳…";
