@@ -37,3 +37,13 @@ export function sansAbsences(dates, person, absences) {
   if (!abs.length) return dates;
   return dates.filter(d => !abs.some(a => String(a.start).slice(0, 10) <= d && String(a.end || a.start).slice(0, 10) >= d && compteCeJour(a, d)));
 }
+
+// Code couleur par site (même couleur dans le planning individuel et sur l'accueil).
+export const PALETTE_SITES = ["#2563EB", "#16A34A", "#DB2777", "#0891B2", "#1F2937", "#4F46E5", "#65A30D", "#475569", "#E11D48", "#0D9488"];
+export const siteCourt = (n) => String(n || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+export function couleursSites(recurrences, person) {
+  const p = normP(person);
+  const sites = [...new Set((recurrences || []).filter(r => normP(r.person) === p && !r.supprimeLe && r.site)
+    .sort((a, b) => (a.jourSemaine ?? 0) - (b.jourSemaine ?? 0) || String(a.dateDebut).localeCompare(String(b.dateDebut))).map(r => siteCourt(r.site)))];
+  return new Map(sites.map((n, i) => [n, PALETTE_SITES[i % PALETTE_SITES.length]]));
+}

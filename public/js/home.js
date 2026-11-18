@@ -2,7 +2,7 @@ import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
 import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
-import { genererOccurrencesRecurrence, sansAbsences } from "./recurrence-utils.js";
+import { genererOccurrencesRecurrence, sansAbsences, couleursSites, siteCourt } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -318,6 +318,40 @@ function personnePlanning(user, toutes) {
   return toutes.find(p => cibles.includes(normNom(p)))
     || toutes.find(p => prenom && normNom(p).split(/\s+/)[0] === prenom)
     || null;
+}
+// « Où je vais » : aujourd'hui / prochain jour ouvré, en gros et en couleur
+// (tablette des techniciens en tournée sur site).
+function blocOuJeVaisHTML(personne) {
+  if (!personne || interventions === null) return "";
+  const estMoi = n => normNom(n) === normNom(personne);
+  const mesRecs = recurrences.filter(r => estMoi(r.person) && !r.supprimeLe && r.actif !== false);
+  if (!mesRecs.length) return "";
+  const couleurs = couleursSites(recurrences, personne);
+  const ouvre = (d) => { let x = addDays(d, 1); while (x.getDay() === 0 || x.getDay() === 6) x = addDays(x, 1); return x; };
+  const jour = (d) => {
+    const k = dateKey(d);
+    const abs = absences.find(a => estMoi(a.person) && a.start <= k && (a.end || a.start) >= k && compteCeJour(a, k));
+    if (abs) return { abs };
+    const reelle = interventions.find(i => estMoi(i.technicien) && i.date === k && i.recurrenceId && !i.supprimeLe);
+    if (reelle) return { site: reelle.site, debut: reelle.heureDebut, fin: reelle.heureFin };
+    const r = mesRecs.find(r => sansAbsences(genererOccurrencesRecurrence(r, addDays(d, 1)), r.person, absences).includes(k));
+    return r ? { site: r.site, debut: r.heureDebut, fin: r.heureFin } : {};
+  };
+  const LIB = { conge: "🌴 Congé", rtt: "🌴 RTT", arret: "Arrêt", enfant: "Enfant malade", mtt: "Absent" };
+  const ligne = (titre, d) => {
+    const j = jour(d), nom = j.site ? siteCourt(j.site) : "", c = nom ? (couleurs.get(nom) || "#2563EB") : "";
+    const texte = j.abs ? (LIB[j.abs.type] || "Absent") : nom || "Pas de tournée — demandes / urgences";
+    const quand = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    return `<div style="border-radius:12px;padding:10px 12px;margin:6px 0;${c ? `background:${c};color:#fff` : "background:#fff;color:#1B2330;border:1px solid #ccd"}">
+      <div style="font-size:12px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.03em">${titre} · ${esc(quand)}</div>
+      <div style="font-size:22px;font-weight:800;line-height:1.2;margin-top:2px">${c ? "📍 " : ""}${esc(texte)}</div>
+      ${nom && j.debut ? `<div style="font-size:13px;opacity:.9">${esc(j.debut)}${j.fin ? ` – ${esc(j.fin)}` : ""}</div>` : ""}
+    </div>`;
+  };
+  const auj = new Date(); auj.setHours(12, 0, 0, 0);
+  const estOuvre = auj.getDay() !== 0 && auj.getDay() !== 6;
+  const suivant = ouvre(auj), nomSuivant = suivant.getDay() === (auj.getDay() + 1) % 7 ? "Demain" : "Prochain jour";
+  return `<div class="gh-astreinte"><p class="gh-astreinte-titre">Où je vais</p>${estOuvre ? ligne("Aujourd'hui je suis à", auj) : ""}${ligne(nomSuivant === "Demain" ? "Demain je vais à" : "Prochaine tournée", suivant)}</div>`;
 }
 function blocMonPlanningHTML(personne) {
   const auj = dateKey(new Date());
@@ -885,6 +919,7 @@ function render() {
         <section class="gh-notifs gh-rouge">
           <h3>${notifs.length} Notification${notifs.length > 1 ? "s" : ""}</h3>
           <div class="gh-notifs-corps">
+            ${blocOuJeVaisHTML(maPersonne)}
             ${horsAstreinte ? blocMonPlanningHTML(maPersonne) : hasPeople ? `
               <div class="gh-astreinte">
                 <p class="gh-astreinte-titre">Astreinte aujourd'hui</p>

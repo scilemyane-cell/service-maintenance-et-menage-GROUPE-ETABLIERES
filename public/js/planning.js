@@ -24,7 +24,7 @@ import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js
 import { imprimerFicheIsolee } from "./print-fiche.js";
 import { redigerCompteRendu, reformulerDecision } from "./ia.js";
 import { nomPropre } from "./sites-visuel.js";
-import { genererOccurrencesRecurrence, sansAbsences } from "./recurrence-utils.js";
+import { genererOccurrencesRecurrence, sansAbsences, couleursSites, siteCourt } from "./recurrence-utils.js";
 import { listeVive } from "./listes-config.js";
 export { genererOccurrencesRecurrence };
 
@@ -1574,10 +1574,7 @@ function renderPlanningIndividuel(container, perms) {
   });
 
   // Code couleur par site pour les passages programmés (tournées, entretiens).
-  const PALETTE_SITES = ["#2563EB", "#16A34A", "#DB2777", "#0891B2", "#1F2937", "#4F46E5", "#65A30D", "#475569", "#E11D48", "#0D9488"];
-  const siteCourt = (n) => String(n || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
-  const sitesPerso = [...new Set((state.recurrences || []).filter(r => r.person === person && !r.supprimeLe && r.site).sort((a, b) => (a.jourSemaine ?? 0) - (b.jourSemaine ?? 0) || String(a.dateDebut).localeCompare(String(b.dateDebut))).map(r => siteCourt(r.site)))];
-  const couleurSite = new Map(sitesPerso.map((n, i) => [n, PALETTE_SITES[i % PALETTE_SITES.length]]));
+  const couleurSite = couleursSites(state.recurrences, person);
   const moisHTML = PLANNING_MOIS_SCOLAIRE.map(({ label, mois: mIdx, decalage }) => {
     const anneeReelle = year + decalage;
     const jours = monthGrid(anneeReelle, mIdx);
