@@ -42,7 +42,11 @@ const MOIS = { janv: 1, fevr: 2, mars: 3, avr: 4, mai: 5, juin: 6, juil: 7, aout
 const iso = (y, m, d) => { const dt = new Date(Date.UTC(y, m - 1, d)); return isNaN(dt) || dt.getUTCMonth() !== m - 1 || y < 2020 || y > new Date().getFullYear() + 1 ? "" : dt.toISOString().slice(0, 10); };
 
 // Dates du fichier : vraies dates Excel, "18082026", "210926", "21/09/2026", "MARDI 4 AOUT"…
-function versIso(v, anneeRef) {
+// Année tapée de travers (« 52026 », « 20026 », « 206 ») : on ne l'invente pas,
+// la date est laissée vide plutôt que de fausser l'ancienneté et les stats.
+const anneeOk = (d) => { const y = +String(d).slice(0, 4), a = new Date().getFullYear(); return y >= 2020 && y <= a + 1 ? d : ""; };
+function versIso(v, anneeRef) { const r = versIsoBrut(v, anneeRef); return r ? anneeOk(r) : r; }
+function versIsoBrut(v, anneeRef) {
   if (v == null || v === "") return "";
   if (v instanceof Date) return iso(v.getFullYear(), v.getMonth() + 1, v.getDate());
   if (typeof v === "number") {
@@ -54,8 +58,8 @@ function versIso(v, anneeRef) {
   }
   const t = sa(v);
   let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return iso(+m[1], +m[2], +m[3]);
-  m = t.match(/(\d{1,2})[/.\-*](\d{1,2})[/.\-*]?(\d{2,4})/); if (m) { let y = +m[3].slice(0, 4); if (y < 100) y += 2000; return iso(y, +m[2], +m[1]); }
-  if (/^\d{6,8}$/.test(t)) return versIso(+t, anneeRef);
+  m = t.match(/(\d{1,2})[/.\-*](\d{1,2})[/.\-*]?(\d{2,})/); if (m) { if (m[3].length !== 2 && m[3].length !== 4) return ""; let y = +m[3]; if (y < 100) y += 2000; return iso(y, +m[2], +m[1]); }
+  if (/^\d{6,8}$/.test(t)) return versIsoBrut(+t, anneeRef);
   m = t.match(/(\d{1,2})\D.*?(janv|fevr|mars|avr|mai|juin|juil|aout|sept|oct|nov|dec)/);
   if (m) return iso(anneeRef || new Date().getFullYear(), MOIS[m[2]], +m[1]);
   return "";
