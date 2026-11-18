@@ -1382,6 +1382,9 @@ function renderJourDetail(person, interventionsJour) {
 // Vue « semaines » de l'équipe : 1 ou 2 semaines ouvrées, sites écrits en
 // clair, absences en barres continues, 4 couleurs sobres.
 const URGENCES_MATIN = { yann: 4, kevin: 2 }; // 0 = lundi … 4 = vendredi (planning du 18/11/2026)
+// « LE CAP » → « Le Cap », « Blanche de castille BAT A RS » → « Blanche de Castille ».
+const joliSite = (n) => siteCourt(n).replace(/\s+(BAT\b.*|RS)$/i, "").toLowerCase()
+  .replace(/(^|[\s'’-])(\p{L})/gu, (m, a, c) => a + c.toUpperCase()).replace(/\b(De|Du|Des|Et)\b/g, (m) => m.toLowerCase());
 function monterVueSemaines(container, personnes, couleurBinome, nbSem) {
   const lundiDe = (d) => { const x = new Date(d); x.setHours(12, 0, 0, 0); return addDays(x, -((x.getDay() + 6) % 7)); };
   if (!ui.planningMultiDebut) ui.planningMultiDebut = dateKey(lundiDe(new Date()));
@@ -1403,7 +1406,7 @@ function monterVueSemaines(container, personnes, couleurBinome, nbSem) {
     const ferie = HOLIDAYS.get(k); if (ferie) return { cle: "f", t: `Férié · ${ferie}`, sty: STY.gris };
     const iv = state.interventions.filter(i => i.technicien === p && i.date === k && !i.supprimeLe);
     const t = iv.find(i => i.recurrenceId);
-    if (t) return { cle: "t" + siteCourt(t.site), t: siteCourt(t.site), sty: STY.tournee, titre: `${siteCourt(t.site)} — ${t.type || "Tournée"}${t.heureDebut ? ` · ${t.heureDebut}–${t.heureFin || ""}` : ""}` };
+    if (t) return { cle: "t" + siteCourt(t.site), t: joliSite(t.site), sty: STY.tournee, titre: `${siteCourt(t.site)} — ${t.type || "Tournée"}${t.heureDebut ? ` · ${t.heureDebut}–${t.heureFin || ""}` : ""}` };
     if (iv.length) return { cle: "i" + k, t: iv.length > 1 ? `${iv.length} interventions` : `Interv. · ${siteCourt(iv[0].site) || iv[0].type || ""}`, sty: STY.interv };
     const u = URGENCES_MATIN[sansAccentSite(p).split(/\s+/)[0]];
     if (u !== undefined && (d.getDay() + 6) % 7 === u && k >= "2026-11-23") return { cle: "u" + k, t: "Urgences (matin)", sty: STY.gris };
@@ -1428,7 +1431,7 @@ function monterVueSemaines(container, personnes, couleurBinome, nbSem) {
       // Absences / fériés consécutifs (même semaine) fusionnés en une barre.
       if (e && /^[af]/.test(e.cle)) while (i + n < jours.length && (i + n) % 5 !== 0 && evs[i + n]?.cle === e.cle) n++;
       const ajd = jours.slice(i, i + n).some(d => dateKey(d) === auj);
-      h += `<div style="${cell(i, `grid-column:span ${n};display:flex;align-items:center;padding:3px;${ajd ? "background:rgba(37,99,235,.06);" : ""}`)}">${e ? `<div title="${esc(e.titre || e.t)}" style="width:100%;padding:5px 8px;border-radius:${/border-left/.test(e.sty) ? "0" : "6px"};font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${e.sty}">${esc(e.t)}</div>` : ""}</div>`;
+      h += `<div style="${cell(i, `grid-column:span ${n};display:flex;align-items:center;padding:3px;${ajd ? "background:rgba(37,99,235,.06);" : ""}`)}">${e ? `<div title="${esc(e.titre || e.t)}" style="width:100%;padding:5px 8px;border-radius:${/border-left/.test(e.sty) ? "0" : "6px"};font-size:12px;font-weight:600;line-height:1.25;word-break:break-word;${e.sty}">${esc(e.t)}</div>` : ""}</div>`;
       i += n;
     }
   });
