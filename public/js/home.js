@@ -351,7 +351,13 @@ function blocOuJeVaisHTML(personne) {
   const auj = new Date(); auj.setHours(12, 0, 0, 0);
   const estOuvre = auj.getDay() !== 0 && auj.getDay() !== 6;
   const suivant = ouvre(auj), nomSuivant = suivant.getDay() === (auj.getDay() + 1) % 7 ? "Demain" : "Prochain jour";
-  return `<div class="gh-astreinte"><p class="gh-astreinte-titre">Où je vais</p>${estOuvre ? ligne("Aujourd'hui je suis à", auj) : ""}${ligne(nomSuivant === "Demain" ? "Demain je vais à" : "Prochaine tournée", suivant)}</div>`;
+  // Ni aujourd'hui ni le jour suivant en tournée (congé, pas de passage) : on montre la prochaine.
+  let prochaine = "";
+  if (!(estOuvre && jour(auj).site) && !jour(suivant).site) {
+    let d = suivant;
+    for (let n = 0; n < 20; n++) { d = ouvre(d); if (jour(d).site) { prochaine = ligne("Prochaine tournée", d); break; } }
+  }
+  return `<div class="gh-astreinte"><p class="gh-astreinte-titre">Où je vais</p>${estOuvre ? ligne("Aujourd'hui je suis à", auj) : ""}${ligne(nomSuivant === "Demain" ? "Demain je vais à" : "Prochain jour", suivant)}${prochaine}</div>`;
 }
 function blocMonPlanningHTML(personne) {
   const auj = dateKey(new Date());
