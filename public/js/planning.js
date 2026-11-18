@@ -1315,6 +1315,7 @@ function renderRecurrencesPanel(person) {
             <option value="2" ${Number(f.frequenceSemaines) === 2 ? "selected" : ""}>Toutes les 2 semaines</option>
             <option value="3" ${Number(f.frequenceSemaines) === 3 ? "selected" : ""}>Toutes les 3 semaines</option>
             <option value="4" ${Number(f.frequenceSemaines) === 4 ? "selected" : ""}>Toutes les 4 semaines (≈ mensuel)</option>
+            ${[5, 6, 8].map(n => `<option value="${n}" ${Number(f.frequenceSemaines) === n ? "selected" : ""}>Toutes les ${n} semaines</option>`).join("")}
           </select>
         </label>
         <label>Jour<select id="rf-jour">${JOURS_SEMAINE.map((j, i) => `<option value="${i}" ${Number(f.jourSemaine) === i ? "selected" : ""}>${j}</option>`).join("")}</select></label>
