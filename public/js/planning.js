@@ -1379,12 +1379,83 @@ function renderJourDetail(person, interventionsJour) {
 // mois de l'année scolaire, pour voir d'un coup d'œil qui est présent,
 // absent ou déjà en intervention ce jour-là (utile en réunion de
 // planification, plutôt que d'ouvrir les plannings un par un).
+// Vue « semaines » de l'équipe : 1 ou 2 semaines ouvrées, sites écrits en
+// clair, absences en barres continues, 4 couleurs sobres.
+const URGENCES_MATIN = { yann: 4, kevin: 2 }; // 0 = lundi … 4 = vendredi (planning du 18/11/2026)
+function monterVueSemaines(container, personnes, couleurBinome, nbSem) {
+  const lundiDe = (d) => { const x = new Date(d); x.setHours(12, 0, 0, 0); return addDays(x, -((x.getDay() + 6) % 7)); };
+  if (!ui.planningMultiDebut) ui.planningMultiDebut = dateKey(lundiDe(new Date()));
+  const debut = new Date(ui.planningMultiDebut + "T12:00:00");
+  const jours = [];
+  for (let w = 0; w < nbSem; w++) for (let i = 0; i < 5; i++) jours.push(addDays(debut, w * 7 + i));
+  const auj = dateKey(new Date());
+  const fin = jours[jours.length - 1];
+  const fmt = (d, o) => d.toLocaleDateString("fr-FR", o);
+  const STY = {
+    tournee: "background:#E6F1FB;color:#0C447C;border-left:3px solid #185FA5",
+    conge: "background:#FAEEDA;color:#633806", arret: "background:#FCEBEB;color:#791F1F",
+    gris: "background:#F1EFE8;color:#444441", interv: "background:#EEEDFE;color:#3C3489",
+  };
+  const LIB = { conge: "Congé", rtt: "RTT", arret: "Arrêt de travail", enfant: "Enfant malade", mtt: "Mi-temps thérap." };
+  const evtJour = (p, d) => {
+    const k = dateKey(d), abs = absenceDuJour(p, k);
+    if (abs) return { cle: "a" + abs.type, t: LIB[abs.type] || "Absent", sty: abs.type === "arret" ? STY.arret : STY.conge };
+    const ferie = HOLIDAYS.get(k); if (ferie) return { cle: "f", t: `Férié · ${ferie}`, sty: STY.gris };
+    const iv = state.interventions.filter(i => i.technicien === p && i.date === k && !i.supprimeLe);
+    const t = iv.find(i => i.recurrenceId);
+    if (t) return { cle: "t" + siteCourt(t.site), t: siteCourt(t.site), sty: STY.tournee, titre: `${siteCourt(t.site)} — ${t.type || "Tournée"}${t.heureDebut ? ` · ${t.heureDebut}–${t.heureFin || ""}` : ""}` };
+    if (iv.length) return { cle: "i" + k, t: iv.length > 1 ? `${iv.length} interventions` : `Interv. · ${siteCourt(iv[0].site) || iv[0].type || ""}`, sty: STY.interv };
+    const u = URGENCES_MATIN[sansAccentSite(p).split(/\s+/)[0]];
+    if (u !== undefined && (d.getDay() + 6) % 7 === u && k >= "2026-11-23") return { cle: "u" + k, t: "Urgences (matin)", sty: STY.gris };
+    return null;
+  };
+  const cell = (i, extra = "") => `border-bottom:0.5px solid var(--border);${i % 5 === 0 && i ? "border-left:1px solid var(--border);" : ""}${extra}`;
+  let h = `<div class="toolbar" style="align-items:center;margin-top:4px">
+      <button type="button" class="nav-btn" id="ps-prec" aria-label="Semaine précédente">‹</button>
+      <b style="font-size:15px">${fmt(debut, { day: "numeric", month: "short" })} → ${fmt(fin, { day: "numeric", month: "short", year: "numeric" })}</b>
+      <button type="button" class="nav-btn" id="ps-suiv" aria-label="Semaine suivante">›</button>
+      <button type="button" class="nav-btn" id="ps-auj">Aujourd'hui</button>
+    </div>
+    <div style="display:grid;grid-template-columns:110px repeat(${jours.length},minmax(0,1fr));font-size:12px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--panel)">
+      <div style="${cell(0, "background:var(--panel-2, rgba(127,127,127,.06))")}"></div>
+      ${jours.map((d, i) => `<div style="${cell(i, `padding:6px 2px;text-align:center;background:${dateKey(d) === auj ? "rgba(37,99,235,.12)" : "var(--panel-2, rgba(127,127,127,.06))"}`)}"><div style="font-size:11px;color:var(--text-dim);text-transform:capitalize">${fmt(d, { weekday: "short" })}</div><div style="font-weight:700;font-size:14px">${d.getDate()}</div></div>`).join("")}`;
+  personnes.forEach(p => {
+    h += `<div style="${cell(0, `padding:0 10px;display:flex;align-items:center;font-weight:700;min-height:38px;${couleurBinome(p) ? `background:${couleurBinome(p)};color:#1A1305` : ""}`)}">${esc(p)}</div>`;
+    const evs = jours.map(d => evtJour(p, d));
+    for (let i = 0; i < jours.length;) {
+      const e = evs[i];
+      let n = 1;
+      // Absences / fériés consécutifs (même semaine) fusionnés en une barre.
+      if (e && /^[af]/.test(e.cle)) while (i + n < jours.length && (i + n) % 5 !== 0 && evs[i + n]?.cle === e.cle) n++;
+      const ajd = jours.slice(i, i + n).some(d => dateKey(d) === auj);
+      h += `<div style="${cell(i, `grid-column:span ${n};display:flex;align-items:center;padding:3px;${ajd ? "background:rgba(37,99,235,.06);" : ""}`)}">${e ? `<div title="${esc(e.titre || e.t)}" style="width:100%;padding:5px 8px;border-radius:${/border-left/.test(e.sty) ? "0" : "6px"};font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${e.sty}">${esc(e.t)}</div>` : ""}</div>`;
+      i += n;
+    }
+  });
+  h += `</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-top:8px">
+      <span><i style="display:inline-block;width:11px;height:11px;vertical-align:-1px;${STY.tournee}"></i> Tournée sur site</span>
+      <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;${STY.interv}"></i> Intervention</span>
+      <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;${STY.conge}"></i> Congé / RTT</span>
+      <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;${STY.arret}"></i> Arrêt</span>
+      <span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;${STY.gris}"></i> Urgences / férié</span>
+    </div>`;
+  container.querySelectorAll(".year-cal-legend, .table-wrap").forEach(e => e.remove());
+  const zone = document.createElement("div"); zone.innerHTML = h;
+  (container.querySelector(".stack") || container).appendChild(zone);
+  const aller = (n) => { ui.planningMultiDebut = dateKey(addDays(debut, n)); renderAll(); };
+  document.getElementById("ps-prec").addEventListener("click", () => aller(-7));
+  document.getElementById("ps-suiv").addEventListener("click", () => aller(7));
+  document.getElementById("ps-auj").addEventListener("click", () => { ui.planningMultiDebut = null; renderAll(); });
+}
 function renderVueMultiPersonnes(container, allPeople) {
   const year = ui.planningIndivYear;
   if (!ui.planningMultiPersonnes) ui.planningMultiPersonnes = [...allPeople];
   else ui.planningMultiPersonnes = ui.planningMultiPersonnes.filter(p => allPeople.includes(p));
-  if (ui.planningMultiMoisIdx === null) ui.planningMultiMoisIdx = -1;
-  const vueAnnee = ui.planningMultiMoisIdx === -1;
+  if (ui.planningMultiMoisIdx === null) ui.planningMultiMoisIdx = -2;
+  // -2 = 2 semaines, -3 = 1 semaine (vue par défaut) ; -1 = année ; 0..11 = un mois.
+  const vueSemaines = ui.planningMultiMoisIdx <= -2;
+  const vueAnnee = ui.planningMultiMoisIdx === -1 || vueSemaines;
 
   // Liste des jours affichés, chacun rattaché à son mois (pour l'en-tête
   // groupé) — soit les jours d'un seul mois, soit ceux des 12 mois de
@@ -1452,7 +1523,7 @@ function renderVueMultiPersonnes(container, allPeople) {
 
   container.innerHTML = `
     <div class="stack">
-      <p class="hint">Vue combinée de plusieurs agendas ${vueAnnee ? "sur l'année scolaire complète" : "sur un même mois"} — pour voir en un coup d'œil qui est présent, absent ou déjà en intervention ce jour-là.</p>
+      <p class="hint">Vue combinée de plusieurs agendas ${vueSemaines ? "semaine par semaine" : vueAnnee ? "sur l'année scolaire complète" : "sur un même mois"} — pour voir en un coup d'œil qui est présent, absent ou déjà en intervention ce jour-là.</p>
       <div class="toolbar">
         ${ui.subtab === "vue-equipe" ? "" : `<button type="button" class="nav-btn" id="pm-retour">← Planning d'une personne</button>`}
         <label>Année scolaire
@@ -1460,7 +1531,9 @@ function renderVueMultiPersonnes(container, allPeople) {
         </label>
         <label>Période
           <select id="pm-mois">
-            <option value="-1" ${vueAnnee ? "selected" : ""}>Année scolaire complète</option>
+            <option value="-2" ${ui.planningMultiMoisIdx === -2 ? "selected" : ""}>2 semaines</option>
+            <option value="-3" ${ui.planningMultiMoisIdx === -3 ? "selected" : ""}>1 semaine</option>
+            <option value="-1" ${ui.planningMultiMoisIdx === -1 ? "selected" : ""}>Année scolaire complète</option>
             ${PLANNING_MOIS_SCOLAIRE.map((m, i) => `<option value="${i}" ${i === ui.planningMultiMoisIdx ? "selected" : ""}>${m.label}</option>`).join("")}
           </select>
         </label>
@@ -1535,6 +1608,7 @@ function renderVueMultiPersonnes(container, allPeople) {
   document.getElementById("pm-retour")?.addEventListener("click", () => { ui.planningVueMulti = false; renderAll(); });
   document.getElementById("pm-annee").addEventListener("change", (e) => { ui.planningIndivYear = Number(e.target.value); renderAll(); });
   document.getElementById("pm-mois").addEventListener("change", (e) => { ui.planningMultiMoisIdx = Number(e.target.value); renderAll(); });
+  if (vueSemaines) monterVueSemaines(container, personnes, couleurBinome, ui.planningMultiMoisIdx === -3 ? 1 : 2);
   container.querySelectorAll("[data-multi-personne]").forEach(chk => chk.addEventListener("change", () => {
     const nom = chk.dataset.multiPersonne;
     if (chk.checked) { if (!ui.planningMultiPersonnes.includes(nom)) ui.planningMultiPersonnes.push(nom); }
