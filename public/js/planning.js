@@ -1573,6 +1573,11 @@ function renderPlanningIndividuel(container, perms) {
     interventionsParDate[i.date].push(i);
   });
 
+  // Code couleur par site pour les passages programmés (tournées, entretiens).
+  const PALETTE_SITES = ["#2563EB", "#16A34A", "#DB2777", "#0891B2", "#92400E", "#4F46E5", "#65A30D", "#475569", "#E11D48", "#0D9488"];
+  const siteCourt = (n) => String(n || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  const sitesPerso = [...new Set((state.recurrences || []).filter(r => r.person === person && !r.supprimeLe && r.site).sort((a, b) => (a.jourSemaine ?? 0) - (b.jourSemaine ?? 0) || String(a.dateDebut).localeCompare(String(b.dateDebut))).map(r => siteCourt(r.site)))];
+  const couleurSite = new Map(sitesPerso.map((n, i) => [n, PALETTE_SITES[i % PALETTE_SITES.length]]));
   const moisHTML = PLANNING_MOIS_SCOLAIRE.map(({ label, mois: mIdx, decalage }) => {
     const anneeReelle = year + decalage;
     const jours = monthGrid(anneeReelle, mIdx);
@@ -1592,7 +1597,10 @@ function renderPlanningIndividuel(container, perms) {
       if (cliquable) classes.push("clickable");
       const titre = abs ? (abs.type === "mtt" ? LIB_MTT : abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(person) : "Congé") : (cliquable ? (infoInterv ? "Cliquer pour voir/modifier l'intervention" : "Cliquer pour ajouter une intervention ponctuelle") : "");
       const dotTitre = infoInterv ? (infoInterv.recurrente ? "Intervention programmée (récurrence)" : "Intervention") : "";
-      return `<div class="${classes.join(" ")}" title="${esc(titre)}" ${cliquable ? `data-date="${k}"` : ""} style="${cliquable ? "cursor:pointer" : ""}">${d.getDate()}${infoInterv ? `<span class="year-cal-dot${infoInterv.recurrente ? " year-cal-dot-recur" : ""}" title="${esc(dotTitre)}"></span>` : ""}</div>`;
+      const prog = !abs && !horsMois ? interventionsJour.find(i => i.recurrenceId && couleurSite.has(siteCourt(i.site))) : null;
+      const coul = prog ? couleurSite.get(siteCourt(prog.site)) : "";
+      const titreJour = prog ? `${siteCourt(prog.site)}${prog.type ? ` — ${prog.type}` : ""}${titre ? ` · ${titre}` : ""}` : titre;
+      return `<div class="${classes.join(" ")}" title="${esc(titreJour)}" ${cliquable ? `data-date="${k}"` : ""} style="${cliquable ? "cursor:pointer;" : ""}${coul ? `background:${coul};color:#fff;font-weight:700;` : ""}">${d.getDate()}${infoInterv ? `<span class="year-cal-dot${infoInterv.recurrente ? " year-cal-dot-recur" : ""}" title="${esc(dotTitre)}"></span>` : ""}</div>`;
     }).join("");
     return `
       <div class="year-cal-month">
@@ -1622,6 +1630,9 @@ function renderPlanningIndividuel(container, perms) {
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention ponctuelle</span>
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline year-cal-legend-dot-recur"></i> Intervention programmée (récurrence)</span>
       </div>
+      ${couleurSite.size ? `<div class="year-cal-legend" style="margin-top:4px"><b style="font-size:12px">📍 Où ${esc(person)} va :</b>${[...couleurSite].map(([n, c]) => {
+        const jours = [...new Set((state.recurrences || []).filter(r => r.person === person && !r.supprimeLe && siteCourt(r.site) === n).map(r => (JOURS_SEMAINE[r.jourSemaine] || "").slice(0, 3).toLowerCase() + (Number(r.frequenceSemaines) > 1 ? ` (1 sem./${r.frequenceSemaines})` : "")))].join(", ");
+        return `<span><i class="year-cal-legend-dot" style="background:${c}"></i> ${esc(n)}${jours ? ` <small style="opacity:.7">${esc(jours)}</small>` : ""}</span>`; }).join("")}</div>` : ""}
       ${!person ? `<p class="hint">Ajoute une personne (N1 ou N2) dans les Coordonnées pour afficher un planning.</p>` : ""}
       ${person && peutProgrammer ? renderRecurrencesPanel(person) : ""}
       ${person ? renderJourDetail(person, ui.planningQuickDate ? (interventionsParDate[ui.planningQuickDate] || []) : []) : ""}
