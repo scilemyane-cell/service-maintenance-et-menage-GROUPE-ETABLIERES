@@ -2599,7 +2599,13 @@ function completerHorairesHTML(i) {
   const dr = ui.completerDraft;
   return `
   <div class="iv-completer">
-    <div class="iv-completer-tete"><b>🕒 Horaires de ${esc(i.technicien || "l'intervention")}</b><span>${esc(nomPropre(i.site || ""))} · ${new Date(i.date).toLocaleDateString("fr-FR")}${i.motifAppelN1 ? ` · ${esc(i.motifAppelN1)}` : ""}</span></div>
+    <div class="iv-completer-tete"><b>🕒 Horaires de ${esc(i.technicien || "l'intervention")}</b><span>${esc(nomPropre(i.site || ""))} · ${new Date(i.date).toLocaleDateString("fr-FR")}${i.type ? ` · ${esc(i.type)}` : ""}</span></div>
+    ${(i.motifAppelN1 || i.description || i.decisionN1) ? `<div class="iv-completer-demande" style="margin:8px 0 12px;padding:10px 12px;border-radius:10px;background:rgba(127,127,127,.12);border-left:4px solid #b8860b;line-height:1.4">
+      <div style="font-size:.8em;font-weight:700;opacity:.75;text-transform:uppercase;letter-spacing:.03em">📋 Demande de base${i.heureAppel ? ` · appel à ${esc(i.heureAppel)}` : ""}${i.n1Contacte ? ` · ${esc(i.n1Contacte)}` : ""}</div>
+      ${i.motifAppelN1 ? `<div style="margin-top:4px"><b>${esc(i.motifAppelN1)}</b></div>` : ""}
+      ${i.description && i.description !== i.motifAppelN1 ? `<div style="margin-top:4px;white-space:pre-wrap">${esc(i.description)}</div>` : ""}
+      ${i.decisionN1 ? `<div style="margin-top:4px"><em>→ ${esc(i.decisionN1)}</em></div>` : ""}
+    </div>` : ""}
     <div class="iv-completer-grille">
       ${champHeureHTML("c-debut", "🚗 Départ", dr.debut)}
       ${champHeureHTML("c-fin", "🏠 Retour", dr.fin)}
