@@ -41,8 +41,13 @@ function distance(a, b) { const R = 6371e3, r = Math.PI / 180, dLat = (b.lat - a
 async function envoyer(p) {
   if (document.visibilityState !== "visible") return;
   const pos = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), precision: Math.round(p.coords.accuracy || 0) };
-  // Pas plus d'un envoi toutes les 2 min, sauf déplacement de plus de 40 m.
-  if (dernier && Date.now() - dernier.t < 120000 && distance(dernier, pos) < 40) return;
+  // Quota d'écritures (20 000 / jour) : au plus un envoi toutes les 2 min, ou
+  // dès 300 m de déplacement mais jamais plus d'un toutes les 30 s. Avant
+  // (40 m), en voiture le GPS déclenchait un envoi presque chaque seconde.
+  if (dernier) {
+    const dt = Date.now() - dernier.t;
+    if (dt < 30000 || (dt < 120000 && distance(dernier, pos) < 300)) return;
+  }
   dernier = { ...pos, t: Date.now() };
   try { await setDoc(doc(db, "positions", user.uid), { ...pos, at: Date.now(), nom: user.nom || user.email || "", role: user.role }); envoiLe = Date.now(); erreurEnvoi = ""; }
   catch (e) { erreurEnvoi = /permission/i.test(e?.message || "") ? "règles Firestore non publiées" : (e?.message || "réseau"); dernier = null; }
