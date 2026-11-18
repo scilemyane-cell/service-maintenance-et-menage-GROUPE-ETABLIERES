@@ -243,7 +243,7 @@ function accordIrreguliers(texte) {
   });
 }
 
-export async function corrigerOrthographe(texte) {
+export async function corrigerOrthographe(texte, { participes = true } = {}) {
   texte = sortirDesMajuscules(texte);
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -265,7 +265,7 @@ export async function corrigerOrthographe(texte) {
       out = out.slice(0, m.offset) + r + out.slice(m.offset + m.length);
     });
     out = nomsPropres(out);
-    out = accordParticipes(out);
+    if (participes) out = accordParticipes(out);
     out = accordIrreguliers(out);
     out = out.replace(/\s+([,.])/g, "$1").replace(/^\s*(\p{Ll})/u, (x, c) => c.toUpperCase()).trim();
     if (out && !/[.!?…]$/.test(out)) out += ".";
@@ -283,12 +283,13 @@ export async function redigerCommentaireDemande(f) {
   const notes = String(f.notes || "").trim();
   try {
     let t = await genererTexte(`Tu corriges une note écrite vite par un technicien de maintenance (Groupe Établières), dans le champ « commentaire » d'une demande d'intervention.
-OBJECTIF : un français correct et professionnel, en gardant EXACTEMENT le sens, le style télégraphique et la longueur.
+OBJECTIF : un français correct et professionnel, en gardant EXACTEMENT le sens. Phrases courtes, mais complètes : rajoute les articles et petits mots manquants (le, la, du, de…).
 À CORRIGER : orthographe, accords (genre et nombre), participes passés à la place des infinitifs (« devis valider » → « devis validé », « fuite reparer » → « fuite réparée »), articles et prépositions manquants ou faux (« le 21 et 22 octobre » → « les 21 et 22 octobre »), ponctuation entre les idées, majuscule en début de phrase, noms propres (Vendée Habitat, Sonepar…).
 INTERDIT : ajouter une information, une cause, une action, une date, un résultat ou une formule de politesse qui n'est pas écrite ; supprimer un nom, une initiale, une référence, un chiffre ; transformer une question ou un message adressé à quelqu'un en constat (garde la question, le destinataire et la signature).
 Exemples :
 - « devis valider interventions le 21 et 22 octobre » → « Devis validé, interventions les 21 et 22 octobre. »
 - « joint siphon changer fuite stopper » → « Joint de siphon changé, fuite stoppée. »
+- « changer disjoncteur general du logement fait » → « Disjoncteur général du logement changé. »
 - « bonjour julie as tu relancer l entreprise ? VB » → « Bonjour Julie, as-tu relancé l'entreprise ? VB »
 Réponds UNIQUEMENT par le texte corrigé, sans guillemets, sans Markdown.
 
@@ -299,7 +300,38 @@ ${notes}`, { rapide: true });
     t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
     // Garde-fous : ni trop longue (invention), ni tronquée (« en attente d'un »).
     const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
-    if (t && t.length <= Math.max(40, notes.length * 1.8) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return t;
+    if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return t;
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
   return corrigerOrthographe(notes);
+}
+
+// Descriptif d'une NOUVELLE demande : c'est ce qui ne va pas ou ce qu'il faut
+// faire (« changer disjoncteur general logement » → « Changer le disjoncteur
+// général du logement. »). Surtout PAS de participe passé (« changé »), qui
+// ferait croire que c'est déjà fait.
+export async function redigerDescriptifDemande(f) {
+  ajouterMotsConnus(f.mots);
+  const notes = String(f.notes || "").trim();
+  try {
+    let t = await genererTexte(`Tu corriges le descriptif d'une DEMANDE d'intervention de maintenance (Groupe Établières), écrit vite, souvent en dictée vocale.
+C'est une demande : elle décrit un problème à régler ou un travail À FAIRE, pas quelque chose de déjà fait.
+OBJECTIF : un français correct, clair et professionnel, en phrases courtes mais complètes, en gardant EXACTEMENT le sens.
+À CORRIGER : toutes les fautes d'orthographe, de frappe et de dictée vocale (mots mal reconnus), accents, accords, articles et petits mots manquants (le, la, du, de, dans…), ponctuation, majuscules, noms propres.
+Les actions demandées s'écrivent à l'INFINITIF (« Changer… », « Remplacer… », « Vérifier… »). Un verbe écrit au participe passé (« changé », « réparé ») dans une demande est presque toujours une faute de dictée pour l'infinitif : corrige-le.
+INTERDIT : ajouter une cause, une action, un lieu, une date ou un détail qui n'est pas écrit ; supprimer un nom, un n° de logement, une référence, un chiffre ; ajouter une formule de politesse.
+Exemples :
+- « Changé disjoncteur général du logement. » → « Changer le disjoncteur général du logement. »
+- « fuite sous evier cuisine sa coule depuis hier » → « Fuite sous l'évier de la cuisine, ça coule depuis hier. »
+- « volet roulant chambre bloquer en bas » → « Volet roulant de la chambre bloqué en bas. »
+- « verifier radiateur sdb froid » → « Vérifier le radiateur de la salle de bain, il est froid. »
+Réponds UNIQUEMENT par le texte corrigé, sans guillemets, sans Markdown.
+
+Texte à corriger :
+${notes}`, { rapide: true });
+    t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
+    const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
+    if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return t;
+  } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
+  // Repli : correcteur seul, sans transformer les infinitifs en participes.
+  return corrigerOrthographe(notes, { participes: false });
 }
