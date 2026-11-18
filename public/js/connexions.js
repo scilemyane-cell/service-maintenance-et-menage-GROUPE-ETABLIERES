@@ -55,13 +55,13 @@ function blocLecturesHTML() {
     <div class="cx-lect-barre"><div class="${niveau}" style="width:${pct}%"></div></div>
     ${duJour.length ? `<div class="cx-lect-pers">${duJour.sort((a, b) => b.n - a.n).map(l => `<span><b>${esc(nomDe(l.uid, l.nom))}</b> ${(l.n || 0).toLocaleString("fr-FR")}</span>`).join("")}</div>` : `<div class="hint">Pas encore de lecture comptée aujourd'hui (envoi toutes les 5 min).</div>`}
     ${(() => {
-      const QE = 20000, te = duJour.reduce((t, l) => t + (l.e || 0), 0), tp = duJour.reduce((t, l) => t + (l.pos || 0), 0);
+      const QE = 20000, te = duJour.reduce((t, l) => t + (l.e || 0), 0), tp = duJour.reduce((t, l) => t + (l.pos || 0), 0), ts = duJour.reduce((t, l) => t + (l.sync || 0), 0);
       const pe = Math.min(100, Math.round(te / QE * 100)), ne = pe >= 80 ? "rouge" : pe >= 50 ? "orange" : "vert";
       const avec = duJour.filter(l => l.e).sort((a, b) => (b.e || 0) - (a.e || 0));
-      return `<div class="cx-lect-tete" style="margin-top:14px"><b>✏️ Écritures Firestore aujourd'hui</b><small>quota gratuit 20 000 / jour${tp ? ` · dont positions GPS : ${tp.toLocaleString("fr-FR")}` : ""}</small></div>
+      return `<div class="cx-lect-tete" style="margin-top:14px"><b>✏️ Écritures Firestore aujourd'hui</b><small>quota gratuit 20 000 / jour${tp ? ` · dont positions GPS : ${tp.toLocaleString("fr-FR")}` : ""}${ts ? ` · dont synchro Excel : ${ts.toLocaleString("fr-FR")}` : ""}</small></div>
       <div class="cx-lect-chiffre"><b>${te.toLocaleString("fr-FR")}</b> / ${QE.toLocaleString("fr-FR")} <span class="cx-lect-pct ${ne}">${pe} %</span></div>
       <div class="cx-lect-barre"><div class="${ne}" style="width:${pe}%"></div></div>
-      ${avec.length ? `<div class="cx-lect-pers">${avec.map(l => `<span><b>${esc(nomDe(l.uid, l.nom))}</b> ${(l.e || 0).toLocaleString("fr-FR")}${l.pos ? ` <small>(GPS ${l.pos.toLocaleString("fr-FR")})</small>` : ""}</span>`).join("")}</div>` : `<div class="hint">Comptage des écritures en place depuis le 18/11 au soir.</div>`}`;
+      ${avec.length ? `<div class="cx-lect-pers">${avec.map(l => `<span><b>${esc(nomDe(l.uid, l.nom))}</b> ${(l.e || 0).toLocaleString("fr-FR")}${l.pos || l.sync ? ` <small>(${[l.pos ? `GPS ${l.pos.toLocaleString("fr-FR")}` : "", l.sync ? `Excel ${l.sync.toLocaleString("fr-FR")}` : ""].filter(Boolean).join(" · ")})</small>` : ""}</span>`).join("")}</div>` : `<div class="hint">Comptage des écritures en place depuis le 18/11 au soir.</div>`}`;
     })()}
     <div class="cx-lect-jours">${parJour.map(x => `<div title="${x.n.toLocaleString("fr-FR")} lectures"><i style="height:${Math.max(2, Math.round(x.n / max * 60))}px" class="${x.n >= QUOTA * .8 ? "rouge" : x.n >= QUOTA * .5 ? "orange" : "vert"}"></i><small>${x.j.slice(8)}/${x.j.slice(5, 7)}</small></div>`).join("")}</div>
   </div>`;

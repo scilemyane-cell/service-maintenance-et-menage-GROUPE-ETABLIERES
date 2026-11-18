@@ -31,7 +31,7 @@ async function prendreVerrou(cle) {
 
 async function tour() {
   if (enCours || document.hidden) return;
-  enCours = true;
+  enCours = true; globalThis.__smmSynchroEnCours = true;
   try {
     const token = await getGraphTokenSilentOnly();
     if (!token) return; // pas de session Microsoft ouverte : on ne dérange pas
@@ -82,7 +82,7 @@ async function tour() {
       await deposerMisesAJour(toutes, { interactif: false });
     }
   } catch (e) { console.warn("Synchro auto des demandes :", e); }
-  finally { enCours = false; }
+  finally { enCours = false; globalThis.__smmSynchroEnCours = false; }
 }
 
 export function demarrerSynchroAutoDemandes() {

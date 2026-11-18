@@ -15,7 +15,10 @@ const C = (globalThis.__smmLectures = globalThis.__smmLectures || { n: 0, envoye
 C.e = C.e || 0; C.eEnvoye = C.eEnvoye || 0; C.pos = C.pos || 0; C.posEnvoye = C.posEnvoye || 0;
 const compter = (k) => { if (k > 0) C.n += k; };
 // Écritures (quota gratuit : 20 000 / jour). Les positions GPS sont comptées à part.
-const ecrit = (k = 1, ref) => { C.e += k; try { if (ref?.path?.startsWith("positions/")) C.pos += k; } catch { /* */ } };
+C.sync = C.sync || 0; C.syncEnvoye = C.syncEnvoye || 0;
+// Écritures faites pendant un passage de la synchro Excel (demandes-auto.js
+// met globalThis.__smmSynchroEnCours à true le temps du passage) : estimation.
+const ecrit = (k = 1, ref) => { C.e += k; try { if (ref?.path?.startsWith("positions/")) C.pos += k; else if (globalThis.__smmSynchroEnCours) C.sync += k; } catch { /* */ } };
 
 export async function setDoc(r, ...a) { const x = await F.setDoc(r, ...a); ecrit(1, r); return x; }
 export async function updateDoc(r, ...a) { const x = await F.updateDoc(r, ...a); ecrit(1, r); return x; }

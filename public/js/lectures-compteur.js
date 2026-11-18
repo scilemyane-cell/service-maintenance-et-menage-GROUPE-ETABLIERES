@@ -12,15 +12,15 @@ export function demarrerCompteurLectures(user) {
   if (timer || !user?.uid) return;
   const C = globalThis.__smmLectures || { n: 0, envoye: 0 };
   const envoyer = async () => {
-    const aEnvoyer = C.n - C.envoye, eEnv = (C.e || 0) - (C.eEnvoye || 0), pEnv = (C.pos || 0) - (C.posEnvoye || 0);
+    const aEnvoyer = C.n - C.envoye, eEnv = (C.e || 0) - (C.eEnvoye || 0), pEnv = (C.pos || 0) - (C.posEnvoye || 0), sEnv = (C.sync || 0) - (C.syncEnvoye || 0);
     if (aEnvoyer <= 0 && eEnv <= 0) return;
-    C.envoye = C.n; C.eEnvoye = C.e || 0; C.posEnvoye = C.pos || 0;
+    C.envoye = C.n; C.eEnvoye = C.e || 0; C.posEnvoye = C.pos || 0; C.syncEnvoye = C.sync || 0;
     try {
       await setDoc(doc(db, "lectures", `${jourQuota()}_${user.uid}`), {
         uid: user.uid, nom: user.nom || user.email || "", jour: jourQuota(), n: increment(aEnvoyer),
-        e: increment(eEnv + 1), pos: increment(pEnv), majLe: serverTimestamp(),
+        e: increment(eEnv + 1), pos: increment(pEnv), sync: increment(sEnv), majLe: serverTimestamp(),
       }, { merge: true });
-    } catch (e) { C.envoye -= aEnvoyer; C.eEnvoye -= eEnv; C.posEnvoye -= pEnv; console.warn("Compteur de lectures :", e?.code || e); }
+    } catch (e) { C.envoye -= aEnvoyer; C.eEnvoye -= eEnv; C.posEnvoye -= pEnv; C.syncEnvoye -= sEnv; console.warn("Compteur de lectures :", e?.code || e); }
   };
   timer = setInterval(envoyer, 5 * 60000);
   setTimeout(envoyer, 60000);
