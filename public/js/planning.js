@@ -1574,7 +1574,7 @@ function renderPlanningIndividuel(container, perms) {
   });
 
   // Code couleur par site pour les passages programmés (tournées, entretiens).
-  const PALETTE_SITES = ["#2563EB", "#16A34A", "#DB2777", "#0891B2", "#92400E", "#4F46E5", "#65A30D", "#475569", "#E11D48", "#0D9488"];
+  const PALETTE_SITES = ["#2563EB", "#16A34A", "#DB2777", "#0891B2", "#1F2937", "#4F46E5", "#65A30D", "#475569", "#E11D48", "#0D9488"];
   const siteCourt = (n) => String(n || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
   const sitesPerso = [...new Set((state.recurrences || []).filter(r => r.person === person && !r.supprimeLe && r.site).sort((a, b) => (a.jourSemaine ?? 0) - (b.jourSemaine ?? 0) || String(a.dateDebut).localeCompare(String(b.dateDebut))).map(r => siteCourt(r.site)))];
   const couleurSite = new Map(sitesPerso.map((n, i) => [n, PALETTE_SITES[i % PALETTE_SITES.length]]));
