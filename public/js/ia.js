@@ -102,6 +102,10 @@ export async function genererTexte(prompt, { rapide = false } = {}) {
 // N1, la décision et la validation du déplacement sont déjà affichés à part
 // dans la fiche, ils servent seulement de contexte et ne sont pas racontés.
 export async function redigerCompteRendu(f) {
+  try { return await redigerCompteRenduIA(f); }
+  catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); const t = [f.description, f.compteRendu].filter(x => x && x.trim()).join("\n").trim(); if (!t) throw e; return corrigerOrthographe(t); }
+}
+async function redigerCompteRenduIA(f) {
   const texte = [f.description, f.compteRendu].filter(t => t && t.trim()).join("\n").trim()
     || (f.type ? `Intervention ${f.type}` : "");
   const contexte = [
@@ -121,6 +125,10 @@ ${texte}`));
 
 // Reformule proprement la décision / consigne du N1 (1 à 2 phrases).
 export async function reformulerDecision(f) {
+  try { return await reformulerDecisionIA(f); }
+  catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); if (!String(f.decisionN1 || "").trim()) throw e; return corrigerOrthographe(f.decisionN1); }
+}
+async function reformulerDecisionIA(f) {
   return nettoyerReponseIA(await genererTexte(`Corrige et mets au propre la décision ou consigne notée par le cadre d'astreinte (N1).
 Renvoie UNIQUEMENT le texte corrigé : une seule version, pas de proposition, pas d'alternative, pas d'introduction, pas de guillemets, pas de Markdown.
 Garde ses mots et le sens exact, corrige l'orthographe et la tournure, n'ajoute aucun fait.
