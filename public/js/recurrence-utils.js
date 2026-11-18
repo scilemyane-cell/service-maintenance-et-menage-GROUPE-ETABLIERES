@@ -2,6 +2,7 @@
 // Sorti de planning.js pour que l'accueil puisse l'utiliser sans charger
 // tout le module Astreinte (chargé seulement à l'ouverture de la tuile).
 import { addDays, dateKey } from "./astreinte-logic.js";
+import { compteCeJour } from "./absences-util.js";
 
 export function jourSemaineVersGetDay(j) { return (j + 1) % 7; }
 
@@ -25,4 +26,14 @@ export function genererOccurrencesRecurrence(rec, horizon) {
   const dates = [];
   while (d <= limite) { dates.push(dateKey(d)); d = addDays(d, freq * 7); }
   return dates;
+}
+
+// Retire les dates où la personne est absente (congés, arrêt… saisis dans
+// l'appli) : une tournée ne doit pas tomber pendant ses congés.
+const normP = (n) => String(n || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+export function sansAbsences(dates, person, absences) {
+  const p = normP(person);
+  const abs = (absences || []).filter(a => a && !a.supprimeLe && normP(a.person) === p);
+  if (!abs.length) return dates;
+  return dates.filter(d => !abs.some(a => String(a.start).slice(0, 10) <= d && String(a.end || a.start).slice(0, 10) >= d && compteCeJour(a, d)));
 }

@@ -24,7 +24,7 @@ import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js
 import { imprimerFicheIsolee } from "./print-fiche.js";
 import { redigerCompteRendu, reformulerDecision } from "./ia.js";
 import { nomPropre } from "./sites-visuel.js";
-import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
+import { genererOccurrencesRecurrence, sansAbsences } from "./recurrence-utils.js";
 import { listeVive } from "./listes-config.js";
 export { genererOccurrencesRecurrence };
 
@@ -319,7 +319,7 @@ function prochainesInterventionsHTML(person) {
   const reelles = state.interventions.filter(i => estMoi(i.technicien) && i.date >= auj && i.date <= fin);
   const dejaLa = new Set(reelles.filter(i => i.recurrenceId).map(i => i.recurrenceId + "|" + i.date));
   const prevues = (state.recurrences || []).filter(r => estMoi(r.person)).flatMap(r =>
-    genererOccurrencesRecurrence(r, addDays(new Date(), 30)).filter(d => d >= auj && d <= fin && !dejaLa.has(r.id + "|" + d))
+    sansAbsences(genererOccurrencesRecurrence(r, addDays(new Date(), 30)), r.person, state.absences).filter(d => d >= auj && d <= fin && !dejaLa.has(r.id + "|" + d))
       .map(d => ({ date: d, heureDebut: r.heureDebut, heureFin: r.heureFin, site: r.site, type: r.type, recurrenceId: r.id })));
   const liste = [...reelles, ...prevues].sort((a, b) => (a.date + (a.heureDebut || "")).localeCompare(b.date + (b.heureDebut || "")));
   return `
@@ -1218,7 +1218,14 @@ function attacherSiteSelectorListeners(idPrefix, form) {
 // sans affecter la règle de récurrence.
 async function genererInterventionsRecurrence(rec, user) {
   const horizon = addDays(new Date(), 120);
-  const dates = genererOccurrencesRecurrence(rec, horizon);
+  // Pas de passage pendant les congés / absences de la personne.
+  const dates = sansAbsences(genererOccurrencesRecurrence(rec, horizon), rec.person, state.absences);
+  // Passages déjà générés qui tombent maintenant pendant un congé / une absence
+  // (saisie après coup) : on les retire s'ils ne sont pas encore faits.
+  const auj = dateKey(new Date()), garder = new Set(dates);
+  for (const i of state.interventions.filter(x => x.recurrenceId === rec.id && x.genereAuto && !x.supprimeLe && x.date >= auj && !garder.has(x.date) && !x.compteRendu && !x.transmis)) {
+    if (sansAbsences([i.date], rec.person, state.absences).length === 0) { try { await envoyerInterventionCorbeille(i.id); } catch (e) { console.warn("Retrait passage pendant absence :", e); } }
+  }
   const dejaGenerees = new Set(state.interventions.filter(i => i.recurrenceId === rec.id).map(i => i.date));
   const aCreer = dates.filter(d => !dejaGenerees.has(d));
   const duree = dureeHeures(rec.heureDebut, rec.heureFin);
@@ -2716,7 +2723,8 @@ function calculerRecapAstreinte(person, start, end) {
   }
   const dans = (i) => i.date && i.date >= start && i.date <= end && !i.supprimeLe;
   state.interventions.filter(i => dans(i) && i.n1Contacte === person && !i.appelOrigineId).forEach(i => { ligne(i.date.slice(0, 7)).appels++; });
-  const miennes = state.interventions.filter(i => dans(i) && estIntervenant(i, person) && !i.sansDeplacement);
+  // Les tournées / passages programmés (récurrences) ne sont pas des déplacements d'astreinte.
+  const miennes = state.interventions.filter(i => dans(i) && estIntervenant(i, person) && !i.sansDeplacement && !i.recurrenceId);
   miennes.forEach(i => { const l = ligne(i.date.slice(0, 7)); l.depl++; l.heures += parseFloat(i.heures) || 0; l.nuit += parseFloat(i.heuresNuit) || 0; l.primes += parseFloat(i.primeDimanche) || 0; });
   const lignes = [...moisMap.values()].sort((a, b) => (a.cle || "").localeCompare(b.cle || ""));
   const tot = lignes.reduce((t, l) => { ["n1", "n2", "we", "ferie", "appels", "depl", "heures", "nuit", "primes"].forEach(k => t[k] += l[k]); l.semaines.forEach(x => t.semaines.add(x)); return t; },

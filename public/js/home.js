@@ -2,7 +2,7 @@ import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
 import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
-import { genererOccurrencesRecurrence } from "./recurrence-utils.js";
+import { genererOccurrencesRecurrence, sansAbsences } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -330,7 +330,7 @@ function blocMonPlanningHTML(personne) {
   // interventions : calculés à la volée depuis la règle de récurrence.
   const dejaLa = new Set(reelles.filter(i => i.recurrenceId).map(i => i.recurrenceId + "|" + i.date));
   const prevues = recurrences.filter(r => estMoi(r.person) && !r.supprimeLe && r.actif !== false).flatMap(r =>
-    genererOccurrencesRecurrence(r, addDays(new Date(), 14))
+    sansAbsences(genererOccurrencesRecurrence(r, addDays(new Date(), 14)), r.person, absences)
       .filter(d => d >= auj && d <= fin && !dejaLa.has(r.id + "|" + d))
       .map(d => ({ date: d, heureDebut: r.heureDebut, heureFin: r.heureFin, site: r.site, type: r.type, recurrenceId: r.id })));
   const aVenir = [...reelles, ...prevues]
