@@ -24,7 +24,7 @@ import { listerFeuillesCandidates, analyserPlanningPrtt } from "./prtt-import.js
 import { imprimerFicheIsolee } from "./print-fiche.js";
 import { redigerCompteRendu, reformulerDecision } from "./ia.js";
 import { nomPropre } from "./sites-visuel.js";
-import { genererOccurrencesRecurrence, sansAbsences, couleursSites, siteCourt } from "./recurrence-utils.js";
+import { genererOccurrencesRecurrence, sansAbsences, couleursSites, siteCourt, abregeSite } from "./recurrence-utils.js";
 import { listeVive } from "./listes-config.js";
 export { genererOccurrencesRecurrence };
 
@@ -1443,8 +1443,12 @@ function renderVueMultiPersonnes(container, allPeople) {
   const interventionsParPersonneDate = {};
   state.interventions.forEach(i => {
     if (!personnes.includes(i.technicien)) return;
-    interventionsParPersonneDate[`${i.technicien}|${i.date}`] = true;
+    if (i.supprimeLe) return;
+    const cle = `${i.technicien}|${i.date}`;
+    // Une tournée / passage programmé l'emporte sur une intervention simple (pour la couleur du site).
+    if (!interventionsParPersonneDate[cle] || interventionsParPersonneDate[cle] === true) interventionsParPersonneDate[cle] = i.recurrenceId ? i : true;
   });
+  const couleurSiteMulti = couleursSites(state.recurrences);
 
   container.innerHTML = `
     <div class="stack">
@@ -1487,6 +1491,8 @@ function renderVueMultiPersonnes(container, allPeople) {
         <span><i class="year-cal-legend-dot year-cal-legend-dot-outline"></i> Intervention</span>
         <span><i class="year-cal-legend-dot" style="background:var(--violet, #8F5FBF)"></i> Jour férié</span>
       </div>
+      ${(() => { const l = [...couleurSiteMulti].filter(([n]) => (state.recurrences || []).some(r => !r.supprimeLe && personnes.includes(r.person) && siteCourt(r.site) === n));
+        return l.length ? `<div class="year-cal-legend" style="gap:6px 10px"><b style="font-size:12px">📍 Tournées :</b>${l.map(([n, c]) => `<span style="display:inline-flex;align-items:center;gap:5px"><i style="display:inline-block;min-width:22px;padding:1px 4px;border-radius:4px;background:${c};color:#fff;font-size:9px;font-weight:800;font-style:normal;text-align:center">${esc(abregeSite(n))}</i>${esc(n)}</span>`).join("")}</div>` : ""; })()}
       <div class="table-wrap">
         <table style="font-size:11px">
           <thead>
@@ -1503,15 +1509,18 @@ function renderVueMultiPersonnes(container, allPeople) {
                   const k = dateKey(d);
                   const abs = absenceDuJour(p, k);
                   const interv = interventionsParPersonneDate[`${p}|${k}`];
+                  const prog = interv && interv !== true && !abs ? interv : null;
+                  const nomSite = prog ? siteCourt(prog.site) : "", coulSite = nomSite ? couleurSiteMulti.get(nomSite) : "";
                   const weekend = d.getDay() === 0 || d.getDay() === 6;
                   let bg = "transparent", titre = "Présent";
                   if (abs) { bg = abs.type === "mtt" ? COUL_MTT : abs.type === "arret" ? "var(--red)" : abs.type === "enfant" ? "var(--violet-abs, #8b5cf6)" : abs.type === "rtt" ? "var(--teal)" : "var(--gold)"; titre = abs.type === "mtt" ? LIB_MTT : abs.type === "arret" ? "Arrêt de travail" : abs.type === "enfant" ? "Enfant malade" : abs.type === "rtt" ? libelleRtt(p) : "Congé"; }
                   else if (j.ferie) { titre = j.ferie; }
                   else if (weekend) { titre = "Week-end"; }
+                  if (coulSite) { bg = coulSite; titre = `📍 ${nomSite}${prog.type ? ` — ${prog.type}` : ""}`; }
                   const bordureCol = j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : "";
                   return `<td style="text-align:center;padding:2px 1px;${bordureCol}${j.ferie && !abs ? "background:rgba(143,95,191,.12)" : ""}${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
-                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${(weekend || j.ferie) && !abs ? "opacity:.4" : ""};position:relative">
-                      ${interv ? `<span style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 1px rgba(0,0,0,.3)" title="Intervention"></span>` : ""}
+                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${(weekend || j.ferie) && !abs && !coulSite ? "opacity:.4" : ""};position:relative;${coulSite ? "color:#fff;font-size:7px;font-weight:800;line-height:" + largeurCol + "px;letter-spacing:-.3px;overflow:hidden" : ""}">
+                      ${coulSite ? esc(abregeSite(nomSite)) : ""}${interv && !coulSite ? `<span style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 1px rgba(0,0,0,.3)" title="Intervention"></span>` : ""}
                     </div>
                   </td>`;
                 }).join("")}
@@ -1574,7 +1583,7 @@ function renderPlanningIndividuel(container, perms) {
   });
 
   // Code couleur par site pour les passages programmés (tournées, entretiens).
-  const couleurSite = couleursSites(state.recurrences, person);
+  const couleurSite = new Map([...couleursSites(state.recurrences)].filter(([n]) => (state.recurrences || []).some(r => r.person === person && !r.supprimeLe && siteCourt(r.site) === n)));
   const moisHTML = PLANNING_MOIS_SCOLAIRE.map(({ label, mois: mIdx, decalage }) => {
     const anneeReelle = year + decalage;
     const jours = monthGrid(anneeReelle, mIdx);

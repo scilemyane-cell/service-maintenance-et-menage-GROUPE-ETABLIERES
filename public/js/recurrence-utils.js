@@ -41,9 +41,15 @@ export function sansAbsences(dates, person, absences) {
 // Code couleur par site (même couleur dans le planning individuel et sur l'accueil).
 export const PALETTE_SITES = ["#2563EB", "#16A34A", "#DB2777", "#0891B2", "#1F2937", "#4F46E5", "#65A30D", "#475569", "#E11D48", "#0D9488"];
 export const siteCourt = (n) => String(n || "").replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
-export function couleursSites(recurrences, person) {
-  const p = normP(person);
-  const sites = [...new Set((recurrences || []).filter(r => normP(r.person) === p && !r.supprimeLe && r.site)
-    .sort((a, b) => (a.jourSemaine ?? 0) - (b.jourSemaine ?? 0) || String(a.dateDebut).localeCompare(String(b.dateDebut))).map(r => siteCourt(r.site)))];
+// Couleurs GLOBALES (un site = toujours la même couleur, quelle que soit la personne).
+export function couleursSites(recurrences) {
+  const sites = [...new Set((recurrences || []).filter(r => !r.supprimeLe && r.site).map(r => siteCourt(r.site)))].sort((a, b) => a.localeCompare(b, "fr"));
   return new Map(sites.map((n, i) => [n, PALETTE_SITES[i % PALETTE_SITES.length]]));
+}
+// Abréviation courte pour les petites cases (« Le Bois Blanc » → « BB », « La Yole » → « LY »).
+export function abregeSite(n) {
+  const mots = siteCourt(n).replace(/[’']/g, " ").split(/\s+/).filter(m => m && !/^(le|la|les|l|de|du|des|rs|bat|a|lot|mna|-)$/i.test(m));
+  if (!mots.length) return "";
+  if (mots.length === 1) return mots[0].slice(0, 4).toUpperCase();
+  return mots.slice(0, 2).map(m => m[0]).join("").toUpperCase();
 }
