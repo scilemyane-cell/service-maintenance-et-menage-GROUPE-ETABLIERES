@@ -1519,7 +1519,7 @@ function renderVueMultiPersonnes(container, allPeople) {
                   if (coulSite) { bg = coulSite; titre = `📍 ${nomSite}${prog.type ? ` — ${prog.type}` : ""}`; }
                   const bordureCol = j.premierDuMois ? "border-left:1px solid var(--border)" : j.premierDeSemaine ? "border-left:1px dashed var(--border)" : "";
                   return `<td style="text-align:center;padding:2px 1px;${bordureCol}${j.ferie && !abs ? "background:rgba(143,95,191,.12)" : ""}${k === todayKey ? "outline:2px solid var(--gold);outline-offset:-2px;" : ""}">
-                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${(weekend || j.ferie) && !abs && !coulSite ? "opacity:.4" : ""};position:relative;${coulSite ? "color:#fff;font-size:7px;font-weight:800;line-height:" + largeurCol + "px;letter-spacing:-.3px;overflow:hidden" : ""}">
+                    <div title="${esc(titre)} — ${d.toLocaleDateString("fr-FR")}" style="width:${largeurCol}px;height:${largeurCol}px;margin:0 auto;border-radius:4px;background:${bg};${(weekend || j.ferie) && !abs && !coulSite ? "opacity:.4" : ""};position:relative;${coulSite ? "color:#fff;font-size:8px;font-weight:800;line-height:" + largeurCol + "px;letter-spacing:-.4px;overflow:hidden;white-space:nowrap" : ""}">
                       ${coulSite ? esc(abregeSite(nomSite)) : ""}${interv && !coulSite ? `<span style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 1px rgba(0,0,0,.3)" title="Intervention"></span>` : ""}
                     </div>
                   </td>`;
