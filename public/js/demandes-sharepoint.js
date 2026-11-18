@@ -278,11 +278,24 @@ export async function comparerAvecFichier(demandesApp, { onProgress = () => {} }
 // demande dont le N° existe déjà dans l'appli, ou descriptif d'une demande
 // existante qui change.
 export const SEUIL_DECALAGE = 3;
+const motsDescr = (t) => sa(t).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(m => m.length > 2);
+export function descriptifProche(avant, apres) {
+  const a = sa(avant).replace(/[^a-z0-9]/g, ""), b = sa(apres).replace(/[^a-z0-9]/g, "");
+  if (!a || !b || a === b) return true;                       // vide avant / après, ou ponctuation
+  if (a.includes(b.slice(0, 20)) || b.includes(a.slice(0, 20))) return true; // complété, préfixé, raccourci
+  const ma = new Set(motsDescr(avant)), mb = motsDescr(apres);
+  if (!ma.size || !mb.length) return false;
+  const communs = mb.filter(m => ma.has(m)).length;
+  return communs / Math.min(ma.size, mb.length) >= 0.6;      // reformulé, mêmes mots
+}
 export function signesDecalage(nouvelles, majs, demandesApp) {
   const nums = new Set((demandesApp || []).map(d => d.numero));
   const conflits = nouvelles.filter(n => nums.has(n.numero));
-  const descrChanges = majs.filter(([, d]) => "descriptif" in d);
   const parId = new Map((demandesApp || []).map(d => [d.id, d]));
+  // Un descriptif complété / précisé dans l'Excel (« plaque de cuisson… » →
+  // « cuisine : plaque de cuisson… », ou descriptif vide qu'on remplit) n'est
+  // PAS un décalage : seul un texte qui n'a plus rien à voir avec l'ancien compte.
+  const descrChanges = majs.filter(([id, d]) => "descriptif" in d && !descriptifProche(parId.get(id)?.descriptif, d.descriptif));
   const exemples = [
     ...conflits.slice(0, 5).map(n => `${n.numero} : « ${String(n.descriptif || "").slice(0, 40)} » (N° déjà pris par « ${String((demandesApp.find(d => d.numero === n.numero) || {}).descriptif || "").slice(0, 40)} »)`),
     ...descrChanges.slice(0, 5).map(([id, d]) => `${parId.get(id)?.numero || id} : « ${String(parId.get(id)?.descriptif || "").slice(0, 40)} » → « ${String(d.descriptif || "").slice(0, 40)} »`),
