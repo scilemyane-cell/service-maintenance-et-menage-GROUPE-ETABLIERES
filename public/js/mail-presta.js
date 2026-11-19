@@ -19,37 +19,44 @@ const BLEU = "#1f3a5f", OR = "#c9a227", VERT = "#2e7d4f";
 // Outlook / Gmail / téléphone) ; police forcée droite (Outlook met parfois
 // l'italique de son style par défaut).
 export function htmlMail(o, { sansSignature = false } = {}) {
+  // Outlook (collage) supprime une partie des styles posés sur <div>/<td> mais
+  // garde ceux des <span> et les fonds de cellule : tout le texte est donc dans
+  // des <span> stylés (couleur, police droite), les fonds sur les <td>.
   const F = "font-family:Segoe UI,Arial,Helvetica,sans-serif;font-style:normal;";
+  const T = (css, html) => `<span style="${F}${css}">${html}</span>`;
+  const nl = (t) => esc(t).replace(/\n/g, "<br>");
   const pastilles = (o.pastilles || []).filter(Boolean).map(t =>
-    `<span style="${F}display:inline-block;margin:3px;padding:6px 13px;border-radius:16px;background:#e8eef6;color:${BLEU};font-size:13px;font-weight:600">${esc(t)}</span>`).join("");
+    `<td style="background:#e8eef6;border-radius:14px;padding:6px 13px">${T(`font-size:13px;font-weight:600;color:${BLEU}`, esc(t))}</td><td style="width:6px"></td>`).join("");
   const lignes = (o.lignes || []).filter(l => l && l[2]).map(([ic, k, v]) =>
-    `<tr><td style="${F}width:34px;padding:9px 0;font-size:18px;vertical-align:top">${ic}</td><td style="${F}padding:9px 0;vertical-align:top"><div style="${F}font-size:12px;color:#6b7280;letter-spacing:.03em">${esc(k)}</div><div style="${F}font-size:15px;color:#1d2433;font-weight:600;margin-top:2px">${esc(v).replace(/\n/g, "<br>")}</div></td></tr>`).join("");
+    `<tr><td valign="top" style="width:30px;padding:9px 0">${T("font-size:17px", ic)}</td><td valign="top" style="padding:9px 0">${T("font-size:12px;color:#6b7280", esc(k))}<br>${T("font-size:14px;color:#1d2433;font-weight:600;line-height:1.45", nl(v))}</td></tr>`).join("");
   const etapes = (o.etapes || []).map((t, i) =>
-    `<tr><td style="${F}width:34px;padding:5px 0;vertical-align:top"><span style="${F}display:inline-block;width:22px;height:22px;line-height:22px;border-radius:11px;background:${OR};color:#fff;font-size:12px;font-weight:700;text-align:center">${i + 1}</span></td><td style="${F}padding:5px 0;font-size:14px;color:#374151">${esc(t)}</td></tr>`).join("");
+    `<tr><td valign="top" style="width:30px;padding:5px 0"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" style="width:22px;height:22px;background:${OR};border-radius:11px">${T("font-size:12px;font-weight:700;color:#ffffff", i + 1)}</td></tr></table></td><td valign="middle" style="padding:5px 0">${T("font-size:14px;color:#374151", esc(t))}</td></tr>`).join("");
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(o.objet)}</title></head>
 <body style="margin:0;padding:0;background:#eef1f5">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f5"><tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e1e5eb">
-  <tr><td style="height:6px;background:${BLEU};font-size:0;line-height:0">&nbsp;</td></tr>
-  <tr><td align="center" style="padding:28px 30px 6px"><img src="${LOGO}" alt="Groupe Établières" height="62" style="display:block;height:62px;border:0"></td></tr>
-  <tr><td align="center" style="padding:6px 30px 0">
-    <div style="${F}font-size:12px;letter-spacing:.14em;color:${OR};font-weight:700">${esc(o.etiquette || "ACCÈS PRESTATAIRE")}</div>
-    <div style="${F}font-size:23px;line-height:1.25;color:${BLEU};font-weight:700;margin:6px 0 12px">${esc(o.titre)}</div>
-    <div style="${F}font-size:15px;line-height:1.55;color:#1d2433">Bonjour, ${esc(o.intro).replace(/\n/g, "<br>")}</div>
-    ${pastilles ? `<div style="margin:16px 0 4px">${pastilles}</div>` : ""}
+<table role="presentation" width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border:1px solid #dfe3e9;border-radius:16px">
+  <tr><td align="center" style="padding:30px 30px 4px"><img src="${LOGO}" alt="Groupe Établières" height="64" style="display:block;height:64px;border:0"></td></tr>
+  <tr><td align="center" style="padding:10px 30px 0">
+    ${T(`font-size:12px;letter-spacing:2px;color:${OR};font-weight:700`, esc(o.etiquette || "ACCÈS PRESTATAIRE"))}<br>
+    ${T(`font-size:23px;line-height:1.5;color:${BLEU};font-weight:700`, esc(o.titre))}<br>
+    ${T("font-size:15px;line-height:1.55;color:#1d2433", `Bonjour, ${nl(o.intro)}`)}
   </td></tr>
-  ${lignes ? `<tr><td style="padding:14px 30px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fa;border-radius:10px;padding:6px 16px">${lignes}</table></td></tr>` : ""}
-  ${o.encadre ? `<tr><td style="padding:12px 30px 0"><div style="${F}padding:12px 16px;background:#fff8e1;border-radius:10px;font-size:14px;color:#5a4500">${esc(o.encadre).replace(/\n/g, "<br>")}</div></td></tr>` : ""}
-  <tr><td align="center" style="padding:22px 30px 6px">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="background:${VERT};border-radius:12px">
-      <a href="${esc(o.url)}" style="${F}display:block;padding:17px 20px;color:#ffffff;font-size:18px;font-weight:700;text-decoration:none">${esc(o.bouton)}&nbsp;&nbsp;›</a>
+  ${pastilles ? `<tr><td align="center" style="padding:14px 30px 0"><table role="presentation" cellpadding="0" cellspacing="0"><tr>${pastilles}</tr></table></td></tr>` : ""}
+  ${lignes ? `<tr><td style="padding:16px 30px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#f5f7fa;border-radius:10px;padding:6px 16px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${lignes}</table></td></tr></table></td></tr>` : ""}
+  ${o.encadre ? `<tr><td style="padding:12px 30px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#fff8e1;border-radius:10px;padding:12px 16px">${T("font-size:14px;color:#5a4500", nl(o.encadre))}</td></tr></table></td></tr>` : ""}
+  <tr><td align="center" style="padding:22px 30px 4px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="background:${VERT};border-radius:12px;padding:16px 20px">
+      <a href="${esc(o.url)}" style="${F}color:#ffffff;font-size:18px;font-weight:700;text-decoration:none">${T("color:#ffffff;font-size:18px;font-weight:700", `${esc(o.bouton)}&nbsp;&nbsp;›`)}</a>
     </td></tr></table>
-    <div style="${F}font-size:12px;color:#6b7280;margin-top:8px">Fonctionne sur téléphone, sans compte ni mot de passe.</div>
   </td></tr>
-  ${etapes ? `<tr><td style="padding:16px 30px 0"><div style="${F}font-size:13px;font-weight:700;color:${BLEU};margin-bottom:4px">Comment ça marche</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${etapes}</table></td></tr>` : ""}
-  ${o.apres ? `<tr><td style="${F}padding:12px 30px 0;font-size:14px;line-height:1.55;color:#4b5563">${esc(o.apres).replace(/\n/g, "<br>")}</td></tr>` : ""}
-  <tr><td style="${F}padding:20px 30px 24px;font-size:15px;color:#1d2433">Cordialement,${sansSignature ? "" : `<br><b>${esc(o.signature || "Service Maintenance et Entretien")}</b><br><span style="color:#6b7280">Groupe Établières</span>`}</td></tr>
-  <tr><td align="center" style="${F}background:${BLEU};color:#cfd8e3;font-size:12px;line-height:1.5;padding:14px 24px">Groupe Établières · Service Maintenance et Entretien<br><span style="color:#9fb0c6">Lien personnel, merci de ne pas le transférer. Une question ? Répondez à ce mail.</span></td></tr>
+  <tr><td align="center" style="padding:4px 30px 0">${T("font-size:12px;color:#6b7280", "Fonctionne sur téléphone, sans compte ni mot de passe.")}</td></tr>
+  ${etapes ? `<tr><td style="padding:18px 30px 0">${T(`font-size:13px;font-weight:700;color:${BLEU}`, "Comment ça marche")}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px">${etapes}</table></td></tr>` : ""}
+  ${o.apres ? `<tr><td style="padding:12px 30px 0">${T("font-size:14px;line-height:1.55;color:#4b5563", nl(o.apres))}</td></tr>` : ""}
+  <tr><td style="padding:20px 30px 22px">${T("font-size:15px;color:#1d2433", `Cordialement,${sansSignature ? "" : `<br><b>${esc(o.signature || "Service Maintenance et Entretien")}</b><br>Groupe Établières`}`)}</td></tr>
+  <tr><td align="center" style="background:#f5f7fa;border-top:1px solid #e5e8ee;border-radius:0 0 16px 16px;padding:14px 24px">
+    ${T(`font-size:12px;color:${BLEU};font-weight:600`, "Groupe Établières · Service Maintenance et Entretien")}<br>
+    ${T("font-size:12px;color:#5b6475", "Lien personnel, merci de ne pas le transférer. Une question ? Répondez à ce mail.")}
+  </td></tr>
 </table></td></tr></table></body></html>`;
 }
 
