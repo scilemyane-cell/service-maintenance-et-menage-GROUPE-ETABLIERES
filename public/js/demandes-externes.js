@@ -54,7 +54,7 @@ function rendre() {
     </form>
     ${liens.length ? `<div class="dex-liens">${liens.sort((a, b) => ms(b.creeLe) - ms(a.creeLe)).map(l => { const n = recues.filter(r => r.lien === l.id).length; return `<div class="dex-lien ${l.actif === false ? "coupe" : ""}">
       <div><b>${esc(l.label || "")}</b> — ${esc(l.site || "")}<small>${l.actif === false ? "⛔ coupé" : "✅ actif"} · ${n} demande${n > 1 ? "s" : ""} reçue${n > 1 ? "s" : ""}</small><code>${esc(urlLien(l.id))}</code></div>
-      <span class="dex-l-btns"><button type="button" class="nav-btn" data-dex-copie="${l.id}">📋 Copier</button><button type="button" class="nav-btn" data-dex-mail="${l.id}">✉️ Mail</button>
+      <span class="dex-l-btns"><button type="button" class="nav-btn" data-dex-copie="${l.id}">📋 Copier</button><button type="button" class="nav-btn" data-dex-mail="${l.id}">✉️ Mail / 🖼️ Image</button>
       <button type="button" class="nav-btn" data-dex-actif="${l.id}">${l.actif === false ? "▶ Réactiver" : "⛔ Couper"}</button></span>
     </div>`; }).join("")}</div>` : ""}
   </details>`;
@@ -76,7 +76,7 @@ function brancher() {
       etiquette: "ACCÈS PRESTATAIRE", titre: "Signaler une demande d'intervention",
       intro: `pour toute panne, dépannage ou réparation sur le site, vous disposez désormais d'un accès direct au service maintenance${l.label ? ` (${l.label})` : ""}.`,
       pastilles: [l.site],
-      bouton: "Faire une demande", url: urlLien(l.id),
+      bouton: "Faire une demande", url: urlLien(l.id), sms: `Groupe Établières – Demandes d'intervention (${l.site}).\nVotre accès : ${urlLien(l.id)}`,
       etapes: ["Ouvrez le lien (gardez ce mail, il sert à chaque fois).", "Indiquez votre nom et décrivez le problème.", "Ajoutez une photo si possible, puis envoyez."],
       signature: ctx.utilisateur || "Service Maintenance et Entretien",
     });

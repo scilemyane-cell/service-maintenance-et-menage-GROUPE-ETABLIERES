@@ -535,7 +535,7 @@ async function mailInvitation(inv) {
     intro: `voici votre accès personnel${inv.label ? ` pour ${inv.label}` : ""}${inv.debut ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
     pastilles: sitesInv(inv).map(s => String(s.name || "").replace(/^Maison MNA\s+/i, "")),
     cases: { icone: "🔑", libelle: "Codes boîtes à clés", items, vide: "Aucun code de boîte à clés trouvé pour ces sites (onglet Codes Masterlock des dossiers de site)." },
-    bouton: "Ouvrir mes fiches", url: guestLink(inv.id),
+    bouton: "Ouvrir mes fiches", url: guestLink(inv.id), sms: texteSms(inv),
     etapes: ["Ouvrez le lien sur votre téléphone.", "À la première ouverture, indiquez vos nom, prénom et société.", "Remplissez la fiche à chaque passage."],
     signature: currentUser?.nom || "Service Maintenance et Entretien",
   });
@@ -556,7 +556,7 @@ function renderInvites(container, user) {
       <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
       <td style="white-space:nowrap">
         ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
-        <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail</button>
+        <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail / 🖼️ Image</button>
         <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
         <button class="nav-btn" data-toggle="${inv.id}" data-active="${inv.active}" style="padding:4px 10px;font-size:11px">${inv.active ? "⛔ Couper" : "Réactiver"}</button>
         <button class="del-btn" data-del-inv="${inv.id}">🗑️</button>
@@ -579,7 +579,7 @@ function renderInvites(container, user) {
       ${(() => { const inv = invState.invitations.find(i => i.id === invState.dernier); if (!inv) return "";
         const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
         return `<div class="form-card" style="border:2px solid var(--teal)"><b>✅ Accès créé pour ${esc(inv.label)}</b><p class="hint" style="margin:4px 0 10px">Envoie-le maintenant :</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail-inv="${inv.id}">✉️ Envoyer par mail</button><button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail-inv="${inv.id}">✉️ Mail / 🖼️ Image</button><button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
           <p class="hint" style="margin:8px 0 0">Sur ordinateur, le bouton SMS ouvre l'application de messages si elle est reliée à ton téléphone ; sinon copie le message et colle-le dans un SMS.</p></div>`; })()}
       <div class="table-wrap"><table>
         <thead><tr><th>Prestataire</th><th>Sites</th><th>Période</th><th>État</th><th></th></tr></thead>

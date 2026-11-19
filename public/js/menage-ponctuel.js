@@ -158,7 +158,7 @@ function liste() {
   return `<div class="mp-tete"><div><h3 style="margin:0">🧽 Ménage ponctuel par une entreprise</h3><p class="hint" style="margin:2px 0 0">Gros ménage sur un site : l'entreprise reçoit un lien, pointe ses heures, coche les pièces avec photos avant / après. Tu suis tout ici puis tu valides.</p></div>
       <span class="mp-actions"><button class="nav-btn" data-plans>🏠 Pièces des maisons</button>${ui.form ? "" : `<button class="add-btn" data-nouveau>➕ Faire passer une entreprise</button>`}</span></div>
     ${ui.form ? formulaire() : ""}
-    ${ui.cree ? `<div class="mp-lien">✓ Mission créée — envoie le lien à l'entreprise : <button class="nav-btn" data-copier="${ui.cree}">📋 Copier le lien</button>${st.missions.find(m => m.id === ui.cree)?.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(st.missions.find(m => m.id === ui.cree))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail="${ui.cree}">✉️ Envoyer par mail</button><button class="nav-btn" data-fermer-cree>OK</button></div>` : ""}
+    ${ui.cree ? `<div class="mp-lien">✓ Mission créée — envoie le lien à l'entreprise : <button class="nav-btn" data-copier="${ui.cree}">📋 Copier le lien</button>${st.missions.find(m => m.id === ui.cree)?.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(st.missions.find(m => m.id === ui.cree))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail="${ui.cree}">✉️ Mail / 🖼️ Image</button><button class="nav-btn" data-fermer-cree>OK</button></div>` : ""}
     ${enCours.length ? `<div class="mp-grille">${enCours.map(carte).join("")}</div>` : (ui.form ? "" : `<div class="form-card hint">Aucun ménage ponctuel en cours.</div>`)}
     ${faits.length ? `<details class="form-card"><summary style="cursor:pointer;font-weight:700">✅ Validés (${faits.length})</summary><div class="mp-grille" style="margin-top:10px">${faits.map(carte).join("")}</div></details>` : ""}`;
 }
@@ -207,7 +207,7 @@ function mailMission(m) {
     etiquette: "MISSION DE MÉNAGE", titre: m.siteName,
     intro: `voici votre accès personnel${m.entreprise ? ` pour ${m.entreprise}` : ""}, valable du ${dateFr(m.debut)} au ${dateFr(m.fin)}.`,
     lignes: [["🔑", "Boîte à clés", (m.codes || []).map(c => `${c.nom || "Boîte"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}`).join("\n")], ["📝", "Consignes", m.consignes]],
-    bouton: "Ouvrir ma mission", url: lienMission(m.id),
+    bouton: "Ouvrir ma mission", url: lienMission(m.id), sms: smsTexte(m),
     etapes: ["À l'arrivée, ouvrez le lien et appuyez sur « J'arrive ».", "Prenez une photo avant et après chaque pièce.", "Terminez avec « Terminer et envoyer »."],
     signature: ctx.user?.nom || "Service Maintenance et Entretien",
   });
@@ -227,7 +227,7 @@ function detail(m) {
       ${m.consignes ? `<p style="white-space:pre-wrap;margin:8px 0 0;font-size:13.5px"><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
       <div class="mp-actions" style="margin-top:10px">
         <a class="add-btn" style="text-decoration:none" href="${lienMission(m.id)}&apercu=1" target="_blank" rel="noopener">👁️ Voir la fiche de l'entreprise</a>
-        <button class="nav-btn" data-copier="${m.id}">📋 Copier le lien</button>${m.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(m)}">📱 SMS</a>` : ""}<button class="nav-btn" data-mail="${m.id}">✉️ Mail</button>
+        <button class="nav-btn" data-copier="${m.id}">📋 Copier le lien</button>${m.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(m)}">📱 SMS</a>` : ""}<button class="nav-btn" data-mail="${m.id}">✉️ Mail / 🖼️ Image</button>
         <button class="nav-btn" data-acces="${actif(m) ? "0" : "1"}">${actif(m) ? "⛔ Couper l'accès" : "🔓 Rouvrir l'accès"}</button>
         ${m.validee ? "" : `<button class="nav-btn" data-modif-detail>✏️ Modifier</button>`}
         <button class="nav-btn" data-imprimer>🖨️ Imprimer le compte rendu</button>

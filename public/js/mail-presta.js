@@ -94,7 +94,7 @@ export function ouvrirMailPresta(o) {
   fond.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px";
   fond.innerHTML = `<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:14px;max-width:680px;width:100%;max-height:94vh;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:14px 16px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--border,#ddd)">
-      <b style="flex:1">✉️ Mail pour le prestataire</b><button type="button" class="nav-btn" data-mpx-fermer>✕</button></div>
+      <b style="flex:1">📤 Envoyer au prestataire</b><button type="button" class="nav-btn" data-mpx-fermer>✕</button></div>
     <div style="padding:10px 16px;display:grid;gap:8px">
       <label style="display:grid;gap:3px;font-size:13px">À<input type="email" data-mpx-a value="${esc(o.a || "")}" placeholder="adresse mail du prestataire"></label>
       <label style="display:grid;gap:3px;font-size:13px">Objet<input data-mpx-objet value="${esc(o.objet)}"></label>
@@ -104,7 +104,8 @@ export function ouvrirMailPresta(o) {
     <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border,#ddd)">
       <button type="button" class="add-btn" data-mpx-copier>📋 Copier le mail</button>
       <button type="button" class="nav-btn" data-mpx-eml>⬇️ Brouillon Outlook (PC)</button>
-      <small class="hint" data-mpx-aide style="flex-basis:100%">« Copier le mail » : ta messagerie s'ouvre, colle (Ctrl+V) dans le corps du mail. « Brouillon Outlook » : ouvre le fichier téléchargé, le mail est prêt, clique Envoyer.</small>
+      <button type="button" class="add-btn" data-mpx-image style="background:#2e7d4f">🖼️ Envoyer en image (SMS)</button>
+      <small class="hint" data-mpx-aide style="flex-basis:100%">« Copier le mail » : ta messagerie s'ouvre, colle (Ctrl+V) dans le corps du mail. « Brouillon Outlook » : ouvre le fichier téléchargé, le mail est prêt, clique Envoyer. « Image (SMS) » : sur téléphone, choisis Messages (ou WhatsApp) — l'image part avec le lien ; sur PC, l'image est téléchargée et le texte copié.</small>
     </div></div>`;
   document.body.appendChild(fond);
   // Ligne « cases » (ex. 🔑 codes) recalculée selon ce qui est coché.
@@ -129,4 +130,13 @@ export function ouvrirMailPresta(o) {
     } catch (err) { alert("Copie impossible : " + (err?.message || err)); }
   });
   fond.querySelector("[data-mpx-eml]").addEventListener("click", () => telechargerEml(val()));
+  fond.querySelector("[data-mpx-image]").addEventListener("click", async (e) => {
+    const b = e.target, avant = b.textContent; b.disabled = true; b.textContent = "⏳ Préparation de l'image…";
+    try {
+      const { partagerCarte } = await import("./image-presta.js");
+      const r = await partagerCarte(val(), o.sms || `${o.titre} — ${o.url}`);
+      b.textContent = r === "telecharge" ? "✓ Image téléchargée, texte copié" : r === "partage" ? "✓ Envoyé" : avant;
+    } catch (err) { alert("Image impossible : " + (err?.message || err)); b.textContent = avant; }
+    b.disabled = false;
+  });
 }
