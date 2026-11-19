@@ -34,7 +34,7 @@ function saisieEnCours() {
 // Une coche enregistrée revient aussitôt par l'écoute (copie locale) : l'écran
 // affiche déjà la bonne valeur, inutile de tout redessiner (la page sautait).
 let ignorerJusqua = 0;
-function sauverFiche(id, data) { ignorerJusqua = Date.now() + 4000; return saveFiche(id, data); }
+function sauverFiche(id, data) { if (semaineFermee()) return Promise.reject(new Error("Seule la fiche de la semaine en cours peut être remplie.")); ignorerJusqua = Date.now() + 4000; return saveFiche(id, data); }
 function renderSiLibre() {
   if (Date.now() < ignorerJusqua) return;
   if (saisieEnCours()) { renderEnAttente = true; return; }
@@ -116,6 +116,10 @@ function prendreCorrection() {
   if (!c || !isEditorUser(mountedUser)) return;
   ui.siteId = c.siteId; ui.weekStart = c.weekStart; ui.actingUid = c.agentUid; ui.actingNom = c.agentNom; ui.vue = "semaine"; ui.jour = null;
 }
+// Agent / agent d'entretien : seule la semaine EN COURS se remplit. Les autres
+// semaines restent consultables mais verrouillées (évite de cocher par erreur
+// la fiche de la semaine dernière). Les responsables peuvent toujours corriger.
+function semaineFermee() { return !isEditorUser(mountedUser) && !!ui.weekStart && ui.weekStart !== dateKey(mondayOf(new Date())); }
 function isEditorUser(user) { return user && (user.role === "super_admin" || user.role === "admin" || user.role === "n1"); }
 
 function effectiveAgent() {
@@ -199,6 +203,7 @@ function currentFiche() {
 
 function scheduleSave(id, data) {
   if (data?.validee && !isEditorUser(mountedUser)) { window.toast?.("🔒 Fiche validée : elle ne peut plus être modifiée"); return; }
+  if (semaineFermee()) { window.toast?.("🔒 Seule la fiche de la semaine en cours peut être remplie"); return; }
   setSaveStatus("saving");
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
@@ -564,6 +569,7 @@ function renderInterne() {
         <button class="${ui.vue === "semaine" ? "actif" : ""}" data-fj-vue="semaine">📋 Toute la semaine</button>
       </div>
 
+      ${semaineFermee() ? `<div class="stat-chip" style="width:fit-content;background:#eef1f6;color:#33449a;border:1px solid #c7d0e6">🔒 ${ui.weekStart < dateKey(mondayOf(new Date())) ? "Semaine passée" : "Semaine à venir"} : consultation seulement. Seule la fiche de la semaine en cours se remplit — en cas d'oubli, préviens ton responsable.</div>` : ""}
       ${data.validee ? `<div class="stat-chip ok" style="width:fit-content">✅ Fiche vérifiée et validée${data.valideePar ? ` par ${esc(data.valideePar)}` : ""}${data.valideeLe ? ` le ${esc(new Date(data.valideeLe).toLocaleDateString("fr-FR"))}` : ""}</div>`
         : data.submitted ? `<div class="stat-chip" style="width:fit-content;background:#fff4dc;color:#8a5a00;border:1px solid #f0c060">⏳ Fiche envoyée au responsable — en attente de vérification</div>` : ""}
       ${(() => {
@@ -635,7 +641,7 @@ function renderInterne() {
 
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <button class="add-btn" id="fc-save">💾 Enregistrer</button>
-        ${data.validee && !isEditorUser(mountedUser) ? "" : `<button class="nav-btn" id="fc-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "📤 Terminer et envoyer au responsable"}</button>`}
+        ${(data.validee && !isEditorUser(mountedUser)) || semaineFermee() ? "" : `<button class="nav-btn" id="fc-submit">${data.submitted ? "↩️ Rouvrir la fiche" : "📤 Terminer et envoyer au responsable"}</button>`}
         <span id="fc-save-status" style="font-size:12px"></span>
       </div>
     </div>
@@ -770,8 +776,9 @@ function renderInterne() {
     catch (e) { console.error(e); setSaveStatus("error", e.message || String(e)); }
   });
   // Fiche validée par le responsable : lecture seule pour l'agent (rien à cocher, effacer ou corriger).
-  if (data.validee && !isEditorUser(mountedUser)) {
+  if ((data.validee && !isEditorUser(mountedUser)) || semaineFermee()) {
     mountedContainer.querySelectorAll("input, textarea, select").forEach(el => { if (el.id !== "fc-site") el.disabled = true; });
+    mountedContainer.querySelectorAll("[data-fj-coche]").forEach(b => { b.disabled = true; b.style.pointerEvents = "none"; });
     mountedContainer.querySelectorAll("#fc-save, #fc-add-chambre, [data-ph-del], [data-del-chambre], [data-fj-obs-btn]").forEach(el => el.remove());
   }
   document.getElementById("fc-corr-date")?.addEventListener("click", () => { const f = document.getElementById("fc-corr-form"); const ouvrir = f.style.display === "none"; f.style.display = ouvrir ? "flex" : "none"; if (ouvrir) f.m.focus(); });
