@@ -11,7 +11,7 @@ import { watchUsers } from "./users-data.js";
 import { getGraphToken } from "./graph-auth.js";
 import { uploadToDrive, EXPORTS_ROOT_FOLDER } from "./sharepoint-storage.js";
 import { lireFicheExistante } from "./fiches-poste-import.js";
-import { MODELES, MISSIONS, SAVOIR_FAIRE, SAVOIR_ETRE, ASSOCIATIONS, RESIDENCES, MANAGERS, POSITIONNEMENT, CHAQUE_COLLABORATEUR, TEXTE_MISSIONS, ficheDepuisModele } from "./fiches-poste-modeles.js";
+import { MODELES, MISSIONS, SAVOIR_FAIRE, SAVOIR_ETRE, ASSOCIATIONS, RESIDENCES, MANAGERS, POSITIONNEMENT, CHAQUE_COLLABORATEUR, TEXTE_MISSIONS, ficheDepuisModele, missionParId } from "./fiches-poste-modeles.js";
 
 const COL = "fiches-poste";
 let conteneur = null, user = null, unsubs = [], fiches = [], personnes = [], incont = {}, incontListes = { savoirFaire: {}, savoirEtre: {} };
@@ -50,7 +50,7 @@ function incontournables(f) {
   const k = clePoste(f.poste); if (!k) return [];
   if (Array.isArray(incont[k])) return incont[k];
   const m = MODELES.find(x => x.id === f.modele && clePoste(x.poste) === k) || MODELES.find(x => clePoste(x.poste) === k);
-  return m ? m.missions.map(id => MISSIONS.flatMap(t => t.liste).find(x => x.id === id)?.texte).filter(Boolean) : [];
+  return m ? m.missions.map(x => (typeof x === "string" ? (MISSIONS.flatMap(t => t.liste || []).find(y => y.id === x) || missionParId(x)) : x)?.texte).filter(Boolean) : [];
 }
 // Idem pour les savoir-faire / savoirs-être (nom = "savoirFaire" | "savoirEtre").
 // Techniciens de maintenance (dont « / espaces verts ») : mêmes savoir-faire et savoirs-être incontournables.
