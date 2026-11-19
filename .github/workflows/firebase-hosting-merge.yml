@@ -54,6 +54,8 @@ jobs:
               "public": "site",
               "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
               "rewrites": [
+                { "source": "/m/**", "destination": "/guest.html" },
+                { "source": "/d/**", "destination": "/demande-guest.html" },
                 { "source": "/", "destination": "/index.html" },
                 { "source": "/beta", "destination": "/beta/index.html" }
               ],
