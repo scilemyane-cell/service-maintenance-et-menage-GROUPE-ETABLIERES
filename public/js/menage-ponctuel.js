@@ -204,12 +204,11 @@ const smsTexte = (m) => `Groupe Établières – Ménage ${m.siteName}, du ${dat
 function mailMission(m) {
   ouvrirMailPresta({
     a: m.email || "", objet: `Mission de ménage — ${m.siteName} — du ${dateFr(m.debut)} au ${dateFr(m.fin)}`,
-    titre: "Votre mission de ménage",
-    intro: `Le Groupe Établières vous confie une prestation de ménage. Vous trouverez ci-dessous les informations utiles et votre accès personnel.`,
-    lignes: [["Entreprise", m.entreprise], ["Site", m.siteName], ["Période", `du ${dateFr(m.debut)} au ${dateFr(m.fin)}`],
-      ["Boîte à clés", (m.codes || []).map(c => `${c.nom || "Boîte"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}`).join("\n")], ["Consignes", m.consignes]],
-    bouton: "Accéder à la mission", url: lienMission(m.id),
-    apres: "Sur place : appuyez sur « J'arrive », prenez une photo avant et après chaque pièce, puis « Terminer et envoyer ». Le lien fonctionne sur téléphone, sans compte ni mot de passe.",
+    etiquette: "MISSION DE MÉNAGE", titre: m.siteName,
+    intro: `voici votre accès personnel${m.entreprise ? ` pour ${m.entreprise}` : ""}, valable du ${dateFr(m.debut)} au ${dateFr(m.fin)}.`,
+    lignes: [["🔑", "Boîte à clés", (m.codes || []).map(c => `${c.nom || "Boîte"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}`).join("\n")], ["📝", "Consignes", m.consignes]],
+    bouton: "Ouvrir ma mission", url: lienMission(m.id),
+    etapes: ["À l'arrivée, ouvrez le lien et appuyez sur « J'arrive ».", "Prenez une photo avant et après chaque pièce.", "Terminez avec « Terminer et envoyer »."],
     signature: ctx.user?.nom || "Service Maintenance et Entretien",
   });
 }

@@ -1,5 +1,7 @@
 import { esc, addDays, dateKey, fmtShort, isPlausibleDate } from "./astreinte-logic.js";
 import { ouvrirMailPresta } from "./mail-presta.js";
+import { watchSitesDossiers } from "./site-dossier-data.js";
+import { listerCodesPourSite } from "./masterlock-data.js";
 import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile, preparerCompteEnAttente } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation, createLienAgent } from "./invitations-data.js";
@@ -508,15 +510,33 @@ const sitesInv = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.si
 function texteSms(inv) {
   return `Groupe Établières – Fiches de traçabilité ménage (${sitesInv(inv).map(s => s.name).join(", ")})${inv.debut ? `, du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.\nVotre accès personnel : ${guestLink(inv.id)}`;
 }
+// Codes boîte à clés des sites de l'accès (onglet Codes Masterlock du dossier de site).
+const normSite = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(maison|mna|la|le|les)\b/g, " ").replace(/[^a-z0-9]+/g, " ").replace(/\bst\b/g, "saint").trim();
+async function codesDesSites(sites) {
+  const dossiers = await new Promise((ok) => { let u = null, fini = false; u = watchSitesDossiers((l) => { if (fini) return; fini = true; ok(l || []); setTimeout(() => u?.(), 0); }); setTimeout(() => { if (!fini) { fini = true; ok([]); } }, 6000); });
+  const items = [];
+  for (const s of sites) {
+    const n = normSite(s.name);
+    const sigle = (t) => normSite(t).split(" ").filter(Boolean).map(w => w[0]).join(""); // « DR » = Douanier Rousseau
+    const d = dossiers.find(x => normSite(x.nom) === n) || dossiers.find(x => { const m = normSite(x.nom); return n && m && (m.includes(n) || n.includes(m)); })
+      || dossiers.find(x => n && n.replace(/ /g, "") === sigle(x.nom));
+    if (!d) continue;
+    const codes = await listerCodesPourSite(d.id).catch(() => []);
+    codes.filter(c => c.code).forEach(c => items.push({ texte: `${String(s.name).replace(/^Maison MNA\s+/i, "")} — ${c.nom || "Boîte à clés"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}` }));
+  }
+  return items;
+}
 // Mail mis en forme (logo, récapitulatif, bouton) pour le prestataire.
-function mailInvitation(inv) {
+async function mailInvitation(inv) {
+  const items = await codesDesSites(sitesInv(inv)).catch(() => []);
   ouvrirMailPresta({
     objet: `Accès aux fiches de traçabilité ménage — Groupe Établières`,
-    titre: "Vos fiches de traçabilité ménage",
-    intro: "Le Groupe Établières vous ouvre un accès personnel pour renseigner les fiches de traçabilité du ménage sur les sites ci-dessous.",
-    lignes: [["Prestataire", inv.label], ["Sites", sitesInv(inv).map(s => s.name).join("\n")], ["Période", inv.debut ? `du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""]],
-    bouton: "Accéder aux fiches de traçabilité", url: guestLink(inv.id),
-    apres: "À la première ouverture, indiquez vos nom, prénom et société. Le lien fonctionne sur téléphone, sans compte ni mot de passe.",
+    etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de traçabilité ménage",
+    intro: `voici votre accès personnel${inv.label ? ` pour ${inv.label}` : ""}${inv.debut ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
+    pastilles: sitesInv(inv).map(s => String(s.name || "").replace(/^Maison MNA\s+/i, "")),
+    cases: { icone: "🔑", libelle: "Codes boîtes à clés", items, vide: "Aucun code de boîte à clés trouvé pour ces sites (onglet Codes Masterlock des dossiers de site)." },
+    bouton: "Ouvrir mes fiches", url: guestLink(inv.id),
+    etapes: ["Ouvrez le lien sur votre téléphone.", "À la première ouverture, indiquez vos nom, prénom et société.", "Remplissez la fiche à chaque passage."],
     signature: currentUser?.nom || "Service Maintenance et Entretien",
   });
 }

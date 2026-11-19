@@ -73,11 +73,11 @@ function brancher() {
     const l = liens.find(x => x.id === b.dataset.dexMail); if (!l) return;
     ouvrirMailPresta({
       objet: `Demandes d'intervention — ${l.site} — Groupe Établières`,
-      titre: "Signaler une demande d'intervention",
-      intro: `Pour toute demande d'intervention (panne, dépannage, réparation) sur le site ${l.site}, vous disposez désormais d'un accès direct au service maintenance du Groupe Établières.`,
-      lignes: [["Société", l.label], ["Site", l.site]],
-      bouton: "Faire une demande d'intervention", url: urlLien(l.id),
-      apres: "Indiquez votre nom, décrivez le problème et ajoutez une photo si possible : la demande arrive directement au service maintenance. Conservez ce mail pour vos prochaines demandes.",
+      etiquette: "ACCÈS PRESTATAIRE", titre: "Signaler une demande d'intervention",
+      intro: `pour toute panne, dépannage ou réparation sur le site, vous disposez désormais d'un accès direct au service maintenance${l.label ? ` (${l.label})` : ""}.`,
+      pastilles: [l.site],
+      bouton: "Faire une demande", url: urlLien(l.id),
+      etapes: ["Ouvrez le lien (gardez ce mail, il sert à chaque fois).", "Indiquez votre nom et décrivez le problème.", "Ajoutez une photo si possible, puis envoyez."],
       signature: ctx.utilisateur || "Service Maintenance et Entretien",
     });
   }));
