@@ -72,7 +72,19 @@ function statut(v) {
   if ((t.startsWith("attente") || t.startsWith("en attente")) && t.includes("date")) return "En attente de date d'intervention";
   return { "pris en compte": "Pris en compte", "demande de devis": "Demande de devis", "planifie": "Planifié", "intervenant sollicite": "Intervenant sollicité", "commande en cours": "Commande en cours", "autre": "Autre" }[t] || txt(v);
 }
-const urgence = (v) => ({ normal: "Normal", urgent: "Urgent", "a planifier": "À planifier", critique: "Critique" }[sa(v)] || "Non renseignée");
+// Saisie libre dans l'Excel (menu déroulant perdu) : « urgent », « URGENT »,
+// « Urgent ! », « très urgent », « urgente », « URGENCE », espaces… → on
+// reconnaît le mot plutôt qu'exiger l'orthographe exacte.
+const urgence = (v) => {
+  const t = sa(v).replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return "Non renseignée";
+  if (/\b(pas|non) urgen/.test(t)) return "Normal";
+  if (/critique/.test(t)) return "Critique";
+  if (/urgen/.test(t)) return "Urgent";
+  if (/planif/.test(t)) return "À planifier";
+  if (/normal/.test(t)) return "Normal";
+  return "Non renseignée";
+};
 const association = (v) => { const t = sa(v); return t === "ecole" || t === "lycee" ? "École" : t === "agropolis" ? "Agropolis" : t === "armonia" ? "Armonia" : "Autres"; };
 const ALIAS = { ronald: "Ronald", rnld: "Ronald", ecoleau: "Écol'eau", saisonnier: "Saisonnier", arnaudelec: "Arnaud Élec", vendeehabitat: "Vendée Habitat", vendeehabita: "Vendée Habitat",
   mickaelfouet: "Mickaël Fouet", mfouet: "Mickaël Fouet", yann: "Yann", bamenuiserie: "BA Menuiserie", fsb: "FSB", richards: "Richards", lionel: "Lionel", kevin: "Kevin",
