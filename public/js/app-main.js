@@ -212,6 +212,10 @@
       if (!r.ok) return;
       versionEnLigne = await r.json();
       document.querySelectorAll(".app-version").forEach(el => { el.innerHTML = versionTexte(); });
+      // Télé « sans mise à jour » (app.html?ecran=atelier&maj=nuit) : aucune recharge
+      // en journée ni bandeau ; la nouvelle version est prise au rechargement de 4 h
+      // (ou via le bouton « Recharger la télé » de l'écran atelier).
+      if (new URLSearchParams(location.search).get("maj") === "nuit" && window.__modeTele) return;
       if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) {
         // Télé : recharge seule, UNE fois par nouvelle version et au plus toutes les 10 min (sinon, si le PC garde
         // l'ancienne page en mémoire, l'écran se rechargeait en boucle). Sinon bandeau « Mettre à jour ».
