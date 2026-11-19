@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<base href="/">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Demande d'intervention — Groupe Établières</title>
 <meta name="robots" content="noindex">
@@ -52,7 +53,8 @@
   import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { doc, getDoc, getDocs, addDoc, collection, query, where, serverTimestamp } from "./js/firestore-compte.js";
 
-  const token = new URLSearchParams(location.search).get("l");
+  // Lien court …/d/CODE ou ancien lien demande-guest.html?l=CODE.
+  const token = new URLSearchParams(location.search).get("l") || (location.pathname.match(/^\/d\/([A-Za-z0-9_-]+)/) || [])[1] || null;
   const app = document.getElementById("app");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const lire = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };

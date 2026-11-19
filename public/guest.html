@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<base href="/">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fiches ménage — Établières</title>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("etablieres-theme")||"sombre";}catch(e){}</script>
@@ -22,7 +23,8 @@
   import { mountGuestFiche, sitesInvitation } from "./js/guest-fiche.js";
 
   const params = new URLSearchParams(location.search);
-  const token = params.get("invite");
+  // Lien court …/m/CODE (prestataire ménage) ou ancien lien guest.html?invite=CODE.
+  const token = params.get("invite") || (location.pathname.match(/^\/m\/([A-Za-z0-9_-]+)/) || [])[1] || null;
   const app = document.getElementById("app");
 
   function showError(msg) {

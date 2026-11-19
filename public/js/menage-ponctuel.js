@@ -6,6 +6,7 @@
 import { esc } from "./astreinte-logic.js";
 import { watchInvitations } from "./invitations-data.js";
 import { voirPhotos } from "./demandes-photos.js";
+import { ouvrirMailPresta } from "./mail-presta.js";
 import { watchSites } from "./sites-data.js";
 import { watchAssociations } from "./associations-data.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
@@ -157,13 +158,13 @@ function liste() {
   return `<div class="mp-tete"><div><h3 style="margin:0">🧽 Ménage ponctuel par une entreprise</h3><p class="hint" style="margin:2px 0 0">Gros ménage sur un site : l'entreprise reçoit un lien, pointe ses heures, coche les pièces avec photos avant / après. Tu suis tout ici puis tu valides.</p></div>
       <span class="mp-actions"><button class="nav-btn" data-plans>🏠 Pièces des maisons</button>${ui.form ? "" : `<button class="add-btn" data-nouveau>➕ Faire passer une entreprise</button>`}</span></div>
     ${ui.form ? formulaire() : ""}
-    ${ui.cree ? `<div class="mp-lien">✓ Mission créée — envoie le lien à l'entreprise : <button class="nav-btn" data-copier="${ui.cree}">📋 Copier le lien</button>${st.missions.find(m => m.id === ui.cree)?.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(st.missions.find(m => m.id === ui.cree))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-fermer-cree>OK</button></div>` : ""}
+    ${ui.cree ? `<div class="mp-lien">✓ Mission créée — envoie le lien à l'entreprise : <button class="nav-btn" data-copier="${ui.cree}">📋 Copier le lien</button>${st.missions.find(m => m.id === ui.cree)?.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(st.missions.find(m => m.id === ui.cree))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail="${ui.cree}">✉️ Envoyer par mail</button><button class="nav-btn" data-fermer-cree>OK</button></div>` : ""}
     ${enCours.length ? `<div class="mp-grille">${enCours.map(carte).join("")}</div>` : (ui.form ? "" : `<div class="form-card hint">Aucun ménage ponctuel en cours.</div>`)}
     ${faits.length ? `<details class="form-card"><summary style="cursor:pointer;font-weight:700">✅ Validés (${faits.length})</summary><div class="mp-grille" style="margin-top:10px">${faits.map(carte).join("")}</div></details>` : ""}`;
 }
 
 function formulaire() {
-  const d = ui.draft || (ui.draft = { siteId: sitesDispo()[0]?.id || "", entreprise: "", telephone: "", debut: auj(), fin: plus(auj(), 7), consignes: "", pieces: null, autres: "" });
+  const d = ui.draft || (ui.draft = { siteId: sitesDispo()[0]?.id || "", entreprise: "", telephone: "", email: "", debut: auj(), fin: plus(auj(), 7), consignes: "", pieces: null, autres: "" });
   if (!sitesDispo().some(s => s.id === d.siteId)) d.siteId = sitesDispo()[0]?.id || "";
   const site = sitesDispo().find(s => s.id === d.siteId);
   const pcs = sitePieces(site), sig = d.siteId + "|" + pcs.map(p => p.cle).join("¦");
@@ -172,6 +173,7 @@ function formulaire() {
     <label class="plein">Site<select name="siteId" data-d>${optionsSites(d.siteId)}</select></label>
     <label>Entreprise<input name="entreprise" data-d required value="${esc(d.entreprise)}" placeholder="Nom de la société"></label>
     <label>Téléphone (pour le SMS)<input name="telephone" data-d type="tel" value="${esc(d.telephone)}" placeholder="06…"></label>
+    <label>Mail (pour le mail)<input name="email" data-d type="email" value="${esc(d.email || "")}" placeholder="contact@entreprise.fr"></label>
     <label>Du<input name="debut" data-d type="date" required value="${d.debut}"></label>
     <label>Au (le lien s'arrête après)<input name="fin" data-d type="date" required value="${d.fin}"></label>
     <label class="plein">Consignes pour l'entreprise<textarea name="consignes" data-d rows="3" placeholder="Ex. gros ménage complet avant l'arrivée d'un jeune : vitres, sols, cuisine (four, frigo), sanitaires détartrés…">${esc(d.consignes)}</textarea></label>
@@ -197,7 +199,20 @@ const codeCoche = (c) => !(ui.draft?.codesOff || {})[c.id] && (!ui.draft?.codesG
 function brancherCodes() { cont?.querySelectorAll("[data-code]").forEach(cb => cb.addEventListener("change", () => {
   const off = {}; cont.querySelectorAll("[data-code]").forEach(x => { off[x.dataset.code] = !x.checked; }); ui.draft.codesOff = off; ui.draft.codesGarder = null; })); }
 const texteCodes = (m) => (m.codes || []).length ? ` Boîte à clés : ${m.codes.map(c => `${c.nom || "boîte"} code ${c.code}${c.notes ? ` (${c.notes})` : ""}`).join(" ; ")}.` : "";
-const smsTexte = (m) => `Bonjour, voici votre accès pour le ménage du site ${m.siteName} (Groupe Établières), du ${dateFr(m.debut)} au ${dateFr(m.fin)}.${texteCodes(m)} À l'arrivée, ouvrez ce lien, appuyez sur « J'arrive », prenez les photos avant / après de chaque pièce, puis « Terminer et envoyer » : ${lienMission(m.id)}`;
+const smsTexte = (m) => `Groupe Établières – Ménage ${m.siteName}, du ${dateFr(m.debut)} au ${dateFr(m.fin)}.${texteCodes(m)}\nVotre accès : ${lienMission(m.id)}`;
+// Mail mis en forme (logo, récapitulatif, bouton « Accéder à la mission »).
+function mailMission(m) {
+  ouvrirMailPresta({
+    a: m.email || "", objet: `Mission de ménage — ${m.siteName} — du ${dateFr(m.debut)} au ${dateFr(m.fin)}`,
+    titre: "Votre mission de ménage",
+    intro: `Le Groupe Établières vous confie une prestation de ménage. Vous trouverez ci-dessous les informations utiles et votre accès personnel.`,
+    lignes: [["Entreprise", m.entreprise], ["Site", m.siteName], ["Période", `du ${dateFr(m.debut)} au ${dateFr(m.fin)}`],
+      ["Boîte à clés", (m.codes || []).map(c => `${c.nom || "Boîte"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}`).join("\n")], ["Consignes", m.consignes]],
+    bouton: "Accéder à la mission", url: lienMission(m.id),
+    apres: "Sur place : appuyez sur « J'arrive », prenez une photo avant et après chaque pièce, puis « Terminer et envoyer ». Le lien fonctionne sur téléphone, sans compte ni mot de passe.",
+    signature: ctx.user?.nom || "Service Maintenance et Entretien",
+  });
+}
 const smsHref = (m) => `sms:${String(m.telephone || "").replace(/[^0-9+]/g, "")}?&body=${encodeURIComponent(smsTexte(m))}`;
 
 function detail(m) {
@@ -213,7 +228,7 @@ function detail(m) {
       ${m.consignes ? `<p style="white-space:pre-wrap;margin:8px 0 0;font-size:13.5px"><b>Consignes :</b> ${esc(m.consignes)}</p>` : ""}
       <div class="mp-actions" style="margin-top:10px">
         <a class="add-btn" style="text-decoration:none" href="${lienMission(m.id)}&apercu=1" target="_blank" rel="noopener">👁️ Voir la fiche de l'entreprise</a>
-        <button class="nav-btn" data-copier="${m.id}">📋 Copier le lien</button>${m.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(m)}">📱 SMS</a>` : ""}
+        <button class="nav-btn" data-copier="${m.id}">📋 Copier le lien</button>${m.telephone ? `<a class="nav-btn" style="text-decoration:none" href="${smsHref(m)}">📱 SMS</a>` : ""}<button class="nav-btn" data-mail="${m.id}">✉️ Mail</button>
         <button class="nav-btn" data-acces="${actif(m) ? "0" : "1"}">${actif(m) ? "⛔ Couper l'accès" : "🔓 Rouvrir l'accès"}</button>
         ${m.validee ? "" : `<button class="nav-btn" data-modif-detail>✏️ Modifier</button>`}
         <button class="nav-btn" data-imprimer>🖨️ Imprimer le compte rendu</button>
@@ -264,7 +279,7 @@ function ouvrirModif(id) {
   const m = st.missions.find(x => x.id === id); if (!m) return;
   const site = sitesDispo().find(s => s.id === m.siteId);
   const noms = (m.pieces || []).map(p => p.nom), pcs = sitePieces(site), duSite = new Set(pcs.map(p => p.cle));
-  ui.draft = { siteId: m.siteId, entreprise: m.entreprise || "", telephone: m.telephone || "", debut: m.debut, fin: m.fin, consignes: m.consignes || "",
+  ui.draft = { siteId: m.siteId, entreprise: m.entreprise || "", telephone: m.telephone || "", email: m.email || "", debut: m.debut, fin: m.fin, consignes: m.consignes || "",
     pieces: Object.fromEntries(pcs.map(p => [p.cle, noms.includes(p.cle)])), piecesPour: m.siteId + "|" + pcs.map(p => p.cle).join("¦"),
     autres: noms.filter(n => !duSite.has(n)).join("\n"), codesGarder: Array.isArray(m.codes) ? m.codes.map(c => c.code) : null };
   ui.edit = id; ui.form = true; ui.ouverte = null; ui.cree = null; render();
@@ -286,6 +301,7 @@ function brancher() {
   q("[data-plans]")?.addEventListener("click", () => { ui.plan = ui.draft?.siteId || sitesDispo()[0]?.id; ui.planRetour = ui.form ? "form" : null; render(); });
   q("[data-prog]")?.addEventListener("click", () => { ui.plan = ui.draft?.siteId; ui.planRetour = "form"; render(); });
   qa("[data-copier]").forEach(b => b.addEventListener("click", () => copier(b.dataset.copier, b)));
+  qa("[data-mail]").forEach(b => b.addEventListener("click", () => { const m = st.missions.find(x => x.id === b.dataset.mail); if (m) mailMission(m); }));
   qa("[data-ouvrir]").forEach(b => b.addEventListener("click", () => { ui.ouverte = b.dataset.ouvrir; render(); }));
   q("[data-retour]")?.addEventListener("click", () => { ui.ouverte = null; render(); });
   qa("[data-voir]").forEach(img => img.addEventListener("click", () => { const i = st.photos.findIndex(p => p.id === img.dataset.voir); voirPhotos(st.photos, Math.max(0, i)); }));
@@ -309,13 +325,13 @@ function brancher() {
       const btn = form.querySelector("[type=submit]"); btn.disabled = true; btn.textContent = "⏳ Création…";
       if (ui.edit) {
         try {
-          await modifierMission(ui.edit, { siteId: site.id, siteName: site.name, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces, codes });
+          await modifierMission(ui.edit, { siteId: site.id, siteName: site.name, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), email: (d.email || "").trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces, codes });
           ui.form = false; ui.draft = null; ui.edit = null; document.activeElement?.blur(); window.toast?.("✓ Modifié — le lien reste le même"); render();
         } catch (err) { btn.disabled = false; btn.textContent = "✓ Enregistrer"; alert("Modification impossible : " + (err?.message || err)); }
         return;
       }
       try {
-        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces, codes, createdBy: ctx.user?.uid || "" });
+        const id = await creerMission({ site, dispositif: site.groupe || site.dispositif || "", entreprise: d.entreprise.trim(), telephone: d.telephone.trim(), email: (d.email || "").trim(), debut: d.debut, fin: d.fin, consignes: d.consignes.trim(), pieces, codes, createdBy: ctx.user?.uid || "" });
         ui.form = false; ui.draft = null; ui.cree = id;
         try { await navigator.clipboard.writeText(smsTexte({ id, siteName: site.name, debut: d.debut, fin: d.fin, codes })); window.toast?.("✓ Mission créée, message avec le lien copié"); } catch { window.toast?.("✓ Mission créée"); }
         document.activeElement?.blur(); render();

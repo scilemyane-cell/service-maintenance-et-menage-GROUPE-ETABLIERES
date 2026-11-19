@@ -21,14 +21,14 @@ function randomToken() {
 }
 
 // Création (responsable) : mission + lien prestataire, même code.
-export async function creerMission({ site, dispositif, entreprise, telephone = "", debut, fin, consignes = "", pieces = [], codes = [], createdBy }) {
+export async function creerMission({ site, dispositif, entreprise, telephone = "", email = "", debut, fin, consignes = "", pieces = [], codes = [], createdBy }) {
   const token = randomToken(), now = new Date().toISOString();
   await setDoc(doc(db, "invitations", token), {
     type: "ponctuel", ponctuelId: token, sites: [{ id: site.id, name: site.name }], siteId: site.id, siteName: site.name,
     weeks: [], debut, fin, label: entreprise, telephone, active: true, createdBy, createdAt: now,
   });
   await setDoc(doc(db, COL_PONCTUEL, token), {
-    siteId: site.id, siteName: site.name, dispositif: dispositif || "", entreprise, telephone, debut, fin, consignes,
+    siteId: site.id, siteName: site.name, dispositif: dispositif || "", entreprise, telephone, email, debut, fin, consignes,
     pieces: pieces.map(p => typeof p === "string" ? { nom: p } : p), codes, faits: {}, obs: {}, passages: [], observations: "",
     presta: null, termine: null, validee: false, createdBy, createdAt: now, majLe: Date.now(),
   });
@@ -99,4 +99,5 @@ export function statutMission(m, actif = true) {
 export const heureFr = (ms) => ms ? new Date(ms).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", "h") : "";
 export const jourFr = (ms) => ms ? new Date(ms).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "";
 export const dateFr = (iso) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "";
-export const lienMission = (id) => `${location.origin}/guest.html?invite=${id}`;
+// Lien court et propre pour le prestataire : …/m/CODE (réécrit vers guest.html).
+export const lienMission = (id) => `${location.origin}/m/${id}`;

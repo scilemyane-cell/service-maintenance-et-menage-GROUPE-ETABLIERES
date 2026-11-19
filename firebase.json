@@ -8,6 +8,14 @@
     ],
     "rewrites": [
       {
+        "source": "/d/**",
+        "destination": "/demande-guest.html"
+      },
+      {
+        "source": "/m/**",
+        "destination": "/guest.html"
+      },
+      {
         "source": "/",
         "destination": "/index.html"
       }

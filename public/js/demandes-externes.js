@@ -6,6 +6,7 @@
 //    demande SMM-xxx, ou « refusee »).
 // Le responsable les voit en tête du Suivi des demandes, avec un bouton
 // « ✓ Créer la demande ».
+import { ouvrirMailPresta } from "./mail-presta.js";
 import { db } from "./firebase-init.js";
 import { collection, doc, setDoc, updateDoc, onSnapshot, serverTimestamp } from "./firestore-compte.js";
 import { esc } from "./astreinte-logic.js";
@@ -13,7 +14,8 @@ import { creerDemande } from "./demandes-creation.js";
 
 const LIENS = "liens-demande", EXT = "demandes-externes";
 let liens = [], recues = [], abonne = false, hote = null, ctx = {}, ouvertGestion = false;
-const urlLien = (t) => `${location.origin}/demande-guest.html?l=${t}`;
+// Lien court : …/d/CODE (réécrit vers demande-guest.html).
+const urlLien = (t) => `${location.origin}/d/${t}`;
 const frDate = (ms) => ms ? new Date(ms).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
 const auj = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const ms = (v) => v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : (typeof v === "number" ? v : 0);
@@ -52,7 +54,7 @@ function rendre() {
     </form>
     ${liens.length ? `<div class="dex-liens">${liens.sort((a, b) => ms(b.creeLe) - ms(a.creeLe)).map(l => { const n = recues.filter(r => r.lien === l.id).length; return `<div class="dex-lien ${l.actif === false ? "coupe" : ""}">
       <div><b>${esc(l.label || "")}</b> — ${esc(l.site || "")}<small>${l.actif === false ? "⛔ coupé" : "✅ actif"} · ${n} demande${n > 1 ? "s" : ""} reçue${n > 1 ? "s" : ""}</small><code>${esc(urlLien(l.id))}</code></div>
-      <span class="dex-l-btns"><button type="button" class="nav-btn" data-dex-copie="${l.id}">📋 Copier</button><a class="nav-btn" href="mailto:?subject=${encodeURIComponent(`Demandes d'intervention — ${l.site}`)}&body=${encodeURIComponent(`Bonjour,\n\nPour toute demande d'intervention (panne, dépannage, réparation) sur le site ${l.site}, merci d'utiliser ce lien :\n${urlLien(l.id)}\n\nIl suffit d'indiquer votre nom, de décrire le problème et d'ajouter une photo si possible. La demande arrive directement au service maintenance.\n\nCordialement,\n${ctx.utilisateur || "Service Maintenance"}\nGroupe Établières`)}">✉️ Mail</a>
+      <span class="dex-l-btns"><button type="button" class="nav-btn" data-dex-copie="${l.id}">📋 Copier</button><button type="button" class="nav-btn" data-dex-mail="${l.id}">✉️ Mail</button>
       <button type="button" class="nav-btn" data-dex-actif="${l.id}">${l.actif === false ? "▶ Réactiver" : "⛔ Couper"}</button></span>
     </div>`; }).join("")}</div>` : ""}
   </details>`;
@@ -67,6 +69,18 @@ function brancher() {
     try { await setDoc(doc(db, LIENS, id), { site: String(f.get("site")).trim(), label: String(f.get("label")).trim(), association: f.get("association"), actif: true, creeLe: serverTimestamp(), creePar: ctx.utilisateur || "" }); ouvertGestion = true; window.toast?.("🔗 Lien créé : copie-le et envoie-le au prestataire."); }
     catch (err) { alert("Création impossible : " + (err?.message || err) + "\n(As-tu publié les règles Firestore « liens-demande » ?)"); }
   });
+  hote.querySelectorAll("[data-dex-mail]").forEach(b => b.addEventListener("click", () => {
+    const l = liens.find(x => x.id === b.dataset.dexMail); if (!l) return;
+    ouvrirMailPresta({
+      objet: `Demandes d'intervention — ${l.site} — Groupe Établières`,
+      titre: "Signaler une demande d'intervention",
+      intro: `Pour toute demande d'intervention (panne, dépannage, réparation) sur le site ${l.site}, vous disposez désormais d'un accès direct au service maintenance du Groupe Établières.`,
+      lignes: [["Société", l.label], ["Site", l.site]],
+      bouton: "Faire une demande d'intervention", url: urlLien(l.id),
+      apres: "Indiquez votre nom, décrivez le problème et ajoutez une photo si possible : la demande arrive directement au service maintenance. Conservez ce mail pour vos prochaines demandes.",
+      signature: ctx.utilisateur || "Service Maintenance et Entretien",
+    });
+  }));
   hote.querySelectorAll("[data-dex-copie]").forEach(b => b.addEventListener("click", async () => { try { await navigator.clipboard.writeText(urlLien(b.dataset.dexCopie)); b.textContent = "✓ Copié"; } catch { prompt("Copie ce lien :", urlLien(b.dataset.dexCopie)); } }));
   hote.querySelectorAll("[data-dex-actif]").forEach(b => b.addEventListener("click", async () => { const l = liens.find(x => x.id === b.dataset.dexActif); if (l) await updateDoc(doc(db, LIENS, l.id), { actif: l.actif === false }); }));
   hote.querySelectorAll("[data-dex-refus]").forEach(b => b.addEventListener("click", async () => {
