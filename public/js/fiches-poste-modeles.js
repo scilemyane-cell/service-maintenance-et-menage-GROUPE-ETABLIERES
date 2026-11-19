@@ -18,7 +18,7 @@ export const TEXTE_MISSIONS = `La fiche de poste recense les missions principale
 Chaque collaborateur concerné en a eu connaissance des degrés des critères classants de son poste via l'annexe détaillée qui lui a été remise.`;
 
 // Bibliothèque de missions : { id, texte, niveau (1 = délégation totale, 2 = partage d'intention), sous? }
-export const MISSIONS = listeVive("fp.missions", [
+const MISSIONS_CODE = [
   { theme: "🧽 Ménage & hygiène", liste: [
     { id: "m-communs-mna", texte: "Entretien et ménage des parties communes des maisons (cuisine, salon, couloirs, sanitaires).", niveau: 1 },
     { id: "m-communs-res", texte: "Entretien des locaux : ménage des parties communes, bureaux et sanitaires de la résidence.", niveau: 1 },
@@ -34,6 +34,9 @@ export const MISSIONS = listeVive("fp.missions", [
     { id: "m-tracab", texte: "Renseignement des fiches de traçabilité du ménage dans l'application de suivi.", niveau: 1 },
     { id: "m-arrivees", texte: "Participation à la préparation des logements lors des arrivées et départs des jeunes.", niveau: 2 },
     { id: "m-anomalies", texte: "Signalement des anomalies et besoins de maintenance constatés dans les logements.", niveau: 2 },
+    { id: "m-log-sortie", texte: "Nettoyage complet des logements après le départ d'un résident : sols, sanitaires, kitchenette et électroménager, vitres, placards et mobilier, pour les remettre en état avant la location suivante.", niveau: 1 },
+    { id: "m-log-entree", texte: "Contrôle et remise en propreté des logements avant l'arrivée d'un nouveau résident : vérification de la propreté, du mobilier et des équipements.", niveau: 1 },
+    { id: "m-log-photos", texte: "Photos avant / après de chaque logement remis en état, enregistrées dans l'application de suivi.", niveau: 1 },
   ] },
   { theme: "🗑️ Déchets & abords", liste: [
     { id: "d-poubelles", texte: "Sortie et rentrée des poubelles selon le planning de collecte.", niveau: 1 },
@@ -98,8 +101,11 @@ export const MISSIONS = listeVive("fp.missions", [
     { id: "o-astreinte", texte: "Organiser et planifier l'astreinte technique.", niveau: 1 },
     { id: "o-prestataires", texte: "Consulter, choisir et suivre les entreprises extérieures et prestataires.", niveau: 2 },
   ] },
-], { type: "groupes" });
-export const missionParId = (id) => MISSIONS.flatMap(t => t.liste).find(m => m.id === id);
+];
+// Liste paramétrable (Administration › Paramétrage). Si elle a été modifiée,
+// les missions ajoutées ensuite dans le code restent trouvables via MISSIONS_CODE.
+export const MISSIONS = listeVive("fp.missions", MISSIONS_CODE, { type: "groupes" });
+export const missionParId = (id) => MISSIONS.flatMap(t => t.liste || []).find(m => m.id === id) || MISSIONS_CODE.flatMap(t => t.liste).find(m => m.id === id);
 
 export const SAVOIR_FAIRE = listeVive("fp.savoirFaire", [
   "Connaissance des règles d'hygiène et de sécurité en milieu d'hébergement collectif.",
@@ -156,6 +162,10 @@ export const MODELES = [
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, l'agent de service assure l'entretien et l'hygiène des locaux en suivant les procédures et les protocoles, ainsi que la collecte, le tri, le transport et la gestion des déchets ménagers et assimilés afin de garantir la propreté des espaces publics et la bonne organisation de la collecte des déchets. Il assure également le ramassage des déchets sur le parking, la sortie et la rentrée des poubelles, ainsi que l'entretien des espaces verts (tonte, désherbage, taille, arrosage).",
     missions: ["m-communs-res", "d-poubelles", "d-points", "d-petits", "d-cendrier", "d-parking", "ev-global"],
     sf: [1, 2, 3, 10, 13, 14], se: [0, 1, 2, 3, 5], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
+  { id: "entretien-residences", poste: "Agent d'entretien", label: "Agent d'entretien — résidences (parties communes et logements)",
+    principale: "Sous la responsabilité du Responsable Maintenance et Entretien, l'agent d'entretien assure l'entretien et l'hygiène des résidences en suivant les procédures et les protocoles : ménage des parties communes, remise en propreté des logements avant l'arrivée et après le départ des résidents, sortie et rentrée des bacs de collecte et propreté des locaux poubelles. Il renseigne les fiches de traçabilité dans l'application de suivi et signale les anomalies constatées, afin de garantir aux résidents un cadre propre, sain et accueillant.",
+    missions: ["m-communs-res", "m-sanitaires", "m-sols", "m-vitres", "m-log-sortie", "m-log-entree", "m-log-photos", "d-poubelles", "d-points", "d-tri", "m-tracab", "m-conso", "m-materiel", "m-anomalies"],
+    sf: [0, 2, 3, 8, 10, 13], se: [0, 1, 2, 3, 5, 9], manager: "Responsable Maintenance et Entretien", management: false, teletravail: false },
   { id: "espaces-verts", poste: "Technicien de maintenance / espaces verts", label: "Technicien de maintenance / espaces verts",
     principale: "Sous la responsabilité du Responsable Maintenance et Entretien, le technicien de maintenance / espaces verts assure l'entretien des espaces extérieurs des différents sites du groupe (tonte, désherbage, taille, ramassage des feuilles, arrosage) afin de garantir des abords propres, accueillants et sécurisés. Il organise ses passages selon la saison et les priorités et en assure la traçabilité. Il réalise également des petits travaux de maintenance sur les bâtiments et les équipements.",
     missions: ["ev-global", "ev-haies", "ev-materiel", "ev-tracab", "ev-planif", "m-anomalies", "t-travaux"],
@@ -185,8 +195,8 @@ export function ficheDepuisModele(modeleId) {
     modele: m.id, poste: m.poste, collaborateur: "", association: "Agropolis", convention: "OEFMT", residence: "La Roche Sur Yon",
     multisite: false, secondSite: "", teletravail: m.teletravail, management: m.management, manager: m.manager,
     principale: m.principale,
-    missions: m.missions.map(id => { const x = missionParId(id); return { texte: x.texte, niveau: x.niveau, sous: x.sous ? [...x.sous] : [] }; }),
-    savoirFaire: m.sf.map(i => SAVOIR_FAIRE[i]), savoirEtre: m.se.map(i => SAVOIR_ETRE[i]),
+    missions: m.missions.map(missionParId).filter(Boolean).map(x => { return { texte: x.texte, niveau: x.niveau, sous: x.sous ? [...x.sous] : [] }; }),
+    savoirFaire: m.sf.map(i => SAVOIR_FAIRE[i]).filter(Boolean), savoirEtre: m.se.map(i => SAVOIR_ETRE[i]).filter(Boolean),
     signatureNonConcerne: !m.management, signatures: "",
     etablieLe: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), etabliePar: "le manager",
   };
