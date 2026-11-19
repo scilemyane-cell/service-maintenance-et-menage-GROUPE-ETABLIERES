@@ -14,7 +14,7 @@ const LOGO = "https://service-maintenance-et-menage.web.app/img/logo-etablieres.
 const BLEU = "#1f3a5f", OR = "#c9a227";
 
 // opts : { a, objet, titre, intro, lignes: [[libellé, valeur]], encadre, bouton, url, apres, signature }
-export function htmlMail(o) {
+export function htmlMail(o, { sansSignature = false } = {}) {
   const lignes = (o.lignes || []).filter(l => l && l[1]).map(([k, v]) =>
     `<tr><td style="padding:6px 0;color:#5b6475;font-size:14px;width:150px;vertical-align:top">${esc(k)}</td><td style="padding:6px 0;color:#1d2433;font-size:14px;font-weight:600">${esc(v).replace(/\n/g, "<br>")}</td></tr>`).join("");
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>${esc(o.objet)}</title></head>
@@ -37,8 +37,8 @@ export function htmlMail(o) {
       <a href="${esc(o.url)}" style="display:inline-block;padding:15px 34px;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none">${esc(o.bouton)}</a>
     </td></tr></table>
     ${o.apres ? `<p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#5b6475">${esc(o.apres).replace(/\n/g, "<br>")}</p>` : ""}
-    <p style="margin:0 0 6px;font-size:15px;color:#1d2433">Cordialement,</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#1d2433"><b>${esc(o.signature || "Service Maintenance et Entretien")}</b><br><span style="color:#5b6475">Groupe Établières</span></p>
+    <p style="margin:0 0 ${sansSignature ? 18 : 6}px;font-size:15px;color:#1d2433">Cordialement,</p>
+    ${sansSignature ? "" : `<p style="margin:0 0 24px;font-size:15px;color:#1d2433"><b>${esc(o.signature || "Service Maintenance et Entretien")}</b><br><span style="color:#5b6475">Groupe Établières</span></p>`}
   </td></tr>
   <tr><td style="background:#f7f5ef;padding:12px 28px;font-size:11px;color:#8a8f99">Ce lien est personnel : merci de ne pas le transférer. En cas de difficulté, répondez simplement à ce mail.</td></tr>
 </table></td></tr></table></body></html>`;
@@ -58,7 +58,7 @@ function telechargerEml(o) {
 }
 
 async function copierMail(o) {
-  const html = htmlMail(o);
+  const html = htmlMail(o, { sansSignature: true }); // la signature Outlook s'ajoute d'elle-même
   // Corps seul (sans <html>/<head>) : se colle mieux dans Outlook / Gmail.
   const corps = html.slice(html.indexOf("<table"), html.lastIndexOf("</body>"));
   if (window.ClipboardItem && navigator.clipboard?.write) {

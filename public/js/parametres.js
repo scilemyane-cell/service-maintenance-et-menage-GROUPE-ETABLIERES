@@ -1,4 +1,5 @@
 import { esc, addDays, dateKey, fmtShort, isPlausibleDate } from "./astreinte-logic.js";
+import { ouvrirMailPresta } from "./mail-presta.js";
 import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile, preparerCompteEnAttente } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation, createLienAgent } from "./invitations-data.js";
@@ -505,7 +506,19 @@ function etatInvitation(inv) {
 }
 const sitesInv = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.sites : [{ id: inv.siteId, name: inv.siteName }]);
 function texteSms(inv) {
-  return `Bonjour, voici votre accès aux fiches de traçabilité ménage du Groupe Établières (${sitesInv(inv).map(s => s.name).join(", ")})${inv.debut ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""} : ${guestLink(inv.id)}\nÀ la première ouverture, indiquez vos nom, prénom et société. Merci de ne pas transmettre ce lien.`;
+  return `Groupe Établières – Fiches de traçabilité ménage (${sitesInv(inv).map(s => s.name).join(", ")})${inv.debut ? `, du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.\nVotre accès personnel : ${guestLink(inv.id)}`;
+}
+// Mail mis en forme (logo, récapitulatif, bouton) pour le prestataire.
+function mailInvitation(inv) {
+  ouvrirMailPresta({
+    objet: `Accès aux fiches de traçabilité ménage — Groupe Établières`,
+    titre: "Vos fiches de traçabilité ménage",
+    intro: "Le Groupe Établières vous ouvre un accès personnel pour renseigner les fiches de traçabilité du ménage sur les sites ci-dessous.",
+    lignes: [["Prestataire", inv.label], ["Sites", sitesInv(inv).map(s => s.name).join("\n")], ["Période", inv.debut ? `du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""]],
+    bouton: "Accéder aux fiches de traçabilité", url: guestLink(inv.id),
+    apres: "À la première ouverture, indiquez vos nom, prénom et société. Le lien fonctionne sur téléphone, sans compte ni mot de passe.",
+    signature: currentUser?.nom || "Service Maintenance et Entretien",
+  });
 }
 
 function renderInvites(container, user) {
@@ -523,6 +536,7 @@ function renderInvites(container, user) {
       <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
       <td style="white-space:nowrap">
         ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
+        <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail</button>
         <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
         <button class="nav-btn" data-toggle="${inv.id}" data-active="${inv.active}" style="padding:4px 10px;font-size:11px">${inv.active ? "⛔ Couper" : "Réactiver"}</button>
         <button class="del-btn" data-del-inv="${inv.id}">🗑️</button>
@@ -545,7 +559,7 @@ function renderInvites(container, user) {
       ${(() => { const inv = invState.invitations.find(i => i.id === invState.dernier); if (!inv) return "";
         const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
         return `<div class="form-card" style="border:2px solid var(--teal)"><b>✅ Accès créé pour ${esc(inv.label)}</b><p class="hint" style="margin:4px 0 10px">Envoie-le maintenant :</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail-inv="${inv.id}">✉️ Envoyer par mail</button><button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
           <p class="hint" style="margin:8px 0 0">Sur ordinateur, le bouton SMS ouvre l'application de messages si elle est reliée à ton téléphone ; sinon copie le message et colle-le dans un SMS.</p></div>`; })()}
       <div class="table-wrap"><table>
         <thead><tr><th>Prestataire</th><th>Sites</th><th>Période</th><th>État</th><th></th></tr></thead>
@@ -573,6 +587,9 @@ function renderInvites(container, user) {
     invForm = { sites: [], label: "", telephone: "", debut: "", fin: "" };
     invState.dernier = token; renderInvites(container, user);
   });
+  container.querySelectorAll("[data-mail-inv]").forEach(btn => btn.addEventListener("click", () => {
+    const inv = invState.invitations.find(i => i.id === btn.dataset.mailInv); if (inv) mailInvitation(inv);
+  }));
   container.querySelectorAll("[data-copy-sms]").forEach(btn => btn.addEventListener("click", () => {
     const inv = invState.invitations.find(i => i.id === btn.dataset.copySms); if (!inv) return;
     navigator.clipboard.writeText(texteSms(inv)).then(() => { const o = btn.textContent; btn.textContent = "Copié !"; setTimeout(() => { btn.textContent = o; }, 1500); });
@@ -587,7 +604,8 @@ function renderInvites(container, user) {
 
 const lienAgent = (token) => `${location.origin}${location.pathname.startsWith("/beta/") ? "/beta" : ""}/agent.html?acces=${token}`;
 const texteLienAgent = (l) => `Bonjour ${l.agentNom || ""}, voici ton accès à l'appli (poubelles et heures), sans mot de passe, valable jusqu'au ${new Date(l.fin + "T12:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${lienAgent(l.id)}\nAstuce : ajoute-le à l'écran d'accueil du téléphone.`;
-function guestLink(token) { return `${location.origin}/guest.html?invite=${token}`; }
+// Lien court …/m/CODE (réécrit vers guest.html ; les anciens liens guest.html?invite= marchent toujours).
+function guestLink(token) { return `${location.origin}/m/${token}`; }
 function copyLink(token, btn) {
   navigator.clipboard.writeText(guestLink(token)).then(() => {
     const original = btn.textContent;
