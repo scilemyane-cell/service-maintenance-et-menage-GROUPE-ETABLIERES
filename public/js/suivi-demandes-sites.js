@@ -989,7 +989,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       <button type="button" class="dps-imprimer" id="dps-imprimer" title="Imprimer le récapitulatif des demandes du site">🖨 Imprimer</button>
       <div><h2>${esc(st.site)}</h2><p>${ouvertes.length} à traiter${enValidation.length ? ` · ${enValidation.length} à valider` : ""} · ${traitees.length} traitée${traitees.length > 1 ? "s" : ""}</p></div>
     </div>
-    ${perms.isEditor && techs.length ? `<div class="dps-affect"><span>👷 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}</div>`
+    ${perms.isEditor && techs.length && !st.focusId && st.affectEdition === st.site ? `<div class="dps-affect"><span>🔓 Technicien(s) du site :</span>${techs.map(t => `<button type="button" class="dps-affect-tech ${techsDuSite(st.site).includes(t.uid) ? "on" : ""}" data-affect="${esc(t.uid)}">${techsDuSite(st.site).includes(t.uid) ? "✓ " : ""}${esc(t.nom || t.email)}</button>`).join("")}<button type="button" class="dps-affect-tech" data-affect-fermer>🔒 Terminer</button></div>`
+      : perms.isEditor && techs.length && !st.focusId ? `<div class="dps-affect"><span>👷 ${esc(techsDuSite(st.site).map(nomDe).filter(Boolean).join(", ") || "Aucun technicien attribué")}</span><button type="button" class="dps-affect-tech" data-affect-ouvrir title="Modifier les techniciens attribués à ce site">🔒 Modifier</button></div>`
       : techsDuSite(st.site).length ? `<div class="dps-affect"><span>👷 ${esc(techsDuSite(st.site).map(nomDe).filter(Boolean).join(", "))}</span></div>` : ""}
     ${enValidation.length ? `<section class="dps-valid-bloc"><div class="dps-valid-tete"><h3>⏳ ${enValidation.length} en attente de validation</h3><p>${perms.isEditor ? "Réalisations et annulations déclarées par les techniciens — vérifie puis valide ou refuse." : "Envoyées au superviseur : en attente de sa validation."}</p></div><div class="dps-cartes">${enValidation.map(l => carteValidation(l)).join("")}</div></section>` : ""}
     <div class="dps-tri-barre">
@@ -1145,8 +1146,14 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   }));
   restaurerSaisies(container, saisies);
   apres?.();
+  // Attribution des techniciens au site : verrouillée par défaut (trop facile à
+  // défaire d'un clic en ouvrant un ticket). Jamais modifiable depuis un ticket ;
+  // sur la vue du site : « 🔒 Modifier », puis confirmation pour tout retrait.
+  container.querySelector("[data-affect-ouvrir]")?.addEventListener("click", () => { st.affectEdition = st.site; rerender(); });
+  container.querySelector("[data-affect-fermer]")?.addEventListener("click", () => { st.affectEdition = null; rerender(); });
   container.querySelectorAll("[data-affect]").forEach(b => b.addEventListener("click", async () => {
     const actuels = techsDuSite(st.site), id = b.dataset.affect;
+    if (actuels.includes(id) && !confirm(`Retirer le site « ${st.site} » à ${nomDe(id) || "ce technicien"} ?\n\nIl ne verra plus les demandes de ce site dans son espace.`)) return;
     const nouveaux = actuels.includes(id) ? actuels.filter(x => x !== id) : [...actuels, id];
     b.disabled = true;
     try {
