@@ -102,7 +102,10 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   unsubs.push(watchAssociations((a) => { associations = a; recu("assoc"); scheduleRender(); }));
   unsubs.push(watchCompteursTotal((n) => { nbCompteurs = n; scheduleRender(); }));
   unsubs.push(watchCoordonnees((c) => { coordonnees = c || {}; scheduleRender(); }));
-  urgences = []; uidTechSeul = user.role === "technicien" ? user.uid : null;
+  urgences = []; uidTechSeul = user.role === "technicien" && !user.postePartage ? user.uid : null;
+  // Écran général du poste partagé (PC atelier) : toutes les urgences ouvertes,
+  // quel que soit le technicien, sans limite d'ancienneté ni « Vu ».
+  ecranGeneral = !!user.postePartage;
   unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; recu("urgences"); scheduleRender(); }));
   nouvelles = []; uidVues = user.uid || null;
   // Actions immédiates : pour moi, et sur un poste partagé pour la personne choisie.
@@ -480,7 +483,7 @@ function moisACloturer() {
 // Demandes Critiques encore ouvertes + Urgentes arrivées depuis 3 jours.
 // Chacun peut masquer une alerte (« Vu ») — mémorisé dans Firestore
 // (favoris-sites/{uid}), avec le navigateur comme cache.
-let urgences = [], uidTechSeul = null; // technicien : on cache les urgences attribuées à un autre
+let urgences = [], uidTechSeul = null, ecranGeneral = false; // technicien : on cache les urgences attribuées à un autre
 let nouvelles = [];
 let uidVues = null;
 const CLE_URG_VUES = "etablieres-urgences-vues";
@@ -504,6 +507,7 @@ function marquerVus(cle, champ, ids) {
   render();
 }
 function urgencesAAfficher() {
+  if (ecranGeneral) return [...urgences].sort((a, b) => (a.urgence === "Critique" ? 0 : 1) - (b.urgence === "Critique" ? 0 : 1) || (b.importeMs || 0) - (a.importeMs || 0));
   const vuesU = vues(CLE_URG_VUES), limite = Date.now() - 3 * 86400000;
   const recente = (u) => (u.importeMs && u.importeMs >= limite) || (u.dateDemande && new Date(u.dateDemande + "T00:00:00").getTime() >= limite);
   return urgences.filter(u => !vuesU.has(u.id) && !(uidTechSeul && u.attribueA && u.attribueA !== uidTechSeul) && (u.urgence === "Critique" || recente(u)))
@@ -518,16 +522,16 @@ function bandeauUrgencesHTML() {
   const cliquable = catsRef.some(c => c.id === "suivi-demandes");
   return `<section class="gh-urgences ${replieCls("urgences")}">
     <button type="button" class="gh-urg-tete gh-urg-plier" data-plier="urgences">🚨 <b>${l.length} demande${l.length > 1 ? "s" : ""} urgente${l.length > 1 ? "s" : ""}</b><span>à traiter en priorité</span>${flechePlier("urgences")}</button>
-    <div class="gh-urg-liste">${l.slice(0, 4).map(u => `
+    <div class="gh-urg-liste">${l.slice(0, ecranGeneral ? 15 : 4).map(u => `
       <div class="gh-urg ${u.urgence === "Critique" ? "crit" : ""}">
         <${cliquable ? `button type="button" data-urg-ouvrir="${esc(u.id)}" data-urg-site="${esc(u.site || "")}"` : "div"} class="gh-urg-corps">
           <span class="gh-urg-badge">${u.urgence === "Critique" ? "CRITIQUE" : "URGENT"}</span>
           <span class="gh-urg-txt"><b>${esc(u.numero || "")} · ${esc(u.site || "")}${u.local ? ` · 📍 ${esc(u.local)}` : ""}</b><small>${esc((u.descriptif || "").slice(0, 110))}</small>${pastilleAction(u.action)}</span>
           ${cliquable ? `<span class="gh-urg-go">Voir →</span>` : ""}
         </${cliquable ? "button" : "div"}>
-        <button type="button" class="gh-urg-vu" data-urg-vu="${esc(u.id)}" title="Masquer cette alerte">✓ Vu</button>
+        ${ecranGeneral ? "" : `<button type="button" class="gh-urg-vu" data-urg-vu="${esc(u.id)}" title="Masquer cette alerte">✓ Vu</button>`}
       </div>`).join("")}
-      ${l.length > 4 ? `<div class="gh-urg-plus">+ ${l.length - 4} autre${l.length - 4 > 1 ? "s" : ""} urgence${l.length - 4 > 1 ? "s" : ""}</div>` : ""}
+      ${l.length > (ecranGeneral ? 15 : 4) ? `<div class="gh-urg-plus">+ ${l.length - (ecranGeneral ? 15 : 4)} autre(s) urgence(s)</div>` : ""}
     </div></section>`;
 }
 

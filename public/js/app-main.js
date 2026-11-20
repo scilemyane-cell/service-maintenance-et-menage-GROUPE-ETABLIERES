@@ -315,7 +315,51 @@
   let apercuUid = null;
   let usersList = [];
   let usersSubscribed = false;
+  // ---- Poste partagé (PC de l'atelier) ----
+  // Compte coché « Poste partagé » (Administration › Utilisateurs) : écran
+  // général pour toute l'équipe ; chaque technicien clique sur son nom pour
+  // passer sur SON espace (tuiles, planning, demandes), sans mot de passe.
+  // Retour automatique à l'écran général après 5 min sans activité.
+  // Même mémoire que le « Qui es-tu ? » du Suivi des demandes.
+  const CLE_POSTE = "etablieres-poste-identite", DELAI_POSTE = 5 * 60000;
+  const lirePoste = () => { try { const i = JSON.parse(localStorage.getItem(CLE_POSTE) || "null"); return i && Date.now() - i.t < DELAI_POSTE ? i : null; } catch { return null; } };
+  const ecrirePoste = (i) => { try { if (i) localStorage.setItem(CLE_POSTE, JSON.stringify(i)); else localStorage.removeItem(CLE_POSTE); } catch { /* */ } };
+  const personnesDuPoste = () => usersList.filter(u => u.uid !== currentUser?.uid && u.role === "technicien" && !u.postePartage && !u.desactive)
+    .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
+  function posteChoisi(uid) {
+    const u = usersList.find(x => x.uid === uid);
+    ecrirePoste(u ? { uid: u.uid, nom: u.nom || u.email, t: Date.now() } : null);
+    currentCategory = null; currentSubtab = null; render();
+  }
+  let posteActiviteMaj = 0, posteMinuteur = null;
+  function surveillerPoste() {
+    if (posteMinuteur || !currentUser?.postePartage) return;
+    const activite = () => { const i = lirePoste(); if (i && Date.now() - posteActiviteMaj > 15000) { posteActiviteMaj = Date.now(); ecrirePoste({ ...i, t: Date.now() }); } };
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(ev => document.addEventListener(ev, activite, { passive: true, capture: true }));
+    let avait = !!lirePoste();
+    posteMinuteur = setInterval(() => {
+      const a = !!lirePoste();
+      if (avait && !a) { ecrirePoste(null); currentCategory = null; currentSubtab = null; render(); window.toast?.("🖥️ Retour à l'écran général (5 min sans activité)"); }
+      avait = a;
+    }, 15000);
+  }
+  function barrePosteHTML(eff) {
+    if (!currentUser?.postePartage) return "";
+    const i = lirePoste();
+    return `<div class="poste-barre">
+      <button type="button" class="poste-btn ${i ? "" : "on"}" data-poste-uid="">🖥️ Écran général</button>
+      ${personnesDuPoste().map(u => `<button type="button" class="poste-btn ${i?.uid === u.uid ? "on" : ""}" data-poste-uid="${escapeHtml(u.uid)}">👤 ${escapeHtml(String(u.nom || u.email).split(/\s+/).map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(" "))}</button>`).join("")}
+      ${i ? `<span class="poste-info">Espace de <b>${escapeHtml(eff.nom || "")}</b> · retour auto après 5 min sans activité</span>` : `<span class="poste-info">Clique sur ton nom pour ouvrir ton espace</span>`}
+    </div>`;
+  }
+  function brancherBarrePoste() {
+    document.querySelectorAll("[data-poste-uid]").forEach(b => b.addEventListener("click", () => posteChoisi(b.dataset.posteUid)));
+  }
   function utilisateurEffectif() {
+    if (currentUser?.postePartage) {
+      const i = lirePoste(), u = i && usersList.find(x => x.uid === i.uid);
+      return u ? { ...u, viaPoste: currentUser.uid } : currentUser;
+    }
     if (!apercuUid || currentUser?.role !== "super_admin") return currentUser;
     const u = usersList.find(x => x.uid === apercuUid);
     return u ? { ...u, apercu: true } : currentUser;
@@ -677,6 +721,11 @@
       window.__synchroDemandesAuto = true;
       import("./demandes-auto.js").then(m => m.demarrerSynchroAutoDemandes()).catch(e => console.warn("Synchro auto demandes :", e));
     }
+    if (!usersSubscribed && user.postePartage) {
+      usersSubscribed = true;
+      watchUsers((l) => { usersList = l; render(); });
+      surveillerPoste();
+    }
     if (!usersSubscribed && user.role === "super_admin") {
       usersSubscribed = true;
       let migFaite = false;
@@ -801,7 +850,8 @@
             <button class="logout-btn" id="logout-btn" style="margin-top:16px">Se déconnecter</button>
           </div>
         </div>`;
-      document.getElementById("logout-btn").addEventListener("click", () => logout()); document.querySelectorAll("[data-ma-loc]").forEach(b => b.onclick = () => import("./geoloc-partage.js").then(m => m.aideLocalisation()));
+      brancherBarrePoste();
+    document.getElementById("logout-btn").addEventListener("click", () => logout()); document.querySelectorAll("[data-ma-loc]").forEach(b => b.onclick = () => import("./geoloc-partage.js").then(m => m.aideLocalisation()));
     document.getElementById("theme-modules-btn")?.addEventListener("click", (e) => {
       const t = basculerThemeModules(); // appliqué tout de suite, sans redessiner (aucune saisie perdue)
       e.currentTarget.textContent = t === "sombre" ? "☀️ Clair" : "🌙 Sombre";
@@ -861,6 +911,7 @@
 
     app.innerHTML = !category ? `
       ${enteteAccueil}
+      ${barrePosteHTML(eff)}
       ${eff.apercu ? `
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
       <main class="content" id="content"></main>
@@ -891,6 +942,7 @@
       </header>
       ${eff.apercu ? `
       <div class="apercu-bandeau">👁️ Aperçu en tant que <b>${escapeHtml(eff.nom || eff.email)}</b> (${escapeHtml(roleLabel(eff.role))}) — tu vois exactement ses tuiles et onglets. Tu peux modifier ses favoris et son planning (enregistrés sous ton compte). <button class="nav-btn" id="apercu-quitter">Quitter l'aperçu</button></div>` : ""}
+      ${barrePosteHTML(eff)}
       ${category && modulesConstruction.includes(category.id) && !eff.apercu && eff.role === "super_admin" ? `<div class="construction-bandeau">🚧 Module en construction — visible uniquement par le Super Admin (masqué pour tous les autres, y compris dans Statistiques).</div>` : ""}
       ${category ? `
       <nav class="tabs ${reorgOnglets ? "tabs-reorg" : ""}" id="tabs-nav" style="--nb-onglets:${Math.min(3, categorySubtabsFor(category, eff).length)}" data-nb="${categorySubtabsFor(category, eff).length}">
@@ -900,6 +952,7 @@
       <main class="content" id="content"></main>
     `;
 
+    brancherBarrePoste();
     document.getElementById("logout-btn").addEventListener("click", () => logout()); document.querySelectorAll("[data-ma-loc]").forEach(b => b.onclick = () => import("./geoloc-partage.js").then(m => m.aideLocalisation()));
     document.getElementById("theme-modules-btn")?.addEventListener("click", (e) => {
       const t = basculerThemeModules(); // appliqué tout de suite, sans redessiner (aucune saisie perdue)
