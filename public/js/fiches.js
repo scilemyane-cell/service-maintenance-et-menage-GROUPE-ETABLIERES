@@ -6,7 +6,9 @@ import { watchUsers } from "./users-data.js";
 import { watchAccess, hasAccess } from "./access-data.js";
 import { photosFusion, watchPhotosFiche, ajouterPhoto, majPhoto, supprimerPhoto } from "./fiches-photos.js";
 
-const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven" };
+const DAY_LABELS = { LUN: "Lun", MAR: "Mar", MER: "Mer", JEU: "Jeu", VEN: "Ven", SAM: "Sam", DIM: "Dim" };
+// Samedi / dimanche cochés par un prestataire de remplacement : colonnes ajoutées.
+const joursWeekendFiche = (data) => ["SAM", "DIM"].filter(d => Object.keys(data?.cells || {}).some(k => data.cells[k] && k.endsWith("-" + d)));
 const MENAGE_ROLES = ["menage", "mi_temps"];
 
 let state = { fiches: [], sites: [], agents: [], allAgents: [], access: {}, photosDocs: [] };
@@ -226,7 +228,8 @@ function setSaveStatus(status, errorMsg) {
 }
 
 function vueSemaineHTML(site, data) {
-  return `<div class="fj-semaine">${site.rooms.map((room, ri) => `
+  const we = joursWeekendFiche(data);
+  return `<div class="fj-semaine">${site.rooms.map((room, ri) => ({ ...room, days: [...(room.days || []), ...we] })).map((room, ri) => `
         <div class="form-card">
           <h3 style="margin:0 0 12px;font-size:14px;color:var(--gold)">${esc(room.name)}</h3>
           <div class="table-wrap" style="border:none">
@@ -287,7 +290,7 @@ function datesFaitesSite(siteId, cle) {
 }
 function joursEntre(isoA, isoB) { return Math.round((new Date(isoB) - new Date(isoA)) / 864e5); }
 function fmtJM(iso) { const d = new Date(iso); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`; }
-function jourISO(jour) { return dateKey(addDays(new Date(ui.weekStart), JOURS_KEYS.indexOf(jour))); }
+function jourISO(jour) { return dateKey(addDays(new Date(ui.weekStart), [...JOURS_KEYS, "SAM", "DIM"].indexOf(jour))); }
 function premiereFicheSite(siteId) { return state.fiches.filter(f => f.siteId === siteId).map(f => f.weekStart).filter(Boolean).sort()[0] || null; }
 
 // État d'une tâche périodique pour un jour donné.

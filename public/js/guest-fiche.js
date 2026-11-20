@@ -9,8 +9,16 @@ import { addDays, dateKey, fmtShort, esc } from "./astreinte-logic.js";
 import { watchSites } from "./sites-data.js";
 import { watchFiches, saveFiche, ficheId, journaliserConnexion } from "./fiches-data.js";
 
-const JOURS = ["LUN", "MAR", "MER", "JEU", "VEN"];
-const NOMS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "Vendredi" };
+const JOURS_SEMAINE = ["LUN", "MAR", "MER", "JEU", "VEN"];
+const NOMS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "Vendredi", SAM: "Samedi", DIM: "Dimanche" };
+// Samedi / dimanche : onglets en plus quand l'accès couvre le week-end de la
+// semaine affichée (remplacement) ; ces jours-là, TOUTES les pièces et tâches.
+const WEEKEND = ["SAM", "DIM"];
+let JOURS = JOURS_SEMAINE;
+function joursDeLaSemaine(inv, weekStart) {
+  const we = WEEKEND.filter((_, i) => { const d = dateKey(addDays(new Date(weekStart + "T00:00:00"), 5 + i)); return (!inv.debut || d >= inv.debut) && (!inv.fin || d <= inv.fin) && inv.debut; });
+  return [...JOURS_SEMAINE, ...we];
+}
 
 let state = { sites: [], fiches: [] };
 let ui = { weekStart: null, siteId: null, jour: null };
@@ -51,10 +59,12 @@ export function mountGuestFiche(container, u, inv) {
   const lundi = dateKey(addDays(new Date(), -((new Date().getDay() + 6) % 7)));
   ui.weekStart = inv.weeks.includes(lundi) ? lundi : inv.weeks[0];
   ui.siteId = sitesInvitation(inv)[0]?.id;
-  const j = JOURS[(new Date().getDay() + 6) % 7];
-  // Samedi / dimanche (remplacement le week-end) : on ouvre sur le vendredi ;
-  // tous les jours de la semaine restent accessibles avec les onglets.
-  ui.jour = ui.weekStart === lundi ? (j || "VEN") : "LUN";
+  JOURS = joursDeLaSemaine(inv, ui.weekStart);
+  const j = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"][(new Date().getDay() + 6) % 7];
+  // Aujourd'hui s'il fait partie de l'accès ; sinon le 1er jour de week-end
+  // ouvert (remplacement samedi / dimanche) ; sinon lundi.
+  const avantDebut = inv.debut && dateKey(new Date()) < inv.debut;
+  ui.jour = !avantDebut && ui.weekStart === lundi && JOURS.includes(j) ? j : (JOURS.find(x => WEEKEND.includes(x)) || (ui.weekStart === lundi && JOURS.includes(j) ? j : "LUN"));
   void auj;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
@@ -115,12 +125,12 @@ function render() {
   const consultation = !!invitation.consultationJusqua;
   const verrou = !!data.validee || consultation;
   const jour = ui.jour;
-  const itemsPiece = (ri, j) => { const r = site.rooms[ri]; if (!(r.days || []).includes(j)) return []; return (r.tasks || []).map((task, ti) => ({ ti, task, key: `${ri}-${ti}-${j}`, fait: !!data.cells[`${ri}-${ti}-${j}`] })); };
+  const itemsPiece = (ri, j) => { const r = site.rooms[ri]; if (!WEEKEND.includes(j) && !(r.days || []).includes(j)) return []; return (r.tasks || []).map((task, ti) => ({ ti, task, key: `${ri}-${ti}-${j}`, fait: !!data.cells[`${ri}-${ti}-${j}`] })); };
   const compteJour = (j) => { const l = (site.rooms || []).flatMap((_, ri) => itemsPiece(ri, j)); return { total: l.length, faits: l.filter(x => x.fait).length }; };
   const { total, faits } = compteJour(jour), pct = total ? Math.round(faits / total * 100) : 0;
   const sem = JOURS.reduce((acc, j) => { const c = compteJour(j); acc.t += c.total; acc.f += c.faits; return acc; }, { t: 0, f: 0 });
   const pctSem = sem.t ? Math.round(sem.f / sem.t * 100) : 0;
-  const dJour = addDays(new Date(ui.weekStart + "T00:00:00"), JOURS.indexOf(jour));
+  const dJour = addDays(new Date(ui.weekStart + "T00:00:00"), [...JOURS_SEMAINE, ...WEEKEND].indexOf(jour));
   const pieces = (site.rooms || []).map((room, ri) => ({ room, ri, items: itemsPiece(ri, jour) })).filter(x => x.items.length);
   const r = 40, circ = 2 * Math.PI * r;
   const msg = !total ? "Pas de tâche aujourd'hui." : faits === 0 ? "C'est parti ! Touche une tâche quand elle est faite." : faits === total ? "Tout est fait, super travail ! 💪" : faits / total >= 0.75 ? `Presque fini, plus que ${total - faits} ! 🔥` : faits / total >= 0.5 ? `Plus de la moitié, continue ! (${total - faits} restantes)` : `Bien lancé ! Encore ${total - faits} tâche${total - faits > 1 ? "s" : ""}.`;
@@ -176,7 +186,7 @@ function render() {
   conteneur.querySelectorAll("[data-obs-btn]").forEach(b => b.addEventListener("click", () => { const z = conteneur.querySelector(`[data-obs-zone="${b.dataset.obsBtn}"]`); z?.classList.toggle("ouverte"); z?.querySelector("input")?.focus(); }));
   conteneur.querySelector("#gf-pas-moi")?.addEventListener("click", () => { if (confirm("Changer de personne sur ce téléphone ?")) { try { localStorage.removeItem(cleIdentite()); } catch { /* */ } identite = null; render(); } });
   conteneur.querySelector("#gf-site")?.addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });
-  conteneur.querySelector("#gf-week")?.addEventListener("change", (e) => { ui.weekStart = e.target.value; render(); });
+  conteneur.querySelector("#gf-week")?.addEventListener("change", (e) => { ui.weekStart = e.target.value; JOURS = joursDeLaSemaine(invitation, ui.weekStart); if (!JOURS.includes(ui.jour)) ui.jour = "LUN"; render(); });
   conteneur.querySelectorAll("[data-jour]").forEach(b => b.addEventListener("click", () => { ui.jour = b.dataset.jour; render(); }));
   conteneur.querySelectorAll("[data-obs]").forEach(inp => inp.addEventListener("input", () => { data.obs[inp.dataset.obs] = inp.value; conteneur.querySelector(`[data-obs-btn="${inp.dataset.obs}"]`)?.classList.toggle("a-obs", !!inp.value); sauver(id, data, 800); }));
   conteneur.querySelector("#gf-obs-generales")?.addEventListener("input", (e) => { data.observationsGenerales = e.target.value; sauver(id, data, 800); });

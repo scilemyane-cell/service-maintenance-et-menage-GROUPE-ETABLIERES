@@ -13,7 +13,11 @@ export function mentionHTML(f, court = false) {
   return "";
 }
 
-const ORDRE_J = ["LUN", "MAR", "MER", "JEU", "VEN"];
+const ORDRE_J = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"];
+// Samedi / dimanche (prestataire de remplacement) : colonnes ajoutées à toutes
+// les pièces seulement si la fiche a des coches ces jours-là.
+const joursWeekend = (fiche) => ["SAM", "DIM"].filter(d => Object.keys(fiche?.cells || {}).some(k => fiche.cells[k] && k.endsWith("-" + d)));
+const joursPiece = (room, fiche) => [...(room.days || []), ...joursWeekend(fiche)];
 const NOMS_J = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" };
 const ORDRE_M = ["avant", "apres", ""];
 const figure = (p) => `<figure style="margin:0;border:1px solid #bbb;border-radius:6px;padding:3px;break-inside:avoid">
@@ -33,7 +37,7 @@ export function taskCompletion(fiche, site) {
   let done = 0, total = 0;
   (site.rooms || []).forEach((room, ri) => {
     room.tasks.forEach((task, ti) => {
-      room.days.forEach(d => {
+      joursPiece(room, fiche).forEach(d => {
         total++;
         if (fiche.cells && fiche.cells[`${ri}-${ti}-${d}`]) done++;
       });
@@ -45,7 +49,7 @@ export function taskCompletion(fiche, site) {
 // Fiche complète au format imprimable (bloc .print-fiche).
 // dispositif : libellé ajouté au titre (ou "" pour ne rien ajouter).
 export function ficheHTML(opened, openedSite, dispositif = "") {
-  const dayNames = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI" };
+  const dayNames = { LUN: "LUNDI", MAR: "MARDI", MER: "MERCREDI", JEU: "JEUDI", VEN: "VENDREDI", SAM: "SAMEDI", DIM: "DIMANCHE" };
   return `
       <div class="print-fiche print-trac" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:24px;color:#111">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
@@ -59,17 +63,17 @@ export function ficheHTML(opened, openedSite, dispositif = "") {
           <div class="trac-piece">
           <p class="trac-titre" style="font-size:13px;font-weight:700;margin:16px 0 6px">${esc(room.name).toUpperCase()}</p>
           <table class="print-fiche-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
-            <colgroup><col style="width:34%">${room.days.map(() => `<col style="width:${(48 / Math.max(1, room.days.length)).toFixed(2)}%">`).join("")}<col style="width:18%"></colgroup>
+            <colgroup><col style="width:34%">${joursPiece(room, opened).map(() => `<col style="width:${(48 / Math.max(1, joursPiece(room, opened).length)).toFixed(2)}%">`).join("")}<col style="width:18%"></colgroup>
             <thead><tr>
               <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">TÂCHE</th>
-              ${room.days.map(d => `<th style="border:1px solid #999;padding:4px 6px;font-size:11px">${dayNames[d]}</th>`).join("")}
+              ${joursPiece(room, opened).map(d => `<th style="border:1px solid #999;padding:4px 6px;font-size:11px">${dayNames[d]}</th>`).join("")}
               <th style="border:1px solid #999;padding:4px 6px;font-size:11px;text-align:left">OBSERVATIONS</th>
             </tr></thead>
             <tbody>
               ${room.tasks.map((task, ti) => `
                 <tr>
                   <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc(task.label)}${task.freq ? ` (${esc(task.freq)})` : ""}</td>
-                  ${room.days.map(d => `<td class="trac-coche" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center;font-weight:700">${(opened.cells && opened.cells[`${ri}-${ti}-${d}`]) ? "✓" : ""}</td>`).join("")}
+                  ${joursPiece(room, opened).map(d => `<td class="trac-coche" style="border:1px solid #999;padding:4px 6px;font-size:12px;text-align:center;font-weight:700">${(opened.cells && opened.cells[`${ri}-${ti}-${d}`]) ? "✓" : ""}</td>`).join("")}
                   <td style="border:1px solid #999;padding:4px 6px;font-size:11px">${esc((opened.obs && opened.obs[`${ri}-${ti}`]) || "")}</td>
                 </tr>
               `).join("")}
