@@ -86,6 +86,7 @@ function currentFiche() {
   } };
 }
 function sauver(id, data, delai = 500) {
+  if (invitation?.apercuResponsable || invitation?.consultationJusqua) return; // aperçu / consultation : rien n'est enregistré
   clearTimeout(saveTimer);
   data.agentNom = nomAgent(); data.prestataire = true; data.invitation = invitation.id; data.societe = identite?.societe || "";
   // Copie locale immédiate : l'écran ne revient pas en arrière en attendant Firestore.
@@ -119,14 +120,16 @@ function formulaireIdentite() {
 function render() {
   if (!conteneur) return;
   if (!document.contains(conteneur)) { cleanup(); return; }
+  const apercuResp = !!invitation.apercuResponsable;
+  if (apercuResp && !identite) identite = { prenom: "Aperçu", nom: "", societe: invitation.label || "" };
   if (!identite) { formulaireIdentite(); return; }
-  journaliserConnexion({ ecran: "prestataire", agentUid: user?.uid || "", agentNom: nomAgent(), prestataire: true, societe: identite?.societe || "", invitation: invitation?.id || "" });
+  if (!apercuResp) journaliserConnexion({ ecran: "prestataire", agentUid: user?.uid || "", agentNom: nomAgent(), prestataire: true, societe: identite?.societe || "", invitation: invitation?.id || "" });
   const a = document.activeElement; if (a && conteneur.contains(a) && a.matches("input:not([type=checkbox]), textarea")) return;
   const { id, data, site } = currentFiche();
   const sites = sitesInvitation(invitation);
   if (!site) { conteneur.innerHTML = `<div class="hint">Chargement du site…</div>`; return; }
   const consultation = !!invitation.consultationJusqua;
-  const verrou = !!data.validee || consultation;
+  const verrou = !!data.validee || consultation || !!invitation.apercuResponsable;
   const jour = ui.jour;
   const itemsPiece = (ri, j) => { const r = site.rooms[ri]; if (!WEEKEND.includes(j) && !(r.days || []).includes(j)) return []; return (r.tasks || []).map((task, ti) => ({ ti, task, key: `${ri}-${ti}-${j}`, fait: !!data.cells[`${ri}-${ti}-${j}`] })); };
   const compteJour = (j) => { const l = (site.rooms || []).flatMap((_, ri) => itemsPiece(ri, j)); return { total: l.length, faits: l.filter(x => x.fait).length }; };
@@ -144,6 +147,7 @@ function render() {
         ${sites.length > 1 ? `<select id="gf-site">${sites.map(s => `<option value="${esc(s.id)}" ${s.id === ui.siteId ? "selected" : ""}>🏠 ${esc(s.name)}</option>`).join("")}</select>` : ""}
         ${invitation.weeks.length > 1 ? `<select id="gf-week">${invitation.weeks.map(w => `<option value="${w}" ${w === ui.weekStart ? "selected" : ""}>Semaine du ${fmtShort(new Date(w + "T00:00:00"))}</option>`).join("")}</select>` : ""}
       </div>` : ""}
+      ${invitation.apercuResponsable ? `<div class="gf-att" style="background:#eef1f6;color:#33449a;border-color:#c7d0e6">👁️ Aperçu responsable : c'est ce que verra le prestataire. Lecture seule, rien n'est enregistré.</div>` : ""}
       ${consultation ? `<div class="gf-att">👀 Consultation : voici le travail à faire sur chaque site et chaque jour. Tu pourras cocher les tâches à partir du ${new Date(invitation.consultationJusqua + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.</div>` : ""}
       ${data.validee ? `<div class="gf-ok">✅ Fiche vérifiée et validée par le responsable. Merci !</div>` : consultation ? "" : data.submitted ? `<div class="gf-att">📤 Fiche envoyée au responsable. Tu peux encore la rouvrir pour corriger.</div>` : ""}
       <div class="fj">

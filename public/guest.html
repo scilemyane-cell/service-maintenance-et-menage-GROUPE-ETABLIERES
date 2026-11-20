@@ -59,7 +59,8 @@
       const invitation = await getInvitation(token);
       if (!invitation) { showError("Ce lien n'existe pas ou plus."); return; }
       // Aperçu par un responsable connecté (…&apercu=1) : pas de contrôle de dates ni d'accès coupé.
-      const apercu = params.get("apercu") === "1" && !user.isAnonymous && invitation.type === "ponctuel";
+      const apercu = params.get("apercu") === "1" && !user.isAnonymous;
+      if (apercu && invitation.type !== "ponctuel") invitation.apercuResponsable = true; // fiches : lecture seule, rien n'est enregistré
       if (!apercu && !invitation.active) { showError("Cet accès a été coupé. Contacte le Groupe Établières."); return; }
       const d = new Date(), auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const fr = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });

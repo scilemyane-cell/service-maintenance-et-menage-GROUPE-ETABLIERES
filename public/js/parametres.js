@@ -567,6 +567,7 @@ function renderInvites(container, user) {
       <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
       <td style="white-space:nowrap">
         ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
+        <a class="nav-btn" href="${guestLink(inv.id)}?apercu=1" target="_blank" rel="noopener" style="padding:4px 10px;font-size:11px;text-decoration:none">👁️ Aperçu</a>
         <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail / 🖼️ Image</button>
         <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
         <button class="nav-btn" data-toggle="${inv.id}" data-active="${inv.active}" style="padding:4px 10px;font-size:11px">${inv.active ? "⛔ Couper" : "Réactiver"}</button>
