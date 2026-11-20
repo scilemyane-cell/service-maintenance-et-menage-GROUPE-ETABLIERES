@@ -193,6 +193,7 @@ function renderUtilisateurs(container) {
                   <td style="white-space:nowrap;font-size:12px">
                     <label style="margin-right:8px"><input type="checkbox" data-user-zone="${u.uid}:ecole" ${(u.stockMenageZones || []).includes("ecole") ? "checked" : ""}> École</label>
                     <label><input type="checkbox" data-user-zone="${u.uid}:agropolis" ${(u.stockMenageZones || []).includes("agropolis") ? "checked" : ""}> Agropolis</label>
+                    <label style="display:block;margin-top:4px" title="Code à 4 chiffres demandé quand la personne ouvre son espace sur le PC partagé de l'atelier">🔒 Code poste <input data-user-codeposte="${u.uid}" type="password" inputmode="numeric" maxlength="4" placeholder="${u.codePoste ? "••••  (défini)" : "4 chiffres"}" style="width:110px;padding:3px 6px"></label>
                     <label style="display:block;margin-top:4px" title="Compte utilisé par plusieurs techniciens (ex. PC fixe) : chacun choisit son nom dans Suivi des demandes"><input type="checkbox" data-user-poste="${u.uid}" ${u.postePartage ? "checked" : ""}> 🖥️ Poste partagé</label>
                   </td>
                   <td>
@@ -321,6 +322,16 @@ function renderUtilisateurs(container) {
       const zones = new Set(u?.stockMenageZones || []);
       if (cb.checked) zones.add(zone); else zones.delete(zone);
       await enregistrerChamp(cb.parentElement, uid, { stockMenageZones: [...zones] });
+    });
+  });
+  container.querySelectorAll("[data-user-codeposte]").forEach(inp => {
+    inp.addEventListener("change", async () => {
+      const v = inp.value.trim(), uid = inp.dataset.userCodeposte;
+      if (v && !/^\d{4}$/.test(v)) { window.toast?.("Le code doit faire 4 chiffres"); inp.value = ""; return; }
+      const hash = v ? await window.__hashCodePoste?.(uid, v) : "";
+      if (v && !hash) { window.toast?.("Recharge l'appli puis recommence"); return; }
+      await enregistrerChamp(inp.parentElement, uid, { codePoste: hash || "" });
+      inp.value = ""; window.toast?.(v ? "🔒 Code poste enregistré" : "Code poste retiré");
     });
   });
   container.querySelectorAll("[data-user-poste]").forEach(cb => {

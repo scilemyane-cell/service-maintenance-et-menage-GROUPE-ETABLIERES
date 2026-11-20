@@ -215,7 +215,9 @@
       // Télé « sans mise à jour » (app.html?ecran=atelier&maj=nuit) : aucune recharge
       // en journée ni bandeau ; la nouvelle version est prise au rechargement de 4 h
       // (ou via le bouton « Recharger la télé » de l'écran atelier).
-      if (new URLSearchParams(location.search).get("maj") === "nuit" && window.__modeTele) return;
+      // Désormais pour TOUT écran atelier (?ecran=atelier), avec ou sans &maj=nuit.
+      // Idem quand l'Écran atelier est ouvert depuis sa tuile (PC du bureau…).
+      if (window.__modeTele || currentCategory === "ecran-atelier") return;
       if (VERSION_CHARGEE !== "dev" && String(versionEnLigne.version) !== VERSION_CHARGEE) {
         // Télé : recharge seule, UNE fois par nouvelle version et au plus toutes les 10 min (sinon, si le PC garde
         // l'ancienne page en mémoire, l'écran se rechargeait en boucle). Sinon bandeau « Mettre à jour ».
@@ -327,10 +329,40 @@
   // Le compte du poste lui-même (ex. « Tony et Anthony ») en premier : son
   // espace technicien, distinct de l'écran général.
   const personnesDuPoste = () => [...(currentUser ? [{ ...currentUser, uid: currentUser.uid }] : []),
-    ...usersList.filter(u => u.uid !== currentUser?.uid && u.role === "technicien" && !u.postePartage && !u.desactive)
+    ...usersList.filter(u => u.uid !== currentUser?.uid && (u.role === "technicien" || u.codePoste) && !u.postePartage && !u.desactive)
       .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"))];
-  function posteChoisi(uid) {
+  // Code à 4 chiffres (Administration › Utilisateurs › « Code poste ») : stocké
+  // haché (SHA-256 + uid). Sans code enregistré, l'espace s'ouvre directement.
+  async function hashCodePoste(uid, code) {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`smm-poste:${uid}:${code}`));
+    return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+  }
+  window.__hashCodePoste = hashCodePoste;
+  function demanderCode(u) {
+    return new Promise((ok) => {
+      const f = document.createElement("div");
+      f.className = "poste-code-fond";
+      f.innerHTML = `<form class="poste-code-boite"><b>🔒 ${escapeHtml(u.nom || u.email)}</b><span>Ton code à 4 chiffres</span>
+        <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" class="poste-code-input">
+        <small class="poste-code-err"></small>
+        <div><button type="button" class="nav-btn" data-annuler>Annuler</button> <button type="submit" class="add-btn">Ouvrir</button></div></form>`;
+      document.body.appendChild(f);
+      const inp = f.querySelector("input"), err = f.querySelector(".poste-code-err"); setTimeout(() => inp.focus(), 50);
+      const fin = (v) => { f.remove(); ok(v); };
+      f.querySelector("[data-annuler]").onclick = () => fin(false);
+      f.addEventListener("click", (e) => { if (e.target === f) fin(false); });
+      const verifier = async () => {
+        if (!/^\d{4}$/.test(inp.value)) return;
+        if (await hashCodePoste(u.uid, inp.value) === u.codePoste) return fin(true);
+        err.textContent = "Code incorrect"; inp.value = ""; inp.focus();
+      };
+      inp.addEventListener("input", verifier);
+      f.querySelector("form").addEventListener("submit", (e) => { e.preventDefault(); verifier(); });
+    });
+  }
+  async function posteChoisi(uid) {
     const u = personnesDuPoste().find(x => x.uid === uid);
+    if (u && u.codePoste && !(await demanderCode(u))) return;
     ecrirePoste(u ? { uid: u.uid, nom: u.nom || u.email, t: Date.now() } : null);
     currentCategory = null; currentSubtab = null; render();
   }
@@ -351,7 +383,7 @@
     const i = lirePoste();
     return `<div class="poste-barre">
       <button type="button" class="poste-btn ${i ? "" : "on"}" data-poste-uid="">🖥️ Écran général</button>
-      ${personnesDuPoste().map(u => `<button type="button" class="poste-btn ${i?.uid === u.uid ? "on" : ""}" data-poste-uid="${escapeHtml(u.uid)}">👤 ${escapeHtml(String(u.nom || u.email).split(/\s+/).map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(" "))}</button>`).join("")}
+      ${personnesDuPoste().map(u => `<button type="button" class="poste-btn ${i?.uid === u.uid ? "on" : ""}" data-poste-uid="${escapeHtml(u.uid)}">${u.codePoste ? "🔒" : "👤"} ${escapeHtml(String(u.nom || u.email).split(/\s+/).map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(" "))}</button>`).join("")}
       ${i ? `<span class="poste-info">Espace de <b>${escapeHtml(eff.nom || "")}</b> · retour auto après 5 min sans activité</span>` : `<span class="poste-info">Clique sur ton nom pour ouvrir ton espace</span>`}
     </div>`;
   }

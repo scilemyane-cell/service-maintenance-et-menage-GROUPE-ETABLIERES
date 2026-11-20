@@ -564,7 +564,7 @@ function pbRender() {
       <span class="hint">Son des nouvelles urgences :</span>
       <button class="nav-btn" data-pb-son="1">🔔 Activer</button><button class="nav-btn" data-pb-son="0">🔕 Couper</button>
       <button class="nav-btn" data-pb-recharger>🔄 Recharger la télé</button>
-      <p class="hint" style="margin:6px 0 0;flex-basis:100%">Adresse à ouvrir sur la télé : <code>${esc(location.origin)}/app.html?ecran=atelier</code></p></div>
+      <p class="hint" style="margin:6px 0 0;flex-basis:100%">Adresse à ouvrir sur la télé : <code>${esc(location.origin)}/app.html?ecran=atelier</code> (ne se recharge pas en journée : mise à jour à 4 h ou via « Recharger la télé »)</p></div>
     <div class="form-card"><b>À venir (${actifs.length})</b>${actifs.map(ligne).join("") || `<p class="hint">Aucun rappel.</p>`}</div>
     ${passes.length ? `<details class="form-card"><summary><b>Passés (${passes.length})</b> — n'apparaissent plus sur la télé</summary>${passes.map(ligne).join("")}</details>` : ""}
   </div>`;
