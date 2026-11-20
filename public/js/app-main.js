@@ -324,10 +324,13 @@
   const CLE_POSTE = "etablieres-poste-identite", DELAI_POSTE = 5 * 60000;
   const lirePoste = () => { try { const i = JSON.parse(localStorage.getItem(CLE_POSTE) || "null"); return i && Date.now() - i.t < DELAI_POSTE ? i : null; } catch { return null; } };
   const ecrirePoste = (i) => { try { if (i) localStorage.setItem(CLE_POSTE, JSON.stringify(i)); else localStorage.removeItem(CLE_POSTE); } catch { /* */ } };
-  const personnesDuPoste = () => usersList.filter(u => u.uid !== currentUser?.uid && u.role === "technicien" && !u.postePartage && !u.desactive)
-    .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"));
+  // Le compte du poste lui-même (ex. « Tony et Anthony ») en premier : son
+  // espace technicien, distinct de l'écran général.
+  const personnesDuPoste = () => [...(currentUser ? [{ ...currentUser, uid: currentUser.uid }] : []),
+    ...usersList.filter(u => u.uid !== currentUser?.uid && u.role === "technicien" && !u.postePartage && !u.desactive)
+      .sort((a, b) => String(a.nom || a.email).localeCompare(String(b.nom || b.email), "fr"))];
   function posteChoisi(uid) {
-    const u = usersList.find(x => x.uid === uid);
+    const u = personnesDuPoste().find(x => x.uid === uid);
     ecrirePoste(u ? { uid: u.uid, nom: u.nom || u.email, t: Date.now() } : null);
     currentCategory = null; currentSubtab = null; render();
   }
@@ -357,7 +360,9 @@
   }
   function utilisateurEffectif() {
     if (currentUser?.postePartage) {
-      const i = lirePoste(), u = i && usersList.find(x => x.uid === i.uid);
+      const i = lirePoste();
+      if (i?.uid === currentUser.uid) return { ...currentUser, postePartage: false, viaPoste: currentUser.uid }; // espace du compte partagé
+      const u = i && usersList.find(x => x.uid === i.uid);
       return u ? { ...u, viaPoste: currentUser.uid } : currentUser;
     }
     if (!apercuUid || currentUser?.role !== "super_admin") return currentUser;
