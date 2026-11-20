@@ -16,8 +16,11 @@ const NOMS = { LUN: "Lundi", MAR: "Mardi", MER: "Mercredi", JEU: "Jeudi", VEN: "
 const WEEKEND = ["SAM", "DIM"];
 let JOURS = JOURS_SEMAINE;
 function joursDeLaSemaine(inv, weekStart) {
-  const we = WEEKEND.filter((_, i) => { const d = dateKey(addDays(new Date(weekStart + "T00:00:00"), 5 + i)); return (!inv.debut || d >= inv.debut) && (!inv.fin || d <= inv.fin) && inv.debut; });
-  return [...JOURS_SEMAINE, ...we];
+  // Seulement les jours compris dans les dates de l'accès (ex. samedi–dimanche
+  // pour un remplacement le week-end) ; accès sans dates : lundi → vendredi.
+  if (!inv.debut) return JOURS_SEMAINE;
+  const l = [...JOURS_SEMAINE, ...WEEKEND].filter((_, i) => { const d = dateKey(addDays(new Date(weekStart + "T00:00:00"), i)); return d >= inv.debut && (!inv.fin || d <= inv.fin); });
+  return l.length ? l : JOURS_SEMAINE;
 }
 
 let state = { sites: [], fiches: [] };
@@ -64,7 +67,7 @@ export function mountGuestFiche(container, u, inv) {
   // Aujourd'hui s'il fait partie de l'accès ; sinon le 1er jour de week-end
   // ouvert (remplacement samedi / dimanche) ; sinon lundi.
   const avantDebut = inv.debut && dateKey(new Date()) < inv.debut;
-  ui.jour = !avantDebut && ui.weekStart === lundi && JOURS.includes(j) ? j : (JOURS.find(x => WEEKEND.includes(x)) || (ui.weekStart === lundi && JOURS.includes(j) ? j : "LUN"));
+  ui.jour = !avantDebut && ui.weekStart === lundi && JOURS.includes(j) ? j : JOURS[0];
   void auj;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { state.sites = s; render(); }));
@@ -186,7 +189,7 @@ function render() {
   conteneur.querySelectorAll("[data-obs-btn]").forEach(b => b.addEventListener("click", () => { const z = conteneur.querySelector(`[data-obs-zone="${b.dataset.obsBtn}"]`); z?.classList.toggle("ouverte"); z?.querySelector("input")?.focus(); }));
   conteneur.querySelector("#gf-pas-moi")?.addEventListener("click", () => { if (confirm("Changer de personne sur ce téléphone ?")) { try { localStorage.removeItem(cleIdentite()); } catch { /* */ } identite = null; render(); } });
   conteneur.querySelector("#gf-site")?.addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });
-  conteneur.querySelector("#gf-week")?.addEventListener("change", (e) => { ui.weekStart = e.target.value; JOURS = joursDeLaSemaine(invitation, ui.weekStart); if (!JOURS.includes(ui.jour)) ui.jour = "LUN"; render(); });
+  conteneur.querySelector("#gf-week")?.addEventListener("change", (e) => { ui.weekStart = e.target.value; JOURS = joursDeLaSemaine(invitation, ui.weekStart); if (!JOURS.includes(ui.jour)) ui.jour = JOURS[0]; render(); });
   conteneur.querySelectorAll("[data-jour]").forEach(b => b.addEventListener("click", () => { ui.jour = b.dataset.jour; render(); }));
   conteneur.querySelectorAll("[data-obs]").forEach(inp => inp.addEventListener("input", () => { data.obs[inp.dataset.obs] = inp.value; conteneur.querySelector(`[data-obs-btn="${inp.dataset.obs}"]`)?.classList.toggle("a-obs", !!inp.value); sauver(id, data, 800); }));
   conteneur.querySelector("#gf-obs-generales")?.addEventListener("input", (e) => { data.observationsGenerales = e.target.value; sauver(id, data, 800); });
