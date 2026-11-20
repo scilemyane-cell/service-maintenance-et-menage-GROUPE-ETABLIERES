@@ -379,7 +379,7 @@
     }, 15000);
   }
   function barrePosteHTML(eff) {
-    if (!currentUser?.postePartage) return "";
+    if (!currentUser?.postePartage || window.__modeTele) return "";
     const i = lirePoste();
     return `<div class="poste-barre">
       <button type="button" class="poste-btn ${i ? "" : "on"}" data-poste-uid="">🖥️ Écran général</button>
@@ -391,7 +391,7 @@
     document.querySelectorAll("[data-poste-uid]").forEach(b => b.addEventListener("click", () => posteChoisi(b.dataset.posteUid)));
   }
   function utilisateurEffectif() {
-    if (currentUser?.postePartage) {
+    if (currentUser?.postePartage && !window.__modeTele) { // la télé reste sur le compte du poste
       const i = lirePoste();
       if (i?.uid === currentUser.uid) return { ...currentUser, postePartage: false, viaPoste: currentUser.uid }; // espace du compte partagé
       const u = i && usersList.find(x => x.uid === i.uid);
@@ -647,7 +647,7 @@
   }
 
   watchAuth((user) => {
-    if (!user) { window.location.href = "index.html"; return; }
+    if (!user) { window.location.href = "index.html" + window.location.search; return; } // garde ?ecran=atelier, ?stock=… après la connexion
     // Version de TEST (/beta/) : réservée au Super Admin. Les autres
     // utilisateurs sont renvoyés vers la version validée (même lien, même QR).
     if (CANAL_TEST && user.role !== "super_admin") { window.location.replace("/app.html" + window.location.search + window.location.hash); return; }
