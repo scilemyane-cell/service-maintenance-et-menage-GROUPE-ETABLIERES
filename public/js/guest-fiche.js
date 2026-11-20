@@ -117,6 +117,26 @@ function formulaireIdentite() {
   });
 }
 
+// ---- 📋 Infos pratiques (adresse, itinéraire, codes, consignes, contact) ----
+// Renseignées par le responsable (Paramètres › accès prestataires › ℹ️ Infos).
+function infosPratiquesHTML(site) {
+  const inf = invitation?.infos; if (!inf) return "";
+  const s = inf.sites?.[site?.id] || {};
+  const tel = inf.contact?.tel ? String(inf.contact.tel).replace(/[^\d+]/g, "") : "";
+  const blocs = [
+    inf.message ? `<div class="gfi-msg">👋 ${esc(inf.message).replace(/\n/g, "<br>")}</div>` : "",
+    s.adresse ? `<div class="gfi-l"><span>📍</span><div><b>Adresse</b><br>${esc(s.adresse)}<br><a class="gfi-btn" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.adresse)}" target="_blank" rel="noopener">🧭 Itinéraire</a></div></div>` : "",
+    (s.codes || []).length ? `<div class="gfi-l"><span>🔑</span><div><b>Boîte(s) à clés</b><br>${s.codes.map(c => esc(c)).join("<br>")}</div></div>` : "",
+    s.consignes ? `<div class="gfi-l"><span>📝</span><div><b>Consignes</b><br>${esc(s.consignes).replace(/\n/g, "<br>")}</div></div>` : "",
+    inf.contact?.nom || tel ? `<div class="gfi-l"><span>📞</span><div><b>Contact</b><br>${esc(inf.contact?.nom || "")}${tel ? ` — <a href="tel:${esc(tel)}">${esc(inf.contact.tel)}</a>` : ""}</div></div>` : "",
+  ].filter(Boolean);
+  if (!blocs.length) return "";
+  return `<details class="gfi" ${ui.infosFermees ? "" : "open"}><summary>📋 Infos pratiques — ${esc(site?.name || "")}</summary>${blocs.join("")}</details>
+    <style>.gfi{background:var(--panel,#fff);border:1px solid var(--border,#dde);border-radius:12px;padding:10px 14px;margin:0 0 12px}.gfi summary{font-weight:700;cursor:pointer;font-size:15px}
+    .gfi-msg{margin:10px 0;padding:10px 12px;border-radius:10px;background:#fff8e1;color:#5a4500}.gfi-l{display:flex;gap:10px;margin:10px 0;line-height:1.45}.gfi-l>span{font-size:20px}
+    .gfi-btn{display:inline-block;margin-top:6px;padding:7px 12px;border-radius:8px;background:#2e7d4f;color:#fff!important;text-decoration:none;font-weight:600}</style>`;
+}
+
 function render() {
   if (!conteneur) return;
   if (!document.contains(conteneur)) { cleanup(); return; }
@@ -147,6 +167,7 @@ function render() {
         ${sites.length > 1 ? `<select id="gf-site">${sites.map(s => `<option value="${esc(s.id)}" ${s.id === ui.siteId ? "selected" : ""}>🏠 ${esc(s.name)}</option>`).join("")}</select>` : ""}
         ${invitation.weeks.length > 1 ? `<select id="gf-week">${invitation.weeks.map(w => `<option value="${w}" ${w === ui.weekStart ? "selected" : ""}>Semaine du ${fmtShort(new Date(w + "T00:00:00"))}</option>`).join("")}</select>` : ""}
       </div>` : ""}
+      ${infosPratiquesHTML(site)}
       ${invitation.apercuResponsable ? `<div class="gf-att" style="background:#eef1f6;color:#33449a;border-color:#c7d0e6">👁️ Aperçu responsable : c'est ce que verra le prestataire. Lecture seule, rien n'est enregistré.</div>` : ""}
       ${consultation ? `<div class="gf-att">👀 Consultation : voici le travail à faire sur chaque site et chaque jour. Tu pourras cocher les tâches à partir du ${new Date(invitation.consultationJusqua + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.</div>` : ""}
       ${data.validee ? `<div class="gf-ok">✅ Fiche vérifiée et validée par le responsable. Merci !</div>` : consultation ? "" : data.submitted ? `<div class="gf-att">📤 Fiche envoyée au responsable. Tu peux encore la rouvrir pour corriger.</div>` : ""}
@@ -190,6 +211,7 @@ function render() {
   const garderPos = (fn) => { const y = window.scrollY; fn(); render(); window.scrollTo(0, y); };
   conteneur.querySelectorAll("[data-cell]").forEach(b => b.addEventListener("click", () => garderPos(() => { data.cells[b.dataset.cell] = !data.cells[b.dataset.cell]; sauver(id, data, 300); })));
   conteneur.querySelectorAll("[data-tout]").forEach(b => b.addEventListener("click", () => garderPos(() => { const ri = +b.dataset.tout, l = itemsPiece(ri, jour), v = !l.every(x => x.fait); l.forEach(x => { data.cells[x.key] = v; }); sauver(id, data, 300); })));
+  conteneur.querySelector(".gfi")?.addEventListener("toggle", (e) => { ui.infosFermees = !e.target.open; });
   conteneur.querySelectorAll("[data-obs-btn]").forEach(b => b.addEventListener("click", () => { const z = conteneur.querySelector(`[data-obs-zone="${b.dataset.obsBtn}"]`); z?.classList.toggle("ouverte"); z?.querySelector("input")?.focus(); }));
   conteneur.querySelector("#gf-pas-moi")?.addEventListener("click", () => { if (confirm("Changer de personne sur ce téléphone ?")) { try { localStorage.removeItem(cleIdentite()); } catch { /* */ } identite = null; render(); } });
   conteneur.querySelector("#gf-site")?.addEventListener("change", (e) => { ui.siteId = e.target.value; render(); });

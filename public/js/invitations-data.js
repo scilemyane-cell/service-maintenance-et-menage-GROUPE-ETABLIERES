@@ -38,6 +38,13 @@ export async function createLienAgent({ dispositif, agentUid, agentNom, debut, f
   return token;
 }
 
+// Infos pratiques pour un prestataire qui ne connaît pas les lieux (adresse,
+// codes boîtes à clés, consignes par site, contact, mot d'accueil) : lues par
+// la page invitée, sans accès aux autres collections (codes copiés ici).
+export async function setInvitationInfos(token, infos) {
+  await updateDoc(doc(db, "invitations", token), { infos });
+}
+
 export async function setInvitationActive(token, active) {
   await updateDoc(doc(db, "invitations", token), { active });
 }

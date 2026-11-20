@@ -2,6 +2,7 @@ import { esc, addDays, dateKey, fmtShort, isPlausibleDate } from "./astreinte-lo
 import { ouvrirMailPresta } from "./mail-presta.js";
 import { watchSitesDossiers } from "./site-dossier-data.js";
 import { listerCodesPourSite } from "./masterlock-data.js";
+import { setInvitationInfos } from "./invitations-data.js";
 import { watchSites, saveSites } from "./sites-data.js";
 import { watchUsers, updateUser, createUserProfile, preparerCompteEnAttente } from "./users-data.js";
 import { watchInvitations, createInvitation, setInvitationActive, deleteInvitation, createLienAgent } from "./invitations-data.js";
@@ -523,6 +524,13 @@ function texteSms(inv) {
 }
 // Codes boîte à clés des sites de l'accès (onglet Codes Masterlock du dossier de site).
 const normSite = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(maison|mna|la|le|les)\b/g, " ").replace(/[^a-z0-9]+/g, " ").replace(/\bst\b/g, "saint").trim();
+const sigleSite = (t) => normSite(t).split(" ").filter(Boolean).map(w => w[0]).join("");
+function dossierDuSite(dossiers, s) {
+  const n = normSite(s.name);
+  return dossiers.find(x => normSite(x.nom) === n) || dossiers.find(x => { const m = normSite(x.nom); return n && m && (m.includes(n) || n.includes(m)); })
+    || dossiers.find(x => n && n.replace(/ /g, "") === sigleSite(x.nom));
+}
+const lireDossiers = () => new Promise((ok) => { let u = null, fini = false; u = watchSitesDossiers((l) => { if (fini) return; fini = true; ok(l || []); setTimeout(() => u?.(), 0); }); setTimeout(() => { if (!fini) { fini = true; ok([]); } }, 6000); });
 async function codesDesSites(sites) {
   const dossiers = await new Promise((ok) => { let u = null, fini = false; u = watchSitesDossiers((l) => { if (fini) return; fini = true; ok(l || []); setTimeout(() => u?.(), 0); }); setTimeout(() => { if (!fini) { fini = true; ok([]); } }, 6000); });
   const items = [];
@@ -536,6 +544,58 @@ async function codesDesSites(sites) {
     codes.filter(c => c.code).forEach(c => items.push({ texte: `${String(s.name).replace(/^Maison MNA\s+/i, "")} — ${c.nom || "Boîte à clés"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}` }));
   }
   return items;
+}
+// ---- ℹ️ Infos pour le prestataire (nouvelles personnes qui ne connaissent pas les lieux) ----
+// Préremplies depuis les dossiers de site (adresse) et les Codes Masterlock,
+// modifiables, puis copiées DANS l'accès : la page du prestataire les affiche
+// sans avoir besoin des autres données de l'appli.
+async function editerInfosInvitation(inv) {
+  const sites = sitesInv(inv);
+  const fond = document.createElement("div");
+  fond.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px";
+  fond.innerHTML = `<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:14px;max-width:760px;width:100%;max-height:94vh;overflow:auto;padding:16px"><p class="hint">⏳ Chargement des adresses et des codes…</p></div>`;
+  document.body.appendChild(fond);
+  const dossiers = await lireDossiers();
+  const deja = inv.infos || {};
+  const parSite = await Promise.all(sites.map(async (st) => {
+    const d = dossierDuSite(dossiers, st), prev = deja.sites?.[st.id];
+    const codes = prev?.codes ?? (d ? (await listerCodesPourSite(d.id).catch(() => [])).filter(c => c.code).map(c => `${c.nom || "Boîte à clés"} : code ${c.code}${c.notes ? ` (${c.notes})` : ""}`) : []);
+    return { id: st.id, name: st.name, adresse: prev?.adresse ?? (d?.adresse || ""), codes: Array.isArray(codes) ? codes.join("\n") : String(codes || ""), consignes: prev?.consignes || "" };
+  }));
+  let contactMem = {}; try { contactMem = JSON.parse(localStorage.getItem("etablieres-contact-presta") || "{}"); } catch { /* */ }
+  const contact = deja.contact || { nom: contactMem.nom || currentUser?.nom || "", tel: contactMem.tel || "" };
+  const champ = "width:100%;box-sizing:border-box;padding:7px 9px;border-radius:8px;border:1px solid var(--border,#ccd);background:var(--bg,#fff);color:inherit;font:inherit";
+  fond.firstElementChild.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="flex:1;font-size:17px">ℹ️ Infos pour le prestataire — ${esc(inv.label || "")}</b><button type="button" class="nav-btn" data-fermer>✕</button></div>
+    <p class="hint" style="margin:0 0 12px">Affichées en haut de sa page (et dans l'aperçu 👁️). Préremplies avec l'adresse du dossier de site et les Codes Masterlock : vérifie, complète, puis enregistre.</p>
+    <label style="display:block;margin-bottom:10px">👋 Mot d'accueil<textarea data-i="message" rows="3" style="${champ}" placeholder="Ex. : Bienvenue ! Merci de commencer par la maison Saint Vincent de Paul. Les produits sont dans le placard de la buanderie.">${esc(deja.message || "")}</textarea></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <label>📞 Contact (nom)<input data-i="contactNom" value="${esc(contact.nom)}" style="${champ}"></label>
+      <label>Téléphone<input data-i="contactTel" type="tel" value="${esc(contact.tel)}" placeholder="06…" style="${champ}"></label>
+    </div>
+    ${parSite.map((p, k) => `<fieldset style="border:1px solid var(--border,#dde);border-radius:10px;padding:10px 12px;margin:0 0 10px">
+      <legend style="font-weight:700;padding:0 6px">🏠 ${esc(p.name)}</legend>
+      <label style="display:block;margin-bottom:8px">📍 Adresse<input data-s="${k}" data-c="adresse" value="${esc(p.adresse)}" style="${champ}" placeholder="N°, rue, code postal, ville"></label>
+      <label style="display:block;margin-bottom:8px">🔑 Boîte(s) à clés — une par ligne<textarea data-s="${k}" data-c="codes" rows="2" style="${champ}">${esc(p.codes)}</textarea></label>
+      <label style="display:block">📝 Consignes pour cette maison<textarea data-s="${k}" data-c="consignes" rows="3" style="${champ}" placeholder="Ex. : porte d'entrée côté parking ; produits au 1er étage ; poubelles à sortir le mardi soir ; ne pas entrer dans les chambres fermées…">${esc(p.consignes)}</textarea></label>
+    </fieldset>`).join("")}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button type="button" class="nav-btn" data-fermer>Annuler</button><button type="button" class="add-btn" data-enreg>💾 Enregistrer</button></div>`;
+  const fermer = () => fond.remove();
+  fond.querySelectorAll("[data-fermer]").forEach(b => b.onclick = fermer);
+  fond.querySelector("[data-enreg]").onclick = async (e) => {
+    const v = (sel) => fond.querySelector(sel)?.value.trim() || "";
+    const infos = { message: v('[data-i="message"]'), contact: { nom: v('[data-i="contactNom"]'), tel: v('[data-i="contactTel"]') }, sites: {} };
+    parSite.forEach((p, k) => {
+      const c = (n) => fond.querySelector(`[data-s="${k}"][data-c="${n}"]`).value.trim();
+      infos.sites[p.id] = { name: p.name, adresse: c("adresse"), codes: c("codes").split("\n").map(x => x.trim()).filter(Boolean), consignes: c("consignes") };
+    });
+    e.target.disabled = true; e.target.textContent = "⏳ Enregistrement…";
+    try {
+      await setInvitationInfos(inv.id, infos);
+      try { localStorage.setItem("etablieres-contact-presta", JSON.stringify(infos.contact)); } catch { /* */ }
+      window.toast?.("✓ Infos enregistrées — elles s'affichent sur la page du prestataire"); fermer();
+    } catch (err) { alert("Non enregistré : " + (err?.message || err)); e.target.disabled = false; e.target.textContent = "💾 Enregistrer"; }
+  };
 }
 // Mail mis en forme (logo, récapitulatif, bouton) pour le prestataire.
 async function mailInvitation(inv) {
@@ -567,6 +627,7 @@ function renderInvites(container, user) {
       <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
       <td style="white-space:nowrap">
         ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
+        <button class="nav-btn" data-infos-inv="${inv.id}" style="padding:4px 10px;font-size:11px;${inv.infos ? "" : "border-color:#c9a227;"}">ℹ️ Infos${inv.infos ? " ✓" : ""}</button>
         <a class="nav-btn" href="${guestLink(inv.id)}?apercu=1" target="_blank" rel="noopener" style="padding:4px 10px;font-size:11px;text-decoration:none">👁️ Aperçu</a>
         <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail / 🖼️ Image</button>
         <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
@@ -619,6 +680,9 @@ function renderInvites(container, user) {
     invForm = { sites: [], label: "", telephone: "", debut: "", fin: "" };
     invState.dernier = token; renderInvites(container, user);
   });
+  container.querySelectorAll("[data-infos-inv]").forEach(btn => btn.addEventListener("click", () => {
+    const inv = invState.invitations.find(i => i.id === btn.dataset.infosInv); if (inv) editerInfosInvitation(inv);
+  }));
   container.querySelectorAll("[data-mail-inv]").forEach(btn => btn.addEventListener("click", () => {
     const inv = invState.invitations.find(i => i.id === btn.dataset.mailInv); if (inv) mailInvitation(inv);
   }));
