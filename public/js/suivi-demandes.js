@@ -177,7 +177,7 @@ export function mountSuiviDemandesTab(container, user) {
   mountedUser = user;
   state = { demandes: null };
   // À chaque ouverture de la tuile : vue « Par site », liste de tous les sites.
-  ui.vue = "sites"; ui.retourActions = false; ui.retourTableau = null; resetVueSites();
+  ui.vue = "sites"; ui.retourActions = false; ui.retourTableau = null; ui.retourParJour = null; resetVueSites();
   const raccourci = window.__suiviRaccourci; window.__suiviRaccourci = null;
   if (raccourci === "actions") ui.vue = "actions";
   if (raccourci === "valider") ui.allerValidation = true;
@@ -547,11 +547,13 @@ function renderVue(container) {
       uid: identite().uid || null,
       favLectureSeule: !!mountedUser?.postePartage,
       rafraichir: () => render(container),
-      quitterFocus: ui.retourTableau ? () => {
+      quitterFocus: ui.retourParJour ? () => {
+        const r = ui.retourParJour; ui.retourParJour = null; ui.vue = "parjour"; render(container); setTimeout(() => window.scrollTo({ top: r.y || 0 }), 30);
+      } : ui.retourTableau ? () => {
         const r = ui.retourTableau; ui.retourTableau = null; Object.assign(ui, { filtreStatut: r.filtreStatut, filtreUrgence: r.filtreUrgence, filtreSites: r.filtreSites, filtreAssociation: r.filtreAssociation, recherche: r.recherche });
         ui.vue = "tableau"; render(container); setTimeout(() => window.scrollTo({ top: r.y || 0 }), 30);
       } : ui.retourActions ? () => { ui.retourActions = false; ui.vue = "actions"; render(container); } : null,
-      libelleRetour: ui.retourTableau ? "📋 Retour au tableau" : "",
+      libelleRetour: ui.retourParJour ? "📅 Retour aux demandes traitées" : ui.retourTableau ? "📋 Retour au tableau" : "",
       utilisateurs,
       apres: () => {
         try { injecterBandeauPoste(container); } catch (e) { console.error("Poste partagé :", e); }
@@ -665,7 +667,7 @@ function renderParJour(container) {
   const URG_LIB = { crit: "Critique", urg: "Urgent", plan: "À planifier", norm: "Normal" };
   const puceUrg = (x) => { const k = urgCle(x.urgence); return `<span class="pj-urg ${k}">${k === "crit" ? "🔴" : k === "urg" ? "🟠" : k === "plan" ? "🔵" : "⚪"} ${URG_LIB[k]}</span>`; };
   const resumeUrg = (l) => ["crit", "urg"].map(k => { const n = l.filter(x => urgCle(x.urgence) === k).length; return n ? `<span class="pj-urg ${k}">${n} ${URG_LIB[k].toLowerCase()}${n > 1 ? "s" : ""}</span>` : ""; }).join("");
-  const ligneDem = (x) => `<div class="pj-dem"><span class="dps-num">${esc(x.n)}</span>${puceUrg(x)}<span><b>${esc(x.site)}</b>${x.local ? ` · ${esc(x.local)}` : ""} — ${esc(String(x.descr || "").slice(0, 140))}<br><small>${x.annulee ? "✖ Annulée" : "✓ Réalisée"}${enValid(x) ? " · en attente de validation" : x.validePar ? ` · validée par ${esc(x.validePar)}` : ""}${per !== "jour" ? ` · ${frC(x.jour)}` : ""}</small></span></div>`;
+  const ligneDem = (x) => `<button type="button" class="pj-dem pj-dem-lien" data-pj-ouvrir="${esc(x.id)}" data-pj-site="${esc(x.site || "")}" title="Ouvrir la demande"><span class="dps-num">${esc(x.n)}</span>${puceUrg(x)}<span><b>${esc(x.site)}</b>${x.local ? ` · ${esc(x.local)}` : ""} — ${esc(String(x.descr || "").slice(0, 140))}<br><small>${x.annulee ? "✖ Annulée" : "✓ Réalisée"}${enValid(x) ? " · en attente de validation" : x.validePar ? ` · validée par ${esc(x.validePar)}` : ""}${per !== "jour" ? ` · ${frC(x.jour)}` : ""}</small></span><span class="pj-go">Ouvrir →</span></button>`;
   // Graphique par jour (plusieurs jours) : une colonne par jour, empilée par technicien.
   const maxJour = Math.max(1, ...jours.map(j => traitees.filter(x => x.jour === j).length));
   const graphe = jours.length > 1 ? `<div class="pj-graphe">${jours.map(j => { const l = traitees.filter(x => x.jour === j && (!filtre || x.tech === filtre)), w = new Date(j + "T12:00").getDay();
@@ -699,6 +701,13 @@ function renderParJour(container) {
   container.querySelector("[data-pj-au]")?.addEventListener("change", (e) => { if (e.target.value) { ui.pjAu = e.target.value; ui.pjDu = ui.pjDu || debut; re(); } });
   container.querySelectorAll("[data-pj-tech]").forEach(b => b.onclick = () => { ui.pjTech = b.dataset.pjTech && ui.pjTech !== b.dataset.pjTech ? b.dataset.pjTech : ""; re(); });
   container.querySelectorAll("[data-pj-jour-col]").forEach(b => b.onclick = () => { ui.pjPeriode = "jour"; ui.pjJour = b.dataset.pjJourCol; re(); });
+  // Une demande de la liste → sa fiche ; « ← Retour » revient sur cette liste.
+  container.querySelectorAll("[data-pj-ouvrir]").forEach(b => b.onclick = () => {
+    ui.retourParJour = { y: window.scrollY };
+    ouvrirDemandeSeule(b.dataset.pjOuvrir, b.dataset.pjSite); ui.vue = "sites"; ui.vueChoisie = true; render(container);
+    container.scrollIntoView({ block: "start" });
+  });
+  if (!document.getElementById("pj-lien-style")) document.head.insertAdjacentHTML("beforeend", `<style id="pj-lien-style">.pj-dem-lien{width:100%;text-align:left;font:inherit;color:inherit;background:none;border:0;border-radius:8px;cursor:pointer;align-items:center}.pj-dem-lien:hover{background:rgba(42,157,143,.10)}.pj-go{margin-left:auto;white-space:nowrap;color:var(--teal,#2a9d8f);font-weight:700;font-size:12px;padding-left:8px}</style>`);
 }
 
 // ---- Onglet « ⏸️ En pause » : demandes en « Arbitrage budgétaire » ----
@@ -728,7 +737,7 @@ function attacherToggleVue(container) {
   container.querySelectorAll("[data-vue]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (btn.dataset.vue === "sites") resetVueSites(); // « Par site » ramène toujours à la liste des sites
-      ui.vue = btn.dataset.vue; ui.vueChoisie = true; ui.retourActions = false; ui.retourTableau = null;
+      ui.vue = btn.dataset.vue; ui.vueChoisie = true; ui.retourActions = false; ui.retourTableau = null; ui.retourParJour = null;
       if (ui.vue === "stats") ui.moisOuvert = null;
       render(container);
     });
