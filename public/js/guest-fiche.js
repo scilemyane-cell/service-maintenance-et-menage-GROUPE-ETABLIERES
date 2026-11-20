@@ -120,7 +120,8 @@ function formulaireIdentite() {
 // ---- 📋 Infos pratiques (adresse, itinéraire, codes, consignes, contact) ----
 // Renseignées par le responsable (Paramètres › accès prestataires › ℹ️ Infos).
 function infosPratiquesHTML(site) {
-  const inf = invitation?.infos; if (!inf) return "";
+  const inf = invitation?.infos;
+  if (!inf) return invitation?.apercuResponsable ? `<div class="gf-att">📋 Aucune info pratique pour cet accès : dans l'appli, Paramètres › accès prestataires, clique sur « ℹ️ Infos » sur la ligne de CET accès, enregistre, puis recharge cet aperçu.</div>` : "";
   const s = inf.sites?.[site?.id] || {};
   const tel = inf.contact?.tel ? String(inf.contact.tel).replace(/[^\d+]/g, "") : "";
   const blocs = [
