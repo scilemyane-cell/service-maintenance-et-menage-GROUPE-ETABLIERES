@@ -60,6 +60,12 @@ export function mountGuestFiche(container, u, inv) {
   const auj = dateKey(new Date());
   // Semaine affichée : celle d'aujourd'hui si elle fait partie de l'accès.
   const lundi = dateKey(addDays(new Date(), -((new Date().getDay() + 6) % 7)));
+  // Accès permanent (sans date de fin) : semaine en cours + précédente (à partir du début).
+  if (!inv.fin || !(inv.weeks || []).length) {
+    const prec = dateKey(addDays(new Date(lundi + "T00:00:00"), -7)), debutL = inv.debut ? dateKey(addDays(new Date(inv.debut + "T00:00:00"), -((new Date(inv.debut + "T00:00:00").getDay() + 6) % 7))) : "";
+    inv.weeks = [prec, lundi].filter(w => !debutL || w >= debutL);
+    if (!inv.weeks.length) inv.weeks = [debutL || lundi];
+  }
   ui.weekStart = inv.weeks.includes(lundi) ? lundi : inv.weeks[0];
   ui.siteId = sitesInvitation(inv)[0]?.id;
   JOURS = joursDeLaSemaine(inv, ui.weekStart);

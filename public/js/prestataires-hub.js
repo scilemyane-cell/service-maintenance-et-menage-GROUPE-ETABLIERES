@@ -83,9 +83,10 @@ function rendreAnnuaire(container, user) {
     ${acc.length ? `<div style="display:grid;gap:8px;margin-top:10px">${acc.map(i => { const [et, col] = etatAcces(i); const nb = (i.sites || []).length; return `
       <div style="border:1px solid var(--border,#dde);border-left:4px solid ${col};border-radius:10px;padding:10px 12px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="flex:1">${typeAcces(i)}</b><span style="color:${col};font-weight:700">${et}</span></div>
-        <div class="hint">${i.debut ? `du ${frD(i.debut)} au ${frD(i.fin)}` : "sans date"} · ${nb} site${nb > 1 ? "s" : ""}${nb && nb <= 4 ? ` : ${escH((i.sites || []).map(x => x.name).join(", "))}` : ""}</div>
+        <div class="hint">${!i.fin ? `♾️ permanent${i.debut ? ` depuis le ${frD(i.debut)}` : ""}` : `du ${frD(i.debut)} au ${frD(i.fin)}`} · ${nb} site${nb > 1 ? "s" : ""}${nb && nb <= 4 ? ` : ${escH((i.sites || []).map(x => x.name).join(", "))}` : ""}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
           <a class="nav-btn" href="${lienAcces(i)}?apercu=1" target="_blank" rel="noopener" style="text-decoration:none">👁️ Aperçu</a>
+          <button type="button" class="nav-btn" data-an-modifier="${escH(i.id)}">✏️ Modifier</button>
           <button type="button" class="nav-btn" data-an-copier="${escH(i.id)}">📋 Copier le lien</button>
           ${i.active === false ? `<button type="button" class="nav-btn" data-an-actif="${escH(i.id)}" data-v="1">✅ Réactiver</button>` : `<button type="button" class="nav-btn" data-an-actif="${escH(i.id)}" data-v="0">⛔ Couper</button>`}
         </div></div>`; }).join("")}</div>` : `<p class="hint">Aucun accès pour ce prestataire. Les accès MNA se créent dans l'onglet 🔗 Accès.</p>`}`;
@@ -131,6 +132,7 @@ function rendreAnnuaire(container, user) {
     catch (err) { alert("Impossible : " + (err?.message || err)); }
     finally { b.disabled = false; b.textContent = avant; }
   });
+  container.querySelectorAll("[data-an-modifier]").forEach(b => b.onclick = async () => { const i = an.invitations.find(x => x.id === b.dataset.anModifier); if (!i) return; const { modifierAcces } = await import("./acces-edit.js"); modifierAcces(i); });
   container.querySelectorAll("[data-an-copier]").forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(lienAcces({ id: b.dataset.anCopier })); window.toast?.("📋 Lien copié"); } catch { prompt("Lien :", lienAcces({ id: b.dataset.anCopier })); } });
   container.querySelectorAll("[data-an-actif]").forEach(b => b.onclick = async () => {
     const actif = b.dataset.v === "1";

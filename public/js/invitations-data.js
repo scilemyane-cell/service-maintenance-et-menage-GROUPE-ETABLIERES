@@ -46,6 +46,11 @@ export async function setInvitationInfos(token, infos) {
   await updateDoc(doc(db, "invitations", token), { infos });
 }
 
+// Modification d'un accès (prestataire, téléphone, dates, sites, semaines).
+export async function updateInvitation(token, patch) {
+  await updateDoc(doc(db, "invitations", token), { ...patch, modifieLe: new Date().toISOString() });
+}
+
 export async function setInvitationActive(token, active) {
   await updateDoc(doc(db, "invitations", token), { active });
 }
