@@ -55,7 +55,7 @@
     const blocs = Object.keys(groupes).sort((a, b) => a.localeCompare(b, "fr")).map(g => `<h2>${esc(g)}</h2>${groupes[g].sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map(s => s.pdf
       ? `<a class="site" href="dossier-pdf-guest.html?dossier=${encodeURIComponent(s.id)}&liste=${encodeURIComponent(jeton || "1")}"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go">Ouvrir ›</span></a>`
       // Pas encore de PDF publié : fiche simplifiée (sans photos) en attendant.
-      : `<a class="site" href="site-dossier-guest.html?dossier=${encodeURIComponent(s.id)}"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go" style="background:#5b6475">Ouvrir ›</span></a>`).join("")}`).join("");
+      : `<a class="site" href="site-dossier-guest.html?dossier=${encodeURIComponent(s.id)}"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go">Ouvrir ›<br><small style="color:#d9f2e3;font-weight:500;font-size:11px">sans photos</small></span></a>`).join("")}`).join("");
     app.querySelector("#liste").innerHTML = blocs || `<p class="vide">Aucun site ne correspond à « ${esc(q)} ».</p>`;
   }
   // Accès daté (…?a=CODE, créé depuis Dossiers de site) : sites choisis, du … au ….
