@@ -79,7 +79,8 @@
     if (!acc.ok) { app.innerHTML = `<p class="err">🔒 ${esc(acc.msg)}</p>`; throw null; }
     if (acc.inv) document.querySelector("header h1").insertAdjacentHTML("afterend", `<div style="margin-top:6px;color:#6b7280;font-size:14px">${esc(acc.inv.label || "")}${acc.inv.fin ? ` · accès jusqu'au <b>${frJ(acc.inv.fin)}</b>` : ""}</div>`);
     const idx = await lireIndexSites();
-    sites = (idx?.sites || []).filter(s => s.nom);
+    // Noms sans adresse mail entre parenthèses ; dossier modèle « Nouvelle résidence » écarté.
+    sites = (idx?.sites || []).map(s => ({ ...s, nom: String(s.nom || "").replace(/\(?\s*[\w.+-]+@[\w-]+(\.[\w-]+)+\s*\)?/g, "").replace(/\s{2,}/g, " ").trim() })).filter(s => s.nom && !/^nouvelle r[ée]sidence$/i.test(s.nom));
     if (acc.inv) { const ids = new Set((acc.inv.sites || []).map(x => x.id)); sites = sites.filter(s => ids.has(s.id)); }
     if (!sites.length) { app.innerHTML = `<p class="err">La liste des sites n'est pas encore disponible. Contactez le service maintenance.</p>`; }
     else {

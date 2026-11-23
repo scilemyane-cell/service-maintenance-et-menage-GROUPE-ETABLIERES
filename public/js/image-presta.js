@@ -47,7 +47,7 @@ export async function carteCanvas(o) {
     y += 10;
     ctx.font = `400 34px ${FONT}`; lignesTexte(ctx, `Bonjour, ${o.intro || ""}`, W - 2 * M).forEach(l => { if (vrai) { ctx.fillStyle = TXT; ctx.fillText(l, W / 2, y + 34); } y += 48; });
     // Pastilles (sites) centrées, sur plusieurs rangées si besoin
-    const pas = (o.pastilles || []).filter(Boolean);
+    const pas = (() => { const p = (o.pastilles || []).map(t => String(t || "").replace(/\(?\s*[\w.+-]+@[\w-]+(\.[\w-]+)+\s*\)?/g, "").replace(/\s{2,}/g, " ").trim()).filter(Boolean); return p.length > 8 ? [`${p.length} sites`] : p; })();
     if (pas.length) {
       y += 24; ctx.font = `600 30px ${FONT}`;
       const rangs = [[]]; let lw = 0;

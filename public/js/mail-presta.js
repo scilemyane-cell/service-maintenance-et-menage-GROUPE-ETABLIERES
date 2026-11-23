@@ -18,6 +18,10 @@ const BLEU = "#1f3a5f", OR = "#c9a227", VERT = "#2e7d4f";
 // Mise en page « carte d'accès » en tableaux + styles en ligne (compatible
 // Outlook / Gmail / téléphone) ; police forcée droite (Outlook met parfois
 // l'italique de son style par défaut).
+// « Cécile Sauvage (rescecilesauvage@etablieres.fr) » → « Cécile Sauvage » ; espaces nettoyés.
+export const nomPropre = (t) => String(t || "").replace(/\(?\s*[\w.+-]+@[\w-]+(\.[\w-]+)+\s*\)?/g, "").replace(/\(\s*\)/g, "").replace(/\s{2,}/g, " ").trim();
+// Au-delà de 8 sites : un résumé au lieu de dizaines de pastilles.
+const pastillesMail = (l) => { const p = (l || []).map(nomPropre).filter(Boolean); return p.length > 8 ? [`${p.length} sites`] : p; };
 export function htmlMail(o, { sansSignature = false } = {}) {
   // Outlook (collage) supprime une partie des styles posés sur <div>/<td> mais
   // garde ceux des <span> et les fonds de cellule : tout le texte est donc dans
@@ -25,7 +29,7 @@ export function htmlMail(o, { sansSignature = false } = {}) {
   const F = "font-family:Segoe UI,Arial,Helvetica,sans-serif;font-style:normal;";
   const T = (css, html) => `<span style="${F}${css}">${html}</span>`;
   const nl = (t) => esc(t).replace(/\n/g, "<br>");
-  const pastilles = (o.pastilles || []).filter(Boolean).map(t =>
+  const pastilles = pastillesMail(o.pastilles).map(t =>
     `<td style="background:#e8eef6;border-radius:14px;padding:6px 13px">${T(`font-size:13px;font-weight:600;color:${BLEU}`, esc(t))}</td><td style="width:6px"></td>`).join("");
   const lignes = (o.lignes || []).filter(l => l && l[2]).map(([ic, k, v]) =>
     `<tr><td valign="top" style="width:30px;padding:9px 0">${T("font-size:17px", ic)}</td><td valign="top" style="padding:9px 0">${T("font-size:12px;color:#6b7280", esc(k))}<br>${T("font-size:14px;color:#1d2433;font-weight:600;line-height:1.45", nl(v))}</td></tr>`).join("");
@@ -60,7 +64,7 @@ export function htmlMail(o, { sansSignature = false } = {}) {
 </table></td></tr></table></body></html>`;
 }
 
-const texteMail = (o) => [`Bonjour, ${o.intro}`, ``, ...(o.pastilles || []).length ? [o.pastilles.join(", ")] : [], ...(o.lignes || []).filter(l => l && l[2]).map(([, k, v]) => `${k} : ${v}`), ...(o.etapes || []).map((t, i) => `${i + 1}. ${t}`), ...(o.encadre ? [``, o.encadre] : []), ``, `${o.bouton} : ${o.url}`, ...(o.apres ? [``, o.apres] : []), ``, `Cordialement,`, o.signature || "Service Maintenance et Entretien", `Groupe Établières`].join("\n");
+const texteMail = (o) => [`Bonjour, ${o.intro}`, ``, ...pastillesMail(o.pastilles).length ? [pastillesMail(o.pastilles).join(", ")] : [], ...(o.lignes || []).filter(l => l && l[2]).map(([, k, v]) => `${k} : ${v}`), ...(o.etapes || []).map((t, i) => `${i + 1}. ${t}`), ...(o.encadre ? [``, o.encadre] : []), ``, `${o.bouton} : ${o.url}`, ...(o.apres ? [``, o.apres] : []), ``, `Cordialement,`, o.signature || "Service Maintenance et Entretien", `Groupe Établières`].join("\n");
 
 // Objet MIME encodé (accents) pour l'en-tête du .eml.
 const motMime = (s) => `=?UTF-8?B?${btoa(unescape(encodeURIComponent(s)))}?=`;
@@ -78,7 +82,8 @@ async function copierMail(o) {
   // Corps seul (sans <html>/<head>) : se colle mieux dans Outlook / Gmail.
   const corps = html.slice(html.indexOf("<table"), html.lastIndexOf("</body>"));
   if (window.ClipboardItem && navigator.clipboard?.write) {
-    await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([corps], { type: "text/html" }), "text/plain": new Blob([texteMail(o)], { type: "text/plain" }) })]);
+    // HTML seul : avec une version « texte » en plus, certains Outlook collent le texte brut.
+    await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([corps], { type: "text/html" }) })]);
     return true;
   }
   // Repli : sélection d'un bloc mis en forme puis copie.

@@ -281,7 +281,7 @@ function render() {
         <label>Au<input data-p="fin" type="date" value="${new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)}" style="${champ}"></label>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin:4px 0 6px"><b style="flex:1">Sites</b><button type="button" class="nav-btn" data-tout="1">Tout cocher</button><button type="button" class="nav-btn" data-tout="0">Tout décocher</button></div>
-      ${Object.keys(parAssoc).sort((x, y) => x.localeCompare(y, "fr")).map(g => `<div style="margin:6px 0"><div class="hint" style="font-weight:700">${esc(g)}</div>${parAssoc[g].sort((x, y) => String(x.nom).localeCompare(String(y.nom), "fr")).map(d => `<label style="display:inline-flex;gap:6px;align-items:center;margin:3px 10px 3px 0"><input type="checkbox" data-site="${esc(d.id)}" checked> ${esc(d.nom)}</label>`).join("")}</div>`).join("")}
+      ${Object.keys(parAssoc).sort((x, y) => x.localeCompare(y, "fr")).map(g => `<div style="margin:6px 0"><div class="hint" style="font-weight:700">${esc(g)}</div>${parAssoc[g].sort((x, y) => String(x.nom).localeCompare(String(y.nom), "fr")).map(d => `<label style="display:inline-flex;gap:6px;align-items:center;margin:3px 10px 3px 0"><input type="checkbox" data-site="${esc(d.id)}" ${/^nouvelle r[ée]sidence$/i.test(String(d.nom || "").trim()) ? "" : "checked"}> ${esc(d.nom)}</label>`).join("")}</div>`).join("")}
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button type="button" class="nav-btn" data-x>Annuler</button><button type="button" class="add-btn" data-creer>🔗 Créer l'accès</button></div></div>`;
     document.body.appendChild(fond);
     fond.querySelectorAll("[data-x]").forEach(x => x.onclick = () => fond.remove());
