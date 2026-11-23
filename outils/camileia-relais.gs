@@ -114,7 +114,7 @@ function actionWeb(req) {
   var cookies = sessionWeb(email, login, mdp, false);
   var page = getWeb(url, cookies);
   if (page.indexOf("_username") >= 0) { cookies = sessionWeb(email, login, mdp, true); page = getWeb(url, cookies); }
-  if (page.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + " (identifiant ou mot de passe)." };
+  if (page.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + " (identifiant ou mot de passe).", diag: DIAG };
 
   var form = lireFormulaire(page, "/DI/Modifier/");
   if (!form) return { erreur: "Fiche DI " + di + " non modifiable avec le compte de " + email + "." };
@@ -145,6 +145,7 @@ function emailFirebase(idToken) {
   return u && u.email ? String(u.email).toLowerCase() : null;
 }
 
+var DIAG = {}; // déroulé de la dernière connexion web (sans aucun secret), pour dépannage
 // Session web (cookies) gardée 20 min par personne.
 function sessionWeb(email, login, mdp, forcer) {
   var cache = CacheService.getScriptCache(), k = "web:" + email;
@@ -158,6 +159,8 @@ function sessionWeb(email, login, mdp, forcer) {
     payload: { _username: login, _password: mdp, _csrf_token: m ? decoder(m[1]) : "" },
   });
   garderCookies(jar, r2);
+  var h2 = r2.getAllHeaders();
+  DIAG = { get: r1.getResponseCode(), csrf: !!m, cookies1: Object.keys(jar), post: r2.getResponseCode(), vers: String(h2["Location"] || ""), setCookie: typeof h2["Set-Cookie"], loginLen: login.length, mdpLen: mdp.length };
   var c2 = texteCookies(jar);
   cache.put(k, c2, 20 * 60);
   return c2;
