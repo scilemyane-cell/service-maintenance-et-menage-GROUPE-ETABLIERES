@@ -33,7 +33,8 @@ async function etatPourStatut(statut) {
 }
 
 export async function renvoyerVersCamileia(id, fields, { collection = "demandes-camileia" } = {}) {
-  if (!cam.estConnecte()) return;
+  await cam.chargerRelaisPartage();
+  if (!cam.estConnecte()) throw new Error("relais Camileia non réglé sur cet appareil (Suivi des demandes › Camileia (test))");
   const ref = doc(db, collection, id);
   const t = (await getDoc(ref))?.data();
   if (!t?.camileiaIri) return;
@@ -72,5 +73,6 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
     }
   } catch (e) { erreurs.push(`message : ${e.message}`); }
   try { await updateDoc(ref, { camileiaRetourLe: Date.now(), camileiaRetour: faits.join(", "), camileiaRetourErreur: erreurs.join(" | ") }); } catch { /* */ }
-  if (erreurs.length) console.warn("Retour Camileia :", erreurs);
+  if (erreurs.length) { console.warn("Retour Camileia :", erreurs); window.toast?.(`⚠️ Camileia : ${erreurs.join(" | ")}`, "error"); }
+  else if (faits.length) window.toast?.(`✓ Camileia mis à jour (${faits.join(", ")})`);
 }

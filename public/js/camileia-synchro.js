@@ -64,7 +64,7 @@ export async function synchroniser() {
   let ctypes = {}; try { ctypes = await (await import("./camileia-envoi.js")).lireCorrespTypes(); } catch { /* */ }
   const brutes = cam.avecIri(await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: 10 }), `${cam.RACINE}/d_is`);
   await resoudreLieux(brutes);
-  const existants = new Map(demandes.filter(d => d.source === "camileia").map(d => [d.id, d]));
+  const existants = new Map(demandes.filter(d => d.source === "camileia" && !String(d.id).startsWith("_")).map(d => [d.id, d]));
   const parSite = new Map();
   demandes.forEach(d => { if (d.source !== "camileia" && d.site && d.association && d.association !== "Autres") parSite.set(sa(d.site), d.association); });
   const assoc = (site) => { const k = sa(site); if (parSite.has(k)) return parSite.get(k); for (const [s, a] of parSite) if (k && (s.startsWith(k) || k.startsWith(s))) return a; return "Autres"; };
@@ -92,6 +92,7 @@ export async function synchroniser() {
 }
 
 async function passage() {
+  await cam.chargerRelaisPartage();
   if (etat.enCours || !cam.estConnecte()) return;
   etat.enCours = true; signaler();
   try { const r = await synchroniser(); etat.crees = r.crees; etat.majs = r.majs; etat.erreur = ""; }

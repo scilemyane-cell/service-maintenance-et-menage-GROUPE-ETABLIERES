@@ -24,6 +24,7 @@ const st = {
 
 export async function mountCamileiaTest(container) {
   racine = container;
+  await cam.chargerRelaisPartage();
   import("./camileia-synchro.js").then(m => { etatAuto = m.etat; m.surEtat((e) => { etatAuto = e; const z = document.getElementById("cam-auto"); if (z) z.outerHTML = autoHTML(); }); }).catch(() => {});
   try { st.correspondances = (await getDoc(REF_CORRESP))?.data()?.etats || {}; } catch { st.correspondances = {}; }
   rendre();
@@ -349,7 +350,12 @@ function brancher() {
     occuper("Connexion…", async () => { await cam.connecter(id, mdp); st.info = "Connecté à l'API Camileia."; });
   });
   $("cam-deco")?.addEventListener("click", () => { cam.deconnecter(); rendre(); });
-  $("cam-relais-ok")?.addEventListener("click", () => { cam.enregistrerConfig({ relaisUrl: $("cam-relais").value.trim(), relaisCle: $("cam-cle").value }); st.info = "Relais enregistré."; rendre(); });
+  $("cam-relais-ok")?.addEventListener("click", () => occuper("Enregistrement du relais…", async () => {
+    const url = $("cam-relais").value.trim(), cle = $("cam-cle").value;
+    cam.enregistrerConfig({ mode: "relais", relaisUrl: url, relaisCle: cle });
+    await cam.partagerRelais(url, cle);
+    st.info = "Relais enregistré pour tous tes appareils (Super Admin seulement).";
+  }));
   $("cam-toutes")?.addEventListener("change", (e) => { st.toutes = e.target.checked; });
   $("cam-lire")?.addEventListener("click", () => occuper("Lecture…", lireDI));
   $("cam-creer")?.addEventListener("click", () => occuper("Création des tickets…", creerTickets));

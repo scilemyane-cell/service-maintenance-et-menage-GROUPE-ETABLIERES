@@ -160,7 +160,7 @@ export function watchDemandes(callback) {
     const envoyer = () => { if (excel) emettre(cam.length ? [...excel, ...cam] : excel); };
     watchDemandesExcel((l) => { excel = l; envoyer(); });
     if (window.__smmRole === "super_admin") {
-      onSnapshot(collection(db, COL_CAMILEIA), (snap) => { cam = []; snap.forEach(d => cam.push({ id: d.id, ...d.data() })); envoyer(); },
+      onSnapshot(collection(db, COL_CAMILEIA), (snap) => { cam = []; snap.forEach(d => { if (!d.id.startsWith("_")) cam.push({ id: d.id, ...d.data() }); }); envoyer(); },
         (e) => console.warn("Tickets Camileia (test) :", e?.message || e));
     }
   }, callback);
@@ -269,7 +269,7 @@ export async function updateDemande(id, fields) {
   if (estTicketCamileia(id)) {
     // Ticket Camileia (test) : enregistré dans sa collection, puis renvoyé à Camileia.
     await updateDoc(doc(db, COL_CAMILEIA, id), { ...fields, dateMaj: serverTimestamp() });
-    import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields)).catch(e => console.warn("Retour Camileia :", e));
+    import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields)).catch(e => { console.warn("Retour Camileia :", e); window.toast?.(`⚠️ Pas envoyé à Camileia : ${e?.message || e}`, "error"); });
     return;
   }
   const avantModif = docLocal("demandes", id);
@@ -284,7 +284,7 @@ export async function updateDemande(id, fields) {
   journaliserDemande(id, avantModif ? { ...avantModif } : null, fields);
   // Demande de l'appli envoyée dans Camileia (version de test) : statut / commentaire y repartent.
   if (CANAL_TEST_DEM && avantModif?.camileiaIri && (fields.statut || fields.commentaireTech || "categoriePanne" in fields || fields.urgence)) {
-    import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields, { collection: "demandes" })).catch(e => console.warn("Retour Camileia :", e));
+    import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields, { collection: "demandes" })).catch(e => { console.warn("Retour Camileia :", e); window.toast?.(`⚠️ Pas envoyé à Camileia : ${e?.message || e}`, "error"); });
   }
 }
 export async function ajouterDemande(record) {

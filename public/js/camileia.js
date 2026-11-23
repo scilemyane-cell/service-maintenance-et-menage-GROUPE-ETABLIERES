@@ -24,6 +24,27 @@ export function enregistrerConfig(c) { try { localStorage.setItem(CLE_CONFIG, JS
 
 const lireJeton = () => { try { return sessionStorage.getItem(CLE_JETON) || ""; } catch { return ""; } };
 const ecrireJeton = (t) => { try { t ? sessionStorage.setItem(CLE_JETON, t) : sessionStorage.removeItem(CLE_JETON); } catch { /* */ } };
+// Réglage partagé entre les appareils du Super Admin : document « _relais » de
+// la collection demandes-camileia (règle Firestore : Super Admin seulement).
+let chargeRelais = null;
+export function chargerRelaisPartage() {
+  if (chargeRelais) return chargeRelais;
+  chargeRelais = (async () => {
+    try {
+      const cfg = lireConfig(); if (cfg.relaisCle) return;
+      const { db } = await import("./firebase-init.js");
+      const { doc, getDoc } = await import("./firestore-compte.js");
+      const r = (await getDoc(doc(db, "demandes-camileia", "_relais")))?.data();
+      if (r?.cle) enregistrerConfig({ mode: "relais", relaisUrl: r.url || cfg.relaisUrl, relaisCle: r.cle });
+    } catch { /* pas Super Admin ou hors ligne */ }
+  })();
+  return chargeRelais;
+}
+export async function partagerRelais(url, cle) {
+  const { db } = await import("./firebase-init.js");
+  const { doc, setDoc } = await import("./firestore-compte.js");
+  await setDoc(doc(db, "demandes-camileia", "_relais"), { url, cle, le: Date.now() });
+}
 export const estConnecte = () => lireConfig().mode === "relais" ? !!lireConfig().relaisUrl : !!lireJeton();
 export function deconnecter() { ecrireJeton(""); }
 
