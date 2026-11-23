@@ -28,6 +28,14 @@
   .site.off { opacity: .55; }
   .site.off .go { background: #9aa3af; }
   .vide, .err { text-align: center; color: #6b7280; padding: 30px 10px; }
+  .bienv { background:#fff; border:1px solid #dfe3e9; border-radius:16px; padding:22px 18px; max-width:440px; margin:10px auto; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+  .bienv h2 { text-transform:none; letter-spacing:0; font-size:22px; margin:0 0 6px; }
+  .bienv p { color:#6b7280; margin:0 0 16px; font-size:14px; }
+  .bienv label { display:block; font-size:13px; font-weight:600; color:#1f3a5f; margin-bottom:12px; }
+  .bienv input { display:block; width:100%; margin-top:5px; padding:12px; font-size:16px; border:1px solid #cfd6e0; border-radius:10px; }
+  .bienv button { width:100%; background:#2e7d4f; color:#fff; border:0; border-radius:12px; padding:14px; font-size:17px; font-weight:700; margin-top:6px; cursor:pointer; }
+  .qui { text-align:center; color:#6b7280; font-size:14px; margin:0 0 12px; }
+  .qui a { color:#1f3a5f; }
   footer { text-align: center; font-size: 12px; color: #6b7280; padding: 20px 10px 30px; }
 </style>
 </head>
@@ -82,12 +90,27 @@
     // Noms sans adresse mail entre parenthèses ; dossier modèle « Nouvelle résidence » écarté.
     sites = (idx?.sites || []).map(s => ({ ...s, nom: String(s.nom || "").replace(/\(?\s*[\w.+-]+@[\w-]+(\.[\w-]+)+\s*\)?/g, "").replace(/\s{2,}/g, " ").trim() })).filter(s => s.nom && !/^nouvelle r[ée]sidence$/i.test(s.nom));
     if (acc.inv) { const ids = new Set((acc.inv.sites || []).map(x => x.id)); sites = sites.filter(s => ids.has(s.id)); }
+    // 👋 Bienvenue : la personne s'identifie (mémorisé sur ce téléphone), comme pour les fiches MNA.
+    const CLE = `smm-sites-id:${jeton || "public"}`;
+    let ident = null; try { ident = JSON.parse(localStorage.getItem(CLE) || "null"); } catch {}
+    if (!ident) {
+      ident = await new Promise((ok) => {
+        app.innerHTML = `<div class="bienv"><h2>👋 Bienvenue</h2><p>Avant de commencer, indiquez qui vous êtes. Ce téléphone s'en souviendra pour les prochaines fois.</p>
+          <form id="f-id"><label>Prénom<input name="prenom" required autocomplete="given-name"></label><label>Nom<input name="nom" required autocomplete="family-name"></label>
+          <label>Société<input name="societe" required autocomplete="organization" value="${esc(acc.inv?.label || "")}"></label><button>Commencer ✓</button></form></div>`;
+        app.querySelector("#f-id").addEventListener("submit", (e) => { e.preventDefault(); const f = new FormData(e.target);
+          const id = { prenom: String(f.get("prenom")).trim(), nom: String(f.get("nom")).trim(), societe: String(f.get("societe")).trim() };
+          try { localStorage.setItem(CLE, JSON.stringify(id)); } catch {} ok(id); });
+      });
+    }
+    const quiHTML = `<p class="qui">Bonjour <b>${esc(ident.prenom)}</b>${ident.societe ? ` (${esc(ident.societe)})` : ""} · <a href="#" id="pas-moi">ce n'est pas moi</a></p>`;
     if (!sites.length) { app.innerHTML = `<p class="err">La liste des sites n'est pas encore disponible. Contactez le service maintenance.</p>`; }
     else {
-      app.innerHTML = `<input class="rech" type="search" placeholder="🔍 Rechercher un site, une ville…" autocomplete="off"><div id="liste"></div>`;
+      app.innerHTML = `${quiHTML}<input class="rech" type="search" placeholder="🔍 Rechercher un site, une ville…" autocomplete="off"><div id="liste"></div>`;
       app.querySelector(".rech").addEventListener("input", (e) => { q = e.target.value; rendre(); });
       rendre();
     }
+    app.querySelector("#pas-moi")?.addEventListener("click", (e) => { e.preventDefault(); try { localStorage.removeItem(CLE); } catch {} location.reload(); });
   } catch (e) { if (e) app.innerHTML = `<p class="err">Impossible de charger la liste : ${esc(e.message || e)}</p>`; }
 </script>
 </body>
