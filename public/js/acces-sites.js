@@ -52,7 +52,7 @@ export async function ouvrirAccesSites({ dossiers = [], user = null, prerempli =
         pastilles: sites.map(st => st.name),
         bouton: "Voir les sites", url: lien,
         sms: `Groupe Établières – Fiches des sites, du ${frJ(v("debut"))} au ${frJ(v("fin"))}.\nVotre accès : ${lien}`,
-        etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "Choisissez le site (recherche par nom ou par ville).", "La fiche s'ouvre en PDF, sans compte ni mot de passe."],
+        etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "À la première ouverture, indiquez vos nom, prénom et société.", "Choisissez le site : sa fiche s'ouvre en PDF, sans mot de passe."],
         signature: user?.nom || "Service Maintenance et Entretien",
       });
     } catch (err) { alert("Création impossible : " + (err?.message || err)); b.disabled = false; b.textContent = "🔗 Créer l'accès"; }
