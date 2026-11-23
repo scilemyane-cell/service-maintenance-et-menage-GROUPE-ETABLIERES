@@ -160,7 +160,15 @@ function sessionWeb(email, login, mdp, forcer) {
   });
   garderCookies(jar, r2);
   var h2 = r2.getAllHeaders();
-  DIAG = { get: r1.getResponseCode(), csrf: !!m, cookies1: Object.keys(jar), post: r2.getResponseCode(), vers: String(h2["Location"] || ""), setCookie: typeof h2["Set-Cookie"], loginLen: login.length, mdpLen: mdp.length };
+  DIAG = { get: r1.getResponseCode(), csrf: !!m, cookies1: Object.keys(jar), post: r2.getResponseCode(), vers: String(h2["Location"] || ""), setCookie: typeof h2["Set-Cookie"], loginLen: login.length, mdpLen: mdp.length, espaces: /^\s|\s$/.test(login) || /^\s|\s$/.test(mdp) };
+  try {
+    var apres = UrlFetchApp.fetch(base + "/", { headers: { Cookie: texteCookies(jar) }, muteHttpExceptions: true, followRedirects: false });
+    var t = apres.getContentText();
+    DIAG.apres = apres.getResponseCode(); DIAG.apresVers = String(apres.getAllHeaders()["Location"] || "");
+    DIAG.formulaire = t.indexOf("_username") >= 0;
+    var al = t.match(/class="[^"]*(alert|error|danger)[^"]*"[^>]*>([\s\S]{0,300}?)<\//i);
+    DIAG.message = al ? al[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+  } catch (x) { DIAG.apresErr = String(x); }
   var c2 = texteCookies(jar);
   cache.put(k, c2, 20 * 60);
   return c2;
