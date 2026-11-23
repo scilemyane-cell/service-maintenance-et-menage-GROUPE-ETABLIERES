@@ -38,6 +38,7 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   const ref = doc(db, collection, id);
   const t = (await getDoc(ref))?.data();
   if (!t?.camileiaIri) return;
+  window.toast?.("⏳ Envoi à Camileia…");
   const faits = [], erreurs = [];
   let contactIri = null;
   try { const { contactParEmail } = await import("./camileia-envoi.js"); contactIri = (await contactParEmail(auth.currentUser?.email))?.["@id"] || null; } catch { /* auteur facultatif */ }
@@ -54,14 +55,15 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   // Qualification faite dans l'appli : type de demande et priorité renvoyés à Camileia.
   try {
     const enPlus = {};
-    if ("categoriePanne" in fields || "urgence" in fields) {
+    const urg = fields.urgenceCorrigee || fields.urgence;
+    if ("categoriePanne" in fields || urg) {
       const ev = await import("./camileia-envoi.js");
       if ("categoriePanne" in fields) {
         const { categorieDe } = await import("./categories-pannes.js");
         const ct = await ev.lireCorrespTypes();
         const tp = ct[categorieDe({ ...t, ...fields })]; if (tp) enPlus.typepanne = tp;
       }
-      if (fields.urgence) { const pr = await ev.prioritePourUrgence(fields.urgence); if (pr) enPlus.priorite = pr; }
+      if (urg) { const pr = await ev.prioritePourUrgence(urg); if (pr) enPlus.priorite = pr; }
     }
     if (Object.keys(enPlus).length) { await cam.changerEtat(t.camileiaIri, null, enPlus); faits.push("qualification"); }
   } catch (e) { erreurs.push(`qualification : ${e.message}`); }
@@ -75,4 +77,5 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   try { await updateDoc(ref, { camileiaRetourLe: Date.now(), camileiaRetour: faits.join(", "), camileiaRetourErreur: erreurs.join(" | ") }); } catch { /* */ }
   if (erreurs.length) { console.warn("Retour Camileia :", erreurs); window.toast?.(`⚠️ Camileia : ${erreurs.join(" | ")}`, "error"); }
   else if (faits.length) window.toast?.(`✓ Camileia mis à jour (${faits.join(", ")})`);
+  else window.toast?.("Camileia : rien à changer (déjà à jour)");
 }

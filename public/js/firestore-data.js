@@ -283,7 +283,9 @@ export async function updateDemande(id, fields) {
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
   journaliserDemande(id, avantModif ? { ...avantModif } : null, fields);
   // Demande de l'appli envoyée dans Camileia (version de test) : statut / commentaire y repartent.
-  if (CANAL_TEST_DEM && avantModif?.camileiaIri && (fields.statut || fields.commentaireTech || "categoriePanne" in fields || fields.urgence)) {
+  // On ne se fie pas à la copie locale (elle peut ne pas avoir le lien Camileia) :
+  // renvoyerVersCamileia relit la demande et ne fait rien si elle n'est pas liée.
+  if (CANAL_TEST_DEM && window.__smmRole === "super_admin" && (fields.statut || fields.commentaireTech || "categoriePanne" in fields || fields.urgence || fields.urgenceCorrigee)) {
     import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields, { collection: "demandes" })).catch(e => { console.warn("Retour Camileia :", e); window.toast?.(`⚠️ Pas envoyé à Camileia : ${e?.message || e}`, "error"); });
   }
 }
