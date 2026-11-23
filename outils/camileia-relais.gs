@@ -40,6 +40,10 @@ function doPost(e) {
     var req = JSON.parse(e.postData.contents || "{}");
     if (!req.cle || req.cle !== p.getProperty("CLE_RELAIS")) return repondre({ erreur: "Clé de relais incorrecte." });
     if (req.action === "web") return repondre(actionWeb(req));
+    if (req.action === "diagWebApi") { // test du mécanisme de connexion web avec le compte API (aucun secret renvoyé)
+      sessionWeb("diag-api", p.getProperty("CAMILEIA_LOGIN"), p.getProperty("CAMILEIA_MDP"), true);
+      return repondre({ diag: DIAG });
+    }
     var methode = String(req.methode || "GET").toUpperCase();
     if (["GET", "POST", "PUT"].indexOf(methode) < 0) return repondre({ erreur: "Méthode refusée : " + methode });
     var chemin = String(req.chemin || "");
@@ -168,6 +172,8 @@ function sessionWeb(email, login, mdp, forcer) {
     DIAG.formulaire = t.indexOf("_username") >= 0;
     var al = t.match(/class="[^"]*(alert|error|danger)[^"]*"[^>]*>([\s\S]{0,300}?)<\//i);
     DIAG.message = al ? al[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+    var mots = t.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").match(/.{0,80}(invalid|incorrect|erron|bloqu|verrouill|expir|tentative).{0,80}/i);
+    DIAG.texte = mots ? mots[0] : "";
   } catch (x) { DIAG.apresErr = String(x); }
   var c2 = texteCookies(jar);
   cache.put(k, c2, 20 * 60);
