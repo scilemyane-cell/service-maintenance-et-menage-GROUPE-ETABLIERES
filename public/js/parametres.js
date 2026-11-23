@@ -519,9 +519,15 @@ function etatInvitation(inv) {
   return ["✅ Actif", "var(--teal)", "#fff"];
 }
 const sitesInv = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.sites : [{ id: inv.siteId, name: inv.siteName }]);
+const nomCourtSite = (n) => String(n || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, "").replace(/\s+[\w.-]+@[\w.-]+\s*$/, "").replace(/^Maison MNA\s+/i, "").trim();
 function texteSms(inv) {
-  if (inv.type === "sites") return `Groupe Établières – Fiches des sites${inv.debut && inv.fin ? `, du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.\nVotre accès : ${guestLink(inv.id)}`;
-  return `Groupe Établières – Fiches de traçabilité ménage (${sitesInv(inv).map(s => s.name).join(", ")})${inv.debut && inv.fin ? `, du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.\nVotre accès personnel : ${guestLink(inv.id)}`;
+  const qui = currentUser?.nom ? `${currentUser.nom}, Service Maintenance` : "le Service Maintenance";
+  const periode = inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : "";
+  const noms = sitesInv(inv).map(x => nomCourtSite(x.name)).filter(Boolean);
+  const quoi = inv.type === "sites"
+    ? `votre accès aux fiches de nos sites (${noms.length} site${noms.length > 1 ? "s" : ""})`
+    : `votre accès personnel aux fiches de traçabilité ménage (${noms.slice(0, 4).join(", ")}${noms.length > 4 ? "…" : ""})`;
+  return `Bonjour, ici ${qui} du Groupe Établières.\n\nVoici ${quoi}${periode} :\n\n${guestLink(inv.id)}\n\nSi le lien n'est pas cliquable, répondez simplement « OK » à ce SMS : il s'activera aussitôt.`;
 }
 // Codes boîte à clés des sites de l'accès (onglet Codes Masterlock du dossier de site).
 const normSite = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(maison|mna|la|le|les)\b/g, " ").replace(/[^a-z0-9]+/g, " ").replace(/\bst\b/g, "saint").trim();
