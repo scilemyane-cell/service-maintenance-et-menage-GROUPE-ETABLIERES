@@ -821,6 +821,7 @@ function renderView(d) {
               <button class="nav-btn" id="sd-preview">👁️ Aperçu PDF</button>
               <button class="nav-btn" id="sd-print">🖨️ Imprimer / PDF</button>
               <button class="nav-btn" id="sd-qr">🔳 QR de la fiche (lien public)</button>
+              ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-presta" title="Envoyer la fiche du site (PDF avec photos) à un prestataire : mail, SMS ou image">🔗 Lien prestataire</button>` : ""}
               ${isEditorUser(mountedUser) ? `<button class="nav-btn" id="sd-save-pdf">💾 Enregistrer le PDF sur SharePoint</button>` : ""}
               ${isEditorUser(mountedUser) ? `<button class="del-btn" id="sd-del">🗑️ Mettre à la corbeille</button>` : ""}
             </div>
@@ -1085,6 +1086,36 @@ function renderView(d) {
     }
   });
   document.getElementById("sd-qr-print").addEventListener("click", () => printQrCard(document.getElementById("sd-qr-holder")));
+  // 🔗 Lien prestataire : la copie publique du PDF (celle du QR) envoyée par
+  // mail / SMS / image. Proposition de la mettre à jour si elle existe déjà,
+  // pour que le prestataire voie les dernières modifications.
+  document.getElementById("sd-presta")?.addEventListener("click", async (e) => {
+    const b = e.currentTarget, avant = b.textContent;
+    const lien = `https://service-maintenance-et-menage.web.app/dossier-pdf-guest.html?dossier=${d.id}`;
+    try {
+      b.disabled = true; b.textContent = "⏳ Vérification…";
+      const existe = await hasPublicPdf(d.id);
+      if (!existe || confirm("Une copie de la fiche existe déjà pour les prestataires.\n\nOK = la mettre à jour avec les dernières modifications (jusqu'à 1 min)\nAnnuler = envoyer la copie actuelle")) {
+        b.textContent = "⏳ Génération du PDF…";
+        const { blob } = await generatePdfBlob(d, mountedContainer.querySelector(".print-fiche"));
+        b.textContent = "⏳ Publication…";
+        await publishPublicPdf(d.id, blob);
+      }
+      try { await navigator.clipboard.writeText(lien); window.toast?.("🔗 Lien copié"); } catch { /* */ }
+      const { ouvrirMailPresta } = await import("./mail-presta.js");
+      ouvrirMailPresta({
+        objet: `Fiche du site ${d.nom} — Groupe Établières`,
+        etiquette: "DOSSIER DE SITE", titre: d.nom,
+        intro: "voici la fiche technique du site : équipements et organes techniques, emplacements, procédures, photos et numéros d'urgence.",
+        pastilles: d.adresse ? [d.adresse] : [],
+        bouton: "Ouvrir la fiche du site", url: lien,
+        sms: `Groupe Établières – Fiche du site ${d.nom}.\nConsultation : ${lien}`,
+        etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "La fiche s'affiche en PDF, sans compte ni mot de passe.", "En cas de doute sur place, appelez le service maintenance."],
+        signature: mountedUser?.nom || "Service Maintenance et Entretien",
+      });
+    } catch (err) { alert("Lien prestataire impossible : " + (err?.message || err)); }
+    finally { b.disabled = false; b.textContent = avant; }
+  });
   document.getElementById("sd-save-pdf")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("sd-pdf-status");
     statusEl.innerHTML = `<span style="color:var(--text-dim)">⏳ Génération et envoi du PDF…</span>`;
