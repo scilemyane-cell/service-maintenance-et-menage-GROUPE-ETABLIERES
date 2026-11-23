@@ -557,9 +557,9 @@
         ],
       },
       {
-        id: "prestataires", label: "Prestataires", icon: "🤝", desc: "Entreprises, accès avec dates (MNA, dossiers de site), liens de demande",
+        id: "prestataires", label: "Prestataires", icon: "🤝", desc: "Coordonnées de chaque prestataire, suivi de leurs accès, liens de demande",
         subtabs: [
-          { id: "entreprises", label: "Entreprises", icon: "🏢", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaEntreprises(c, u)) },
+          { id: "annuaire", label: "Annuaire", icon: "📇", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaAnnuaire(c, u)) },
           { id: "acces", label: "Accès", icon: "🔗", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaAcces(c, u)) },
           { id: "liens", label: "Liens de demande", icon: "📝", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaLiens(c, u)) },
         ],

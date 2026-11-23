@@ -4,7 +4,7 @@
 // vérifiés). Utilisé par Dossiers de site et par la tuile Prestataires.
 import { esc } from "./astreinte-logic.js";
 
-export async function ouvrirAccesSites({ dossiers = [], user = null } = {}) {
+export async function ouvrirAccesSites({ dossiers = [], user = null, prerempli = {} } = {}) {
   const auj = new Date().toISOString().slice(0, 10);
   const parAssoc = {};
   dossiers.forEach(d => (parAssoc[d.association || "Autres sites"] ||= []).push(d));
@@ -15,8 +15,8 @@ export async function ouvrirAccesSites({ dossiers = [], user = null } = {}) {
     <div style="display:flex;align-items:center;gap:8px"><b style="flex:1;font-size:17px">🔗 Accès prestataire aux dossiers de site</b><button type="button" class="nav-btn" data-x>✕</button></div>
     <p class="hint">Le prestataire ouvre la liste des sites cochés et la fiche PDF de chacun, uniquement entre les dates choisies. L'accès se coupe ensuite dans Paramètres › accès prestataires.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0">
-      <label>Prestataire / société<input data-p="label" style="${champ}" placeholder="Ex. : Dupont Plomberie"></label>
-      <label>Téléphone (SMS)<input data-p="tel" type="tel" style="${champ}" placeholder="06…"></label>
+      <label>Prestataire / société<input data-p="label" value="${esc(prerempli.label || "")}" style="${champ}" placeholder="Ex. : Dupont Plomberie"></label>
+      <label>Téléphone (SMS)<input data-p="tel" type="tel" value="${esc(prerempli.tel || "")}" style="${champ}" placeholder="06…"></label>
       <label>Du<input data-p="debut" type="date" value="${auj}" style="${champ}"></label>
       <label>Au<input data-p="fin" type="date" value="${new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)}" style="${champ}"></label>
     </div>
