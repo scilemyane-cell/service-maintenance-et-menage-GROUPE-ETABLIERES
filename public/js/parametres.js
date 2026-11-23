@@ -631,26 +631,40 @@ function renderInvites(container, user) {
   const parDisp = {}; invState.sites.forEach(s => { const d = s.dispositif || "Dispositif MNA"; (parDisp[d] ||= []).push(s); });
   const actifs = invState.invitations.filter(i => etatInvitation(i)[0].includes("Actif") || etatInvitation(i)[0].includes("venir"));
   const anciens = invState.invitations.filter(i => !actifs.includes(i));
-  const ligne = (inv) => { const [lib, bg, fg] = etatInvitation(inv); return `<tr>
-      <td><b>${esc(inv.label || "—")}</b>${inv.telephone ? `<br><small>📱 ${esc(inv.telephone)}</small>` : ""}</td>
-      <td>${sitesInv(inv).map(s => esc(s.name)).join("<br>")}</td>
-      <td>${inv.debut && !inv.fin ? `♾️ Permanent<br><small>depuis le ${frJ(inv.debut)}</small>` : inv.debut ? `${frJ(inv.debut)} → ${frJ(inv.fin)}` : `${(inv.weeks || []).length} sem.`}</td>
-      <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
-      <td style="white-space:nowrap">
-        ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
-        ${inv.type === "sites" ? `<span class="hint" style="font-size:11px">🏢 Dossiers de site</span>` : `<button class="nav-btn" data-infos-inv="${inv.id}" style="padding:4px 10px;font-size:11px;${inv.infos ? "" : "border-color:#c9a227;"}">ℹ️ Infos${inv.infos ? " ✓" : ""}</button>`}
-        <button class="nav-btn" data-modif-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✏️ Modifier</button>
-        <a class="nav-btn" href="${guestLink(inv.id)}?apercu=1" target="_blank" rel="noopener" style="padding:4px 10px;font-size:11px;text-decoration:none">👁️ Aperçu</a>
-        <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail / 🖼️ Image</button>
-        <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
-        <button class="nav-btn" data-toggle="${inv.id}" data-active="${inv.active}" style="padding:4px 10px;font-size:11px">${inv.active ? "⛔ Couper" : "Réactiver"}</button>
-        <button class="del-btn" data-del-inv="${inv.id}">🗑️</button>
-      </td></tr>`; };
+  const nomSite = (n) => String(n || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, "").replace(/\s+[\w.-]+@[\w.-]+\s*$/, "").replace(/^Maison MNA\s+/i, "").trim();
+  const ligne = (inv) => { const [lib, bg, fg] = etatInvitation(inv);
+    const sites = sitesInv(inv).map(x => nomSite(x.name)).filter(Boolean).sort((x, y) => x.localeCompare(y, "fr"));
+    const chip = (n) => `<span class="ac-chip">${esc(n)}</span>`;
+    const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
+    const perm = inv.debut && !inv.fin;
+    const periode = perm ? `♾️ Permanent <small>depuis le ${frJ(inv.debut)}</small>` : inv.debut ? `📅 ${frJ(inv.debut)} → ${frJ(inv.fin)}` : `📅 ${(inv.weeks || []).length} sem.`;
+    return `<div class="ac-card${inv.active ? "" : " ac-off"}">
+      <div class="ac-head">
+        <div class="ac-av">${esc(String(inv.label || "?").trim().slice(0, 2).toUpperCase())}</div>
+        <div class="ac-id"><b>${esc(inv.label || "—")}</b>
+          <div class="ac-meta">${inv.telephone ? `<span>📱 ${esc(inv.telephone)}</span>` : ""}<span class="ac-type">${inv.type === "sites" ? "🏢 Dossiers de site" : "🧹 Fiches ménage"}</span><span>${periode}</span></div></div>
+        <span class="ac-etat" style="background:${bg};color:${fg}">${lib}</span>
+      </div>
+      <div class="ac-sites"><span class="ac-nb">${sites.length} site${sites.length > 1 ? "s" : ""}</span>${sites.slice(0, 6).map(chip).join("")}${sites.length > 6 ? `<details class="ac-plus"><summary>+ ${sites.length - 6} autres</summary>${sites.slice(6).map(chip).join("")}</details>` : ""}</div>
+      <div class="ac-actions">
+        <div class="ac-grp">
+          ${tel ? `<a class="ac-btn ac-pri" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 SMS</a>` : ""}
+          <button class="ac-btn ac-pri" data-mail-inv="${inv.id}">✉️ Mail / Image</button>
+          <button class="ac-btn" data-copy-sms="${inv.id}">📋 Copier</button>
+          <a class="ac-btn" href="${guestLink(inv.id)}?apercu=1" target="_blank" rel="noopener">👁️ Aperçu</a>
+        </div>
+        <div class="ac-grp">
+          ${inv.type === "sites" ? "" : `<button class="ac-btn${inv.infos ? "" : " ac-warn"}" data-infos-inv="${inv.id}">ℹ️ Infos${inv.infos ? " ✓" : ""}</button>`}
+          <button class="ac-btn" data-modif-inv="${inv.id}">✏️ Modifier</button>
+          <button class="ac-btn" data-toggle="${inv.id}" data-active="${inv.active}">${inv.active ? "⛔ Couper" : "↩️ Réactiver"}</button>
+          <button class="ac-btn ac-del" data-del-inv="${inv.id}" title="Supprimer">🗑️</button>
+        </div>
+      </div></div>`; };
   container.innerHTML = `
     <div class="stack">
-      <div class="form-card">
-        <h3 style="margin:0 0 4px">🔗 Accès prestataire / remplaçant</h3>
-        <p class="hint" style="margin:0 0 12px">Un lien personnel, envoyé par SMS, valable seulement entre deux dates et pour les sites cochés. À la première ouverture, la personne indique ses nom, prénom et société ; son téléphone la reconnaît ensuite et garde ses fiches en cours. Ses fiches t'arrivent « à vérifier » dans Traçabilité.</p>
+      <details class="form-card" id="pi-form" ${invState.formOuvert ? "open" : ""}>
+        <summary style="cursor:pointer;font-weight:700;font-size:15px">➕ Nouvel accès fiches ménage (MNA / remplaçant)</summary>
+        <p class="hint" style="margin:10px 0 12px">Un lien personnel, envoyé par SMS, valable seulement entre deux dates et pour les sites cochés. À la première ouverture, la personne indique ses nom, prénom et société ; son téléphone la reconnaît ensuite et garde ses fiches en cours. Ses fiches t'arrivent « à vérifier » dans Traçabilité.</p>
         <div class="form-grid">
           <label>Société / personne<input id="pi-label" value="${esc(invForm.label)}" placeholder="ex. Société Net Pro"></label>
           <label>Téléphone (pour le SMS)<input id="pi-tel" type="tel" value="${esc(invForm.telephone)}" placeholder="06 12 34 56 78"></label>
@@ -660,20 +674,19 @@ function renderInvites(container, user) {
         <div style="margin:12px 0 4px;font-size:12px;color:var(--text-dim)">Sites concernés</div>
         <div class="pi-sites">${Object.entries(parDisp).map(([d, l]) => `<div><b style="font-size:12px;color:var(--text-dim)">${esc(d)}</b><div class="pi-sites-l">${l.map(s => `<label class="pi-site"><input type="checkbox" data-pi-site="${s.id}" ${invForm.sites.includes(s.id) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")}</div></div>`).join("")}</div>
         <button class="add-btn" id="pi-generate" style="margin-top:12px">🔗 Créer l'accès</button>
-      </div>
+      </details>
       ${(() => { const inv = invState.invitations.find(i => i.id === invState.dernier); if (!inv) return "";
         const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
         return `<div class="form-card" style="border:2px solid var(--teal)"><b>✅ Accès créé pour ${esc(inv.label)}</b><p class="hint" style="margin:4px 0 10px">Envoie-le maintenant :</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail-inv="${inv.id}">✉️ Mail / 🖼️ Image</button><button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
           <p class="hint" style="margin:8px 0 0">Sur ordinateur, le bouton SMS ouvre l'application de messages si elle est reliée à ton téléphone ; sinon copie le message et colle-le dans un SMS.</p></div>`; })()}
-      <div class="table-wrap"><table>
-        <thead><tr><th>Prestataire</th><th>Sites</th><th>Période</th><th>État</th><th></th></tr></thead>
-        <tbody>${actifs.length ? actifs.map(ligne).join("") : `<tr><td colspan="5" class="empty-row">Aucun accès en cours.</td></tr>`}</tbody>
-      </table></div>
-      ${anciens.length ? `<details class="form-card"><summary>Accès expirés ou coupés (${anciens.length})</summary><div class="table-wrap"><table><tbody>${anciens.map(ligne).join("")}</tbody></table></div></details>` : ""}
+      <div class="ac-titre">Accès en cours <span>${actifs.length}</span></div>
+      <div class="ac-list">${actifs.length ? actifs.map(ligne).join("") : `<div class="form-card hint">Aucun accès en cours.</div>`}</div>
+      ${anciens.length ? `<details class="form-card"><summary>Accès expirés ou coupés (${anciens.length})</summary><div class="ac-list" style="margin-top:10px">${anciens.map(ligne).join("")}</div></details>` : ""}
     </div>
-    <style>.pi-sites{display:flex;flex-direction:column;gap:8px}.pi-sites-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.pi-site{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:99px;padding:5px 12px;font-size:13px;cursor:pointer;background:var(--panel-alt)}</style>`;
+    <style>.ac-titre{font-weight:700;font-size:15px;margin:6px 2px 0;display:flex;align-items:center;gap:8px}.ac-titre span{background:var(--teal,#14806e);color:#fff;border-radius:99px;font-size:12px;padding:1px 9px}.ac-list{display:flex;flex-direction:column;gap:12px}.ac-card{background:var(--panel,#fff);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05);border-left:4px solid var(--teal,#14806e)}.ac-card.ac-off{border-left-color:#bbb;opacity:.8}.ac-head{display:flex;align-items:center;gap:12px}.ac-av{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#0f2a4a,#1d4e7e);color:#f5b942;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none}.ac-id{flex:1;min-width:0}.ac-id b{font-size:16px}.ac-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--text-dim);margin-top:2px}.ac-meta small{opacity:.8}.ac-type{font-weight:600}.ac-etat{border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;white-space:nowrap}.ac-sites{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:12px 0 0}.ac-nb{font-size:12px;font-weight:700;color:var(--text-dim);margin-right:4px}.ac-chip{background:var(--panel-alt,#f2f4f7);border:1px solid var(--border);border-radius:99px;padding:3px 10px;font-size:12px}.ac-plus{display:contents}.ac-plus summary{list-style:none;cursor:pointer;font-size:12px;font-weight:700;color:var(--teal,#14806e);padding:3px 8px}.ac-plus summary::-webkit-details-marker{display:none}.ac-plus[open] summary{display:none}.ac-actions{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)}.ac-grp{display:flex;flex-wrap:wrap;gap:6px}.ac-btn{border:1px solid var(--border);background:var(--panel,#fff);color:inherit;border-radius:9px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none;font-family:inherit}.ac-btn:hover{border-color:var(--teal,#14806e)}.ac-pri{background:#0f2a4a;color:#fff;border-color:#0f2a4a}.ac-pri:hover{background:#1d4e7e}.ac-warn{border-color:#c9a227;background:#fff8e1}.ac-del{color:#b42318}.pi-sites{display:flex;flex-direction:column;gap:8px}.pi-sites-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.pi-site{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:99px;padding:5px 12px;font-size:13px;cursor:pointer;background:var(--panel-alt)}</style>`;
 
+  document.getElementById("pi-form").addEventListener("toggle", (e) => { invState.formOuvert = e.target.open; });
   document.getElementById("pi-label").addEventListener("input", (e) => { invForm.label = e.target.value; });
   document.getElementById("pi-tel").addEventListener("input", (e) => { invForm.telephone = e.target.value; });
   document.getElementById("pi-debut").addEventListener("input", (e) => { invForm.debut = e.target.value; });
