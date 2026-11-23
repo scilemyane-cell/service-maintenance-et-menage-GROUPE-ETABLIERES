@@ -126,8 +126,8 @@ const LIBELLES = {
   nonurgent: "Non urgent", moinsurgent: "Moins urgent", semiurgent: "Semi-urgent", tresurgent: "Très urgent", vital: "Vital",
 };
 export function libelleLisible(l) {
-  const brut = String(l ?? "").replace(/^(word|message|label|enum)\./i, "");
-  return LIBELLES[brut.toLowerCase()] || brut;
+  const brut = String(l ?? "").replace(/^(word|message|label|enum|custom)\./i, "");
+  return LIBELLES[brut.toLowerCase()] || brut.replace(/([a-zà-ÿ])([A-Z])/g, "$1 $2");
 }
 
 // Une valeur d'IRI peut arriver en texte (« /api-platform/d_i_etats/3 »)
@@ -173,4 +173,22 @@ export async function changerEtat(diIri, etatIri) {
     if (v && typeof v === "object" && !Array.isArray(v) && v["@id"]) corps[k] = v["@id"];
     if (Array.isArray(v)) corps[k] = v.map(x => (x && typeof x === "object" && x["@id"] ? x["@id"] : x)); });
   return appeler("PUT", diIri, corps);
+}
+
+// ---- Création d'une DI dans Camileia ----
+// Champs obligatoires côté Camileia : dateouverture, numero, libelle, etat,
+// typepanne, site, batiment, P3, chargerecuperable, createurs, iot.
+// Le N° est d'abord laissé à Camileia ; s'il est exigé, on en génère un.
+export async function creerDI({ libelle, note, site, siteCode, batiment, typepanne, priorite, etat, createur, demandeur }) {
+  const base = {
+    dateouverture: new Date().toISOString(), libelle, note: note || null, etat, typepanne, site, batiment,
+    priorite: priorite || null, P3: false, chargerecuperable: false, iot: false,
+    createurs: createur ? [createur] : [], demandeur: demandeur || null,
+  };
+  try { return await appeler("POST", `${RACINE}/d_is`, base); }
+  catch (e) {
+    if (!(e.statut >= 400 && e.statut < 500) || !/numero/i.test(JSON.stringify(e.corps || e.message))) throw e;
+    const d = new Date(), aamm = `${String(d.getFullYear()).slice(2)}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return appeler("POST", `${RACINE}/d_is`, { ...base, numero: `${siteCode || "SMM"}/${aamm}/SMM${String(Date.now()).slice(-5)}` });
+  }
 }

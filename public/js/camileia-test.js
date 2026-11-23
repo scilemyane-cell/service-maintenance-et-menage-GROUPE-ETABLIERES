@@ -73,11 +73,76 @@ function rendre() {
     </div>
 
     ${st.refs ? correspondancesHTML() : ""}
+    ${cam.estConnecte() ? creationHTML() : ""}
     ${st.dis.length ? simulationHTML() : ""}
     ${st.dis.length ? tableauHTML() : ""}
     ${st.ouverte ? detailHTML() : ""}
   </div>`;
   brancher();
+}
+
+// ---- Créer une DI dans Camileia (test) ----
+const cr = { charge: false, sites: [], batiments: [], categories: [], types: [], priorites: [], etats: [], contacts: [], site: "", bat: "", cat: "", type: "", prio: "", createur: "", resultat: null };
+function creationHTML() {
+  if (!cr.charge) return `<div class="form-card"><h3 style="margin:0 0 6px;font-size:15px">5. Créer une DI dans Camileia</h3>
+    <p class="hint" style="margin:0 0 8px">Crée une vraie demande d'intervention dans Camileia (GMAO en test chez vous), comme un demandeur.</p>
+    <button class="nav-btn" id="cam-cr-ouvrir" ${st.occupe ? "disabled" : ""}>➕ Préparer une nouvelle DI</button></div>`;
+  const opt = (liste, val, lib = (x) => cam.libelleLisible(x.libelle)) => `<option value="">— choisir —</option>` + liste.map(x => `<option value="${esc(x["@id"])}" ${x["@id"] === val ? "selected" : ""}>${esc(lib(x))}</option>`).join("");
+  const typesCat = cr.types.filter(t => !cr.cat || t.categorie === cr.cat);
+  return `<div class="form-card" style="border-left:4px solid #8e24aa">
+    <h3 style="margin:0 0 6px;font-size:15px">5. Créer une DI dans Camileia</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
+      <label>Site<br><select id="cr-site">${opt(cr.sites, cr.site)}</select></label>
+      <label>Bâtiment<br><select id="cr-bat" ${!cr.site ? "disabled" : ""}>${opt(cr.batiments, cr.bat)}</select></label>
+      <label>Catégorie<br><select id="cr-cat">${opt(cr.categories, cr.cat)}</select></label>
+      <label>Type de panne<br><select id="cr-type">${opt(typesCat, cr.type)}</select></label>
+      <label>Priorité<br><select id="cr-prio">${opt(cr.priorites, cr.prio)}</select></label>
+      <label>Créée au nom de<br><select id="cr-createur">${opt(cr.contacts, cr.createur, (c) => `${c.prenom || ""} ${c.nom || ""}`.trim())}</select></label>
+    </div>
+    <label style="display:block;margin-top:8px">Libellé (court) *<br><input id="cr-libelle" style="width:100%" placeholder="Ex. Fuite robinet salle 12"></label>
+    <label style="display:block;margin-top:8px">Description<br><textarea id="cr-note" rows="3" style="width:100%"></textarea></label>
+    <button class="add-btn" id="cam-cr-envoyer" style="margin-top:8px" ${st.occupe ? "disabled" : ""}>📤 Créer dans Camileia</button>
+    ${cr.resultat ? `<p style="margin:8px 0 0">${cr.resultat}</p>` : ""}
+  </div>`;
+}
+async function chargerCreation() {
+  const L = (c) => cam.lireTout(c, { maxPages: 3 }).then(l => cam.avecIri(l, c));
+  const [sites, categories, types, priorites, etats, contacts] = await Promise.all([
+    L(`${cam.RACINE}/sites`), L(`${cam.RACINE}/d_i_categorie_type_pannes`), L(`${cam.RACINE}/d_i_type_pannes`),
+    L(`${cam.RACINE}/d_i_priorites`), L(`${cam.RACINE}/d_i_etats`), L(`${cam.RACINE}/contacts`)]);
+  const actif = (x) => x.actif !== false && x.visible !== false;
+  cr.sites = sites.filter(x => x.actif !== false).sort((a, b) => String(a.libelle).localeCompare(b.libelle, "fr"));
+  cr.categories = categories.filter(actif).sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
+  cr.types = types.filter(actif).sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
+  cr.priorites = priorites; cr.etats = etats;
+  cr.contacts = contacts.filter(c => c.actif !== false).sort((a, b) => String(a.nom).localeCompare(b.nom, "fr"));
+  // Par défaut : le contact Camileia qui a l'adresse mail de la personne connectée.
+  const mail = String(window.__smmEmail || (await import("./firebase-init.js")).auth?.currentUser?.email || "").toLowerCase();
+  cr.createur = (cr.contacts.find(c => String(c.email || "").toLowerCase() === mail) || {})["@id"] || "";
+  cr.charge = true;
+}
+async function chargerBatiments(siteIri) {
+  cr.batiments = []; cr.bat = "";
+  const site = cr.sites.find(x => x["@id"] === siteIri); if (!site) return;
+  const iris = (site.batiments || []).map(cam.iriDe);
+  const lus = await Promise.all(iris.map(i => cam.appeler("GET", i).then(b => ({ ...b, "@id": i })).catch(() => ({ "@id": i, libelle: i.split("/").pop() }))));
+  cr.batiments = lus;
+  if (lus.length === 1) cr.bat = lus[0]["@id"];
+}
+async function envoyerCreation() {
+  const $ = (id) => document.getElementById(id);
+  const libelle = $("cr-libelle").value.trim(), note = $("cr-note").value.trim();
+  const manque = [!cr.site && "site", !cr.bat && "bâtiment", !cr.type && "type de panne", !libelle && "libellé"].filter(Boolean);
+  if (manque.length) { st.erreur = `À remplir : ${manque.join(", ")}.`; rendre(); return; }
+  const site = cr.sites.find(x => x["@id"] === cr.site);
+  const etat = (cr.etats.find(e => /aqualifier/i.test(String(e.libelle).replace(/[^a-z]/gi, ""))) || cr.etats[0] || {})["@id"];
+  const contact = cr.contacts.find(c => c["@id"] === cr.createur);
+  if (!confirm(`Créer cette DI dans Camileia ?\n\n${site?.libelle} — ${libelle}`)) return;
+  await occuper("Création dans Camileia…", async () => {
+    const r = await cam.creerDI({ libelle, note, site: cr.site, siteCode: site?.code, batiment: cr.bat, typepanne: cr.type, priorite: cr.prio, etat, createur: cr.createur, demandeur: contact ? `${contact.prenom || ""} ${contact.nom || ""}`.trim() : null });
+    cr.resultat = `✅ DI créée dans Camileia : <b>${esc(r?.numero || ("n° " + (r?.id ?? "?")))}</b>. Clique « 📥 Lire les DI » puis « 🎫 Créer les tickets » pour la voir dans l'appli.`;
+    st.info = "DI créée dans Camileia.";
+  });
 }
 
 function resumeRefs() {
@@ -222,6 +287,16 @@ function brancher() {
   $("cam-toutes")?.addEventListener("change", (e) => { st.toutes = e.target.checked; });
   $("cam-lire")?.addEventListener("click", () => occuper("Lecture…", lireDI));
   $("cam-creer")?.addEventListener("click", () => occuper("Création des tickets…", creerTickets));
+  $("cam-cr-ouvrir")?.addEventListener("click", () => occuper("Chargement des sites, types de panne et contacts…", chargerCreation));
+  const garder = () => { const l = $("cr-libelle"), n = $("cr-note"); return { l: l?.value || "", n: n?.value || "" }; };
+  const remettre = (g) => { if ($("cr-libelle")) $("cr-libelle").value = g.l; if ($("cr-note")) $("cr-note").value = g.n; };
+  $("cr-site")?.addEventListener("change", (e) => { const g = garder(); cr.site = e.target.value; occuper("Lecture des bâtiments…", () => chargerBatiments(cr.site)).then(() => remettre(g)); });
+  $("cr-bat")?.addEventListener("change", (e) => { cr.bat = e.target.value; });
+  $("cr-cat")?.addEventListener("change", (e) => { const g = garder(); cr.cat = e.target.value; cr.type = ""; rendre(); remettre(g); });
+  $("cr-type")?.addEventListener("change", (e) => { cr.type = e.target.value; });
+  $("cr-prio")?.addEventListener("change", (e) => { cr.prio = e.target.value; });
+  $("cr-createur")?.addEventListener("change", (e) => { cr.createur = e.target.value; });
+  $("cam-cr-envoyer")?.addEventListener("click", envoyerCreation);
   $("cam-corresp-ok")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
     const etats = {}; racine.querySelectorAll("select[data-etat]").forEach(s => { if (s.value) etats[s.dataset.etat] = s.value; });
     await setDoc(REF_CORRESP, { etats, le: Date.now() }, { merge: false });
