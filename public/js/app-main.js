@@ -554,6 +554,8 @@
         id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: (mesActionsCount + (["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0)) || null, badgeActions: mesActionsCount, badgeValider: ["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
           { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien","menage","mi_temps"], mount: mountSuiviDemandesTab },
+          // Lien Camileia (GMAO) : version de test seulement, en simulation.
+          ...(CANAL_TEST ? [{ id: "camileia", label: "Camileia (test)", icon: "🔗", roles: SUPER_ADMIN_ONLY, mount: (c, u) => import("./camileia-test.js").then(m => m.mountCamileiaTest(c, u)) }] : []),
         ],
       },
       {
