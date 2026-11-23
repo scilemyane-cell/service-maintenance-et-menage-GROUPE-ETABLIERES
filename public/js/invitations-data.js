@@ -4,10 +4,20 @@ import {
   collection, onSnapshot,
 } from "./firestore-compte.js";
 
+// Code court (8 caractères, sans 0/O/1/l/I) : lien SMS lisible, ~10^14 combinaisons.
 function randomToken() {
-  const bytes = new Uint8Array(16);
+  const A = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, b => A[b % A.length]).join("");
+}
+// Remplace un ancien lien long par un lien court (copie de l'accès, l'ancien est supprimé).
+export async function raccourcirInvitation(inv) {
+  const { id, ...data } = inv;
+  const token = randomToken();
+  await setDoc(doc(db, "invitations", token), { ...data, ancienLien: id, modifieLe: new Date().toISOString() });
+  await deleteDoc(doc(db, "invitations", id));
+  return token;
 }
 
 export function watchInvitations(callback) {

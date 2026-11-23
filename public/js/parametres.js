@@ -505,6 +505,7 @@ function weekStartOf(date) {
 
 export function mountAccesRemplacants(container, user) {
   cleanup();
+  currentUser = user;
   container.innerHTML = `<div class="hint">Chargement…</div>`;
   unsubs.push(watchSites((s) => { invState.sites = s; renderInvites(container, user); }));
   unsubs.push(watchInvitations((i) => { invState.invitations = i.filter(x => x.type !== "agent"); renderInvites(container, user); }));
@@ -521,7 +522,8 @@ function etatInvitation(inv) {
 const sitesInv = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.sites : [{ id: inv.siteId, name: inv.siteName }]);
 const nomCourtSite = (n) => String(n || "").replace(/\s*\([^)]*@[^)]*\)\s*/g, "").replace(/\s+[\w.-]+@[\w.-]+\s*$/, "").replace(/^Maison MNA\s+/i, "").trim();
 function texteSms(inv) {
-  const qui = currentUser?.nom ? `${currentUser.nom}, Service Maintenance` : "le Service Maintenance";
+  const nom = String(currentUser?.nom || "").replace(/@.*/, "").trim().toLowerCase().replace(/(^|[\s-])\p{L}/gu, c => c.toUpperCase());
+  const qui = nom ? `${nom}, Service Maintenance` : "le Service Maintenance";
   const periode = inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : "";
   const noms = sitesInv(inv).map(x => nomCourtSite(x.name)).filter(Boolean);
   const quoi = inv.type === "sites"
@@ -605,19 +607,20 @@ async function editerInfosInvitation(inv) {
   };
 }
 // Mail mis en forme (logo, récapitulatif, bouton) pour le prestataire.
-async function mailInvitation(inv) {
+// Options de la carte d'accès (mail + image SMS).
+async function optionsCarte(inv) {
   if (inv.type === "sites") {
-    return ouvrirMailPresta({
+    return {
       objet: `Fiches des sites — Groupe Établières${inv.debut && inv.fin ? ` — du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}`,
       etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de nos sites",
       intro: `voici votre accès${inv.label ? ` pour ${inv.label}` : ""} aux fiches techniques des sites ci-dessous${inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
       pastilles: sitesInv(inv).map(s => s.name), bouton: "Voir les sites", url: guestLink(inv.id), sms: texteSms(inv),
       etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "À la première ouverture, indiquez vos nom, prénom et société.", "Choisissez le site : sa fiche s'ouvre, sans mot de passe."],
       signature: currentUser?.nom || "Service Maintenance et Entretien",
-    });
+    };
   }
   const items = await codesDesSites(sitesInv(inv)).catch(() => []);
-  ouvrirMailPresta({
+  return {
     objet: `Accès aux fiches de traçabilité ménage — Groupe Établières`,
     etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de traçabilité ménage",
     intro: `voici votre accès personnel${inv.label ? ` pour ${inv.label}` : ""}${inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
@@ -626,7 +629,24 @@ async function mailInvitation(inv) {
     bouton: "Ouvrir mes fiches", url: guestLink(inv.id), sms: texteSms(inv),
     etapes: ["Ouvrez le lien sur votre téléphone.", "À la première ouverture, indiquez vos nom, prénom et société.", "Remplissez la fiche à chaque passage."],
     signature: currentUser?.nom || "Service Maintenance et Entretien",
-  });
+  };
+}
+// Mail mis en forme (logo, récapitulatif, bouton) pour le prestataire.
+async function mailInvitation(inv) { ouvrirMailPresta(await optionsCarte(inv)); }
+// 📱 SMS sur téléphone : image + texte via le partage (Messages, WhatsApp…). Le numéro est copié pour le coller.
+const surTelephone = () => matchMedia("(pointer: coarse)").matches && !!navigator.canShare;
+async function smsAvecImage(inv, btn) {
+  const avant = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Image…";
+  try {
+    if (inv.telephone) { try { await navigator.clipboard.writeText(String(inv.telephone).replace(/[^0-9+]/g, "")); } catch { /* */ } }
+    const o = await optionsCarte(inv);
+    const t = (o.cases?.items || []).map(i => i.texte).join("\n");
+    const carte = t ? { ...o, lignes: [[o.cases.icone, o.cases.libelle, t]] } : o;
+    const { partagerCarte } = await import("./image-presta.js");
+    const r = await partagerCarte(carte, texteSms(inv));
+    btn.textContent = r === "partage" ? "✓ Envoyé" : r === "telecharge" ? "✓ Image téléchargée" : avant;
+  } catch (e) { alert("Image impossible : " + (e?.message || e)); btn.textContent = avant; }
+  btn.disabled = false;
 }
 
 function renderInvites(container, user) {
@@ -654,13 +674,14 @@ function renderInvites(container, user) {
       <div class="ac-sites"><span class="ac-nb">${sites.length} site${sites.length > 1 ? "s" : ""}</span>${sites.slice(0, 6).map(chip).join("")}${sites.length > 6 ? `<details class="ac-plus"><summary>+ ${sites.length - 6} autres</summary>${sites.slice(6).map(chip).join("")}</details>` : ""}</div>
       <div class="ac-actions">
         <div class="ac-grp">
-          ${tel ? `<a class="ac-btn ac-pri" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 SMS</a>` : ""}
+          ${surTelephone() ? `<button class="ac-btn ac-pri" data-sms-img="${inv.id}">📱 SMS + image</button>` : tel ? `<a class="ac-btn ac-pri" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 SMS</a>` : ""}
           <button class="ac-btn ac-pri" data-mail-inv="${inv.id}">✉️ Mail / Image</button>
           <button class="ac-btn" data-copy-sms="${inv.id}">📋 Copier</button>
           <a class="ac-btn" href="${guestLink(inv.id)}?apercu=1" target="_blank" rel="noopener">👁️ Aperçu</a>
         </div>
         <div class="ac-grp">
           ${inv.type === "sites" ? "" : `<button class="ac-btn${inv.infos ? "" : " ac-warn"}" data-infos-inv="${inv.id}">ℹ️ Infos${inv.infos ? " ✓" : ""}</button>`}
+${inv.type === "sites" && inv.id.length > 12 ? `<button class="ac-btn ac-warn" data-court-inv="${inv.id}" title="Remplace le lien par un lien court (l'ancien lien ne marchera plus)">✂️ Lien court</button>` : ""}
           <button class="ac-btn" data-modif-inv="${inv.id}">✏️ Modifier</button>
           <button class="ac-btn" data-toggle="${inv.id}" data-active="${inv.active}">${inv.active ? "⛔ Couper" : "↩️ Réactiver"}</button>
           <button class="ac-btn ac-del" data-del-inv="${inv.id}" title="Supprimer">🗑️</button>
@@ -684,7 +705,7 @@ function renderInvites(container, user) {
       ${(() => { const inv = invState.invitations.find(i => i.id === invState.dernier); if (!inv) return "";
         const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
         return `<div class="form-card" style="border:2px solid var(--teal)"><b>✅ Accès créé pour ${esc(inv.label)}</b><p class="hint" style="margin:4px 0 10px">Envoie-le maintenant :</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">${tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail-inv="${inv.id}">✉️ Mail / 🖼️ Image</button><button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${surTelephone() ? `<button class="add-btn" data-sms-img="${inv.id}">📱 Envoyer par SMS (avec image)</button>` : tel ? `<a class="add-btn" style="text-decoration:none" href="sms:${esc(tel)}?&body=${encodeURIComponent(texteSms(inv))}">📱 Envoyer par SMS</a>` : ""}<button class="nav-btn" data-mail-inv="${inv.id}">✉️ Mail / 🖼️ Image</button><button class="nav-btn" data-copy-sms="${inv.id}">📋 Copier le message</button></div>
           <p class="hint" style="margin:8px 0 0">Sur ordinateur, le bouton SMS ouvre l'application de messages si elle est reliée à ton téléphone ; sinon copie le message et colle-le dans un SMS.</p></div>`; })()}
       ${(() => { const perm = actifs.filter(i => i.debut && !i.fin), prov = actifs.filter(i => !(i.debut && !i.fin));
         return `<div class="ac-titre">♾️ Accès permanents <span>${perm.length}</span></div>
@@ -714,6 +735,16 @@ function renderInvites(container, user) {
     invForm = { sites: [], label: "", telephone: "", debut: "", fin: "" };
     invState.dernier = token; renderInvites(container, user);
   });
+  container.querySelectorAll("[data-sms-img]").forEach(btn => btn.addEventListener("click", () => {
+    const inv = invState.invitations.find(i => i.id === btn.dataset.smsImg); if (inv) smsAvecImage(inv, btn);
+  }));
+  container.querySelectorAll("[data-court-inv]").forEach(btn => btn.addEventListener("click", async () => {
+    const inv = invState.invitations.find(i => i.id === btn.dataset.courtInv); if (!inv) return;
+    if (!confirm(`Remplacer le lien de ${inv.label || "cet accès"} par un lien court ?\n\nL'ancien lien (déjà envoyé) ne fonctionnera plus : renvoie le nouveau SMS.`)) return;
+    btn.disabled = true;
+    try { const { raccourcirInvitation } = await import("./invitations-data.js"); invState.dernier = await raccourcirInvitation(inv); }
+    catch (e) { alert("Impossible : " + (e.message || e)); btn.disabled = false; }
+  }));
   container.querySelectorAll("[data-modif-inv]").forEach(btn => btn.addEventListener("click", async () => {
     const inv = invState.invitations.find(i => i.id === btn.dataset.modifInv); if (!inv) return;
     const { modifierAcces } = await import("./acces-edit.js"); modifierAcces(inv);
