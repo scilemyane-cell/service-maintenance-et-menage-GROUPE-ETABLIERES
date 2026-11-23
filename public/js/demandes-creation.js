@@ -54,6 +54,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       <label>Logement occupé<select name="logementOccupe"><option value="">—</option><option>OUI</option><option>NON</option></select></label>
     </div>
     <div class="ndm-photos"><div class="ndm-photo-btns"><label class="ndm-photo-btn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" data-ndm-photos hidden></label><label class="ndm-photo-btn">🖼️ Choisir des photos<input type="file" accept="image/*" multiple data-ndm-photos hidden></label></div><div class="ndm-vignettes" data-ndm-vign></div></div>
+    ${location.pathname.startsWith("/beta/") && window.__smmRole === "super_admin" ? `<label class="ndm-camileia" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="envoyerCamileia" checked> 📤 Envoyer aussi dans Camileia (GMAO) — test</label>` : ""}
     <div class="ndm-etat" aria-live="polite"></div>
     <div class="ndm-btns"><button type="button" class="dps-annuler" data-fermer>Annuler</button><button type="submit" class="dps-enregistrer">➕ Créer la demande</button></div>
   </form>`;
@@ -106,7 +107,19 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
         let ko = 0; for (const p of photos) { try { await ajouterPhotoDemande(ref.id, p, utilisateur); } catch (er) { ko++; console.warn("Photo demande :", er); } }
         if (ko) window.toast?.(`⚠️ ${ko} photo(s) non envoyée(s)`, "error");
       }
-      window.toast?.(`✓ Demande ${numero} créée — elle sera ajoutée au fichier Excel.`);
+      let msgCam = "";
+      if (v.envoyerCamileia) {
+        etat.textContent = "⏳ Envoi dans Camileia…";
+        try {
+          const { envoyerDemande } = await import("./camileia-envoi.js");
+          const { auth } = await import("./firebase-init.js");
+          const di = await envoyerDemande({ ...v, site: v.site.trim(), numero }, { email: auth.currentUser?.email || "" });
+          const { updateDemande } = await import("./firestore-data.js");
+          await updateDemande(ref.id, { camileiaId: di?.id ?? null, camileiaIri: di?.id != null ? `/api-platform/d_is/${di.id}` : "", camileiaNumero: di?.numero || "" });
+          msgCam = ` · envoyée dans Camileia (${di?.numero || di?.id})`;
+        } catch (er) { console.warn("Envoi Camileia :", er); window.toast?.(`⚠️ Demande créée dans l'appli, mais pas dans Camileia : ${er?.message || er}`, "error"); }
+      }
+      window.toast?.(`✓ Demande ${numero} créée${msgCam}.`);
       fermer(); onCree(numero, v.site.trim());
     } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); bouton.disabled = false; }
   });

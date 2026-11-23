@@ -69,7 +69,10 @@ export async function synchroniser() {
   const assoc = (site) => { const k = sa(site); if (parSite.has(k)) return parSite.get(k); for (const [s, a] of parSite) if (k && (s.startsWith(k) || k.startsWith(s))) return a; return "Autres"; };
   let crees = 0, majs = 0;
   const dis = brutes.map(di => diVersDemande(di, { libelles, correspondances: c }));
+  // DI créées depuis l'appli : déjà une demande → pas de ticket en double.
+  const dejaLiees = new Set(demandes.filter(d => d.source !== "camileia" && d.camileiaId != null).map(d => String(d.camileiaId)));
   for (const d of dis) {
+    if (dejaLiees.has(String(d.camileiaId))) continue;
     const id = `cam-${d.camileiaId}`;
     const { lieuxNonResolus, ...champs } = d;
     const base = { ...champs, association: assoc(d.site), source: "camileia", creeDansApp: true, vuDansFichier: false };

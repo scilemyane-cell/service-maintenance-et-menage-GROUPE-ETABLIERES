@@ -75,12 +75,59 @@ function rendre() {
     </div>
 
     ${st.refs ? correspondancesHTML() : ""}
+    ${cam.estConnecte() ? correspSitesHTML() : ""}
     ${cam.estConnecte() ? creationHTML() : ""}
     ${st.dis.length ? simulationHTML() : ""}
     ${st.dis.length ? tableauHTML() : ""}
     ${st.ouverte ? detailHTML() : ""}
   </div>`;
   brancher();
+}
+
+// ---- Correspondance des sites appli → Camileia (pour envoyer les nouvelles demandes) ----
+const cs = { charge: false, sitesApp: [], camSites: [], map: {}, bats: {}, types: [], typeDefaut: "" };
+function correspSitesHTML() {
+  if (!cs.charge) return `<div class="form-card"><h3 style="margin:0 0 6px;font-size:15px">6. Correspondance des sites (appli → Camileia)</h3>
+    <p class="hint" style="margin:0 0 8px">Nécessaire pour que « ➕ Nouvelle demande » parte aussi dans Camileia. Proposition automatique, à vérifier une fois.</p>
+    <button class="nav-btn" id="cs-ouvrir" ${st.occupe ? "disabled" : ""}>🔗 Préparer la correspondance des sites</button></div>`;
+  const optSites = (val) => `<option value="">— pas relié —</option>` + cs.camSites.map(s => `<option value="${esc(s["@id"])}" ${s["@id"] === val ? "selected" : ""}>${esc(s.libelle)}</option>`).join("");
+  const optBats = (siteIri, val) => { const l = cs.bats[siteIri]; if (!l) return `<option value="${esc(val || "")}">${val ? "Bâtiment " + esc(String(val).split("/").pop()) : "—"}</option>`;
+    return l.map(b => `<option value="${esc(b["@id"])}" ${b["@id"] === val ? "selected" : ""}>${esc(b.libelle || b["@id"].split("/").pop())}</option>`).join(""); };
+  const relies = cs.sitesApp.filter(n => cs.map[n]?.site).length;
+  return `<div class="form-card" style="border-left:4px solid #00897b;overflow-x:auto">
+    <h3 style="margin:0 0 6px;font-size:15px">6. Correspondance des sites (appli → Camileia)</h3>
+    <p class="hint" style="margin:0 0 8px">${relies} / ${cs.sitesApp.length} sites reliés. Le bâtiment se charge quand tu choisis le site (sinon le 1er bâtiment du site est utilisé).</p>
+    <table class="table" style="width:100%;font-size:12px"><thead><tr><th>Site dans l'appli</th><th>Site Camileia</th><th>Bâtiment</th></tr></thead><tbody>
+    ${cs.sitesApp.map((n, i) => { const m = cs.map[n] || {}; return `<tr><td>${esc(n)}</td>
+      <td><select data-cs-site="${i}">${optSites(m.site)}</select></td>
+      <td><select data-cs-bat="${i}" ${!m.site ? "disabled" : ""}>${optBats(m.site, m.batiment)}</select></td></tr>`; }).join("")}
+    </tbody></table>
+    <label style="display:block;margin-top:8px">Type de panne par défaut (si le « type » de la demande ne correspond à aucune catégorie Camileia)<br>
+      <select id="cs-type">${cs.types.map(t => `<option value="${esc(t["@id"])}" ${t["@id"] === cs.typeDefaut ? "selected" : ""}>${esc(cam.libelleLisible(t.libelle))}</option>`).join("")}</select></label>
+    <button class="add-btn" id="cs-enregistrer" style="margin-top:8px">💾 Enregistrer la correspondance des sites</button>
+  </div>`;
+}
+async function chargerCorrespSites() {
+  const ev = await import("./camileia-envoi.js");
+  const [r, actuelle] = await Promise.all([ev.referentiels(), ev.lireCorrespSites()]);
+  if (!st.demandes.length) { const snap = await getDocs(collection(db, "demandes")); st.demandes = []; snap.forEach(x => st.demandes.push({ id: x.id, ...x.data() })); }
+  cs.sitesApp = [...new Set(st.demandes.filter(d => d.source !== "camileia" && d.site && d.site !== "Non renseigné" && !d.supprimeeLe).map(d => d.site.trim()))].sort((a, b) => a.localeCompare(b, "fr"));
+  cs.camSites = [...r.sites].sort((a, b) => String(a.libelle).localeCompare(b.libelle, "fr"));
+  cs.types = [...r.types].sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
+  cs.typeDefaut = actuelle.typeDefaut || (cs.types.find(t => cam.libelleLisible(t.libelle).toLowerCase() === "autre") || cs.types[0] || {})["@id"] || "";
+  cs.map = {};
+  cs.sitesApp.forEach(n => {
+    const deja = actuelle.sites?.[n];
+    if (deja?.site) { cs.map[n] = { ...deja }; return; }
+    const p = ev.proposerSite(n, cs.camSites);
+    if (p) cs.map[n] = { site: p["@id"], siteCode: p.code || "", siteLib: p.libelle, batiment: cam.iriDe((p.batiments || [])[0]) || "", auto: true };
+  });
+  cs.charge = true;
+}
+async function chargerBatsSite(siteIri) {
+  if (!siteIri || cs.bats[siteIri]) return;
+  const s = cs.camSites.find(x => x["@id"] === siteIri); if (!s) return;
+  cs.bats[siteIri] = await Promise.all((s.batiments || []).map(cam.iriDe).map(i => cam.appeler("GET", i).then(b => ({ ...b, "@id": i })).catch(() => ({ "@id": i }))));
 }
 
 // ---- Créer une DI dans Camileia (test) ----
@@ -290,6 +337,25 @@ function brancher() {
   $("cr-prio")?.addEventListener("change", (e) => { cr.prio = e.target.value; });
   $("cr-createur")?.addEventListener("change", (e) => { cr.createur = e.target.value; });
   $("cam-cr-envoyer")?.addEventListener("click", envoyerCreation);
+  $("cs-ouvrir")?.addEventListener("click", () => occuper("Lecture des sites Camileia…", chargerCorrespSites));
+  racine.querySelectorAll("select[data-cs-site]").forEach(sel => sel.addEventListener("change", () => {
+    const n = cs.sitesApp[+sel.dataset.csSite], s = cs.camSites.find(x => x["@id"] === sel.value);
+    if (!s) { delete cs.map[n]; rendre(); return; }
+    cs.map[n] = { site: s["@id"], siteCode: s.code || "", siteLib: s.libelle, batiment: cam.iriDe((s.batiments || [])[0]) || "" };
+    occuper("Lecture des bâtiments…", () => chargerBatsSite(s["@id"]));
+  }));
+  racine.querySelectorAll("select[data-cs-bat]").forEach(sel => {
+    const n = cs.sitesApp[+sel.dataset.csBat];
+    sel.addEventListener("focus", () => { const si = cs.map[n]?.site; if (si && !cs.bats[si]) occuper("Lecture des bâtiments…", () => chargerBatsSite(si)); }, { once: true });
+    sel.addEventListener("change", () => { if (cs.map[n]) { cs.map[n].batiment = sel.value; cs.map[n].batLib = sel.selectedOptions[0]?.text || ""; } });
+  });
+  $("cs-type")?.addEventListener("change", (e) => { cs.typeDefaut = e.target.value; });
+  $("cs-enregistrer")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
+    const { enregistrerCorrespSites } = await import("./camileia-envoi.js");
+    const sites = {}; Object.entries(cs.map).forEach(([n, m]) => { if (m?.site && m?.batiment) { const { auto, ...r } = m; sites[n] = r; } });
+    await enregistrerCorrespSites({ sites, typeDefaut: cs.typeDefaut });
+    st.info = `Correspondance enregistrée : ${Object.keys(sites).length} site(s) relié(s). « ➕ Nouvelle demande » peut maintenant les envoyer dans Camileia.`;
+  }));
   $("cam-corresp-ok")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
     const etats = {}; racine.querySelectorAll("select[data-etat]").forEach(s => { if (s.value) etats[s.dataset.etat] = s.value; });
     await setDoc(REF_CORRESP, { etats, le: Date.now() }, { merge: false });

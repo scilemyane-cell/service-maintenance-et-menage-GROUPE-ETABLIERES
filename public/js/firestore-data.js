@@ -282,6 +282,10 @@ export async function updateDemande(id, fields) {
   majLocale("demandes", id, { ...fields, dateMaj: Timestamp.now() }); // affichage immédiat, même hors ligne
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
   journaliserDemande(id, avantModif ? { ...avantModif } : null, fields);
+  // Demande de l'appli envoyée dans Camileia (version de test) : statut / commentaire y repartent.
+  if (CANAL_TEST_DEM && avantModif?.camileiaIri && (fields.statut || fields.commentaireTech)) {
+    import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields, { collection: "demandes" })).catch(e => console.warn("Retour Camileia :", e));
+  }
 }
 export async function ajouterDemande(record) {
   await addDoc(collection(db, "demandes"), { ...record, dateMaj: serverTimestamp() });

@@ -31,9 +31,9 @@ async function etatPourStatut(statut) {
   return inverse ? inverse["@id"] : null;
 }
 
-export async function renvoyerVersCamileia(id, fields) {
+export async function renvoyerVersCamileia(id, fields, { collection = "demandes-camileia" } = {}) {
   if (!cam.estConnecte()) return;
-  const ref = doc(db, "demandes-camileia", id);
+  const ref = doc(db, collection, id);
   const t = (await getDoc(ref))?.data();
   if (!t?.camileiaIri) return;
   const faits = [], erreurs = [];
