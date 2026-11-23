@@ -100,22 +100,21 @@ export function membres(d) {
   return (d && (d["hydra:member"] || d.member)) || [];
 }
 export async function lireTout(chemin, { maxPages = 20, onPage = () => {} } = {}) {
-  const out = [];
-  // Camileia renvoie des tableaux JSON simples (sans lien « page suivante ») :
-  // on demande page=1, 2, 3… jusqu'à une page vide ou incomplète.
+  const out = [], vus = new Set();
+  // Camileia renvoie des tableaux JSON simples ; selon la ressource, « page »
+  // est ignoré (toute la liste à chaque fois). On dédoublonne par id et on
+  // s'arrête dès qu'une page n'apporte plus rien de nouveau.
   const avecPage = (n) => chemin + (chemin.includes("?") ? "&" : "?") + `page=${n}`;
-  let taille = 0;
   for (let n = 1; n <= maxPages; n++) {
     const d = await appeler("GET", /[?&]page=/.test(chemin) ? chemin : avecPage(n));
     const m = membres(d);
-    out.push(...m); onPage(n, out.length);
+    let nouveaux = 0;
+    m.forEach(x => { const k = x && x.id != null ? String(x.id) : JSON.stringify(x); if (!vus.has(k)) { vus.add(k); out.push(x); nouveaux++; } });
+    onPage(n, out.length);
     if (!Array.isArray(d)) {
       const vue = d && (d["hydra:view"] || d.view);
       if (!(vue && (vue["hydra:next"] || vue.next))) break;
-    } else {
-      if (n === 1) taille = m.length;
-      if (!m.length || m.length < taille || /[?&]page=/.test(chemin)) break;
-    }
+    } else if (!nouveaux || /[?&]page=/.test(chemin)) break;
   }
   return out;
 }
