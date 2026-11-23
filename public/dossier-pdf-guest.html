@@ -56,7 +56,7 @@
         app.innerHTML = `<iframe id="pdf-frame" src="${url}"></iframe>`
           // Venu de la liste « tous les sites » : bouton de retour + lien de téléchargement (le PDF
           // intégré ne s'affiche pas sur certains téléphones).
-          + (params.get("liste") === "1" ? `<a href="sites-guest.html" style="position:fixed;left:10px;top:10px;z-index:5;background:#1f3a5f;color:#fff;padding:9px 13px;border-radius:10px;font:600 14px Segoe UI,Arial;text-decoration:none">← Tous les sites</a>` : "")
+          + (params.get("liste") ? `<a href="sites-guest.html${params.get("liste") !== "1" ? "?a=" + encodeURIComponent(params.get("liste")) : ""}" style="position:fixed;left:10px;top:10px;z-index:5;background:#1f3a5f;color:#fff;padding:9px 13px;border-radius:10px;font:600 14px Segoe UI,Arial;text-decoration:none">← Tous les sites</a>` : "")
           + `<a href="${url}" download="fiche-site.pdf" style="position:fixed;right:10px;top:10px;z-index:5;background:#2e7d4f;color:#fff;padding:9px 13px;border-radius:10px;font:600 14px Segoe UI,Arial;text-decoration:none">⬇️ Ouvrir le PDF</a>`;
       }
     } catch (e) {

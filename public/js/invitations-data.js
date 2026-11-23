@@ -19,9 +19,10 @@ export function watchInvitations(callback) {
 }
 
 // Accès prestataire / remplaçant : un ou plusieurs sites, valable du … au …
-export async function createInvitation({ sites, debut, fin, weeks, label, telephone = "", createdBy }) {
+export async function createInvitation({ sites, debut, fin, weeks, label, telephone = "", createdBy, type = "" }) {
   const token = randomToken();
   await setDoc(doc(db, "invitations", token), {
+    ...(type ? { type } : {}),
     sites, siteId: sites[0]?.id || "", siteName: sites.map(s => s.name).join(", "), weeks, debut, fin, label, telephone,
     active: true, createdBy, createdAt: new Date().toISOString(),
   });

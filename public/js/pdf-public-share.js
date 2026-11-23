@@ -110,7 +110,7 @@ export async function publishPublicPdf(dossierId, blob) {
 export async function publierIndexSites(sites) {
   const avec = await Promise.all(sites.map(async (st) => ({ ...st, pdf: await hasPublicPdf(st.id).catch(() => false) })));
   await setDoc(doc(db, COLLECTION, "_index"), { sites: avec, majLe: Date.now() });
-  return { total: avec.length, avecPdf: avec.filter(x => x.pdf).length };
+  return { total: avec.length, avecPdf: avec.filter(x => x.pdf).length, sites: avec };
 }
 export async function lireIndexSites() {
   const snap = await getDoc(doc(db, COLLECTION, "_index"));

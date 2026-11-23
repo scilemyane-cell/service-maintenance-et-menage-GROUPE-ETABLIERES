@@ -41,6 +41,9 @@
 <footer>Groupe Établières · Service Maintenance et Entretien<br>Consultation seule — en cas de doute sur place, appelez le service maintenance.</footer>
 <script type="module">
   import { lireIndexSites } from "./js/pdf-public-share.js";
+  import { auth } from "./js/firebase-init.js";
+  import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getInvitation } from "./js/invitations-data.js";
   const app = document.getElementById("app");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -50,20 +53,41 @@
     const groupes = {};
     l.forEach(s => { (groupes[s.association || "Autres sites"] ||= []).push(s); });
     const blocs = Object.keys(groupes).sort((a, b) => a.localeCompare(b, "fr")).map(g => `<h2>${esc(g)}</h2>${groupes[g].sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map(s => s.pdf
-      ? `<a class="site" href="dossier-pdf-guest.html?dossier=${encodeURIComponent(s.id)}&liste=1"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go">Ouvrir ›</span></a>`
-      : `<div class="site off"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go">Fiche à venir</span></div>`).join("")}`).join("");
+      ? `<a class="site" href="dossier-pdf-guest.html?dossier=${encodeURIComponent(s.id)}&liste=${encodeURIComponent(jeton || "1")}"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go">Ouvrir ›</span></a>`
+      // Pas encore de PDF publié : fiche simplifiée (sans photos) en attendant.
+      : `<a class="site" href="site-dossier-guest.html?dossier=${encodeURIComponent(s.id)}"><div><b>${esc(s.nom)}</b><small>${esc(s.adresse || "")}</small></div><span class="go" style="background:#5b6475">Ouvrir ›</span></a>`).join("")}`).join("");
     app.querySelector("#liste").innerHTML = blocs || `<p class="vide">Aucun site ne correspond à « ${esc(q)} ».</p>`;
   }
+  // Accès daté (…?a=CODE, créé depuis Dossiers de site) : sites choisis, du … au ….
+  const params = new URLSearchParams(location.search), jeton = params.get("a");
+  const frJ = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  async function controleAcces() {
+    if (!jeton) return { ok: true };
+    const user = await new Promise((ok) => { const u = onAuthStateChanged(auth, async (x) => { if (x) { u(); ok(x); } else { try { await signInAnonymously(auth); } catch { u(); ok(null); } } }); });
+    if (!user) return { ok: false, msg: "Connexion impossible. Réessayez plus tard." };
+    const inv = await getInvitation(jeton);
+    if (!inv || inv.type !== "sites") return { ok: false, msg: "Ce lien n'existe pas ou plus." };
+    const apercu = params.get("apercu") === "1" && !user.isAnonymous;
+    const d = new Date(), auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!apercu && !inv.active) return { ok: false, msg: "Cet accès a été coupé. Contactez le Groupe Établières." };
+    if (!apercu && inv.debut && auj < inv.debut) return { ok: false, msg: `Cet accès sera ouvert à partir du ${frJ(inv.debut)}.` };
+    if (!apercu && inv.fin && auj > inv.fin) return { ok: false, msg: `Cet accès a expiré le ${frJ(inv.fin)}. Contactez le Groupe Établières pour un nouveau lien.` };
+    return { ok: true, inv };
+  }
   try {
+    const acc = await controleAcces();
+    if (!acc.ok) { app.innerHTML = `<p class="err">🔒 ${esc(acc.msg)}</p>`; throw null; }
+    if (acc.inv) document.querySelector("header h1").insertAdjacentHTML("afterend", `<div style="margin-top:6px;color:#6b7280;font-size:14px">${esc(acc.inv.label || "")}${acc.inv.fin ? ` · accès jusqu'au <b>${frJ(acc.inv.fin)}</b>` : ""}</div>`);
     const idx = await lireIndexSites();
     sites = (idx?.sites || []).filter(s => s.nom);
+    if (acc.inv) { const ids = new Set((acc.inv.sites || []).map(x => x.id)); sites = sites.filter(s => ids.has(s.id)); }
     if (!sites.length) { app.innerHTML = `<p class="err">La liste des sites n'est pas encore disponible. Contactez le service maintenance.</p>`; }
     else {
       app.innerHTML = `<input class="rech" type="search" placeholder="🔍 Rechercher un site, une ville…" autocomplete="off"><div id="liste"></div>`;
       app.querySelector(".rech").addEventListener("input", (e) => { q = e.target.value; rendre(); });
       rendre();
     }
-  } catch (e) { app.innerHTML = `<p class="err">Impossible de charger la liste : ${esc(e.message || e)}</p>`; }
+  } catch (e) { if (e) app.innerHTML = `<p class="err">Impossible de charger la liste : ${esc(e.message || e)}</p>`; }
 </script>
 </body>
 </html>

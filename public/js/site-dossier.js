@@ -203,7 +203,7 @@ function render() {
           <div><b>${state.dossiers.length}</b><small>sites</small></div>
           <div><b>${new Set(state.dossiers.map(d => d.association).filter(Boolean)).size}</b><small>associations</small></div>
           <div><b>${state.dossiers.reduce((n, d) => n + (d.sections || []).reduce((m, sec) => m + photosSection(sec).length, 0), 0)}</b><small>photos</small></div>
-          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-presta-tous" title="Un seul lien pour le prestataire : la liste de tous les sites, chacun avec sa fiche PDF">🔗 Lien prestataire · tous les sites</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button><button class="nav-btn" id="sd-copier-photos" title="Garder une copie de toutes les photos dans l'appli : ouverture des dossiers instantanée">${esc(copieEtat || "⚡ Photos dans l'appli")}</button></div>` : ""}
+          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-publier-tous" title="Créer la fiche PDF publique (avec photos) de chaque site qui n'en a pas encore, pour les liens prestataires et QR">📄 Publier les fiches</button><button class="nav-btn" id="sd-presta-tous" title="Accès prestataire avec dates : liste des sites choisis, chacun avec sa fiche PDF">🔗 Accès prestataire (sites)</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button><button class="nav-btn" id="sd-copier-photos" title="Garder une copie de toutes les photos dans l'appli : ouverture des dossiers instantanée">${esc(copieEtat || "⚡ Photos dans l'appli")}</button></div>` : ""}
         </div>
       </div>
       ${barreListeHTML()}
@@ -226,32 +226,97 @@ function render() {
   `;
   brancherBarreListe(render);
 
-  // 🔗 Lien prestataire — tous les sites : (ré)écrit l'index public des sites
-  // (nom, adresse, association, fiche publiée ou non) lu par sites-guest.html,
-  // puis propose l'envoi (mail / SMS / image). Lien sans compte, sans date de fin.
-  document.getElementById("sd-presta-tous")?.addEventListener("click", async (e) => {
+  // 📄 Publier les fiches : génère la copie PDF publique de chaque dossier qui
+  // n'en a pas (ou de tous, au choix), en hors-écran avec les photos résolues
+  // (même principe que l'outil de migration), puis met à jour l'index des sites.
+  document.getElementById("sd-publier-tous")?.addEventListener("click", async (e) => {
     const b = e.currentTarget, avant = b.textContent;
-    const lien = "https://service-maintenance-et-menage.web.app/sites-guest.html";
+    b.disabled = true; b.textContent = "⏳ Vérification…";
     try {
-      b.disabled = true; b.textContent = "⏳ Préparation de la liste…";
+      const etats = await Promise.all(state.dossiers.map(async d => ({ d, pdf: await hasPublicPdf(d.id).catch(() => false) })));
+      const manquants = etats.filter(x => !x.pdf).map(x => x.d);
+      const tous = confirm(`${state.dossiers.length - manquants.length}/${state.dossiers.length} fiches déjà publiées.\n\nOK = publier les ${manquants.length} manquante(s)\nAnnuler = rien faire\n\n(Garde cette page ouverte : environ 20 à 60 s par fiche.)`);
+      if (!tous || !manquants.length) return;
+      let ok = 0; const ko = [];
+      for (const [i, d] of manquants.entries()) {
+        b.textContent = `⏳ ${i + 1}/${manquants.length} — ${String(d.nom).slice(0, 22)}`;
+        const cache = document.createElement("div");
+        cache.style.cssText = "position:fixed;left:-9999px;top:0;width:800px;";
+        cache.innerHTML = printFicheHtml(d);
+        document.body.appendChild(cache);
+        try {
+          // Photos : copies gardées dans l'appli d'abord, sinon SharePoint (comme à l'écran).
+          await resolveGalleryImages(cache).catch(() => {});
+          const { blob } = await generatePdfBlob(d, cache.querySelector(".print-fiche"));
+          await publishPublicPdf(d.id, blob);
+          ok++;
+        } catch (err) { ko.push(`${d.nom} — ${err?.message || err}`); }
+        finally { cache.remove(); }
+      }
       const { publierIndexSites } = await import("./pdf-public-share.js");
-      const r = await publierIndexSites(state.dossiers.map(d => ({ id: d.id, nom: d.nom || "", adresse: d.adresse || "", association: d.association || "", groupe: d.groupe || "" })));
-      try { await navigator.clipboard.writeText(lien); } catch { /* */ }
-      window.toast?.(`🔗 Lien copié — ${r.avecPdf}/${r.total} fiches consultables`);
-      if (r.avecPdf < r.total && !confirm(`${r.total - r.avecPdf} site(s) n'ont pas encore de fiche publiée : ils apparaîtront dans la liste comme « fiche à venir ».\nPour les publier : ouvre le dossier puis « 🔗 Lien prestataire ».\n\nOK = préparer l'envoi maintenant`)) return;
-      const { ouvrirMailPresta } = await import("./mail-presta.js");
-      ouvrirMailPresta({
-        objet: "Fiches des sites — Groupe Établières",
-        etiquette: "DOSSIERS DE SITE", titre: "Fiches de nos sites",
-        intro: "voici l'accès aux fiches techniques de nos sites : choisissez le site pour voir ses équipements, emplacements, procédures, photos et numéros d'urgence.",
-        pastilles: [`${r.avecPdf} sites`],
-        bouton: "Voir les sites", url: lien,
-        sms: `Groupe Établières – Fiches de nos sites.\nConsultation : ${lien}`,
-        etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "Choisissez le site (recherche par nom ou par ville).", "La fiche s'ouvre en PDF, sans compte ni mot de passe."],
-        signature: mountedUser?.nom || "Service Maintenance et Entretien",
-      });
-    } catch (err) { alert("Lien impossible : " + (err?.message || err)); }
+      await publierIndexSites(state.dossiers.map(d => ({ id: d.id, nom: d.nom || "", adresse: d.adresse || "", association: d.association || "", groupe: d.groupe || "" })));
+      alert(`✓ ${ok} fiche(s) publiée(s).${ko.length ? `\n\n❌ ${ko.length} en échec :\n${ko.join("\n")}` : ""}`);
+    } catch (err) { alert("Publication impossible : " + (err?.message || err)); }
     finally { b.disabled = false; b.textContent = avant; }
+  });
+
+  // 🔗 Accès prestataire aux dossiers de site, AVEC DATES (comme les accès MNA) :
+  // sites cochés + du … au … → accès « sites » (collection invitations) ; lien
+  // court …/m/CODE → sites-guest.html?a=CODE, qui vérifie dates et accès coupé.
+  // Les accès créés se gèrent ensuite dans Paramètres › accès prestataires.
+  document.getElementById("sd-presta-tous")?.addEventListener("click", async () => {
+    const auj = new Date().toISOString().slice(0, 10);
+    const parAssoc = {};
+    state.dossiers.forEach(d => (parAssoc[d.association || "Autres sites"] ||= []).push(d));
+    const fond = document.createElement("div");
+    fond.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px";
+    const champ = "width:100%;box-sizing:border-box;padding:7px 9px;border-radius:8px;border:1px solid var(--border,#ccd);background:var(--bg,#fff);color:inherit;font:inherit";
+    fond.innerHTML = `<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:14px;max-width:720px;width:100%;max-height:94vh;overflow:auto;padding:16px">
+      <div style="display:flex;align-items:center;gap:8px"><b style="flex:1;font-size:17px">🔗 Accès prestataire aux dossiers de site</b><button type="button" class="nav-btn" data-x>✕</button></div>
+      <p class="hint">Le prestataire ouvre la liste des sites cochés et la fiche PDF de chacun, uniquement entre les dates choisies. L'accès se coupe ensuite dans Paramètres › accès prestataires.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0">
+        <label>Prestataire / société<input data-p="label" style="${champ}" placeholder="Ex. : Dupont Plomberie"></label>
+        <label>Téléphone (SMS)<input data-p="tel" type="tel" style="${champ}" placeholder="06…"></label>
+        <label>Du<input data-p="debut" type="date" value="${auj}" style="${champ}"></label>
+        <label>Au<input data-p="fin" type="date" value="${new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)}" style="${champ}"></label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin:4px 0 6px"><b style="flex:1">Sites</b><button type="button" class="nav-btn" data-tout="1">Tout cocher</button><button type="button" class="nav-btn" data-tout="0">Tout décocher</button></div>
+      ${Object.keys(parAssoc).sort((x, y) => x.localeCompare(y, "fr")).map(g => `<div style="margin:6px 0"><div class="hint" style="font-weight:700">${esc(g)}</div>${parAssoc[g].sort((x, y) => String(x.nom).localeCompare(String(y.nom), "fr")).map(d => `<label style="display:inline-flex;gap:6px;align-items:center;margin:3px 10px 3px 0"><input type="checkbox" data-site="${esc(d.id)}" checked> ${esc(d.nom)}</label>`).join("")}</div>`).join("")}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button type="button" class="nav-btn" data-x>Annuler</button><button type="button" class="add-btn" data-creer>🔗 Créer l'accès</button></div></div>`;
+    document.body.appendChild(fond);
+    fond.querySelectorAll("[data-x]").forEach(x => x.onclick = () => fond.remove());
+    fond.querySelectorAll("[data-tout]").forEach(x => x.onclick = () => fond.querySelectorAll("[data-site]").forEach(c => { c.checked = x.dataset.tout === "1"; }));
+    fond.querySelector("[data-creer]").onclick = async (e) => {
+      const v = (k) => fond.querySelector(`[data-p="${k}"]`).value.trim();
+      const ids = new Set([...fond.querySelectorAll("[data-site]:checked")].map(c => c.dataset.site));
+      const sites = state.dossiers.filter(d => ids.has(d.id)).map(d => ({ id: d.id, name: d.nom || "" }));
+      if (!v("label")) return alert("Indique le nom du prestataire.");
+      if (!sites.length) return alert("Coche au moins un site.");
+      if (!v("debut") || !v("fin") || v("fin") < v("debut")) return alert("Vérifie les dates.");
+      const b = e.currentTarget; b.disabled = true; b.textContent = "⏳ Création…";
+      try {
+        const { publierIndexSites } = await import("./pdf-public-share.js");
+        const r = await publierIndexSites(state.dossiers.map(d => ({ id: d.id, nom: d.nom || "", adresse: d.adresse || "", association: d.association || "", groupe: d.groupe || "" })));
+        const { createInvitation } = await import("./invitations-data.js");
+        const token = await createInvitation({ type: "sites", sites, debut: v("debut"), fin: v("fin"), weeks: [], label: v("label"), telephone: v("tel"), createdBy: mountedUser?.uid || "" });
+        const lien = `${location.origin}/m/${token}`, frJ = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
+        try { await navigator.clipboard.writeText(lien); } catch { /* */ }
+        fond.remove();
+        const sansPdf = sites.filter(st => !(r.sites || []).some(x => x.id === st.id && x.pdf)).length;
+        window.toast?.(`🔗 Accès créé, lien copié${sansPdf ? ` — ${sansPdf} site(s) sans fiche publiée (« Fiche à venir »)` : ""}`);
+        const { ouvrirMailPresta } = await import("./mail-presta.js");
+        ouvrirMailPresta({
+          objet: `Fiches des sites — Groupe Établières — du ${frJ(v("debut"))} au ${frJ(v("fin"))}`,
+          etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de nos sites",
+          intro: `voici votre accès${v("label") ? ` pour ${v("label")}` : ""} aux fiches techniques des sites ci-dessous (équipements, emplacements, procédures, photos, numéros d'urgence), valable du ${frJ(v("debut"))} au ${frJ(v("fin"))}.`,
+          pastilles: sites.map(st => st.name),
+          bouton: "Voir les sites", url: lien,
+          sms: `Groupe Établières – Fiches des sites, du ${frJ(v("debut"))} au ${frJ(v("fin"))}.\nVotre accès : ${lien}`,
+          etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "Choisissez le site (recherche par nom ou par ville).", "La fiche s'ouvre en PDF, sans compte ni mot de passe."],
+          signature: mountedUser?.nom || "Service Maintenance et Entretien",
+        });
+      } catch (err) { alert("Création impossible : " + (err?.message || err)); b.disabled = false; b.textContent = "🔗 Créer l'accès"; }
+    };
   });
   document.getElementById("sd-new")?.addEventListener("click", async () => {
     const id = await createDossier(nouveauDossier(state.sectionsOrder));

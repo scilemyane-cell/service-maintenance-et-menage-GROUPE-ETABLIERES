@@ -58,6 +58,8 @@
       }
       const invitation = await getInvitation(token);
       if (!invitation) { showError("Ce lien n'existe pas ou plus."); return; }
+      // Accès « dossiers de site » (liste des sites avec dates) : page dédiée.
+      if (invitation.type === "sites") { location.replace(`/sites-guest.html?a=${encodeURIComponent(token)}${params.get("apercu") === "1" ? "&apercu=1" : ""}`); return; }
       // Aperçu par un responsable connecté (…&apercu=1) : pas de contrôle de dates ni d'accès coupé.
       const apercu = params.get("apercu") === "1" && !user.isAnonymous;
       if (apercu && invitation.type !== "ponctuel") invitation.apercuResponsable = true; // fiches : lecture seule, rien n'est enregistré
