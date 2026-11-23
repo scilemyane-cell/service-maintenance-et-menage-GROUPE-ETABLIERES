@@ -180,6 +180,7 @@ export function mountSuiviDemandesTab(container, user) {
   ui.vue = "sites"; ui.retourActions = false; ui.retourTableau = null; ui.retourParJour = null; resetVueSites();
   const raccourci = window.__suiviRaccourci; window.__suiviRaccourci = null;
   if (raccourci === "actions") ui.vue = "actions";
+  if (raccourci === "prestataires") { ui.vue = "prestataires"; ui.vueChoisie = true; } // tuile 🤝 Prestataires
   if (raccourci === "valider") ui.allerValidation = true;
   // En-tête de l'accueil : « à traiter » / « urgentes » → tableau filtré.
   if (raccourci === "a-traiter" || raccourci === "urgentes") {

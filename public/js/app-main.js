@@ -557,6 +557,14 @@
         ],
       },
       {
+        id: "prestataires", label: "Prestataires", icon: "🤝", desc: "Entreprises, accès avec dates (MNA, dossiers de site), liens de demande",
+        subtabs: [
+          { id: "entreprises", label: "Entreprises", icon: "🏢", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaEntreprises(c, u)) },
+          { id: "acces", label: "Accès", icon: "🔗", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaAcces(c, u)) },
+          { id: "liens", label: "Liens de demande", icon: "📝", roles: GESTION, mount: (c, u) => import("./prestataires-hub.js").then(m => m.mountPrestaLiens(c, u)) },
+        ],
+      },
+      {
         id: "logements", label: "Logements Bât. A / B", icon: "🏠", desc: "Occupation des chambres, vidage, transfert, planning saisonnier (miroir de l'outil logements)",
         subtabs: [
           // Rôles de terrain : seulement si "Gérer l'accès" le donne (Lecture/Modification)

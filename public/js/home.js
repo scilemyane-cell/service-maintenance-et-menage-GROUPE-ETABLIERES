@@ -196,7 +196,7 @@ const ACCENTS_TUILES = ["#2f6fd6", "#d9466f", "#139c8f", "#e0a526", "#7c4fd1", "
 function accentPour(id) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACCENTS_TUILES[h % ACCENTS_TUILES.length]; }
 // ---- Interface « Plan technique » : modules regroupés par métier, en listes ----
 const GROUPES_PLAN = [
-  ["Interventions", "🛠️", ["equipe-terrain", "suivi-demandes", "astreinte", "planning-individuel", "mon-planning", "taches", "previsionnel", "ecran-atelier"]],
+  ["Interventions", "🛠️", ["equipe-terrain", "suivi-demandes", "prestataires", "astreinte", "planning-individuel", "mon-planning", "taches", "previsionnel", "ecran-atelier"]],
   ["Patrimoine & sites", "🏢", ["sites", "compteurs", "masterlock", "cles", "logements", "durete-eau"]],
   ["Ménage & espaces verts", "🧹", ["disp-", "stock-menage", "espaces-verts"]],
   ["Stocks", "📦", ["stock", "stock-deporte"]],
