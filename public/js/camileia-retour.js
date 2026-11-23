@@ -6,6 +6,7 @@ import { db } from "./firebase-init.js";
 import { doc, getDoc, updateDoc } from "./firestore-compte.js";
 import * as cam from "./camileia.js";
 import { statutPropose } from "./camileia-demandes.js";
+import { auth } from "./firebase-init.js";
 
 const sa = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 // Statut appli → libellé d'état Camileia (par défaut).
@@ -37,16 +38,22 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   const t = (await getDoc(ref))?.data();
   if (!t?.camileiaIri) return;
   const faits = [], erreurs = [];
+  let contactIri = null;
+  try { const { contactParEmail } = await import("./camileia-envoi.js"); contactIri = (await contactParEmail(auth.currentUser?.email))?.["@id"] || null; } catch { /* auteur facultatif */ }
   try {
     if (fields.statut && fields.statut !== "Annulé") {
       const iri = await etatPourStatut(fields.statut);
-      if (iri && iri !== t.camileiaEtatIri) { await cam.changerEtat(t.camileiaIri, iri); faits.push("état"); await updateDoc(ref, { camileiaEtatIri: iri }); }
+      // Demande réalisée : le commentaire technicien devient le compte rendu d'intervention de la DI.
+      const realise = /^r[ée]alis/i.test(fields.statut);
+      const cr = String(fields.commentaireTech || t.commentaireTech || "").trim();
+      const enPlus = realise ? { ...(cr ? { noteb: cr } : {}), dateintervention: t.camileiaDateIntervention || new Date().toISOString() } : {};
+      if (iri && iri !== t.camileiaEtatIri) { await cam.changerEtat(t.camileiaIri, iri, enPlus); faits.push(realise && cr ? "état + compte rendu" : "état"); await updateDoc(ref, { camileiaEtatIri: iri }); }
     }
   } catch (e) { erreurs.push(`état : ${e.message}`); }
   try {
     const texte = String(fields.commentaireTech || "").trim();
     if (texte && texte !== String(t.dernierMessageCamileia || "")) {
-      await cam.envoyerMessage(t.camileiaIri, `[Appli SMM] ${texte}`); faits.push("message");
+      await cam.envoyerMessage(t.camileiaIri, `[Appli SMM] ${texte}`, contactIri); faits.push("message");
       await updateDoc(ref, { dernierMessageCamileia: texte });
     }
   } catch (e) { erreurs.push(`message : ${e.message}`); }

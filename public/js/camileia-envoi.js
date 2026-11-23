@@ -17,7 +17,7 @@ export async function enregistrerCorrespSites(c) { await setDoc(REF_SITES, { ...
 let refs = null, refsLe = 0;
 export async function referentiels() {
   if (refs && Date.now() - refsLe < 6 * 3600 * 1000) return refs;
-  const L = (c) => cam.lireTout(c, { maxPages: 3 }).then(l => cam.avecIri(l, c));
+  const L = (c) => cam.lireTout(c, { maxPages: 3 }).then(l => cam.avecLibellesWeb(cam.avecIri(l, c), c));
   const [sites, categories, types, priorites, etats, contacts] = await Promise.all([
     L(`${cam.RACINE}/sites`), L(`${cam.RACINE}/d_i_categorie_type_pannes`), L(`${cam.RACINE}/d_i_type_pannes`),
     L(`${cam.RACINE}/d_i_priorites`), L(`${cam.RACINE}/d_i_etats`), L(`${cam.RACINE}/contacts`)]);
@@ -28,6 +28,22 @@ export async function referentiels() {
 }
 
 // Proposition automatique : site Camileia le plus proche du nom de site de l'appli.
+// Contact Camileia de la personne connectée (auteur des messages, créateur des DI).
+export async function contactParEmail(email) {
+  if (!email) return null;
+  const r = await referentiels();
+  return r.contacts.find(x => String(x.email || "").toLowerCase() === String(email).toLowerCase()) || null;
+}
+// Locaux Camileia (≈ 1 500, gardés 6 h) : « CH 301 » dans l'appli → local du même nom dans le bâtiment.
+let locaux = null, locauxLe = 0;
+async function localPour(batimentIri, texte) {
+  const t = sa(texte); if (!t || !batimentIri) return null;
+  if (!locaux || Date.now() - locauxLe > 6 * 3600 * 1000) { locaux = cam.avecIri(await cam.lireTout(`${cam.RACINE}/locals`, { maxPages: 3 }), `${cam.RACINE}/locals`); locauxLe = Date.now(); }
+  const dans = locaux.filter(l => l.batiment === batimentIri);
+  const exact = dans.filter(l => sa(l.numero) === t || sa(l.libelle) === t);
+  return exact.length === 1 ? exact[0]["@id"] : null;
+}
+
 export function proposerSite(nomApp, sitesCam) {
   const a = sa(nomApp); if (!a) return null;
   const motsA = new Set(a.split(" ").filter(m => m.length > 2));
@@ -70,8 +86,9 @@ export async function envoyerDemande(d, { email = "" } = {}) {
   const descr = String(d.descriptif || "").trim();
   const libelle = (d.local ? `${d.local} — ` : "") + (descr.length > 90 ? descr.slice(0, 87) + "…" : descr);
   const note = [descr, d.local && `Local : ${d.local}`, d.demandeur && `Demandeur : ${d.demandeur}`, d.numero && `Créée depuis l'appli SMM (${d.numero})`].filter(Boolean).join("\n");
+  let local = null; try { local = await localPour(m.batiment, d.local); } catch { /* local facultatif */ }
   return cam.creerDI({
-    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, typepanne: choisirType(d.type, r, c.typeDefaut),
+    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: choisirType(d.type, r, c.typeDefaut),
     priorite: prio?.["@id"] || null, etat: etat?.["@id"], createur: contact?.["@id"] || null, demandeur: d.demandeur || null,
   });
 }

@@ -155,7 +155,7 @@ function creationHTML() {
   </div>`;
 }
 async function chargerCreation() {
-  const L = (c) => cam.lireTout(c, { maxPages: 3 }).then(l => cam.avecIri(l, c));
+  const L = (c) => cam.lireTout(c, { maxPages: 3 }).then(l => cam.avecLibellesWeb(cam.avecIri(l, c), c));
   const [sites, categories, types, priorites, etats, contacts] = await Promise.all([
     L(`${cam.RACINE}/sites`), L(`${cam.RACINE}/d_i_categorie_type_pannes`), L(`${cam.RACINE}/d_i_type_pannes`),
     L(`${cam.RACINE}/d_i_priorites`), L(`${cam.RACINE}/d_i_etats`), L(`${cam.RACINE}/contacts`)]);

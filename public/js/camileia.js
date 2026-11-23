@@ -119,6 +119,19 @@ export async function lireTout(chemin, { maxPages = 20, onPage = () => {} } = {}
   return out;
 }
 
+// Libellés tels qu'affichés dans l'interface web de Camileia (l'API renvoie
+// « custom.Fuitesurclimatiseur ») — relevés le 23/11/2026 dans Paramètres ›
+// Types de demandes et sur une fiche DI. Un type ajouté depuis retombe sur le
+// libellé de l'API.
+const LIB_TYPES_PANNE = {"1": "Autre", "2": "Problème de chauffage/climatisation", "3": "J'ai trop chaud", "4": "J'ai trop froid", "5": "Le radiateur ne fonctionne pas", "6": "On a plus de chauffage", "7": "On a plus de climatisation", "8": "Il y a un bruit anormal", "9": "Il y a une odeur anormale", "10": "Le VMC ne fonctionne pas", "11": "L'ascenseur est bloqué", "12": "La porte du garage ne fonctionne pas", "13": "La porte du SAS ne fonctionne pas", "14": "Il n'y a plus d'électricité", "15": "La lumière ne fonctionne pas", "16": "Problème avec le disjoncteur du tableau de distribution", "17": "Ma prise ne fonctionne pas", "18": "Problème de propreté", "19": "Ma corbeille n'a pas été vidée", "20": "Les vitres ne sont pas propres", "21": "Le sol n'est pas propre", "22": "Le robinet fuit", "23": "Il n'y a pas d'eau chaude", "24": "Pas d'eau froide", "25": "Les WC sont bouchés", "26": "La fontaine d'eau ne fonctionne pas", "27": "Ma serrure ne fonctionne pas", "28": "Ma fenêtre ne s'ouvre pas", "29": "Ma poignée de porte est cassée", "30": "Il manque une dalle de faux plafond", "31": "Mon badge ne fonctionne plus", "32": "J'ai besoin d'un nouveau badge", "33": "Le BEAS est hors service", "34": "Infiltration d'eau", "35": "Fuite d'étanchéité", "900002": "Suivi contrôle réglementaire", "900003": "Demandes d'aménagement", "900004": "Demande d'équipements", "900005": "Demande de clé", "900006": "Paramétrage d'accès sur badge existant", "900007": "Autre", "900008": "Autre", "900009": "Autre", "900010": "Fuite sur radiateur", "900011": "Fuite sur climatiseur", "900012": "Clé cassée", "900013": "Clé perdue", "900014": "Changement de cylindre", "900015": "Masterlock", "900016": "Vitre cassée / fêlée", "900017": "Volet roulant", "900018": "Porte cassée", "900019": "Réparation mobilier", "900020": "Achat mobilier", "900021": "Demande ponctuelle (évènement)", "900022": "Abattant de toilettes cassé", "900023": "Siphon bouché", "900024": "Autre", "900025": "Portail", "900026": "Barrière", "900027": "Affichage HS", "900028": "Equipement interphone logement HS", "900029": "Platine HS", "900030": "Lecteur de badge HS", "900031": "Recomplètement consommables", "900032": "Recomplètement consommables", "900033": "Recomplètement consommables", "900034": "Recomplètement consommables", "900035": "Prestation exceptionnelle", "900036": "Remise en état peinture", "900037": "Salle de bain", "900038": "Cuisine", "900039": "Sol", "900040": "Plafond", "900041": "Sanitaires", "900042": "Peinture", "900043": "Cloison", "900044": "SSI en défaut", "900045": "Extincteur", "900046": "Désenfumage", "900047": "Arrêt d'urgence percuté", "900048": "Alarme", "900049": "Détecteur de fumée", "900050": "Eclairage de sécurité", "900051": "Zone à sécuriser", "900052": "Zone à sécuriser", "900053": "Eclairage", "900054": "Réfrigérateur", "900055": "Plaques de cuisson", "900056": "Pommeau de douche", "900057": "Barre de douche", "900058": "Bouche d'aération"};
+const LIB_CATEGORIES = {"1": "Autre", "2": "Chauffage", "3": "Climatisation", "4": "Ventilation", "5": "Badges", "6": "Contrôle d'accès", "7": "Propreté", "8": "Ascenseur", "9": "Mobilier", "10": "Éclairage", "11": "Électricité", "12": "Traitement des déchets", "13": "Portes automatiques", "14": "Plomberie", "15": "Menuiserie", "16": "Travaux de finition", "17": "Sécurité", "18": "Toit", "900001": "Suivi contrôle réglementaire", "900002": "Salle de réunion", "900003": "Gestion des clés", "900004": "Interphonie", "900005": "Travaux", "900006": "Équipements", "900007": "Informatique / Téléphonie / Multimédia", "900008": "Informatique", "900009": "Téléphonie", "900010": "Multimédia", "900011": "Compte utilisateur"};
+// Remplace le libellé brut par celui de l'interface pour les types / catégories de panne.
+export function avecLibellesWeb(liste, collection) {
+  const dico = /d_i_type_pannes/.test(collection) ? LIB_TYPES_PANNE : /d_i_categorie_type_pannes/.test(collection) ? LIB_CATEGORIES : null;
+  if (!dico) return liste;
+  return (liste || []).map(x => (x && dico[String(x.id)] ? { ...x, libelle: dico[String(x.id)] } : x));
+}
+
 // Libellés Camileia = clés de traduction (« word.Encours », « message.Attentedevis »).
 const LIBELLES = {
   encours: "En cours", attentedevis: "Attente devis", terminee: "Terminée", cloturee: "Clôturée",
@@ -152,7 +165,7 @@ export async function lireReferentiels(onProgress = () => {}) {
   const out = {};
   for (const [cle, chemin] of Object.entries(REFERENTIELS)) {
     onProgress(`Lecture ${cle}…`);
-    try { out[cle] = avecIri(await lireTout(chemin, { maxPages: 10 }), chemin); }
+    try { out[cle] = avecLibellesWeb(avecIri(await lireTout(chemin, { maxPages: 10 }), chemin), chemin); }
     catch (e) { out[cle] = []; out[cle].erreur = e.message; }
   }
   return out;
@@ -160,14 +173,14 @@ export async function lireReferentiels(onProgress = () => {}) {
 
 // ---- Envois vers Camileia (aucune suppression possible) ----
 // Message / compte rendu sur une DI.
-export function envoyerMessage(diIri, texte) {
-  return appeler("POST", `${RACINE}/d_i_messages`, { di: diIri, message: texte, date: new Date().toISOString() });
+export function envoyerMessage(diIri, texte, contactIri = null) {
+  return appeler("POST", `${RACINE}/d_i_messages`, { di: diIri, contact: contactIri, message: texte, date: new Date().toISOString() });
 }
 // Changement d'état : l'API n'a que PUT (remplacement complet) → on relit
 // la DI juste avant pour ne rien écraser de ce qui a changé dans Camileia.
-export async function changerEtat(diIri, etatIri) {
+export async function changerEtat(diIri, etatIri, enPlus = {}) {
   const actuelle = await appeler("GET", diIri);
-  const corps = { ...actuelle, etat: etatIri };
+  const corps = { ...actuelle, ...(etatIri ? { etat: etatIri } : {}), ...enPlus };
   ["@context", "@type", "@id"].forEach(k => delete corps[k]);
   Object.keys(corps).forEach(k => { const v = corps[k];
     if (v && typeof v === "object" && !Array.isArray(v) && v["@id"]) corps[k] = v["@id"];
@@ -179,9 +192,9 @@ export async function changerEtat(diIri, etatIri) {
 // Champs obligatoires côté Camileia : dateouverture, numero, libelle, etat,
 // typepanne, site, batiment, P3, chargerecuperable, createurs, iot.
 // Le N° est d'abord laissé à Camileia ; s'il est exigé, on en génère un.
-export async function creerDI({ libelle, note, site, siteCode, batiment, typepanne, priorite, etat, createur, demandeur }) {
+export async function creerDI({ libelle, note, site, siteCode, batiment, local = null, typepanne, priorite, etat, createur, demandeur }) {
   const base = {
-    dateouverture: new Date().toISOString(), libelle, note: note || null, etat, typepanne, site, batiment,
+    dateouverture: new Date().toISOString(), libelle, note: note || null, etat, typepanne, site, batiment, ...(local ? { local } : {}),
     priorite: priorite || null, P3: false, chargerecuperable: false, iot: false,
     createurs: createur ? [createur] : [], demandeur: demandeur || null,
   };
