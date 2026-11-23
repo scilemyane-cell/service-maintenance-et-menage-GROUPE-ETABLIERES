@@ -669,6 +669,12 @@
     if (new URLSearchParams(window.location.search).get("ecran") === "atelier" && currentCategory === null) {
       currentCategory = "ecran-atelier"; currentSubtab = "ecran"; window.__modeTele = true;
     }
+    // Envoi SMS + image depuis le téléphone (QR affiché sur PC) : .../app.html?envoi=TOKEN
+    const envoiParam = new URLSearchParams(window.location.search).get("envoi");
+    if (envoiParam) {
+      history.replaceState(null, "", window.location.pathname);
+      setTimeout(() => import("./parametres.js").then(m => m.ouvrirEnvoiTelephone(envoiParam, user)).catch(e => alert("Envoi impossible : " + (e?.message || e))), 600);
+    }
     // Lien direct depuis un QR produit (scanné avec l'appareil photo du
     // téléphone, hors appli) : .../app.html?stock=ID_PRODUIT
     const stockParam = new URLSearchParams(window.location.search).get("stock");

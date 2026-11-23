@@ -110,9 +110,14 @@ export function ouvrirMailPresta(o) {
       <button type="button" class="add-btn" data-mpx-copier>📋 Copier le mail</button>
       <button type="button" class="nav-btn" data-mpx-eml>⬇️ Brouillon Outlook (PC)</button>
       <button type="button" class="add-btn" data-mpx-image style="background:#2e7d4f">🖼️ Envoyer en image (SMS)</button>
+      ${o.envoi && !matchMedia("(pointer: coarse)").matches ? `<div style="flex-basis:100%;display:flex;gap:14px;align-items:center;background:#eef6f1;border:1px solid #b9dcc6;border-radius:12px;padding:10px 14px"><div data-mpx-qr style="width:110px;height:110px;flex:none;background:#fff;border-radius:8px"></div><div><b>📱 Envoyer le SMS avec l'image depuis ton téléphone</b><br><small class="hint">Scanne ce code avec ton téléphone : l'appli s'ouvre, appuie sur « Envoyer SMS + image » puis choisis Messages. (Depuis le PC, un SMS ne peut pas partir avec une image.)</small></div></div>` : ""}
       <small class="hint" data-mpx-aide style="flex-basis:100%">« Copier le mail » : ta messagerie s'ouvre, colle (Ctrl+V) dans le corps du mail. « Brouillon Outlook » : ouvre le fichier téléchargé, le mail est prêt, clique Envoyer. « Image (SMS) » : sur téléphone, choisis Messages (ou WhatsApp) — l'image part avec le lien ; sur PC, l'image est téléchargée et le texte copié.</small>
     </div></div>`;
   document.body.appendChild(fond);
+  const qrBox = fond.querySelector("[data-mpx-qr]");
+  if (qrBox) (async () => { try { await window.chargerLib?.("QRCodeStyling");
+    new window.QRCodeStyling({ width: 110, height: 110, type: "canvas", data: `${location.origin}/app.html?envoi=${encodeURIComponent(o.envoi)}`, margin: 4,
+      dotsOptions: { color: "#1f3a5f", type: "rounded" }, cornersSquareOptions: { color: "#1f3a5f", type: "extra-rounded" } }).append(qrBox); } catch { qrBox.remove(); } })();
   // Ligne « cases » (ex. 🔑 codes) recalculée selon ce qui est coché.
   const avecCases = (x) => {
     if (!o.cases?.items?.length) return x;

@@ -614,7 +614,7 @@ async function optionsCarte(inv) {
       objet: `Fiches des sites — Groupe Établières${inv.debut && inv.fin ? ` — du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}`,
       etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de nos sites",
       intro: `voici votre accès${inv.label ? ` pour ${inv.label}` : ""} aux fiches techniques des sites ci-dessous${inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
-      pastilles: sitesInv(inv).map(s => s.name), bouton: "Voir les sites", url: guestLink(inv.id), sms: texteSms(inv),
+      pastilles: sitesInv(inv).map(s => s.name), bouton: "Voir les sites", url: guestLink(inv.id), sms: texteSms(inv), envoi: inv.id,
       etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "À la première ouverture, indiquez vos nom, prénom et société.", "Choisissez le site : sa fiche s'ouvre, sans mot de passe."],
       signature: currentUser?.nom || "Service Maintenance et Entretien",
     };
@@ -626,7 +626,7 @@ async function optionsCarte(inv) {
     intro: `voici votre accès personnel${inv.label ? ` pour ${inv.label}` : ""}${inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
     pastilles: sitesInv(inv).map(s => String(s.name || "").replace(/^Maison MNA\s+/i, "")),
     cases: { icone: "🔑", libelle: "Codes boîtes à clés", items, vide: "Aucun code de boîte à clés trouvé pour ces sites (onglet Codes Masterlock des dossiers de site)." },
-    bouton: "Ouvrir mes fiches", url: guestLink(inv.id), sms: texteSms(inv),
+    bouton: "Ouvrir mes fiches", url: guestLink(inv.id), sms: texteSms(inv), envoi: inv.id,
     etapes: ["Ouvrez le lien sur votre téléphone.", "À la première ouverture, indiquez vos nom, prénom et société.", "Remplissez la fiche à chaque passage."],
     signature: currentUser?.nom || "Service Maintenance et Entretien",
   };
@@ -635,18 +635,54 @@ async function optionsCarte(inv) {
 async function mailInvitation(inv) { ouvrirMailPresta(await optionsCarte(inv)); }
 // 📱 SMS sur téléphone : image + texte via le partage (Messages, WhatsApp…). Le numéro est copié pour le coller.
 const surTelephone = () => matchMedia("(pointer: coarse)").matches && !!navigator.canShare;
-async function smsAvecImage(inv, btn) {
-  const avant = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Image…";
-  try {
-    if (inv.telephone) { try { await navigator.clipboard.writeText(String(inv.telephone).replace(/[^0-9+]/g, "")); } catch { /* */ } }
+// L'image est préparée d'abord (codes, QR, dessin), puis partagée au tap suivant :
+// le partage Android doit suivre immédiatement un appui, sinon il est refusé.
+const cartesPretes = {};
+function preparerCarte(inv) {
+  return cartesPretes[inv.id] ||= (async () => {
     const o = await optionsCarte(inv);
     const t = (o.cases?.items || []).map(i => i.texte).join("\n");
-    const carte = t ? { ...o, lignes: [[o.cases.icone, o.cases.libelle, t]] } : o;
-    const { partagerCarte } = await import("./image-presta.js");
-    const r = await partagerCarte(carte, texteSms(inv));
-    btn.textContent = r === "partage" ? "✓ Envoyé" : r === "telecharge" ? "✓ Image téléchargée" : avant;
-  } catch (e) { alert("Image impossible : " + (e?.message || e)); btn.textContent = avant; }
-  btn.disabled = false;
+    const { carteCanvas } = await import("./image-presta.js");
+    const c = await carteCanvas(t ? { ...o, lignes: [[o.cases.icone, o.cases.libelle, t]] } : o);
+    const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
+    return new File([blob], "acces-groupe-etablieres.png", { type: "image/png" });
+  })().catch(e => { delete cartesPretes[inv.id]; throw e; });
+}
+async function smsAvecImage(inv, btn) {
+  const tel = String(inv.telephone || "").replace(/[^0-9+]/g, "");
+  if (!btn.dataset.pret) {
+    const avant = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Préparation de l'image…";
+    try { await preparerCarte(inv); btn.dataset.pret = "1"; btn.textContent = "✅ Prêt — appuie pour envoyer"; }
+    catch (e) { alert("Image impossible : " + (e?.message || e)); btn.textContent = avant; }
+    btn.disabled = false; return;
+  }
+  const fichier = await preparerCarte(inv);
+  if (tel) { try { navigator.clipboard.writeText(tel); } catch { /* */ } }
+  try { await navigator.share({ files: [fichier], text: texteSms(inv) }); btn.textContent = "✓ Envoyé"; }
+  catch (e) { if (e?.name !== "AbortError") alert("Partage impossible : " + (e?.message || e)); }
+}
+
+// Ouvert sur le téléphone après scan du QR « Envoyer depuis mon téléphone ».
+export async function ouvrirEnvoiTelephone(token, user) {
+  currentUser = user;
+  const { getInvitation } = await import("./invitations-data.js");
+  const inv = await getInvitation(token);
+  if (!inv) { alert("Accès introuvable."); return; }
+  inv.id = inv.id || token;
+  const fond = document.createElement("div");
+  fond.style.cssText = "position:fixed;inset:0;background:rgba(15,42,74,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
+  fond.innerHTML = `<div style="background:#fff;color:#1d2433;border-radius:18px;padding:22px;max-width:420px;width:100%;text-align:center;font-family:inherit">
+    <div style="font-size:12px;letter-spacing:2px;color:#c9a227;font-weight:700">ENVOI AU PRESTATAIRE</div>
+    <h2 style="margin:6px 0 4px;color:#1f3a5f">${esc(inv.label || "Prestataire")}</h2>
+    ${inv.telephone ? `<div style="color:#6b7280;margin-bottom:14px">📱 ${esc(inv.telephone)} <small>(numéro copié, colle-le comme destinataire)</small></div>` : ""}
+    <button data-go style="width:100%;background:#2e7d4f;color:#fff;border:0;border-radius:12px;padding:16px;font-size:18px;font-weight:700">📱 Envoyer SMS + image</button>
+    <p style="font-size:13px;color:#6b7280;margin:12px 0">Choisis <b>Messages</b> dans le menu de partage : l'image et le texte partent ensemble.</p>
+    <button data-x style="background:none;border:1px solid #cfd6e0;border-radius:10px;padding:8px 16px">Fermer</button></div>`;
+  document.body.appendChild(fond);
+  fond.querySelector("[data-x]").addEventListener("click", () => fond.remove());
+  const go = fond.querySelector("[data-go]");
+  go.addEventListener("click", () => smsAvecImage(inv, go));
+  smsAvecImage(inv, go); // prépare l'image tout de suite ; l'appui suivant l'envoie
 }
 
 function renderInvites(container, user) {
