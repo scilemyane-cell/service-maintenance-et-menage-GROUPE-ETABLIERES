@@ -520,6 +520,7 @@ function etatInvitation(inv) {
 }
 const sitesInv = (inv) => (Array.isArray(inv.sites) && inv.sites.length ? inv.sites : [{ id: inv.siteId, name: inv.siteName }]);
 function texteSms(inv) {
+  if (inv.type === "sites") return `Groupe Établières – Fiches des sites${inv.debut ? `, du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.\nVotre accès : ${guestLink(inv.id)}`;
   return `Groupe Établières – Fiches de traçabilité ménage (${sitesInv(inv).map(s => s.name).join(", ")})${inv.debut ? `, du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.\nVotre accès personnel : ${guestLink(inv.id)}`;
 }
 // Codes boîte à clés des sites de l'accès (onglet Codes Masterlock du dossier de site).
@@ -599,6 +600,16 @@ async function editerInfosInvitation(inv) {
 }
 // Mail mis en forme (logo, récapitulatif, bouton) pour le prestataire.
 async function mailInvitation(inv) {
+  if (inv.type === "sites") {
+    return ouvrirMailPresta({
+      objet: `Fiches des sites — Groupe Établières${inv.debut ? ` — du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}`,
+      etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de nos sites",
+      intro: `voici votre accès${inv.label ? ` pour ${inv.label}` : ""} aux fiches techniques des sites ci-dessous${inv.debut ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
+      pastilles: sitesInv(inv).map(s => s.name), bouton: "Voir les sites", url: guestLink(inv.id), sms: texteSms(inv),
+      etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "Choisissez le site (recherche par nom ou par ville).", "La fiche s'ouvre, sans compte ni mot de passe."],
+      signature: currentUser?.nom || "Service Maintenance et Entretien",
+    });
+  }
   const items = await codesDesSites(sitesInv(inv)).catch(() => []);
   ouvrirMailPresta({
     objet: `Accès aux fiches de traçabilité ménage — Groupe Établières`,
@@ -627,7 +638,7 @@ function renderInvites(container, user) {
       <td><span class="tag" style="background:${bg};color:${fg}">${lib}</span></td>
       <td style="white-space:nowrap">
         ${inv.telephone ? `<a class="nav-btn" href="sms:${esc(String(inv.telephone).replace(/[^0-9+]/g, ""))}?&body=${encodeURIComponent(texteSms(inv))}" style="padding:4px 10px;font-size:11px;text-decoration:none">📱 SMS</a>` : ""}
-        <button class="nav-btn" data-infos-inv="${inv.id}" style="padding:4px 10px;font-size:11px;${inv.infos ? "" : "border-color:#c9a227;"}">ℹ️ Infos${inv.infos ? " ✓" : ""}</button>
+        ${inv.type === "sites" ? `<span class="hint" style="font-size:11px">🏢 Dossiers de site</span>` : `<button class="nav-btn" data-infos-inv="${inv.id}" style="padding:4px 10px;font-size:11px;${inv.infos ? "" : "border-color:#c9a227;"}">ℹ️ Infos${inv.infos ? " ✓" : ""}</button>`}
         <a class="nav-btn" href="${guestLink(inv.id)}?apercu=1" target="_blank" rel="noopener" style="padding:4px 10px;font-size:11px;text-decoration:none">👁️ Aperçu</a>
         <button class="nav-btn" data-mail-inv="${inv.id}" style="padding:4px 10px;font-size:11px">✉️ Mail / 🖼️ Image</button>
         <button class="nav-btn" data-copy-sms="${inv.id}" style="padding:4px 10px;font-size:11px">📋 Copier le message</button>
