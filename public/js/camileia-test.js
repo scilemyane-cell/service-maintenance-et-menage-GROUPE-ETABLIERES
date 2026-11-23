@@ -92,7 +92,7 @@ function correspondancesHTML() {
     <h3 style="margin:0 0 6px;font-size:15px">3. Correspondance des états</h3>
     <p class="hint" style="margin:0 0 8px">Chaque état Camileia devient un statut de l'appli. Proposition automatique à vérifier ; « Enregistrer » garde ton choix (réglage partagé, n'affecte aucune demande).</p>
     <table class="table" style="width:100%;font-size:13px"><thead><tr><th>État Camileia</th><th>Statut dans l'appli</th><th>DI</th></tr></thead><tbody>
-    ${etats.map(e => { const iri = cam.iriDe(e); const choix = st.correspondances[iri] || statutPropose(cam.libelleLisible(e.libelle)) || ""; const n = st.dis.filter(d => cam.iriDe(d.etat) === iri).length;
+    ${etats.map(e => { const iri = cam.iriDe(e); const choix = st.correspondances[iri] || statutPropose(cam.libelleLisible(e.libelle)) || ""; const n = st.dis.filter(d => d.camileiaEtatIri === iri).length;
       return `<tr><td>${esc(cam.libelleLisible(e.libelle))}</td><td><select data-etat="${esc(iri)}">${["", ...STATUTS_SMM].map(s => `<option value="${esc(s)}" ${s === choix ? "selected" : ""}>${s ? esc(s) : "— à choisir —"}</option>`).join("")}</select>${st.correspondances[iri] ? "" : ` <span class="hint">(auto)</span>`}</td><td>${n}</td></tr>`; }).join("")}
     </tbody></table>
     <button class="nav-btn" id="cam-corresp-ok" style="margin-top:8px">💾 Enregistrer la correspondance</button>
