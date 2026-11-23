@@ -82,8 +82,9 @@ export async function appeler(methode, chemin, corps = null) {
   }
   const jeton = lireJeton();
   if (!jeton) throw new ErreurCamileia("Non connecté à Camileia.", { statut: 401 });
-  const enTetes = { Authorization: `Bearer ${jeton}`, Accept: "application/ld+json" };
-  if (corps != null) enTetes["Content-Type"] = "application/ld+json";
+  // JSON simple : Camileia refuse « application/ld+json » (406 Not Acceptable).
+  const enTetes = { Authorization: `Bearer ${jeton}`, Accept: "application/json" };
+  if (corps != null) enTetes["Content-Type"] = "application/json";
   let r;
   try { r = await fetch(cfg.base + chemin, { method: methode, headers: enTetes, body: corps != null ? JSON.stringify(corps) : undefined }); }
   catch { throw new ErreurCamileia(MSG_CORS); }
@@ -100,22 +101,40 @@ export function membres(d) {
 }
 export async function lireTout(chemin, { maxPages = 20, onPage = () => {} } = {}) {
   const out = [];
-  let suivant = chemin, n = 0;
-  while (suivant && n < maxPages) {
-    const d = await appeler("GET", suivant);
-    out.push(...membres(d));
-    n++; onPage(n, out.length);
-    const vue = d && (d["hydra:view"] || d.view);
-    const next = vue && (vue["hydra:next"] || vue.next);
-    suivant = next && next !== suivant ? next : null;
+  // Camileia renvoie des tableaux JSON simples (sans lien « page suivante ») :
+  // on demande page=1, 2, 3… jusqu'à une page vide ou incomplète.
+  const avecPage = (n) => chemin + (chemin.includes("?") ? "&" : "?") + `page=${n}`;
+  let taille = 0;
+  for (let n = 1; n <= maxPages; n++) {
+    const d = await appeler("GET", /[?&]page=/.test(chemin) ? chemin : avecPage(n));
+    const m = membres(d);
+    out.push(...m); onPage(n, out.length);
+    if (!Array.isArray(d)) {
+      const vue = d && (d["hydra:view"] || d.view);
+      if (!(vue && (vue["hydra:next"] || vue.next))) break;
+    } else {
+      if (n === 1) taille = m.length;
+      if (!m.length || m.length < taille || /[?&]page=/.test(chemin)) break;
+    }
   }
   return out;
+}
+
+// Libellés Camileia = clés de traduction (« word.Encours », « message.Attentedevis »).
+const LIBELLES = {
+  encours: "En cours", attentedevis: "Attente devis", terminee: "Terminée", cloturee: "Clôturée",
+  aqualifier: "À qualifier", nonqualifiee: "Non qualifiée", prisencompte: "Pris en compte",
+  nonurgent: "Non urgent", moinsurgent: "Moins urgent", semiurgent: "Semi-urgent", tresurgent: "Très urgent", vital: "Vital",
+};
+export function libelleLisible(l) {
+  const brut = String(l ?? "").replace(/^(word|message|label|enum)\./i, "");
+  return LIBELLES[brut.toLowerCase()] || brut;
 }
 
 // Une valeur d'IRI peut arriver en texte (« /api-platform/d_i_etats/3 »)
 // ou en objet intégré ({ "@id": …, libelle: … }).
 export const iriDe = (v) => (v && typeof v === "object" ? v["@id"] || "" : v || "");
-export const libelleDe = (v) => (v && typeof v === "object" ? v.libelle || v.label || v.nom || v.name || "" : "");
+export const libelleDe = (v) => (v && typeof v === "object" ? libelleLisible(v.libelle || v.label || v.nom || v.name || "") : "");
 export const idDepuisIri = (iri) => { const m = String(iri || "").match(/\/(\d+)\/?$/); return m ? +m[1] : null; };
 
 // Référentiels du module DI (pour traduire les IRI en libellés).
@@ -126,11 +145,15 @@ export const REFERENTIELS = {
   categories: `${RACINE}/d_i_categorie_type_pannes`,
   types: `${RACINE}/d_i_types`,
 };
+// JSON simple : pas de « @id » → reconstruit depuis la collection + id.
+export function avecIri(liste, collection) {
+  return (liste || []).map(x => (x && typeof x === "object" && !x["@id"] && x.id != null ? { ...x, "@id": `${collection.split("?")[0]}/${x.id}` } : x));
+}
 export async function lireReferentiels(onProgress = () => {}) {
   const out = {};
   for (const [cle, chemin] of Object.entries(REFERENTIELS)) {
     onProgress(`Lecture ${cle}…`);
-    try { out[cle] = await lireTout(chemin, { maxPages: 10 }); }
+    try { out[cle] = avecIri(await lireTout(chemin, { maxPages: 10 }), chemin); }
     catch (e) { out[cle] = []; out[cle].erreur = e.message; }
   }
   return out;

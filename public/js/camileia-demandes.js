@@ -23,16 +23,19 @@ export function statutPropose(libelleEtat) {
   if (/sollicit|affect|transmis/.test(t)) return "Intervenant sollicité";
   if (/attente/.test(t)) return "En attente de date d'intervention";
   if (/pris|prise en charge|en cours|valid/.test(t)) return "Pris en compte";
-  if (/nouve|ouvert|cree|saisi|a traiter/.test(t)) return "Non renseigné";
+  if (/nouve|ouvert|cree|saisi|a traiter|qualifi/.test(t)) return "Non renseigné";
   return "";
 }
 // Priorité Camileia → urgence de l'appli (même logique que l'Excel).
 export function urgenceDepuisPriorite(libelle) {
-  const t = sa(libelle);
+  const t = sa(libelle).replace(/-/g, " ");
   if (!t) return "Non renseignée";
-  if (/critique|immediat|tres urgent/.test(t)) return "Critique";
+  // Échelle Camileia : Vital > Très urgent > Semi-urgent > Moins urgent > Non urgent.
+  if (/vital|critique|immediat/.test(t)) return "Critique";
+  if (/(pas|non) ?urgen/.test(t)) return "À planifier";
+  if (/moins ?urgen|basse|faible/.test(t)) return "Normal";
   if (/urgen|haute|elevee/.test(t)) return "Urgent";
-  if (/planif|basse|faible/.test(t)) return "À planifier";
+  if (/planif/.test(t)) return "À planifier";
   if (/normal|moyenne/.test(t)) return "Normal";
   return "Non renseignée";
 }

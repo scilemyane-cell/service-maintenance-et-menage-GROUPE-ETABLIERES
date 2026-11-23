@@ -92,8 +92,8 @@ function correspondancesHTML() {
     <h3 style="margin:0 0 6px;font-size:15px">3. Correspondance des états</h3>
     <p class="hint" style="margin:0 0 8px">Chaque état Camileia devient un statut de l'appli. Proposition automatique à vérifier ; « Enregistrer » garde ton choix (réglage partagé, n'affecte aucune demande).</p>
     <table class="table" style="width:100%;font-size:13px"><thead><tr><th>État Camileia</th><th>Statut dans l'appli</th><th>DI</th></tr></thead><tbody>
-    ${etats.map(e => { const iri = cam.iriDe(e); const choix = st.correspondances[iri] || statutPropose(e.libelle) || ""; const n = st.dis.filter(d => cam.iriDe(d.etat) === iri).length;
-      return `<tr><td>${esc(e.libelle)}</td><td><select data-etat="${esc(iri)}">${["", ...STATUTS_SMM].map(s => `<option value="${esc(s)}" ${s === choix ? "selected" : ""}>${s ? esc(s) : "— à choisir —"}</option>`).join("")}</select>${st.correspondances[iri] ? "" : ` <span class="hint">(auto)</span>`}</td><td>${n}</td></tr>`; }).join("")}
+    ${etats.map(e => { const iri = cam.iriDe(e); const choix = st.correspondances[iri] || statutPropose(cam.libelleLisible(e.libelle)) || ""; const n = st.dis.filter(d => cam.iriDe(d.etat) === iri).length;
+      return `<tr><td>${esc(cam.libelleLisible(e.libelle))}</td><td><select data-etat="${esc(iri)}">${["", ...STATUTS_SMM].map(s => `<option value="${esc(s)}" ${s === choix ? "selected" : ""}>${s ? esc(s) : "— à choisir —"}</option>`).join("")}</select>${st.correspondances[iri] ? "" : ` <span class="hint">(auto)</span>`}</td><td>${n}</td></tr>`; }).join("")}
     </tbody></table>
     <button class="nav-btn" id="cam-corresp-ok" style="margin-top:8px">💾 Enregistrer la correspondance</button>
   </div>`;
@@ -142,7 +142,7 @@ function detailHTML() {
       <button class="nav-btn" id="cam-envoyer-msg">💬 Envoyer le message</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <select id="cam-nouvel-etat">${etats.map(e => `<option value="${esc(cam.iriDe(e))}" ${cam.iriDe(e) === d.camileiaEtatIri ? "selected" : ""}>${esc(e.libelle)}</option>`).join("")}</select>
+      <select id="cam-nouvel-etat">${etats.map(e => `<option value="${esc(cam.iriDe(e))}" ${cam.iriDe(e) === d.camileiaEtatIri ? "selected" : ""}>${esc(cam.libelleLisible(e.libelle))}</option>`).join("")}</select>
       <button class="nav-btn" id="cam-changer-etat">🔄 Changer l'état</button>
     </div>
     <button class="nav-btn" id="cam-brut">🔍 Voir la DI brute (diagnostic)</button>
@@ -169,8 +169,8 @@ async function resoudreLieux(brutes) {
 async function lireDI() {
   st.refs = await cam.lireReferentiels((m) => { st.occupe = m; rendre(); });
   st.libelles = new Map();
-  Object.values(st.refs).forEach(liste => liste.forEach(x => { const i = cam.iriDe(x); if (i) st.libelles.set(i, x.libelle || x.label || ""); }));
-  const brutes = await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: st.toutes ? 200 : 3, onPage: (p, n) => { st.occupe = `Lecture des DI : page ${p} (${n})…`; rendre(); } });
+  Object.values(st.refs).forEach(liste => liste.forEach(x => { const i = cam.iriDe(x); if (i) st.libelles.set(i, cam.libelleLisible(x.libelle || x.label || "")); }));
+  const brutes = cam.avecIri(await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: st.toutes ? 200 : 3, onPage: (p, n) => { st.occupe = `Lecture des DI : page ${p} (${n})…`; rendre(); } }), `${cam.RACINE}/d_is`);
   st.brutes = brutes;
   await resoudreLieux(brutes);
   st.occupe = "Comparaison avec les demandes de l'appli…"; rendre();
@@ -218,7 +218,7 @@ function brancher() {
   });
   $("cam-changer-etat")?.addEventListener("click", () => {
     const d = st.ouverte, iri = $("cam-nouvel-etat").value;
-    const lib = (st.refs?.etats || []).find(e => cam.iriDe(e) === iri)?.libelle || iri;
+    const libBrut = (st.refs?.etats || []).find(e => cam.iriDe(e) === iri)?.libelle; const lib = cam.libelleLisible(libBrut || iri);
     if (iri === d.camileiaEtatIri) { st.info = "C'est déjà l'état actuel."; rendre(); return; }
     if (!confirm(`Passer la DI ${d.numero} de « ${d.camileiaEtat} » à « ${lib} » dans Camileia ?`)) return;
     occuper("Changement d'état…", async () => {
@@ -231,7 +231,7 @@ function brancher() {
       Object.keys(corps).forEach(k => { const v = corps[k]; if (v && typeof v === "object" && !Array.isArray(v) && v["@id"]) corps[k] = v["@id"]; if (Array.isArray(v)) corps[k] = v.map(x => (x && typeof x === "object" && x["@id"] ? x["@id"] : x)); });
       const r = await cam.appeler("PUT", d.camileiaIri, corps);
       const idx = st.brutes.findIndex(x => String(x.id) === String(d.camileiaId));
-      if (idx >= 0 && r && typeof r === "object") st.brutes[idx] = r;
+      if (idx >= 0 && r && typeof r === "object") st.brutes[idx] = cam.avecIri([r], `${cam.RACINE}/d_is`)[0];
       traduire(); st.ouverte = st.dis.find(x => String(x.camileiaId) === String(d.camileiaId)) || null;
       st.info = `État de la DI ${d.numero} changé en « ${lib} ».`;
     });

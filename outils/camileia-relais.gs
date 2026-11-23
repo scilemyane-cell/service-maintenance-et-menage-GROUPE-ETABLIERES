@@ -41,8 +41,8 @@ function doPost(e) {
 
 function appelCamileia(methode, chemin, corps, tok) {
   var base = PropertiesService.getScriptProperties().getProperty("CAMILEIA_BASE");
-  var opts = { method: methode.toLowerCase(), muteHttpExceptions: true, headers: { Authorization: "Bearer " + tok, Accept: "application/ld+json" } };
-  if (corps != null) { opts.contentType = "application/ld+json"; opts.payload = JSON.stringify(corps); }
+  var opts = { method: methode.toLowerCase(), muteHttpExceptions: true, headers: { Authorization: "Bearer " + tok, Accept: "application/json" } };
+  if (corps != null) { opts.contentType = "application/json"; opts.payload = JSON.stringify(corps); }
   var res = UrlFetchApp.fetch(base + chemin, opts);
   var texte = res.getContentText(), json;
   try { json = texte ? JSON.parse(texte) : null; } catch (x) { json = texte; }
