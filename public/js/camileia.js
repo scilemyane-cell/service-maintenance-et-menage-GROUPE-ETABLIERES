@@ -157,3 +157,20 @@ export async function lireReferentiels(onProgress = () => {}) {
   }
   return out;
 }
+
+// ---- Envois vers Camileia (aucune suppression possible) ----
+// Message / compte rendu sur une DI.
+export function envoyerMessage(diIri, texte) {
+  return appeler("POST", `${RACINE}/d_i_messages`, { di: diIri, message: texte, date: new Date().toISOString() });
+}
+// Changement d'état : l'API n'a que PUT (remplacement complet) → on relit
+// la DI juste avant pour ne rien écraser de ce qui a changé dans Camileia.
+export async function changerEtat(diIri, etatIri) {
+  const actuelle = await appeler("GET", diIri);
+  const corps = { ...actuelle, etat: etatIri };
+  ["@context", "@type", "@id"].forEach(k => delete corps[k]);
+  Object.keys(corps).forEach(k => { const v = corps[k];
+    if (v && typeof v === "object" && !Array.isArray(v) && v["@id"]) corps[k] = v["@id"];
+    if (Array.isArray(v)) corps[k] = v.map(x => (x && typeof x === "object" && x["@id"] ? x["@id"] : x)); });
+  return appeler("PUT", diIri, corps);
+}

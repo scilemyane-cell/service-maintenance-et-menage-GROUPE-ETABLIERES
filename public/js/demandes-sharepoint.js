@@ -36,6 +36,8 @@ const REF_SYNCHRO = doc(db, "config", "demandes-synchro");
 const REF_EMPREINTES = doc(db, "config", "demandes-empreintes");
 function hashCourt(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 
+// Tickets Camileia (version de test) : jamais concernés par la synchro Excel.
+const horsCamileia = (l) => (Array.isArray(l) ? l.filter(d => d?.source !== "camileia") : l);
 const sa = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const txt = (v) => (v == null ? "" : String(v).replace(/\s+/g, " ").trim());
 const MOIS = { janv: 1, fevr: 2, mars: 3, avr: 4, mai: 5, juin: 6, juil: 7, aout: 8, sept: 9, oct: 10, nov: 11, dec: 12 };
@@ -253,6 +255,7 @@ export function rapprocherLignes(fichier, demandesApp) {
 // Contrôle de cohérence (lecture seule) : compare la copie du fichier Excel
 // et les demandes de l'appli, sans rien modifier.
 export async function comparerAvecFichier(demandesApp, { onProgress = () => {} } = {}) {
+  demandesApp = horsCamileia(demandesApp);
   const token = await getGraphToken(); if (!token) return null;
   onProgress("Lecture de la copie SharePoint…");
   const buf = await telechargerFichierDrive(`${DOSSIER}/${COPIE}`, token);
@@ -321,6 +324,7 @@ export function signesDecalage(nouvelles, majs, demandesApp) {
 
 const sansIdAppli = (o) => { const { idAppli, ...reste } = o; return reste; };
 export async function recupererDepuisCopie(demandesApp, { interactif = true, onProgress = () => {}, simulation = false, forcer = false, reference = null } = {}) {
+  demandesApp = horsCamileia(demandesApp);
   const token = interactif ? await getGraphToken() : await getGraphTokenSilentOnly();
   if (!token) return null;
   onProgress("Lecture de la copie SharePoint…");
@@ -423,6 +427,7 @@ function texteAction(d) {
 // on garde la plus complète et on RELIE les autres comme doublons (masquées,
 // non comptées, réversible avec « Délier »).
 export async function regrouperDoublonsImport(demandesApp) {
+  demandesApp = horsCamileia(demandesApp);
   const empreinte = (x) => sa(x.descriptif).replace(/[^a-z0-9]/g, "").slice(0, 25);
   const groupes = new Map();
   (demandesApp || []).filter(d => !d.lieeA && !d.creeDansApp).forEach(d => { const c = `${d.numero}|${empreinte(d)}`; groupes.set(c, [...(groupes.get(c) || []), d]); });
@@ -474,6 +479,7 @@ export function textesProches(a, b) {
   return c / Math.min(A.size, B.size) >= 0.75;
 }
 export function horsExcel(demandesApp, copie, compteNum) {
+  demandesApp = horsCamileia(demandesApp);
   const emp = (v) => sa(v).replace(/[^a-z0-9]/g, "").slice(0, 25);
   const tousTextes = new Set(); copie.forEach(rows => rows.forEach(r => { const e = emp(r?.[6]); if (e) tousTextes.add(e); }));
   const ops = [];
@@ -550,6 +556,7 @@ function dejaDansFichier(l, r) {
 }
 
 export async function deposerMisesAJour(demandesApp, { onProgress = () => {}, interactif = true } = {}) {
+  demandesApp = horsCamileia(demandesApp);
   // N° décalés dans le fichier : un envoi écrirait les suivis sur les MAUVAISES lignes.
   const etatSynchro = (await getDoc(REF_SYNCHRO).catch(() => null))?.data();
   if (etatSynchro?.suspendu) throw new Error("Envoi bloqué : la synchro est suspendue (N° décalés dans le fichier Excel). Vérifie l'Excel puis « Reprendre la synchro ».");

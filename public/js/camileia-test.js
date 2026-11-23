@@ -10,7 +10,7 @@
 // sur une DI choisie, après confirmation.
 import { esc } from "./astreinte-logic.js";
 import { db } from "./firebase-init.js";
-import { doc, getDoc, getDocs, setDoc, collection } from "./firestore-compte.js";
+import { doc, getDoc, getDocs, setDoc, updateDoc, collection, serverTimestamp } from "./firestore-compte.js";
 import * as cam from "./camileia.js";
 import { diVersDemande, rapprocherDI, statutPropose, STATUTS_SMM } from "./camileia-demandes.js";
 
@@ -40,7 +40,7 @@ function rendre() {
   const connecte = cam.estConnecte();
   racine.innerHTML = `
   <div class="stack">
-    <p class="hint">🧪 <b>Test du lien Camileia.</b> Cet écran lit les demandes d'intervention de Camileia et montre comment elles arriveraient dans le Suivi des demandes. <b>Rien n'est enregistré dans l'appli</b> : c'est une simulation. Les seuls envois possibles vont vers Camileia (message, changement d'état), sur une DI que tu choisis, après confirmation.</p>
+    <p class="hint">🧪 <b>Test du lien Camileia.</b> Cet écran lit les demandes d'intervention de Camileia et montre comment elles arrivent dans le Suivi des demandes. « Créer les tickets » les ajoute à l'onglet <b>Demandes</b> de la <b>version de test uniquement</b> : visibles par toi seul, jamais par l'équipe. Quand tu modifies un de ces tickets (statut, commentaire), l'état et le commentaire repartent dans Camileia.</p>
     ${st.erreur ? `<div class="form-card" style="border-left:4px solid #e53935"><b>⚠️ ${esc(st.erreur)}</b></div>` : ""}
     ${st.info ? `<div class="form-card" style="border-left:4px solid #43a047">${esc(st.info)}</div>` : ""}
     ${st.occupe ? `<div class="hint">⏳ ${esc(st.occupe)}</div>` : ""}
@@ -111,7 +111,32 @@ function simulationHTML() {
       <li>${sansStatut} sans statut précis (état non relié ou « nouvelle »)</li>
       ${lieux ? `<li style="color:#e65100">${lieux} DI avec un site / bâtiment / local illisible par ce compte API (seul le lien technique est fourni)</li>` : ""}
     </ul>
+    <button class="add-btn" id="cam-creer" style="margin-top:10px" ${st.occupe ? "disabled" : ""}>🎫 Créer / mettre à jour les tickets (test)</button>
+    <p class="hint" style="margin:6px 0 0">Tickets visibles seulement dans la version de test, par toi. Relancer ne crée pas de doublon : les tickets existants sont mis à jour (le statut seulement s'il n'a pas été touché dans l'appli).</p>
   </div>`;
+}
+
+const saT = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+async function creerTickets() {
+  const existants = new Map();
+  (await getDocs(collection(db, "demandes-camileia"))).forEach(d => existants.set(d.id, d.data()));
+  // Association : reprise des demandes existantes du même site (sinon « Autres »).
+  const parSite = new Map();
+  st.demandes.forEach(d => { if (d.site && d.association && d.association !== "Autres") parSite.set(saT(d.site), d.association); });
+  const assoc = (site) => { const k = saT(site); if (parSite.has(k)) return parSite.get(k); for (const [s, a] of parSite) if (k && (s.startsWith(k) || k.startsWith(s))) return a; return "Autres"; };
+  let crees = 0, majs = 0;
+  for (const d of st.dis) {
+    const id = `cam-${d.camileiaId}`;
+    const { _brut, lieuxNonResolus, ...champs } = d;
+    const base = { ...champs, association: assoc(d.site), source: "camileia", creeDansApp: true, vuDansFichier: false };
+    const e = existants.get(id);
+    if (!e) { await setDoc(doc(db, "demandes-camileia", id), { ...base, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }); crees++; continue; }
+    const maj = {};
+    ["dateDemande", "site", "association", "type", "descriptif", "local", "demandeur", "camileiaEtat", "camileiaEtatIri", "numero"].forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
+    if (!e.dateMaj) ["statut", "urgence", "dateIntervention", "dateStatut"].forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
+    if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
+  }
+  st.info = `${crees} ticket(s) créé(s), ${majs} mis à jour. Va dans l'onglet « Demandes » (version de test).`;
 }
 
 function tableauHTML() {
@@ -196,6 +221,7 @@ function brancher() {
   $("cam-relais-ok")?.addEventListener("click", () => { cam.enregistrerConfig({ relaisUrl: $("cam-relais").value.trim(), relaisCle: $("cam-cle").value }); st.info = "Relais enregistré."; rendre(); });
   $("cam-toutes")?.addEventListener("change", (e) => { st.toutes = e.target.checked; });
   $("cam-lire")?.addEventListener("click", () => occuper("Lecture…", lireDI));
+  $("cam-creer")?.addEventListener("click", () => occuper("Création des tickets…", creerTickets));
   $("cam-corresp-ok")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
     const etats = {}; racine.querySelectorAll("select[data-etat]").forEach(s => { if (s.value) etats[s.dataset.etat] = s.value; });
     await setDoc(REF_CORRESP, { etats, le: Date.now() }, { merge: false });

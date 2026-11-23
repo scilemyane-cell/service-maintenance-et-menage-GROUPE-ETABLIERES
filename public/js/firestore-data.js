@@ -144,8 +144,26 @@ export async function listerInterventionsCorbeille() {
 // depuis la dernière visite sont lues (voir cache-delta.js). Les champs
 // date couvrent toutes les écritures : dateMaj (appli), importeLe (nouvelle
 // demande importée), importMajLe (mise à jour venant du fichier Excel).
-export function watchDemandes(callback) {
+// Tickets Camileia (TEST) : collection à part « demandes-camileia », lue
+// uniquement par la version de test et le Super Admin — la version validée
+// ne la lit jamais, l'équipe ne les voit donc pas. Id « cam-<id Camileia> ».
+const CANAL_TEST_DEM = typeof location !== "undefined" && location.pathname.startsWith("/beta/");
+export const COL_CAMILEIA = "demandes-camileia";
+export const estTicketCamileia = (id) => String(id || "").startsWith("cam-");
+function watchDemandesExcel(callback) {
   return ecoutePartagee("demandes:delta", ecouteDelta({ cle: "demandes", col: "demandes", champs: ["dateMaj", "importeLe", "importMajLe"] }), callback);
+}
+export function watchDemandes(callback) {
+  if (!CANAL_TEST_DEM) return watchDemandesExcel(callback);
+  return ecoutePartagee("demandes:fusion-camileia", (emettre) => {
+    let excel = null, cam = [];
+    const envoyer = () => { if (excel) emettre(cam.length ? [...excel, ...cam] : excel); };
+    watchDemandesExcel((l) => { excel = l; envoyer(); });
+    if (window.__smmRole === "super_admin") {
+      onSnapshot(collection(db, COL_CAMILEIA), (snap) => { cam = []; snap.forEach(d => cam.push({ id: d.id, ...d.data() })); envoyer(); },
+        (e) => console.warn("Tickets Camileia (test) :", e?.message || e));
+    }
+  }, callback);
 }
 // Lecture ponctuelle de toutes les demandes (outils manuels : récupérer, doublons).
 export async function lireToutesDemandes() {
@@ -248,6 +266,12 @@ export async function lireHistoriqueDemande(id) {
 }
 
 export async function updateDemande(id, fields) {
+  if (estTicketCamileia(id)) {
+    // Ticket Camileia (test) : enregistré dans sa collection, puis renvoyé à Camileia.
+    await updateDoc(doc(db, COL_CAMILEIA, id), { ...fields, dateMaj: serverTimestamp() });
+    import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields)).catch(e => console.warn("Retour Camileia :", e));
+    return;
+  }
   const avantModif = docLocal("demandes", id);
   // Demande clôturée (réalisée / annulée, même en attente de validation) :
   // l'action qui y était attribuée est close en même temps.

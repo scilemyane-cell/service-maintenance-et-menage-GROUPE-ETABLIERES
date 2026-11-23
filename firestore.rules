@@ -154,6 +154,11 @@ service cloud.firestore {
       allow update, delete: if isEditor();
     }
 
+    // Tickets Camileia de la version de TEST : Super Admin seulement.
+    match /demandes-camileia/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
     match /demandes/{docId} {
       allow read: if isSignedIn();
       allow create: if isEditor()
