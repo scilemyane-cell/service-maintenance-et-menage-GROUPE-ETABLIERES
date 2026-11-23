@@ -9,9 +9,23 @@ export const REF_SITES = doc(db, "config", "camileia-sites");
 // Catégorie de panne de l'appli (categories-pannes.js) → type de demande Camileia.
 export const REF_TYPES = doc(db, "config", "camileia-types");
 // Proposition par défaut (ids Camileia relevés dans Paramètres › Types de demandes).
+// Choisis d'après le contenu réel des demandes de l'appli (23/11/2026) :
+// sécurité incendie = surtout des DAAF ; électricité = surtout néons / ampoules.
+// Pas de type générique côté Camileia pour équipements, menuiserie, extérieurs et nuisibles.
 export const TYPES_PROPOSES = {
-  nuisibles: 1, incendie: 900048, toiture: 34, ecs: 23, chauffage: 2, serrurerie: 27, electricite: 14,
-  equipements: 900004, plomberie: 900024, menuiserie: 900018, exterieur: 1, peinture: 900036, autre: 1,
+  nuisibles: 1,          // Autre
+  incendie: 900049,      // Détecteur de fumée
+  toiture: 34,           // Infiltration d'eau
+  ecs: 23,               // Il n'y a pas d'eau chaude
+  chauffage: 2,          // Problème de chauffage/climatisation
+  serrurerie: 27,        // Ma serrure ne fonctionne pas
+  electricite: 900053,   // Éclairage
+  equipements: 1,        // Autre (pas de type « équipement HS » générique)
+  plomberie: 900024,     // Plomberie › Autre
+  menuiserie: 900018,    // Porte cassée
+  exterieur: 1,          // Autre (pas d'espaces verts dans Camileia)
+  peinture: 900036,      // Remise en état peinture
+  autre: 1,              // Autre
 };
 export async function lireCorrespTypes() {
   let c = {}; try { c = (await getDoc(REF_TYPES))?.data()?.categories || {}; } catch { /* */ }
