@@ -6,6 +6,29 @@ import { doc, getDoc, setDoc } from "./firestore-compte.js";
 import * as cam from "./camileia.js";
 
 export const REF_SITES = doc(db, "config", "camileia-sites");
+// Catégorie de panne de l'appli (categories-pannes.js) → type de demande Camileia.
+export const REF_TYPES = doc(db, "config", "camileia-types");
+// Proposition par défaut (ids Camileia relevés dans Paramètres › Types de demandes).
+export const TYPES_PROPOSES = {
+  nuisibles: 1, incendie: 900048, toiture: 34, ecs: 23, chauffage: 2, serrurerie: 27, electricite: 14,
+  equipements: 900004, plomberie: 900024, menuiserie: 900018, exterieur: 1, peinture: 900036, autre: 1,
+};
+export async function lireCorrespTypes() {
+  let c = {}; try { c = (await getDoc(REF_TYPES))?.data()?.categories || {}; } catch { /* */ }
+  const out = {}; Object.entries(TYPES_PROPOSES).forEach(([k, id]) => { out[k] = c[k] || `${cam.RACINE}/d_i_type_pannes/${id}`; });
+  return out;
+}
+export async function enregistrerCorrespTypes(categories) { await setDoc(REF_TYPES, { categories, le: Date.now() }); }
+// Type Camileia → catégorie de l'appli (sens retour), d'après la correspondance.
+export function categorieAppliPourType(typeIri, corresp) {
+  const k = Object.entries(corresp || {}).find(([, iri]) => iri === typeIri);
+  return k ? k[0] : "";
+}
+const PRIO_POUR_URGENCE = { "critique": "vital", "urgent": "tres urgent", "normal": "moins urgent", "a planifier": "non urgent" };
+export async function prioritePourUrgence(urgence) {
+  const r = await referentiels(); const v = PRIO_POUR_URGENCE[sa(urgence)];
+  return (v && r.priorites.find(p => sa(cam.libelleLisible(p.libelle)) === v))?.["@id"] || null;
+}
 const sa = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 export async function lireCorrespSites() {
@@ -87,8 +110,11 @@ export async function envoyerDemande(d, { email = "" } = {}) {
   const libelle = (d.local ? `${d.local} — ` : "") + (descr.length > 90 ? descr.slice(0, 87) + "…" : descr);
   const note = [descr, d.local && `Local : ${d.local}`, d.demandeur && `Demandeur : ${d.demandeur}`, d.numero && `Créée depuis l'appli SMM (${d.numero})`].filter(Boolean).join("\n");
   let local = null; try { local = await localPour(m.batiment, d.local); } catch { /* local facultatif */ }
+  // Type : catégorie de la demande (corrigée ou automatique) → type Camileia de la correspondance.
+  let typeIri = null;
+  try { const { categorieDe } = await import("./categories-pannes.js"); const ct = await lireCorrespTypes(); typeIri = ct[categorieDe(d)] || null; } catch { /* repli ci-dessous */ }
   return cam.creerDI({
-    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: choisirType(d.type, r, c.typeDefaut),
+    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: typeIri || choisirType(d.type, r, c.typeDefaut),
     priorite: prio?.["@id"] || null, etat: etat?.["@id"], createur: contact?.["@id"] || null, demandeur: d.demandeur || null,
   });
 }

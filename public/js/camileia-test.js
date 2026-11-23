@@ -76,6 +76,7 @@ function rendre() {
 
     ${st.refs ? correspondancesHTML() : ""}
     ${cam.estConnecte() ? correspSitesHTML() : ""}
+    ${cam.estConnecte() ? correspTypesHTML() : ""}
     ${cam.estConnecte() ? creationHTML() : ""}
     ${st.dis.length ? simulationHTML() : ""}
     ${st.dis.length ? tableauHTML() : ""}
@@ -128,6 +129,31 @@ async function chargerBatsSite(siteIri) {
   if (!siteIri || cs.bats[siteIri]) return;
   const s = cs.camSites.find(x => x["@id"] === siteIri); if (!s) return;
   cs.bats[siteIri] = await Promise.all((s.batiments || []).map(cam.iriDe).map(i => cam.appeler("GET", i).then(b => ({ ...b, "@id": i })).catch(() => ({ "@id": i }))));
+}
+
+// ---- Correspondance catégories de l'appli → types de demande Camileia ----
+const ct = { charge: false, cats: [], types: [], categories: [], map: {} };
+function correspTypesHTML() {
+  if (!ct.charge) return `<div class="form-card"><h3 style="margin:0 0 6px;font-size:15px">7. Correspondance des catégories (appli → Camileia)</h3>
+    <p class="hint" style="margin:0 0 8px">Chaque catégorie de panne de l'appli (Plomberie, Électricité…) devient un type de demande Camileia : à la création, et quand Lionel corrige la catégorie d'un ticket.</p>
+    <button class="nav-btn" id="ct-ouvrir" ${st.occupe ? "disabled" : ""}>🏷️ Préparer la correspondance des catégories</button></div>`;
+  const options = (val) => ct.categories.map(c => { const l = ct.types.filter(t => t.categorie === c["@id"]); return l.length ? `<optgroup label="${esc(cam.libelleLisible(c.libelle))}">${l.map(t => `<option value="${esc(t["@id"])}" ${t["@id"] === val ? "selected" : ""}>${esc(cam.libelleLisible(t.libelle))}</option>`).join("")}</optgroup>` : ""; }).join("");
+  return `<div class="form-card" style="border-left:4px solid #f4511e;overflow-x:auto">
+    <h3 style="margin:0 0 6px;font-size:15px">7. Correspondance des catégories (appli → Camileia)</h3>
+    <table class="table" style="width:100%;font-size:12px"><thead><tr><th>Catégorie dans l'appli</th><th>Type de demande Camileia</th></tr></thead><tbody>
+    ${ct.cats.map((c, i) => `<tr><td>${c.ic} ${esc(c.lib)}</td><td><select data-ct="${i}">${options(ct.map[c.id])}</select></td></tr>`).join("")}
+    </tbody></table>
+    <button class="add-btn" id="ct-enregistrer" style="margin-top:8px">💾 Enregistrer la correspondance des catégories</button>
+  </div>`;
+}
+async function chargerCorrespTypes() {
+  const ev = await import("./camileia-envoi.js");
+  const { CATEGORIES_PANNES } = await import("./categories-pannes.js");
+  const [r, m] = await Promise.all([ev.referentiels(), ev.lireCorrespTypes()]);
+  ct.cats = CATEGORIES_PANNES; ct.map = { ...m };
+  ct.categories = [...r.categories].sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
+  ct.types = [...r.types].sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
+  ct.charge = true;
 }
 
 // ---- Créer une DI dans Camileia (test) ----
@@ -337,6 +363,12 @@ function brancher() {
   $("cr-prio")?.addEventListener("change", (e) => { cr.prio = e.target.value; });
   $("cr-createur")?.addEventListener("change", (e) => { cr.createur = e.target.value; });
   $("cam-cr-envoyer")?.addEventListener("click", envoyerCreation);
+  $("ct-ouvrir")?.addEventListener("click", () => occuper("Lecture des types de demande Camileia…", chargerCorrespTypes));
+  racine.querySelectorAll("select[data-ct]").forEach(sel => sel.addEventListener("change", () => { ct.map[ct.cats[+sel.dataset.ct].id] = sel.value; }));
+  $("ct-enregistrer")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
+    await (await import("./camileia-envoi.js")).enregistrerCorrespTypes(ct.map);
+    st.info = "Correspondance des catégories enregistrée.";
+  }));
   $("cs-ouvrir")?.addEventListener("click", () => occuper("Lecture des sites Camileia…", chargerCorrespSites));
   racine.querySelectorAll("select[data-cs-site]").forEach(sel => sel.addEventListener("change", () => {
     const n = cs.sitesApp[+sel.dataset.csSite], s = cs.camSites.find(x => x["@id"] === sel.value);

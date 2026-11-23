@@ -50,6 +50,20 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
       if (iri && iri !== t.camileiaEtatIri) { await cam.changerEtat(t.camileiaIri, iri, enPlus); faits.push(realise && cr ? "état + compte rendu" : "état"); await updateDoc(ref, { camileiaEtatIri: iri }); }
     }
   } catch (e) { erreurs.push(`état : ${e.message}`); }
+  // Qualification faite dans l'appli : type de demande et priorité renvoyés à Camileia.
+  try {
+    const enPlus = {};
+    if ("categoriePanne" in fields || "urgence" in fields) {
+      const ev = await import("./camileia-envoi.js");
+      if ("categoriePanne" in fields) {
+        const { categorieDe } = await import("./categories-pannes.js");
+        const ct = await ev.lireCorrespTypes();
+        const tp = ct[categorieDe({ ...t, ...fields })]; if (tp) enPlus.typepanne = tp;
+      }
+      if (fields.urgence) { const pr = await ev.prioritePourUrgence(fields.urgence); if (pr) enPlus.priorite = pr; }
+    }
+    if (Object.keys(enPlus).length) { await cam.changerEtat(t.camileiaIri, null, enPlus); faits.push("qualification"); }
+  } catch (e) { erreurs.push(`qualification : ${e.message}`); }
   try {
     const texte = String(fields.commentaireTech || "").trim();
     if (texte && texte !== String(t.dernierMessageCamileia || "")) {

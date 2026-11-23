@@ -54,13 +54,14 @@ async function correspondances() {
 export const oublierCorrespondances = () => { correspLe = 0; };
 
 const CHAMPS_CAMILEIA = ["dateDemande", "site", "association", "type", "descriptif", "local", "demandeur", "camileiaEtat", "camileiaEtatIri", "numero"];
-const CHAMPS_TRAITEMENT = ["statut", "urgence", "dateIntervention", "dateStatut"];
+const CHAMPS_TRAITEMENT = ["statut", "urgence", "dateIntervention", "dateStatut", "categoriePanne"];
 
 // Lit les DI Camileia et crée / met à jour les tickets. Renvoie { crees, majs, dis }.
 export async function synchroniser() {
   await demandesPretes();
   await chargerReferentiels();
   const c = await correspondances();
+  let ctypes = {}; try { ctypes = await (await import("./camileia-envoi.js")).lireCorrespTypes(); } catch { /* */ }
   const brutes = cam.avecIri(await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: 10 }), `${cam.RACINE}/d_is`);
   await resoudreLieux(brutes);
   const existants = new Map(demandes.filter(d => d.source === "camileia").map(d => [d.id, d]));
@@ -76,6 +77,9 @@ export async function synchroniser() {
     const id = `cam-${d.camileiaId}`;
     const { lieuxNonResolus, ...champs } = d;
     const base = { ...champs, association: assoc(d.site), source: "camileia", creeDansApp: true, vuDansFichier: false };
+    const brut = brutes.find(b => String(b.id) === String(d.camileiaId));
+    const catAppli = (await import("./camileia-envoi.js")).categorieAppliPourType(cam.iriDe(brut?.typepanne), ctypes);
+    if (catAppli) base.categoriePanne = catAppli;
     const e = existants.get(id);
     if (!e) { await setDoc(doc(db, "demandes-camileia", id), { ...base, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }); crees++; continue; }
     const maj = {};

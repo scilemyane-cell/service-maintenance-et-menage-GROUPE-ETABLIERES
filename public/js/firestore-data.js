@@ -283,7 +283,7 @@ export async function updateDemande(id, fields) {
   await updateDoc(doc(db, "demandes", id), { ...fields, dateMaj: serverTimestamp() });
   journaliserDemande(id, avantModif ? { ...avantModif } : null, fields);
   // Demande de l'appli envoyée dans Camileia (version de test) : statut / commentaire y repartent.
-  if (CANAL_TEST_DEM && avantModif?.camileiaIri && (fields.statut || fields.commentaireTech)) {
+  if (CANAL_TEST_DEM && avantModif?.camileiaIri && (fields.statut || fields.commentaireTech || "categoriePanne" in fields || fields.urgence)) {
     import("./camileia-retour.js").then(m => m.renvoyerVersCamileia(id, fields, { collection: "demandes" })).catch(e => console.warn("Retour Camileia :", e));
   }
 }
