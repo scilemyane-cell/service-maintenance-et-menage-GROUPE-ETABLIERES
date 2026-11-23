@@ -95,6 +95,24 @@ export async function publishPublicPdf(dossierId, blob) {
     await setDoc(chunkRef(dossierId, i), { data: bytesToBase64(slice) });
   }
   await setDoc(metaRef(dossierId), { chunkCount, updatedAt: Date.now(), sizeBytes: bytes.length });
+  // Tient à jour l'index « tous les sites » (sites-guest.html) s'il existe.
+  try {
+    const idx = await getDoc(doc(db, COLLECTION, "_index"));
+    if (idx.exists()) { const sites = (idx.data().sites || []).map(x => x.id === dossierId ? { ...x, pdf: true } : x); await setDoc(doc(db, COLLECTION, "_index"), { ...idx.data(), sites }); }
+  } catch { /* index facultatif */ }
 
   return blob;
+}
+
+// Index public des sites (document « _index » de la même collection, lisible
+// sans compte) pour la page sites-guest.html : un seul lien prestataire vers
+// la liste de tous les sites, chacun ouvrant sa fiche PDF publiée.
+export async function publierIndexSites(sites) {
+  const avec = await Promise.all(sites.map(async (st) => ({ ...st, pdf: await hasPublicPdf(st.id).catch(() => false) })));
+  await setDoc(doc(db, COLLECTION, "_index"), { sites: avec, majLe: Date.now() });
+  return { total: avec.length, avecPdf: avec.filter(x => x.pdf).length };
+}
+export async function lireIndexSites() {
+  const snap = await getDoc(doc(db, COLLECTION, "_index"));
+  return snap.exists() ? snap.data() : null;
 }

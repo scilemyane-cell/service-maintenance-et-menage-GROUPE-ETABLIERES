@@ -203,7 +203,7 @@ function render() {
           <div><b>${state.dossiers.length}</b><small>sites</small></div>
           <div><b>${new Set(state.dossiers.map(d => d.association).filter(Boolean)).size}</b><small>associations</small></div>
           <div><b>${state.dossiers.reduce((n, d) => n + (d.sections || []).reduce((m, sec) => m + photosSection(sec).length, 0), 0)}</b><small>photos</small></div>
-          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button><button class="nav-btn" id="sd-copier-photos" title="Garder une copie de toutes les photos dans l'appli : ouverture des dossiers instantanée">${esc(copieEtat || "⚡ Photos dans l'appli")}</button></div>` : ""}
+          ${isEditorUser(mountedUser) ? `<div class="sdw-actions"><button class="add-btn" id="sd-new">➕ Nouveau</button><button class="nav-btn" id="sd-presta-tous" title="Un seul lien pour le prestataire : la liste de tous les sites, chacun avec sa fiche PDF">🔗 Lien prestataire · tous les sites</button><button class="nav-btn" id="sd-params" title="Ordre des équipements">⚙️</button><button class="nav-btn" id="sd-copier-photos" title="Garder une copie de toutes les photos dans l'appli : ouverture des dossiers instantanée">${esc(copieEtat || "⚡ Photos dans l'appli")}</button></div>` : ""}
         </div>
       </div>
       ${barreListeHTML()}
@@ -226,6 +226,33 @@ function render() {
   `;
   brancherBarreListe(render);
 
+  // 🔗 Lien prestataire — tous les sites : (ré)écrit l'index public des sites
+  // (nom, adresse, association, fiche publiée ou non) lu par sites-guest.html,
+  // puis propose l'envoi (mail / SMS / image). Lien sans compte, sans date de fin.
+  document.getElementById("sd-presta-tous")?.addEventListener("click", async (e) => {
+    const b = e.currentTarget, avant = b.textContent;
+    const lien = "https://service-maintenance-et-menage.web.app/sites-guest.html";
+    try {
+      b.disabled = true; b.textContent = "⏳ Préparation de la liste…";
+      const { publierIndexSites } = await import("./pdf-public-share.js");
+      const r = await publierIndexSites(state.dossiers.map(d => ({ id: d.id, nom: d.nom || "", adresse: d.adresse || "", association: d.association || "", groupe: d.groupe || "" })));
+      try { await navigator.clipboard.writeText(lien); } catch { /* */ }
+      window.toast?.(`🔗 Lien copié — ${r.avecPdf}/${r.total} fiches consultables`);
+      if (r.avecPdf < r.total && !confirm(`${r.total - r.avecPdf} site(s) n'ont pas encore de fiche publiée : ils apparaîtront dans la liste comme « fiche à venir ».\nPour les publier : ouvre le dossier puis « 🔗 Lien prestataire ».\n\nOK = préparer l'envoi maintenant`)) return;
+      const { ouvrirMailPresta } = await import("./mail-presta.js");
+      ouvrirMailPresta({
+        objet: "Fiches des sites — Groupe Établières",
+        etiquette: "DOSSIERS DE SITE", titre: "Fiches de nos sites",
+        intro: "voici l'accès aux fiches techniques de nos sites : choisissez le site pour voir ses équipements, emplacements, procédures, photos et numéros d'urgence.",
+        pastilles: [`${r.avecPdf} sites`],
+        bouton: "Voir les sites", url: lien,
+        sms: `Groupe Établières – Fiches de nos sites.\nConsultation : ${lien}`,
+        etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "Choisissez le site (recherche par nom ou par ville).", "La fiche s'ouvre en PDF, sans compte ni mot de passe."],
+        signature: mountedUser?.nom || "Service Maintenance et Entretien",
+      });
+    } catch (err) { alert("Lien impossible : " + (err?.message || err)); }
+    finally { b.disabled = false; b.textContent = avant; }
+  });
   document.getElementById("sd-new")?.addEventListener("click", async () => {
     const id = await createDossier(nouveauDossier(state.sectionsOrder));
     ui.openId = id; ui.mode = "edit"; boitesEnEdition = { dossierId: null, liste: [] }; render();
