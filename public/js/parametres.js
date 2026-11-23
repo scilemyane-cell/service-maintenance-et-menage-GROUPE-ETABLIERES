@@ -612,7 +612,7 @@ async function mailInvitation(inv) {
       etiquette: "ACCÈS PRESTATAIRE", titre: "Fiches de nos sites",
       intro: `voici votre accès${inv.label ? ` pour ${inv.label}` : ""} aux fiches techniques des sites ci-dessous${inv.debut && inv.fin ? `, valable du ${frJ(inv.debut)} au ${frJ(inv.fin)}` : ""}.`,
       pastilles: sitesInv(inv).map(s => s.name), bouton: "Voir les sites", url: guestLink(inv.id), sms: texteSms(inv),
-      etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "Choisissez le site (recherche par nom ou par ville).", "La fiche s'ouvre, sans compte ni mot de passe."],
+      etapes: ["Ouvrez le lien sur votre téléphone ou ordinateur.", "À la première ouverture, indiquez vos nom, prénom et société.", "Choisissez le site : sa fiche s'ouvre, sans mot de passe."],
       signature: currentUser?.nom || "Service Maintenance et Entretien",
     });
   }
