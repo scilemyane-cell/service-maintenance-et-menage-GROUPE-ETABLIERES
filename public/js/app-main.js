@@ -770,6 +770,8 @@
     }
     // Interventions gardées sur l'appareil (quota/réseau) : envoi automatique.
     if (!window.__intervAttente) { window.__intervAttente = true; import("./interventions-attente.js").then(m => m.demarrerEnvoiAuto()).catch(() => {}); }
+    // Camileia (version de test, Super Admin) : nouvelles DI vérifiées toutes les minutes.
+    if (CANAL_TEST && user.role === "super_admin") import("./camileia-synchro.js").then(m => m.demarrer()).catch(e => console.warn("Synchro Camileia :", e));
     if (!window.__synchroDemandesAuto && ["super_admin", "admin", "n1"].includes(user.role)) {
       window.__synchroDemandesAuto = true;
       import("./demandes-auto.js").then(m => m.demarrerSynchroAutoDemandes()).catch(e => console.warn("Synchro auto demandes :", e));

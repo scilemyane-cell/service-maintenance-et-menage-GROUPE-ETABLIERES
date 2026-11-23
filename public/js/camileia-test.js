@@ -24,6 +24,7 @@ const st = {
 
 export async function mountCamileiaTest(container) {
   racine = container;
+  import("./camileia-synchro.js").then(m => { etatAuto = m.etat; m.surEtat((e) => { etatAuto = e; const z = document.getElementById("cam-auto"); if (z) z.outerHTML = autoHTML(); }); }).catch(() => {});
   try { st.correspondances = (await getDoc(REF_CORRESP))?.data()?.etats || {}; } catch { st.correspondances = {}; }
   rendre();
 }
@@ -41,6 +42,7 @@ function rendre() {
   racine.innerHTML = `
   <div class="stack">
     <p class="hint">🧪 <b>Test du lien Camileia.</b> Cet écran lit les demandes d'intervention de Camileia et montre comment elles arrivent dans le Suivi des demandes. « Créer les tickets » les ajoute à l'onglet <b>Demandes</b> de la <b>version de test uniquement</b> : visibles par toi seul, jamais par l'équipe. Quand tu modifies un de ces tickets (statut, commentaire), l'état et le commentaire repartent dans Camileia.</p>
+    ${autoHTML()}
     ${st.erreur ? `<div class="form-card" style="border-left:4px solid #e53935"><b>⚠️ ${esc(st.erreur)}</b></div>` : ""}
     ${st.info ? `<div class="form-card" style="border-left:4px solid #43a047">${esc(st.info)}</div>` : ""}
     ${st.occupe ? `<div class="hint">⏳ ${esc(st.occupe)}</div>` : ""}
@@ -145,6 +147,13 @@ async function envoyerCreation() {
   });
 }
 
+let etatAuto = null;
+function autoHTML() {
+  const e = etatAuto; if (!e?.actif) return `<div id="cam-auto"></div>`;
+  const quand = e.derniere ? new Date(e.derniere).toLocaleTimeString("fr-FR") : "—";
+  return `<div class="hint" id="cam-auto">🔄 Vérification automatique toutes les minutes${e.enCours ? " (en cours…)" : ""} · dernière : ${quand}${e.derniere && !e.erreur ? ` · ${e.crees} créé(s), ${e.majs} mis à jour` : ""}${e.erreur ? ` · <span style="color:#e53935">⚠️ ${esc(e.erreur)}</span>` : ""}</div>`;
+}
+
 function resumeRefs() {
   const l = (k, nom) => { const r = st.refs[k] || []; return `<li>${nom} : ${r.erreur ? `<span style="color:#e53935">${esc(r.erreur)}</span>` : `${r.length}`}</li>`; };
   return `<ul class="hint" style="margin:8px 0 0">${l("etats", "États")}${l("priorites", "Priorités")}${l("typesPanne", "Types de panne")}${l("categories", "Catégories")}${l("types", "Types")}<li><b>${st.dis.length} DI lues</b></li></ul>`;
@@ -183,25 +192,9 @@ function simulationHTML() {
 
 const saT = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 async function creerTickets() {
-  const existants = new Map();
-  (await getDocs(collection(db, "demandes-camileia"))).forEach(d => existants.set(d.id, d.data()));
-  // Association : reprise des demandes existantes du même site (sinon « Autres »).
-  const parSite = new Map();
-  st.demandes.forEach(d => { if (d.site && d.association && d.association !== "Autres") parSite.set(saT(d.site), d.association); });
-  const assoc = (site) => { const k = saT(site); if (parSite.has(k)) return parSite.get(k); for (const [s, a] of parSite) if (k && (s.startsWith(k) || k.startsWith(s))) return a; return "Autres"; };
-  let crees = 0, majs = 0;
-  for (const d of st.dis) {
-    const id = `cam-${d.camileiaId}`;
-    const { _brut, lieuxNonResolus, ...champs } = d;
-    const base = { ...champs, association: assoc(d.site), source: "camileia", creeDansApp: true, vuDansFichier: false };
-    const e = existants.get(id);
-    if (!e) { await setDoc(doc(db, "demandes-camileia", id), { ...base, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }); crees++; continue; }
-    const maj = {};
-    ["dateDemande", "site", "association", "type", "descriptif", "local", "demandeur", "camileiaEtat", "camileiaEtatIri", "numero"].forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
-    if (!e.dateMaj) ["statut", "urgence", "dateIntervention", "dateStatut"].forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
-    if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
-  }
-  st.info = `${crees} ticket(s) créé(s), ${majs} mis à jour. Va dans l'onglet « Demandes » (version de test).`;
+  const { synchroniser } = await import("./camileia-synchro.js");
+  const r = await synchroniser();
+  st.info = `${r.crees} ticket(s) créé(s), ${r.majs} mis à jour. Va dans l'onglet « Demandes » (version de test).`;
 }
 
 function tableauHTML() {
@@ -301,6 +294,7 @@ function brancher() {
     const etats = {}; racine.querySelectorAll("select[data-etat]").forEach(s => { if (s.value) etats[s.dataset.etat] = s.value; });
     await setDoc(REF_CORRESP, { etats, le: Date.now() }, { merge: false });
     st.correspondances = etats; traduire(); st.info = "Correspondance enregistrée.";
+    import("./camileia-synchro.js").then(m => m.oublierCorrespondances()).catch(() => {});
   }));
   racine.querySelectorAll("tr[data-di]").forEach(tr => tr.addEventListener("click", () => {
     st.ouverte = st.dis.find(d => String(d.camileiaId) === tr.dataset.di) || null; st.brut = null; rendre();
