@@ -85,6 +85,26 @@ export async function connecter(identifiant, motDePasse) {
   throw new ErreurCamileia(`Connexion refusée : ${messageErreur(derniere?.statut, derniere?.corps)}`, derniere || {});
 }
 
+// Modification de la fiche DI « au nom de » la personne connectée, par
+// l'interface web de Camileia (le relais se connecte avec SON compte) :
+// Camileia trace alors l'historique et envoie ses mails comme à la main.
+// champs = { etat: 7, noteb, dateintervention: "AAAA-MM-JJTHH:MM", priorite: 3,
+//            typepanne: 900024, contacts: [12], societes: [4] } (identifiants numériques).
+// Retour : { ok, email, absents } ou { pasDeCompte: true } (→ repasser par l'API).
+export async function modifierAuNomDe(diId, champs, idToken) {
+  const cfg = lireConfig();
+  if (cfg.mode !== "relais" || !cfg.relaisUrl) return { pasDeCompte: true };
+  let r;
+  try { r = await fetch(cfg.relaisUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ cle: cfg.relaisCle, action: "web", idToken, di: diId, champs }) }); }
+  catch { throw new ErreurCamileia("Relais injoignable."); }
+  const d = await lireReponse(r);
+  if (!d || typeof d !== "object") throw new ErreurCamileia(`Réponse du relais illisible : ${String(d).slice(0, 200)}`);
+  // Relais pas encore mis à jour (pas de mode « web ») : on repasse par l'API.
+  if (d.erreur && /^Adresse refus/.test(d.erreur)) return { pasDeCompte: true, relaisAncien: true };
+  if (d.erreur) throw new ErreurCamileia(d.erreur);
+  return d;
+}
+
 // Appel générique. chemin = "/api-platform/d_is?page=1" ou une IRI.
 export async function appeler(methode, chemin, corps = null) {
   const cfg = lireConfig();

@@ -20,12 +20,26 @@
  *
  * Sécurité : seules les adresses /api-platform/… sont relayées, et seulement
  * avec la bonne clé. Aucune suppression possible (pas de DELETE).
+ *
+ * MODE « AU NOM DU TECHNICIEN » (action "web") — pour que Camileia trace
+ * l'historique (« modifié par … ») et envoie ses mails : le relais se connecte
+ * à l'interface web de Camileia avec le compte du technicien et enregistre la
+ * fiche DI exactement comme il le ferait à la main.
+ *  • L'appli envoie son jeton de connexion Firebase : le relais vérifie auprès
+ *    de Google QUI est connecté (impossible de se faire passer pour un autre).
+ *  • Identifiants web : une propriété du script par personne, saisie par la
+ *    personne elle-même (jamais dans l'appli ni sur les téléphones) :
+ *       clé    = WEB prenom.nom@etablieres.fr   (l'adresse de connexion à l'appli)
+ *       valeur = identifiant-camileia:mot-de-passe-camileia
+ *    Sans propriété pour quelqu'un, l'appli repasse par l'API (non tracé).
  */
+var FIREBASE_API_KEY_DEFAUT = "AIzaSyBuxtTTgsdstl2Fho4mUXPibuurFZGy7jk"; // clé web publique de l'appli
 function doPost(e) {
   var p = PropertiesService.getScriptProperties();
   try {
     var req = JSON.parse(e.postData.contents || "{}");
     if (!req.cle || req.cle !== p.getProperty("CLE_RELAIS")) return repondre({ erreur: "Clé de relais incorrecte." });
+    if (req.action === "web") return repondre(actionWeb(req));
     var methode = String(req.methode || "GET").toUpperCase();
     if (["GET", "POST", "PUT"].indexOf(methode) < 0) return repondre({ erreur: "Méthode refusée : " + methode });
     var chemin = String(req.chemin || "");
@@ -68,6 +82,162 @@ function jeton(forcer) {
     }
   }
   throw new Error("Connexion Camileia refusée : vérifie CAMILEIA_LOGIN / CAMILEIA_MDP.");
+}
+
+/* ───────────── Mode « au nom du technicien » (interface web) ───────────── */
+
+var P = "sitepro_demandeinterventionbundle_ditype";
+var CHAMPS_WEB = {
+  etat: P + "[etat]", noteb: P + "[noteb]", dateintervention: P + "[dateintervention]",
+  dateinterventionplanifiee: P + "[dateinterventionplanifiee]",
+  priorite: P + "[priorite]", typepanne: P + "[typepanne]",
+  societes: P + "_societe[]", contacts: P + "_contact[]",
+};
+
+// req = { idToken, di: 6, champs: { etat: 7, noteb: "…", contacts: [12], societes: [4] } }
+function actionWeb(req) {
+  var email = emailFirebase(req.idToken);
+  if (!email) return { erreur: "Connexion à l'appli non vérifiée." };
+  var compte = PropertiesService.getScriptProperties().getProperty("WEB " + email);
+  if (!compte) return { pasDeCompte: true, email: email };
+  var i = compte.indexOf(":");
+  var login = compte.slice(0, i).trim(), mdp = compte.slice(i + 1);
+  var di = parseInt(req.di, 10);
+  if (!di) return { erreur: "DI manquante." };
+  // Le site de la DI (dans l'adresse de la fiche) : lu par l'API.
+  var api = appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(false));
+  if (api.statut === 401) api = appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(true));
+  var site = api.corps && String(api.corps.site || "").split("/").pop();
+  if (!site) return { erreur: "DI " + di + " introuvable dans Camileia." };
+  var url = "/DI/Modifier/Liste_All_DI/" + site + "/" + site + "/" + di;
+
+  var cookies = sessionWeb(email, login, mdp, false);
+  var page = getWeb(url, cookies);
+  if (page.indexOf("_username") >= 0) { cookies = sessionWeb(email, login, mdp, true); page = getWeb(url, cookies); }
+  if (page.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + " (identifiant ou mot de passe)." };
+
+  var form = lireFormulaire(page, "/DI/Modifier/");
+  if (!form) return { erreur: "Fiche DI " + di + " non modifiable avec le compte de " + email + "." };
+  var absents = [];
+  var ch = req.champs || {};
+  Object.keys(ch).forEach(function (k) {
+    var nom = CHAMPS_WEB[k]; if (!nom) return;
+    var present = form.noms[nom];
+    if (!present) { absents.push(k); return; }
+    form.champs = form.champs.filter(function (c) { return c.nom !== nom; });
+    var v = ch[k];
+    (Array.isArray(v) ? v : [v]).forEach(function (x) { if (x !== null && x !== undefined) form.champs.push({ nom: nom, valeur: String(x) }); });
+  });
+  var res = postMultipart(form.action, form.champs, cookies);
+  var ok = /modifi[ée]e avec succ/i.test(res);
+  if (!ok) return { erreur: "Camileia n'a pas confirmé l'enregistrement de la DI " + di + ".", absents: absents };
+  return { ok: true, email: email, absents: absents };
+}
+
+function emailFirebase(idToken) {
+  if (!idToken) return null;
+  var cle = PropertiesService.getScriptProperties().getProperty("FIREBASE_API_KEY") || FIREBASE_API_KEY_DEFAUT;
+  var r = UrlFetchApp.fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + cle, {
+    method: "post", contentType: "application/json", payload: JSON.stringify({ idToken: idToken }), muteHttpExceptions: true,
+  });
+  if (r.getResponseCode() !== 200) return null;
+  var u = (JSON.parse(r.getContentText()).users || [])[0];
+  return u && u.email ? String(u.email).toLowerCase() : null;
+}
+
+// Session web (cookies) gardée 20 min par personne.
+function sessionWeb(email, login, mdp, forcer) {
+  var cache = CacheService.getScriptCache(), k = "web:" + email;
+  if (!forcer) { var c = cache.get(k); if (c) return c; }
+  var base = PropertiesService.getScriptProperties().getProperty("CAMILEIA_BASE");
+  var r1 = UrlFetchApp.fetch(base + "/", { followRedirects: false, muteHttpExceptions: true });
+  var jar = {}; garderCookies(jar, r1);
+  var m = r1.getContentText().match(/name="_csrf_token"[^>]*value="([^"]*)"/) || r1.getContentText().match(/value="([^"]*)"[^>]*name="_csrf_token"/);
+  var r2 = UrlFetchApp.fetch(base + "/", {
+    method: "post", followRedirects: false, muteHttpExceptions: true, headers: { Cookie: texteCookies(jar) },
+    payload: { _username: login, _password: mdp, _csrf_token: m ? decoder(m[1]) : "" },
+  });
+  garderCookies(jar, r2);
+  var c2 = texteCookies(jar);
+  cache.put(k, c2, 20 * 60);
+  return c2;
+}
+function garderCookies(jar, res) {
+  var h = res.getAllHeaders()["Set-Cookie"]; if (!h) return;
+  (Array.isArray(h) ? h : [h]).forEach(function (l) { var p = String(l).split(";")[0], i = p.indexOf("="); if (i > 0) jar[p.slice(0, i).trim()] = p.slice(i + 1); });
+}
+function texteCookies(jar) { return Object.keys(jar).map(function (k) { return k + "=" + jar[k]; }).join("; "); }
+
+function getWeb(chemin, cookies) {
+  var base = PropertiesService.getScriptProperties().getProperty("CAMILEIA_BASE");
+  return UrlFetchApp.fetch(base + chemin, { headers: { Cookie: cookies }, muteHttpExceptions: true }).getContentText();
+}
+
+// Envoi du formulaire comme le navigateur (multipart, champs répétés permis).
+function postMultipart(chemin, champs, cookies) {
+  var base = PropertiesService.getScriptProperties().getProperty("CAMILEIA_BASE");
+  var b = "----smm" + Utilities.getUuid().replace(/-/g, ""), corps = "";
+  champs.forEach(function (c) {
+    corps += "--" + b + "\r\n";
+    if (c.fichier) corps += 'Content-Disposition: form-data; name="' + c.nom + '"; filename=""\r\nContent-Type: application/octet-stream\r\n\r\n\r\n';
+    else corps += 'Content-Disposition: form-data; name="' + c.nom + '"\r\n\r\n' + c.valeur + "\r\n";
+  });
+  corps += "--" + b + "--\r\n";
+  var r = UrlFetchApp.fetch(base + chemin, {
+    method: "post", contentType: "multipart/form-data; boundary=" + b, payload: Utilities.newBlob(corps).getBytes(),
+    headers: { Cookie: cookies }, muteHttpExceptions: true, followRedirects: false,
+  });
+  var loc = r.getAllHeaders()["Location"];
+  if (loc) return getWeb(String(loc).replace(/^https?:\/\/[^/]+/, ""), cookies);
+  return r.getContentText();
+}
+
+// Lit le formulaire de la fiche : mêmes valeurs que celles qu'enverrait le navigateur.
+function lireFormulaire(html, actionContient) {
+  var re = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi, m;
+  while ((m = re.exec(html))) {
+    var action = attr(m[1], "action");
+    if (!action || action.indexOf(actionContient) < 0) continue;
+    var corps = m[2].replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<!--[\s\S]*?-->/g, ""), champs = [], noms = {};
+    var ajoute = function (nom, valeur, fichier) { champs.push({ nom: nom, valeur: valeur, fichier: !!fichier }); noms[nom] = true; };
+    // zones de texte (retirées du corps pour ne pas lire leurs contenus comme des balises)
+    corps = corps.replace(/<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi, function (t, a, v) {
+      var nom = attr(a, "name"); if (nom && !aAttr(a, "disabled")) ajoute(nom, decoder(v.replace(/^\r?\n/, ""))); else if (nom) noms[nom] = true;
+      return "";
+    });
+    corps.replace(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi, function (t, a, opts) {
+      var nom = attr(a, "name"); if (!nom) return ""; noms[nom] = true;
+      if (aAttr(a, "disabled")) return "";
+      var multiple = aAttr(a, "multiple"), liste = [], om, ro = /<option\b([^>]*)>([\s\S]*?)(?=<option\b|<\/option>|<\/optgroup>|$)/gi;
+      while ((om = ro.exec(opts))) liste.push({ v: attr(om[1], "value") !== null ? attr(om[1], "value") : decoder(om[2]).trim(), sel: aAttr(om[1], "selected"), dis: aAttr(om[1], "disabled") });
+      var sel = liste.filter(function (o) { return o.sel; });
+      if (!multiple && !sel.length) { var p = liste.filter(function (o) { return !o.dis; })[0]; if (p) sel = [p]; }
+      if (!multiple) sel = sel.slice(-1);
+      sel.forEach(function (o) { ajoute(nom, o.v); });
+      return "";
+    });
+    corps.replace(/<input\b([^>]*)>/gi, function (t, a) {
+      var nom = attr(a, "name"); if (!nom) return ""; noms[nom] = true;
+      var type = String(attr(a, "type") || "text").toLowerCase();
+      if (aAttr(a, "disabled") || /^(submit|button|image|reset)$/.test(type)) return "";
+      if (type === "file") { ajoute(nom, "", true); return ""; }
+      if ((type === "checkbox" || type === "radio") && !aAttr(a, "checked")) return "";
+      var v = attr(a, "value"); ajoute(nom, v === null ? (type === "checkbox" || type === "radio" ? "on" : "") : v);
+      return "";
+    });
+    return { action: decoder(action), champs: champs, noms: noms };
+  }
+  return null;
+}
+function attr(a, n) {
+  var m = a.match(new RegExp("(?:^|\\s)" + n + "\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", "i"));
+  return m ? decoder(m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4]) : null;
+}
+function aAttr(a, n) { return new RegExp("(?:^|\\s)" + n + "(?:\\s|=|$)", "i").test(a); }
+function decoder(s) {
+  return String(s).replace(/&#x([0-9a-f]+);/gi, function (t, h) { return String.fromCharCode(parseInt(h, 16)); })
+    .replace(/&#(\d+);/g, function (t, d) { return String.fromCharCode(+d); })
+    .replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, "\u00a0").replace(/&amp;/g, "&");
 }
 
 function repondre(o) {

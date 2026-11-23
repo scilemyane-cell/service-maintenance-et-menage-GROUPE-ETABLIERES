@@ -32,6 +32,25 @@ async function etatPourStatut(statut) {
   return inverse ? inverse["@id"] : null;
 }
 
+const idDe = (iri) => { const n = parseInt(String(iri || "").split("/").pop(), 10); return Number.isFinite(n) ? n : null; };
+// « 2026-11-23T21:45:00Z » → « 2026-11-23T22:45 » (heure locale, format du formulaire Camileia)
+const dateLocale = (v) => { const d = v ? new Date(v) : new Date(); if (isNaN(d)) return null; return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
+
+// Technicien attribué dans l'appli → contact (et société) Camileia.
+async function contactPourAttribution(uid, nom) {
+  const ev = await import("./camileia-envoi.js");
+  let email = "";
+  try { email = (await getDoc(doc(db, "users", uid)))?.data()?.email || ""; } catch { /* */ }
+  let c = email ? await ev.contactParEmail(email) : null;
+  if (!c && nom) {
+    const r = await ev.referentiels();
+    const cible = sa(nom).replace(/[^a-z]+/g, " ").trim();
+    const trouves = r.contacts.filter(x => { const a = sa(`${x.prenom} ${x.nom}`).replace(/[^a-z]+/g, " ").trim(), b = sa(`${x.nom} ${x.prenom}`).replace(/[^a-z]+/g, " ").trim(); return a === cible || b === cible; });
+    if (trouves.length === 1) c = trouves[0];
+  }
+  return c;
+}
+
 export async function renvoyerVersCamileia(id, fields, { collection = "demandes-camileia" } = {}) {
   await cam.chargerRelaisPartage();
   if (!cam.estConnecte()) throw new Error("relais Camileia non réglé sur cet appareil (Suivi des demandes › Camileia (test))");
@@ -39,34 +58,81 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   const t = (await getDoc(ref))?.data();
   if (!t?.camileiaIri) return;
   window.toast?.("⏳ Envoi à Camileia…");
-  const faits = [], erreurs = [];
+  const faits = [], erreurs = [], avertissements = [];
   let contactIri = null;
   try { const { contactParEmail } = await import("./camileia-envoi.js"); contactIri = (await contactParEmail(auth.currentUser?.email))?.["@id"] || null; } catch { /* auteur facultatif */ }
+
+  // 1) Ce qu'on veut changer sur la fiche DI (identifiants numériques Camileia).
+  const champs = {}, libelles = [];
+  let etatIri = null;
   try {
     if (fields.statut && fields.statut !== "Annulé") {
       const iri = await etatPourStatut(fields.statut);
-      // Demande réalisée : le commentaire technicien devient le compte rendu d'intervention de la DI.
-      const realise = /^r[ée]alis/i.test(fields.statut);
-      const cr = String(fields.commentaireTech || t.commentaireTech || "").trim();
-      const enPlus = realise ? { ...(cr ? { noteb: cr } : {}), dateintervention: t.camileiaDateIntervention || new Date().toISOString() } : {};
-      if (iri && iri !== t.camileiaEtatIri) { await cam.changerEtat(t.camileiaIri, iri, enPlus); faits.push(realise && cr ? "état + compte rendu" : "état"); await updateDoc(ref, { camileiaEtatIri: iri }); }
+      if (iri && iri !== t.camileiaEtatIri) {
+        etatIri = iri; champs.etat = idDe(iri); libelles.push("état");
+        // Demande réalisée : le commentaire technicien devient le compte rendu d'intervention.
+        if (/^r[ée]alis/i.test(fields.statut)) {
+          const cr = String(fields.commentaireTech || t.commentaireTech || "").trim();
+          if (cr) { champs.noteb = cr; libelles.push("compte rendu"); }
+          champs.dateintervention = dateLocale(t.camileiaDateIntervention);
+        }
+      }
     }
   } catch (e) { erreurs.push(`état : ${e.message}`); }
-  // Qualification faite dans l'appli : type de demande et priorité renvoyés à Camileia.
   try {
-    const enPlus = {};
     const urg = fields.urgenceCorrigee || fields.urgence;
     if ("categoriePanne" in fields || urg) {
       const ev = await import("./camileia-envoi.js");
       if ("categoriePanne" in fields) {
         const { categorieDe } = await import("./categories-pannes.js");
         const ct = await ev.lireCorrespTypes();
-        const tp = ct[categorieDe({ ...t, ...fields })]; if (tp) enPlus.typepanne = tp;
+        const tp = ct[categorieDe({ ...t, ...fields })]; if (tp) champs.typepanne = idDe(tp);
       }
-      if (urg) { const pr = await ev.prioritePourUrgence(urg); if (pr) enPlus.priorite = pr; }
+      if (urg) { const pr = await ev.prioritePourUrgence(urg); if (pr) champs.priorite = idDe(pr); }
+      if (champs.typepanne || champs.priorite) libelles.push("qualification");
     }
-    if (Object.keys(enPlus).length) { await cam.changerEtat(t.camileiaIri, null, enPlus); faits.push("qualification"); }
   } catch (e) { erreurs.push(`qualification : ${e.message}`); }
+  try {
+    if ("attribueA" in fields && fields.attribueA !== "ext") {
+      if (!fields.attribueA) { champs.contacts = []; champs.societes = []; libelles.push("attribution retirée"); }
+      else {
+        const c = await contactPourAttribution(fields.attribueA, fields.attribueANom);
+        if (c) { champs.contacts = [c.id ?? idDe(c["@id"])]; champs.societes = c.societe ? [idDe(c.societe)] : []; libelles.push(`attribuée à ${fields.attribueANom || c.prenom}`); }
+        else avertissements.push(`${fields.attribueANom || "technicien"} introuvable dans les contacts Camileia : attribution non reportée`);
+      }
+    }
+  } catch (e) { erreurs.push(`attribution : ${e.message}`); }
+
+  // 2) Envoi : d'abord au nom de la personne connectée (tracé dans Camileia),
+  //    sinon par l'API (enregistré mais SANS historique ni mail Camileia).
+  if (Object.keys(champs).length) {
+    let fait = false;
+    try {
+      const jeton = await auth.currentUser?.getIdToken?.();
+      const r = await cam.modifierAuNomDe(idDe(t.camileiaIri), champs, jeton);
+      if (r?.ok) {
+        fait = true; faits.push(`${libelles.join(", ")} — tracé`);
+        if (r.absents?.length) avertissements.push(`non modifiable avec ce compte Camileia : ${r.absents.join(", ")}`);
+      } else if (!r?.pasDeCompte) erreurs.push("Camileia n'a pas confirmé la modification");
+      else avertissements.push(r.relaisAncien ? "relais à mettre à jour : modification NON tracée dans Camileia" : `pas de compte Camileia relié pour ${r.email || auth.currentUser?.email} : modification NON tracée dans Camileia`);
+    } catch (e) { erreurs.push(e.message); fait = true; /* pas de double envoi si le relais a répondu une erreur */ }
+    if (!fait) {
+      try {
+        const enPlus = {};
+        if ("noteb" in champs) enPlus.noteb = champs.noteb;
+        if ("dateintervention" in champs) enPlus.dateintervention = new Date(champs.dateintervention).toISOString();
+        if (champs.typepanne) enPlus.typepanne = `${cam.RACINE}/d_i_type_pannes/${champs.typepanne}`;
+        if (champs.priorite) enPlus.priorite = `${cam.RACINE}/d_i_priorites/${champs.priorite}`;
+        if (champs.contacts) enPlus.contacts = champs.contacts.map(x => `${cam.RACINE}/contacts/${x}`);
+        if (champs.societes) enPlus.societes = champs.societes.map(x => `${cam.RACINE}/societes/${x}`);
+        await cam.changerEtat(t.camileiaIri, etatIri, enPlus);
+        faits.push(libelles.join(", ")); fait = true;
+      } catch (e) { erreurs.push(e.message); }
+    }
+    if (fait && etatIri && !erreurs.length) { try { await updateDoc(ref, { camileiaEtatIri: etatIri }); } catch { /* */ } }
+  }
+
+  // 3) Commentaire technicien → message dans la DI (signé par son contact).
   try {
     const texte = String(fields.commentaireTech || "").trim();
     if (texte && texte !== String(t.dernierMessageCamileia || "")) {
@@ -74,8 +140,9 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
       await updateDoc(ref, { dernierMessageCamileia: texte });
     }
   } catch (e) { erreurs.push(`message : ${e.message}`); }
-  try { await updateDoc(ref, { camileiaRetourLe: Date.now(), camileiaRetour: faits.join(", "), camileiaRetourErreur: erreurs.join(" | ") }); } catch { /* */ }
+  try { await updateDoc(ref, { camileiaRetourLe: Date.now(), camileiaRetour: faits.join(", "), camileiaRetourErreur: [...erreurs, ...avertissements].join(" | ") }); } catch { /* */ }
   if (erreurs.length) { console.warn("Retour Camileia :", erreurs); window.toast?.(`⚠️ Camileia : ${erreurs.join(" | ")}`, "error"); }
+  else if (avertissements.length) window.toast?.(`⚠️ Camileia${faits.length ? ` (${faits.join(", ")})` : ""} : ${avertissements.join(" | ")}`, "error");
   else if (faits.length) window.toast?.(`✓ Camileia mis à jour (${faits.join(", ")})`);
   else window.toast?.("Camileia : rien à changer (déjà à jour)");
 }
