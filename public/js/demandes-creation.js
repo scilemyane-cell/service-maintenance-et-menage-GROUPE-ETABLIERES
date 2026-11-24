@@ -110,7 +110,9 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
         const sIri = `${cam.RACINE}/sites/${v.slice(4)}`, bIri = f.camBatiment.value ? `${cam.RACINE}/batiments/${f.camBatiment.value}` : "";
         const lib = actifs.find(x => iriS(x) === sIri)?.libelle || "";
         // Nom de site de l'appli relié à ce site + bâtiment (sinon à ce site, sinon le nom Camileia).
-        const noms = Object.entries(camLieux.corr);
+        // D'abord les noms de site réellement utilisés dans l'appli (ex. « Lycée » plutôt que « Lycee »).
+        const tous = Object.entries(camLieux.corr);
+        const noms = [...tous.filter(([n]) => n in sites), ...tous.filter(([n]) => !(n in sites))];
         const meme = (n) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
         const relie = noms.find(([n, m]) => m?.site === sIri && meme(n) === meme(lib)) || noms.find(([, m]) => m?.site === sIri && m?.batiment === bIri) || noms.find(([, m]) => m?.site === sIri);
         f.site.value = relie ? relie[0] : lib;

@@ -547,6 +547,9 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
   suivrePhrases();
   if (!lignes) { container.innerHTML = `<div class="stack">${toggleHTML}<div class="hint">Chargement des demandes…</div></div>`; onToggle(); return; }
   const toutesLignes = lignes;
+  // Ouverture d'une demande précise (accueil, alertes…) : on prend le site sous
+  // lequel elle est rangée ici (le nom reçu peut s'écrire autrement, ex. « Lycee »).
+  if (st.focusId) { const lf = lignes.find(x => x.id === st.focusId); if (lf && lf.site && lf.site !== st.site) st.site = lf.site; }
   const rerender = () => renderParSite(container, toutesLignes, { toggleHTML, onToggle, perms, maj, utilisateur, uid, utilisateurs, apres, favLectureSeule, rafraichir, quitterFocus, libelleRetour });
   fav.rerender = () => { if (container.isConnected && !st.site) rerender(); };
   aff.rerender = () => { if (container.isConnected) rerender(); };
