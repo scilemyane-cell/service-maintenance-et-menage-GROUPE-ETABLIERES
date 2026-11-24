@@ -227,6 +227,8 @@ function inspecterWeb(req) {
   var js = (page.match(/(\$\.(?:ajax|post)|fetch)\([\s\S]{0,300}/g) || []).filter(function (x) { return /essage/i.test(x); }).slice(0, 5);
   var p0 = page.indexOf("form_message"); var autour = p0 >= 0 ? page.slice(Math.max(0, p0 - 1500), p0 + 1500) : "";
   js.push((autour.match(/url\s*[=:][^;\n]{0,160}/g) || []).join(" ## "));
+  var p1 = page.indexOf("/DI/Messages/"); js.push(p1 >= 0 ? page.slice(Math.max(0, p1 - 600), p1 + 900) : "");
+  var p2 = page.indexOf("form_message"); js.push(p2 >= 0 ? page.slice(Math.max(0, p2 - 200), p2 + 1500) : "");
   return { taille: page.length, titre: (page.match(/<title>([\s\S]*?)<\/title>/i) || [, ""])[1].trim(), forms: forms, urls: urls, js: js };
 }
 
