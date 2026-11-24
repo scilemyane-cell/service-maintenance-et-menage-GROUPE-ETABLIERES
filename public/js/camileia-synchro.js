@@ -63,6 +63,7 @@ export async function synchroniser() {
   const c = await correspondances();
   let ctypes = {}; try { ctypes = await (await import("./camileia-envoi.js")).lireCorrespTypes(); } catch { /* */ }
   const brutes = cam.avecIri(await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: 10 }), `${cam.RACINE}/d_is`);
+  try { await surveillerDI(brutes); } catch (e) { console.warn("Surveillance DI Camileia :", e); }
   await resoudreLieux(brutes);
   const existants = new Map(demandes.filter(d => d.source === "camileia" && !String(d.id).startsWith("_")).map(d => [d.id, d]));
   const parSite = new Map();
@@ -89,6 +90,34 @@ export async function synchroniser() {
     if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
   }
   return { crees, majs, dis };
+}
+
+// ---- Surveillance : une DI sans état / type / libellé fait planter Camileia (erreur 500) ----
+// On garde sur l'appareil les dernières valeurs saines de chaque DI ; si un champ
+// essentiel disparaît, on le remet (sinon valeur par défaut) et on prévient.
+const CLE_SAINES = "camileia-di-saines";
+const ESSENTIELS = ["etat", "typepanne", "libelle", "site", "batiment", "priorite"];
+const PAR_DEFAUT = { typepanne: `${cam.RACINE}/d_i_type_pannes/1`, libelle: "(sans libellé)" };
+async function surveillerDI(brutes) {
+  let saines = {}; try { saines = JSON.parse(localStorage.getItem(CLE_SAINES) || "{}"); } catch { /* */ }
+  const reparees = [];
+  for (const di of brutes) {
+    const k = String(di.id), connu = saines[k] || {};
+    const manquants = ESSENTIELS.filter(c => !di[c] && (connu[c] || PAR_DEFAUT[c] || c === "etat"));
+    // priorité : seulement si elle existait avant (elle peut être vide à la création)
+    if (manquants.length) {
+      const corrige = {};
+      manquants.forEach(c => { corrige[c] = connu[c] || (c === "etat" ? `${cam.RACINE}/d_i_etats/${di.datecloture ? 4 : 5}` : PAR_DEFAUT[c]); });
+      const aRemettre = Object.fromEntries(Object.entries(corrige).filter(([, v]) => v));
+      if (Object.keys(aRemettre).length) {
+        try { await cam.changerEtat(cam.iriDe(di) || `${cam.RACINE}/d_is/${di.id}`, null, aRemettre); Object.assign(di, aRemettre); reparees.push(`${di.numero || di.id} (${Object.keys(aRemettre).join(", ")})`); }
+        catch (e) { console.warn("Réparation DI", di.id, e); }
+      }
+    }
+    saines[k] = Object.fromEntries(ESSENTIELS.filter(c => di[c]).map(c => [c, cam.iriDe(di[c]) || di[c]]));
+  }
+  try { localStorage.setItem(CLE_SAINES, JSON.stringify(saines)); } catch { /* */ }
+  if (reparees.length) window.toast?.(`🛠️ Camileia : DI réparée${reparees.length > 1 ? "s" : ""} automatiquement — ${reparees.join(" · ")}`, "error");
 }
 
 async function passage() {
