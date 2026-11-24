@@ -105,7 +105,10 @@ function actionWeb(req) {
   var compte = PropertiesService.getScriptProperties().getProperty("WEB " + email);
   if (!compte) return { pasDeCompte: true, email: email };
   var i = compte.indexOf(":");
-  var login = compte.slice(0, i).trim(), mdp = compte.slice(i + 1);
+  var login = (i < 0 ? compte : compte.slice(0, i)).trim(), mdp = i < 0 ? "" : compte.slice(i + 1);
+  // Compte web = compte API (même identifiant) sans mot de passe saisi : on reprend CAMILEIA_MDP.
+  var pp = PropertiesService.getScriptProperties();
+  if (!mdp && login === String(pp.getProperty("CAMILEIA_LOGIN") || "").trim()) mdp = pp.getProperty("CAMILEIA_MDP");
   var di = parseInt(req.di, 10);
   if (!di) return { erreur: "DI manquante." };
   // Le site de la DI (dans l'adresse de la fiche) : lu par l'API.
