@@ -354,7 +354,8 @@ export function initCarteSites(holder, dossiers, options = {}) {
     detruire() {
       detruit = true;
       abonnes.delete(idAbonne);
-      if (map) { map.remove(); map = null; }
+      // Carte détruite pendant une animation de zoom : Leaflet plante ensuite (« _leaflet_pos ») → on coupe l'animation avant.
+      if (map) { try { map.stop?.(); map._onZoomTransitionEnd = () => {}; map.off(); map.remove(); } catch { /* */ } map = null; }
     },
   };
 }
