@@ -133,6 +133,9 @@ async function importerMessages(brutes) {
   let contacts = []; try { contacts = (await (await import("./camileia-envoi.js")).referentiels()).contacts; } catch { /* */ }
   const nomContact = (iri) => { const c = contacts.find(x => String(x.id) === String(cam.iriDe(iri) || iri || "").split("/").pop()); return c ? `${c.prenom || ""} ${c.nom || ""}`.trim() : ""; };
   // Demandes de l'appli reliées à une DI (tickets Camileia + demandes envoyées depuis l'appli)
+  // Contacts Camileia de l'équipe (correspondance des personnes) : leurs messages ne sont pas « nouveaux ».
+  let equipe = new Set();
+  try { const { getDoc: gd } = await import("./firestore-compte.js"); const m = (await gd(doc(db, "config", "camileia-contacts")))?.data()?.map || {}; equipe = new Set(Object.values(m).filter(Boolean).map(String)); } catch { /* */ }
   const parDi = new Map();
   demandes.forEach(d => { const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
   for (const di of brutes) {
@@ -148,7 +151,7 @@ async function importerMessages(brutes) {
     if (msgs.length === avant.length && msgs.every((m, i) => String(m.id) === String(avant[i]?.id))) continue;
     // Nouveau message qui ne vient pas de l'appli → « non lu » (badge sur la fiche)
     const nouveaux = msgs.filter(m => !avant.some(a => a.id === m.id));
-    const nonLu = nouveaux.some(m => !/^\[Appli SMM\]/.test(m.texte) && !avant.some(a => a.depuisAppli && String(a.texte).trim() === String(m.texte).trim())) || !!d.camileiaMsgNonLu;
+    const nonLu = nouveaux.some(m => !/^\[Appli SMM\]/.test(m.texte) && !equipe.has(String(m.contact).split("/").pop()) && !avant.some(a => a.depuisAppli && String(a.texte).trim() === String(m.texte).trim())) || !!d.camileiaMsgNonLu;
     const col = String(d.id).startsWith("cam-") ? "demandes-camileia" : "demandes";
     try { await updateDoc(doc(db, col, d.id), { camileiaMessages: msgs, camileiaMsgNonLu: nonLu }); } catch (e) { console.warn("Messages", d.id, e); }
   }
