@@ -229,6 +229,7 @@ function inspecterWeb(req) {
   js.push((autour.match(/url\s*[=:][^;\n]{0,160}/g) || []).join(" ## "));
   var p1 = page.indexOf("/DI/Messages/"); js.push(p1 >= 0 ? page.slice(Math.max(0, p1 - 600), p1 + 900) : "");
   var p2 = page.indexOf("form_message"); js.push(p2 >= 0 ? page.slice(Math.max(0, p2 - 200), p2 + 1500) : "");
+  if (req.chercher) { var p3 = page.indexOf(String(req.chercher)); js.push(p3 >= 0 ? page.slice(Math.max(0, p3 - 2000), p3 + 400) : "(absent)"); }
   return { taille: page.length, titre: (page.match(/<title>([\s\S]*?)<\/title>/i) || [, ""])[1].trim(), forms: forms, urls: urls, js: js };
 }
 
