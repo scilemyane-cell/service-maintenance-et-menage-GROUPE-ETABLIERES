@@ -124,7 +124,11 @@ function actionWeb(req) {
   if (page.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + " (identifiant ou mot de passe).", diag: DIAG };
 
   var form = lireFormulaire(page, "/DI/Modifier/");
-  if (!form) return { erreur: "Fiche DI " + di + " non modifiable avec le compte de " + email + "." };
+  if (!form) {
+    var tt = page.match(/<title>([\s\S]*?)<\/title>/i);
+    var corpsTxt = page.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    return { erreur: "Fiche DI " + di + " non modifiable avec le compte de " + email + ".", diagPage: { url: url, titre: tt ? tt[1].trim() : "", taille: page.length, nbForms: (page.match(/<form\b/gi) || []).length, actions: (page.match(/<form\b[^>]*>/gi) || []).slice(0, 5), texte: corpsTxt.slice(0, 400) } };
+  }
   var absents = [];
   var ch = req.champs || {};
   Object.keys(ch).forEach(function (k) {
