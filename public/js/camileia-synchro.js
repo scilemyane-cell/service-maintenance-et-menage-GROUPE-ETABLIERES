@@ -97,12 +97,15 @@ export async function synchroniser() {
 // essentiel disparaît, on le remet (sinon valeur par défaut) et on prévient.
 const CLE_SAINES = "camileia-di-saines";
 const ESSENTIELS = ["etat", "typepanne", "libelle", "site", "batiment", "priorite"];
-const PAR_DEFAUT = { typepanne: `${cam.RACINE}/d_i_type_pannes/1`, libelle: "(sans libellé)" };
+const PAR_DEFAUT = { typepanne: null, libelle: "(sans libellé)" };
 async function surveillerDI(brutes) {
+  try { const ev = await import("./camileia-envoi.js"); PAR_DEFAUT.typepanne = ev.typeParDefaut(await ev.referentiels()); } catch { /* */ }
   let saines = {}; try { saines = JSON.parse(localStorage.getItem(CLE_SAINES) || "{}"); } catch { /* */ }
   const reparees = [];
   for (const di of brutes) {
     const k = String(di.id), connu = saines[k] || {};
+    let actifs = null; try { const ev = await import("./camileia-envoi.js"); actifs = await ev.referentiels(); } catch { /* */ }
+    if (di.typepanne && actifs && !(await import("./camileia-envoi.js")).typeActif(di.typepanne, actifs)) { di.typepanne = null; connu.typepanne = null; }
     const manquants = ESSENTIELS.filter(c => !di[c] && (connu[c] || PAR_DEFAUT[c] || c === "etat"));
     // priorité : seulement si elle existait avant (elle peut être vide à la création)
     if (manquants.length) {

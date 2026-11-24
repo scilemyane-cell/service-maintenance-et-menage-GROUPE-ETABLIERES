@@ -24,7 +24,7 @@ export const TYPES_PROPOSES = {
   plomberie: 900024,     // Plomberie › Autre
   menuiserie: 900018,    // Porte cassée
   exterieur: 1,          // Autre (pas d'espaces verts dans Camileia)
-  peinture: 900036,      // Remise en état peinture
+  peinture: 900042,      // Travaux › Peinture (900036 désactivé)
   autre: 1,              // Autre
 };
 export async function lireCorrespTypes() {
@@ -98,6 +98,14 @@ export function proposerSite(nomApp, sitesCam) {
 
 // Type de panne : catégorie Camileia dont le nom correspond au « type » de
 // l'appli (Plomberie, Électricité…), puis son type « Autre » ; sinon le type par défaut.
+// Un type de demande désactivé dans Camileia fait planter la fiche (erreur 500) : on ne l'envoie jamais.
+const idType = (v) => String(cam.iriDe(v) || v || "").split("/").pop();
+export const typeActif = (iri, r) => iri && r.types.some(t => idType(t["@id"] || t.id) === idType(iri)) ? `${cam.RACINE}/d_i_type_pannes/${idType(iri)}` : null;
+export function typeParDefaut(r) {
+  const parId = (id) => r.types.find(t => idType(t["@id"] || t.id) === String(id));
+  const t = parId(1) || r.types.find(x => idType(x.categorie) === "1") || r.types[0];
+  return t ? `${cam.RACINE}/d_i_type_pannes/${idType(t["@id"] || t.id)}` : null;
+}
 function choisirType(typeApp, r, typeDefaut) {
   const t = sa(typeApp);
   const cat = t && r.categories.find(c => { const l = sa(cam.libelleLisible(c.libelle)); return l && (l === t || l.startsWith(t) || t.startsWith(l)); });
@@ -129,7 +137,7 @@ export async function envoyerDemande(d, { email = "" } = {}) {
   let typeIri = null;
   try { const { categorieDe } = await import("./categories-pannes.js"); const ct = await lireCorrespTypes(); typeIri = ct[categorieDe(d)] || null; } catch { /* repli ci-dessous */ }
   return cam.creerDI({
-    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: typeIri || choisirType(d.type, r, c.typeDefaut) || `${cam.RACINE}/d_i_type_pannes/${TYPES_PROPOSES.autre}`, // jamais vide : Camileia ne sait pas afficher une DI sans type (erreur 500)
+    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: typeActif(typeIri, r) || typeActif(choisirType(d.type, r, c.typeDefaut), r) || typeParDefaut(r), // jamais vide ni désactivé : sinon la fiche Camileia plante (erreur 500)
     priorite: prio?.["@id"] || null, etat: etat?.["@id"], createur: contact?.["@id"] || null, demandeur: d.demandeur || null,
   });
 }
