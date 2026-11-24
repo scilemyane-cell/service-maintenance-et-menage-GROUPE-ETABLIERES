@@ -89,6 +89,25 @@ export async function synchroniser() {
     const prioIri = cam.iriDe(brut?.priorite) || "";
     base.camileiaPrioIri = prioIri;
     const e = existants.get(id);
+    // Urgence signalée par le demandeur (Camileia ne lui propose pas de priorité) : motif « URGENT – … »
+    // ou mot « urgent » dans le libellé / la description → ticket Urgent + priorité « Très urgent » dans Camileia.
+    if (!e) {
+      const tCam = typesCam.find(t => String(cam.iriDe(t) || t["@id"] || t.id).split("/").pop() === String(typeIri).split("/").pop());
+      const motifUrgent = /^urgent/.test(sa(cam.libelleLisible(tCam?.libelle || "")));
+      const motUrgent = /(^|[^a-z])urgen(t|te|ce)([^a-z]|$)/.test(sa(`${brut?.libelle || ""} ${brut?.note || ""}`)) && !/(pas|non|moins) urgen/.test(sa(`${brut?.libelle || ""} ${brut?.note || ""}`));
+      // « URGENT – Autre » : la catégorie vient de la description.
+      if (motifUrgent && /\/d_i_categorie_type_pannes\/1$|^1$/.test(String(cam.iriDe(tCam?.categorie) || tCam?.categorie || ""))) {
+        try { const { categorieAuto } = await import("./categories-pannes.js"); base.categoriePanne = categorieAuto(`${brut?.libelle || ""} ${brut?.note || ""}`); } catch { /* */ }
+      }
+      if ((motifUrgent || motUrgent) && !["Urgent", "Critique"].includes(base.urgence)) {
+        base.urgence = "Urgent";
+        try {
+          const pr = await (await import("./camileia-envoi.js")).prioritePourUrgence("Urgent");
+          if (pr) { await cam.changerEtat(cam.iriDe(brut) || `${cam.RACINE}/d_is/${brut.id}`, null, { priorite: pr }); base.camileiaPrioIri = cam.iriDe(pr) || pr; }
+        } catch (er) { console.warn("Priorité urgente", id, er); }
+        window.toast?.(`🔴 Demande URGENTE reçue de Camileia : ${base.numero || id} — ${String(base.descriptif || "").slice(0, 60)}`, "error");
+      }
+    }
     if (!e) { await setDoc(doc(db, "demandes-camileia", id), { ...base, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }); crees++; continue; }
     const maj = {};
     CHAMPS_CAMILEIA.forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });

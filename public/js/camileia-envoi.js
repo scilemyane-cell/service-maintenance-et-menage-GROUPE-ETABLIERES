@@ -43,7 +43,7 @@ export async function typePourCategorie(catApp, texte = "", typeActuel = null) {
   const mots = new Set(sa(texte).split(" ").filter(m => m.length > 3).map(racine));
   let meilleur = null, score = 0;
   for (const t of dans) {
-    const lib = sa(cam.libelleLisible(t.libelle)); if (!lib || lib === "autre") continue;
+    const lib = sa(cam.libelleLisible(t.libelle)); if (!lib || lib === "autre" || /^urgent/.test(lib)) continue; // motifs « URGENT – … » : choisis par le demandeur seulement
     const n = lib.split(" ").filter(m => m.length > 3 && mots.has(racine(m))).length;
     if (n > score) { score = n; meilleur = t; }
   }
