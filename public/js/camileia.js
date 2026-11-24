@@ -120,6 +120,17 @@ export async function messageAuNomDe(diId, texte, idToken) {
   return d;
 }
 
+// Photo / pièce jointe d'une DI (chemin « /upload/… ») → Blob, via le relais.
+export async function lireFichier(chemin, idToken) {
+  const cfg = lireConfig();
+  if (cfg.mode !== "relais" || !cfg.relaisUrl) throw new ErreurCamileia("relais non réglé");
+  const r = await fetch(cfg.relaisUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ cle: cfg.relaisCle, action: "webFichier", idToken, chemin }) });
+  const d = await lireReponse(r);
+  if (!d?.b64) throw new ErreurCamileia(d?.erreur || "fichier illisible");
+  const bin = atob(d.b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new Blob([u], { type: d.type || "image/jpeg" });
+}
+
 // Appel générique. chemin = "/api-platform/d_is?page=1" ou une IRI.
 export async function appeler(methode, chemin, corps = null) {
   const cfg = lireConfig();

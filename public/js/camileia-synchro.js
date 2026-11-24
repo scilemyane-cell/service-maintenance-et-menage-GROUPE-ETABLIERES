@@ -65,6 +65,7 @@ export async function synchroniser() {
   const brutes = cam.avecIri(await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: 10 }), `${cam.RACINE}/d_is`);
   try { await surveillerDI(brutes); } catch (e) { console.warn("Surveillance DI Camileia :", e); }
   try { await importerMessages(brutes); } catch (e) { console.warn("Messages Camileia :", e); }
+  try { await importerPhotos(brutes); } catch (e) { console.warn("Photos Camileia :", e); }
   await resoudreLieux(brutes);
   const existants = new Map(demandes.filter(d => d.source === "camileia" && !String(d.id).startsWith("_")).map(d => [d.id, d]));
   const parSite = new Map();
@@ -168,6 +169,31 @@ async function importerMessages(brutes) {
     if (nonLu && !d.camileiaMsgNonLu) window.toast?.(`💬 Nouveau message du demandeur sur ${d.numero || "une demande"} (Camileia)`);
   }
   try { localStorage.setItem(CLE_MSG, JSON.stringify(cache)); } catch { /* */ }
+}
+
+// ---- Photos de la DI (photo 1-3, photos du compte rendu) : Camileia → fiche de l'appli ----
+const CHAMPS_PHOTOS = ["photo_1", "photo_2", "photo_3", "photo_compterendu_1", "photo_compterendu_2", "photo_compterendu_3"];
+async function importerPhotos(brutes) {
+  const parDi = new Map();
+  demandes.forEach(d => { const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
+  let jeton = null;
+  for (const di of brutes) {
+    const d = parDi.get(String(di.id)); if (!d) continue;
+    const deja = new Set(Array.isArray(d.camileiaPhotos) ? d.camileiaPhotos : []);
+    const nouvelles = CHAMPS_PHOTOS.map(k => di[k]).filter(v => typeof v === "string" && v.startsWith("/upload/") && !deja.has(v));
+    if (!nouvelles.length) continue;
+    if (!jeton) { const { auth } = await import("./firebase-init.js"); jeton = await auth.currentUser?.getIdToken?.(); }
+    const { compresserImage, ajouterPhotoDemande } = await import("./demandes-photos.js");
+    let ajoutees = 0;
+    for (const chemin of nouvelles) {
+      try { const blob = await cam.lireFichier(chemin, jeton); await ajouterPhotoDemande(d.id, await compresserImage(blob), "Camileia"); ajoutees++; }
+      catch (e) { console.warn("Photo Camileia", chemin, e); continue; }
+      deja.add(chemin);
+    }
+    if (!ajoutees) continue;
+    const col = String(d.id).startsWith("cam-") ? "demandes-camileia" : "demandes";
+    try { await updateDoc(doc(db, col, d.id), { camileiaPhotos: [...deja], nbPhotos: (d.nbPhotos || 0) + ajoutees, ...(col === "demandes" ? { dateMaj: serverTimestamp() } : {}) }); } catch (e) { console.warn("Photos", d.id, e); }
+  }
 }
 
 async function passage() {

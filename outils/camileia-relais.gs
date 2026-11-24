@@ -41,6 +41,7 @@ function doPost(e) {
     if (!req.cle || req.cle !== p.getProperty("CLE_RELAIS")) return repondre({ erreur: "Clé de relais incorrecte." });
     if (req.action === "web") return repondre(actionWeb(req));
     if (req.action === "inspecter") return repondre(inspecterWeb(req));
+    if (req.action === "webFichier") return repondre(fichierWeb(req)); // photo / pièce jointe d'une DI (lecture seule)
     if (req.action === "webMessage") return repondre(messageWeb(req)); // message dans la DI, au nom du technicien (Camileia prévient par mail) // lecture seule d'une page /DI/ (diagnostic)
     if (req.action === "diagWebApi") { // test du mécanisme de connexion web avec le compte API (aucun secret renvoyé)
       sessionWeb("diag-api", p.getProperty("CAMILEIA_LOGIN"), p.getProperty("CAMILEIA_MDP"), true);
@@ -183,6 +184,26 @@ function actionWeb(req) {
     appelCamileia("PUT", "/api-platform/d_is/" + di, corps, jeton(false));
   }
   return { ok: true, email: email, absents: absents, restaures: vides, suiviRefuse: suiviRefuse };
+}
+
+function fichierWeb(req) {
+  var chemin = String(req.chemin || "");
+  if (!/^\/(upload\/|DI\/Message\/File\/)/.test(chemin) || chemin.indexOf("..") >= 0) return { erreur: "Adresse refusée" };
+  var email = emailFirebase(req.idToken); if (!email) return { erreur: "Connexion à l'appli non vérifiée." };
+  var pp = PropertiesService.getScriptProperties(), base = pp.getProperty("CAMILEIA_BASE");
+  var url = base + encodeURI(decodeURI(chemin));
+  var lire = function (cookies) { return UrlFetchApp.fetch(url, { headers: cookies ? { Cookie: cookies } : {}, muteHttpExceptions: true, followRedirects: false }); };
+  var r = lire(null);
+  if (r.getResponseCode() !== 200 || /text\/html/i.test(String(r.getHeaders()["Content-Type"] || ""))) {
+    var compte = pp.getProperty("WEB " + email) || "";
+    var i = compte.indexOf(":"), login = (i < 0 ? compte : compte.slice(0, i)).trim() || pp.getProperty("CAMILEIA_LOGIN"), mdp = i < 0 ? "" : compte.slice(i + 1);
+    if (!mdp) mdp = pp.getProperty("CAMILEIA_MDP");
+    r = lire(sessionWeb(email, login, mdp, false));
+    if (r.getResponseCode() !== 200 || /text\/html/i.test(String(r.getHeaders()["Content-Type"] || ""))) r = lire(sessionWeb(email, login, mdp, true));
+  }
+  var type = String(r.getHeaders()["Content-Type"] || "");
+  if (r.getResponseCode() !== 200 || /text\/html/i.test(type)) return { erreur: "Fichier introuvable (" + r.getResponseCode() + ")" };
+  return { type: type, b64: Utilities.base64Encode(r.getContent()) };
 }
 
 function messageWeb(req) {
