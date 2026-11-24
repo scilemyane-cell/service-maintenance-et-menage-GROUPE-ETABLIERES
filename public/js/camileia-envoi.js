@@ -13,7 +13,7 @@ export const REF_TYPES = doc(db, "config", "camileia-types");
 export const CATEGORIE_CAM = {
   plomberie: 14, electricite: 11, equipements: 900006, menuiserie: 15, peinture: 9, serrurerie: 5,
   chauffage: 2, nettoyage: 7, incendie: 17, courants: 900004, ecs: 900012, exterieur: 900013,
-  logistique: 12, toiture: 18, nuisibles: 900014, autre: 1,
+  logistique: 12, toiture: 18, nuisibles: 900014, ascenseur: 8, autre: 1,
 };
 // Type « générique » de chaque catégorie, si aucun mot du descriptif ne correspond à un type précis.
 export const TYPES_PROPOSES = {
@@ -24,7 +24,7 @@ export const TYPES_PROPOSES = {
   nettoyage: 18,         // Problème de propreté
   incendie: 900049,      // Détecteur de fumée
   courants: 900028, ecs: 23, exterieur: 900083, logistique: 900085,
-  toiture: 34, nuisibles: 900095, autre: 900096,
+  toiture: 34, nuisibles: 900095, ascenseur: 11, autre: 900096,
 };
 export async function lireCorrespTypes() {
   let c = {}; try { c = (await getDoc(REF_TYPES))?.data()?.categories || {}; } catch { /* */ }
@@ -59,7 +59,7 @@ export async function enregistrerCorrespTypes(categories) { await setDoc(REF_TYP
 const CAT_POUR_CATEGORIE_CAM = {
   // catégories actuelles (refonte 24/11/2026) + anciennes désactivées (DI plus anciennes)
   ...Object.fromEntries(Object.entries(CATEGORIE_CAM).map(([k, v]) => [v, k])),
-  3: "chauffage", 4: "chauffage", 6: "serrurerie", 8: "equipements", 10: "electricite", 13: "serrurerie", 16: "peinture",
+  3: "chauffage", 4: "chauffage", 6: "serrurerie", 10: "electricite", 13: "serrurerie", 16: "peinture",
   900002: "logistique", 900003: "serrurerie", 900005: "peinture", 900007: "courants", 900008: "courants", 900009: "courants", 900010: "courants",
 };
 // Type de demande Camileia → catégorie de l'appli : d'abord la correspondance
