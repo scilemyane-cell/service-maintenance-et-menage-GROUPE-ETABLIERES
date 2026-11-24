@@ -260,6 +260,11 @@
   // Badge « actions attribuées » : suit l'utilisateur affiché (y compris en
   // « Aperçu en tant que… », pour voir ce que voit la personne).
   let mesActionsCount = 0, mesActionsUid = null, mesActionsUnsub = null;
+  let msgsCamCount = 0, msgsCamUid = null;
+  function suivreMessagesCam(uid, role) {
+    if (!uid || uid === msgsCamUid) return; msgsCamUid = uid;
+    import("./firestore-data.js").then(({ watchMessagesCamNonLus }) => watchMessagesCamNonLus(uid, role, (l) => { if (msgsCamUid !== uid) return; const avant = msgsCamCount; msgsCamCount = l.length; if (avant !== msgsCamCount && currentCategory === null) render(); }));
+  }
   // Demandes à valider (superviseurs) : notification avec raccourci.
   let aValiderCount = 0, aValiderAbonne = false;
   function suivreAValider(role) {
@@ -551,7 +556,7 @@
         ],
       },
       {
-        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: (mesActionsCount + (["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0)) || null, badgeActions: mesActionsCount, badgeValider: ["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
+        id: "suivi-demandes", label: "Suivi des demandes", icon: "📄", badge: (mesActionsCount + msgsCamCount + (["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0)) || null, badgeMessages: msgsCamCount, badgeActions: mesActionsCount, badgeValider: ["super_admin", "admin", "n1"].includes(utilisateurEffectif()?.role) ? aValiderCount : 0, desc: "Demandes d'intervention importées du fichier Excel : tableau à traiter par les techniciens, + statistiques (mois, statut, association, site, urgence)",
         subtabs: [
           { id: "liste", label: "Demandes", icon: "📄", roles: [...GESTION,"direction","technicien","menage","mi_temps"], mount: mountSuiviDemandesTab },
           // Lien Camileia (GMAO) : version de test seulement, en simulation.
@@ -893,6 +898,7 @@
 
   function render() {
     const app = document.getElementById("app");
+    try { suivreMessagesCam(currentUser?.role ? utilisateurEffectif()?.uid : null, utilisateurEffectif()?.role); } catch (e) { console.error(e); }
     try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); suivreAValider(currentUser?.role); suivreDemandesOuvertes(currentUser?.role); } catch (e) { console.error(e); }
 
     if (currentUser.role === null) {

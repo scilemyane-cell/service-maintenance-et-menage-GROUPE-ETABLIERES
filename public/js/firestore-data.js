@@ -228,6 +228,23 @@ export function watchActionsImmediates(uid, callback) {
   return deriverDemandes(`immediates:${uid}`, (liste) => liste.filter(x => x.actionPour === uid && x.actionImmediate && !x.actionFaiteLe && !demandeClose(x) && !x.lieeA)
     .map(x => ({ id: x.id, numero: x.numero, site: x.site, local: x.local, actionTexte: x.actionTexte, actionPar: x.actionPar })), callback);
 }
+// Nouveaux messages de demandeurs (échanges Camileia) qui concernent cette personne :
+// tout pour les superviseurs ; pour un technicien, ses demandes attribuées,
+// ses actions et les demandes non attribuées de ses sites.
+const cleSiteMsg = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+export function watchMessagesCamNonLus(uid, role, callback) {
+  let liste = [], aff = {};
+  const calc = () => {
+    const sup = ["super_admin", "admin", "n1"].includes(role);
+    const mesSites = new Set(Object.entries(aff || {}).filter(([, l]) => (l || []).includes(uid)).map(([n]) => cleSiteMsg(n)));
+    callback(liste.filter(x => x.camileiaMsgNonLu && !x.lieeA && (sup || x.attribueA === uid || x.actionPour === uid || (!x.attribueA && mesSites.has(cleSiteMsg(x.site)))))
+      .map(x => { const m = (x.camileiaMessages || []).slice(-1)[0] || {}; return { id: x.id, numero: x.numero, site: x.site, local: x.local, auteur: m.auteur || "", texte: String(m.texte || "").replace(/^\[Appli SMM\]\s*/, "") }; }));
+  };
+  const u1 = deriverDemandes("msgcam", (l) => l.filter(x => x.camileiaMsgNonLu), (l) => { liste = l; calc(); });
+  let u2 = () => {};
+  import("./affectations-sites-data.js").then(m => { u2 = m.watchAffectationsSites((a) => { aff = a; calc(); }); });
+  return () => { try { u1?.(); } catch { /* */ } try { u2?.(); } catch { /* */ } };
+}
 // Actions à faire + retours non lus sur les actions que j'ai attribuées (badge de la tuile).
 export function watchMesActionsDemandes(uid, callback) {
   return deriverDemandes(`mes-actions:${uid}`, (liste) => liste.filter(x => (x.actionPour === uid && !x.actionFaiteLe && !demandeClose(x)) || (x.actionParUid === uid && x.actionReponseNonLue)).length, callback);

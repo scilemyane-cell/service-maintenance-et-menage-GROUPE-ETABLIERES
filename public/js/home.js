@@ -1,7 +1,7 @@
 import { compteCeJour, joursAbsence } from "./absences-util.js";
 import { resolveDayN1, resolveDayN2, computeWeeklyTitulaires, YEAR_START, YEAR_END, HOLIDAYS, dateKey, esc, initials, colorForPerson, nextHandover, addDays } from "./astreinte-logic.js";
 import { modulesMasquesPour } from "./modules-construction-data.js";
-import { watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
+import { watchMessagesCamNonLus, watchPeople, watchAbsences, watchInterventions, watchRecurrences, watchUrgencesOuvertes, watchNouvellesDemandes, watchActionsImmediates, watchInterventionsDepuis, watchInterventionsACompleter } from "./firestore-data.js";
 import { genererOccurrencesRecurrence, sansAbsences, couleursSites, siteCourt } from "./recurrence-utils.js";
 import { watchTransferts } from "./transfert-data.js";
 import { transfertBannerHTML, attachTransfertListeners } from "./transfert-ui.js";
@@ -107,6 +107,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
   // quel que soit le technicien, sans limite d'ancienneté ni « Vu ».
   ecranGeneral = !!user.postePartage;
   unsubs.push(watchUrgencesOuvertes((u) => { urgences = u; recu("urgences"); scheduleRender(); }));
+  msgsCam = []; if (user.uid) unsubs.push(watchMessagesCamNonLus(user.uid, user.role, (l) => { msgsCam = l; scheduleRender(); }));
   nouvelles = []; uidVues = user.uid || null;
   // Actions immédiates : pour moi, et sur un poste partagé pour la personne choisie.
   immediates = {};
@@ -485,6 +486,7 @@ function moisACloturer() {
 // (favoris-sites/{uid}), avec le navigateur comme cache.
 let urgences = [], uidTechSeul = null, ecranGeneral = false; // technicien : on cache les urgences attribuées à un autre
 let nouvelles = [];
+let msgsCam = []; // nouveaux messages de demandeurs (échanges Camileia)
 let uidVues = null;
 const CLE_URG_VUES = "etablieres-urgences-vues";
 const CLE_NOUV_VUES = "etablieres-nouvelles-vues";
@@ -636,6 +638,23 @@ function bandeauImmediatHTML() {
           ${cliquable ? `<span class="gh-urg-go">Ouvrir →</span>` : ""}
         </${cliquable ? "button" : "div"}>
       </div>`).join("")}
+    </div></section>`;
+}
+
+// ---- Bandeau « nouveaux messages » (échanges avec le demandeur, Camileia) ----
+function bandeauMessagesHTML() {
+  const l = msgsCam || []; if (!l.length) return "";
+  const cliquable = catsRef.some(c => c.id === "suivi-demandes");
+  return `<section class="gh-nouv">
+    <div class="gh-nouv-tete">💬 <b>${l.length} nouveau${l.length > 1 ? "x" : ""} message${l.length > 1 ? "s" : ""} de demandeur${l.length > 1 ? "s" : ""}</b></div>
+    <div class="gh-urg-liste">${l.slice(0, 5).map(n => `
+      <div class="gh-urg">
+        <${cliquable ? `button type="button" data-urg-ouvrir="${esc(n.id)}" data-urg-site="${esc(n.site || "")}"` : "div"} class="gh-urg-corps gh-nouv-corps">
+          <span class="gh-urg-txt"><b>${esc(n.numero || "")} · ${esc(n.site || "")}${n.local ? ` · 📍 ${esc(n.local)}` : ""}</b><small>${n.auteur ? `<b>${esc(n.auteur)} :</b> ` : ""}${esc((n.texte || "").slice(0, 110))}</small></span>
+          ${cliquable ? `<span class="gh-urg-go">Lire →</span>` : ""}
+        </${cliquable ? "button" : "div"}>
+      </div>`).join("")}
+      ${l.length > 5 ? `<div class="gh-urg-plus">+ ${l.length - 5} autre${l.length - 5 > 1 ? "s" : ""}</div>` : ""}
     </div></section>`;
 }
 
@@ -878,6 +897,7 @@ function render() {
       ${bandeauLogementsHTML()}
       ${bandeauDepotsHTML()}
       ${bandeauUrgencesHTML()}
+      ${bandeauMessagesHTML()}
       ${bandeauNouvellesHTML()}
 
       <div class="gh-entete">
