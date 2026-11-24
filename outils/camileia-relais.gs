@@ -121,6 +121,11 @@ function actionWeb(req) {
   var cookies = sessionWeb(email, login, mdp, false);
   var page = getWeb(url, cookies);
   if (page.indexOf("_username") >= 0) { cookies = sessionWeb(email, login, mdp, true); page = getWeb(url, cookies); }
+  // Session neuve : Camileia attend qu'on passe par l'accueil et la liste des DI (sinon erreur 500).
+  if (/Erreur 500/i.test(page)) {
+    ["/Home/Home", "/DI/ListeAll", "/DI/Details/Liste_All_DI/" + site + "/" + site + "/" + di].forEach(function (u) { getWeb(u, cookies); });
+    page = getWeb(url, cookies);
+  }
   if (page.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + " (identifiant ou mot de passe).", diag: DIAG };
 
   var form = lireFormulaire(page, "/DI/Modifier/");
