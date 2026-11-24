@@ -13,7 +13,8 @@ const sa = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLow
 const ETAT_POUR_STATUT = {
   "pris en compte": "Pris en compte", "demande de devis": "Attente devis", "planifie": "En cours",
   "intervenant sollicite": "En cours", "commande en cours": "En cours", "en attente de date d'intervention": "En cours",
-  "realise – a valider": "Terminée", "realise": "Clôturée",
+  "arbitrage budgetaire": "En cours", "autre": "En cours",
+  "realise – a valider": "Terminée", "realise": "Clôturée", "annule": "Non qualifiée", "non renseigne": "A qualifier",
 };
 let etatsCache = null;
 async function etats() {
@@ -66,7 +67,7 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   const champs = {}, libelles = [];
   let etatIri = null;
   try {
-    if (fields.statut && fields.statut !== "Annulé") {
+    if (fields.statut) {
       const iri = await etatPourStatut(fields.statut);
       if (iri && iri !== t.camileiaEtatIri) {
         etatIri = iri; champs.etat = idDe(iri); libelles.push("état");

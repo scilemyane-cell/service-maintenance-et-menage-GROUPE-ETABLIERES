@@ -169,6 +169,14 @@ async function basculerFavori(nomSite) {
   catch (e) { console.error("saveFavorisDemandes:", e); window.toast?.("Favori non enregistré."); }
 }
 
+// Version test : mêmes libellés que Camileia (GMAO). Les valeurs enregistrées
+// restent celles de l'appli (base partagée avec la version validée et l'Excel) ;
+// seuls les libellés et les boutons changent.
+const CANAL_TEST_CAM = location.pathname.startsWith("/beta/");
+const EN_COURS_CAM = ["Planifié", "Intervenant sollicité", "Commande en cours", "En attente de date d'intervention", "Arbitrage budgétaire", "Autre"];
+const BOUTONS_CAM = [["Pris en compte", "Pris en compte"], ["Planifié", "En cours"], ["Demande de devis", "Attente devis"], ["Réalisé", "Terminée"], ["Annulé", "Non qualifiée"]];
+export const libStatut = (s) => !CANAL_TEST_CAM ? s : !s || s === "Non renseigné" ? "À qualifier" : s === "Réalisé" ? "Clôturée" : s === "Réalisé – à valider" ? "Terminée (à valider)" : s === "Annulé" ? "Non qualifiée" : s === "Demande de devis" ? "Attente devis" : EN_COURS_CAM.includes(s) ? "En cours" : s;
+const URGENCES_EDIT = CANAL_TEST_CAM ? [["Critique", "Vital"], ["Urgent", "Très urgent"], ["Normal", "Moins urgent"], ["À planifier", "Non urgent"]] : [["Critique", "Critique"], ["Urgent", "Urgent"], ["À planifier", "À planifier"], ["Normal", "Normal"]];
 const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "En attente de date d'intervention", "Planifié", "Commande en cours", "Réalisé", "Annulé", "Arbitrage budgétaire"];
 const ORDRE_URG = { "Critique": 0, "Urgent": 1, "À planifier": 2, "Normal": 3, "Non renseignée": 4 };
 const TRAITE = (s) => s === "Réalisé" || s === "Annulé";
@@ -776,7 +784,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${q.length >= 3 ? (() => {
         // Recherche aussi dans les demandes (N°, descriptif, local), même traitées ou reliées.
         const qc = q.replace(/[\s\-_.\/]+/g, ""), cp = (x) => sa(x).replace(/[\s\-_.\/]+/g, ""); const trouvees = lignes.filter(l => sa(l.n).includes(q) || sa(l.descr).includes(q) || sa(l.local).includes(q) || (qc.length >= 2 && cp(l.local).includes(qc))).slice(0, 60);
-        const etat = (l) => l.lieeA ? `🔗 doublon de ${esc(l.lieeANumero || "?")}` : TRAITE(l.statut) ? `✓ ${esc(l.statut)}` : EN_ATTENTE_VALID(l.statut) ? "⏳ à valider" : `à traiter · ${esc(l.statut)}`;
+        const etat = (l) => l.lieeA ? `🔗 doublon de ${esc(l.lieeANumero || "?")}` : TRAITE(l.statut) ? `✓ ${esc(libStatut(l.statut))}` : EN_ATTENTE_VALID(l.statut) ? "⏳ à valider" : `à traiter · ${esc(libStatut(l.statut))}`;
         return `<section class="dps-trouvees"><h3>📄 Demandes trouvées <small>${trouvees.length}${trouvees.length === 30 ? "+" : ""}</small></h3>
           ${trouvees.length ? `<div class="dps-trouvees-liste">${trouvees.map(l => `<button type="button" class="dps-trouvee" data-ouvrir-dem="${esc(l.id)}" data-ouvrir-site="${esc(l.site)}"><b>${esc(l.n)}</b><span>${esc(l.site)}${l.local ? ` · ${esc(l.local)}` : ""} — ${esc((l.descr || "").slice(0, 70))}</span><em class="${TRAITE(l.statut) || l.lieeA ? "fini" : ""}">${etat(l)}</em></button>`).join("")}</div>`
           : `<p class="dps-vide">❌ Aucune demande « ${esc(st.q.trim())} » dans l'appli${/^[a-z]{1,4}-?\d+$/i.test(st.q.trim()) ? " : elle n'a pas encore été récupérée du fichier Excel (onglet Tableau › « 📥 Récupérer les demandes du fichier »)" : ""}.</p>`}</section>`;
@@ -890,7 +898,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
         <div><b>${esc(l.versionPrecedente.site)}</b>${l.versionPrecedente.local ? ` · 📍 ${esc(l.versionPrecedente.local)}` : ""}${l.versionPrecedente.demandeur ? ` · par ${esc(l.versionPrecedente.demandeur)}` : ""}${l.versionPrecedente.dateDemande ? ` · ${fr(l.versionPrecedente.dateDemande)}` : ""}<br><i>${esc(l.versionPrecedente.descriptif || "(sans descriptif)")}</i></div>
         ${perms.isEditor ? `<button type="button" data-restaurer-version="${esc(l.id)}">↩ Restaurer cette version</button>` : ""}</details>` : ""}
       ${perms.isEditor ? `<div class="dps-urg-edit"><label>Site <select data-site-corr="${esc(l.id)}">${(() => { const m = {}; lignes.forEach(x => { if (x.site && x.site !== "Non renseigné") m[x.site] = m[x.site] || x.association || "Autres"; }); return ["Agropolis", "École", "Armonia", "Autres"].map(as => { const n = Object.keys(m).filter(k => (m[k] || "Autres") === as).sort((a, b) => a.localeCompare(b, "fr")); return n.length ? `<optgroup label="${as}">${n.map(k => `<option value="${esc(k)}" data-asso="${esc(m[k])}" ${k === l.site ? "selected" : ""}>${esc(k)}</option>`).join("")}</optgroup>` : ""; }).join(""); })()}</select></label></div>` : ""}
-      ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${["Critique", "Urgent", "À planifier", "Normal"].map(u => `<option ${u === l.urgence ? "selected" : ""}>${u}</option>`).join("")}${["Critique", "Urgent", "À planifier", "Normal"].includes(l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
+      ${perms.isEditor ? `<div class="dps-urg-edit"><label>Urgence <select data-urgence="${esc(l.id)}">${URGENCES_EDIT.map(([u, lib]) => `<option value="${u}" ${u === l.urgence ? "selected" : ""}>${lib}</option>`).join("")}${URGENCES_EDIT.some(([u]) => u === l.urgence) ? "" : `<option selected>${esc(l.urgence)}</option>`}</select></label>${l.urgenceCorrigee ? `<small>requalifiée${l.urgenceCorrigeePar ? ` par ${esc(l.urgenceCorrigeePar)}` : ""} — demandée « ${esc(l.urgenceDemandee)} » <button type="button" data-urgence-reset="${esc(l.id)}">↩ remettre</button></small>` : ""}</div>`
         : l.urgenceCorrigee ? `<div class="dps-urg-edit"><small>Urgence requalifiée (demandée « ${esc(l.urgenceDemandee)} »)</small></div>` : ""}
       ${perms.isEditor ? (() => { const auto = categorieAuto(`${l.descr || ""} ${l.type || ""}`), cur = categorieDe(l), info = CATEGORIES_PANNES.find(c => c.id === auto);
         return `<div class="dps-urg-edit"><label>Catégorie <select data-cat-panne="${esc(l.id)}"><option value="">${info.ic} ${esc(info.lib)} (auto)</option>${CATEGORIES_PANNES.map(c => `<option value="${c.id}" ${l.categoriePanne === c.id ? "selected" : ""}>${c.ic} ${esc(c.lib)}</option>`).join("")}</select></label>${l.categoriePanne && l.categoriePanne !== auto ? `<small>corrigée à la main</small>` : ""}</div>`; })() : ""}
@@ -898,7 +906,8 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${lieesHTML(l)}${suggestionHTML(l)}
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
-        ${STATUTS_RAPIDES.map(s => `<button type="button" class="dps-st ${val(l, "statut") === s ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}">${esc(s)}</button>`).join("")}
+        ${CANAL_TEST_CAM ? BOUTONS_CAM.map(([s, lib]) => `<button type="button" class="dps-st ${val(l, "statut") === s || (s === "Planifié" && EN_COURS_CAM.includes(val(l, "statut"))) ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}" title="${s === "Réalisé" ? "Terminée : à valider par un superviseur, puis Clôturée" : ""}">${esc(lib)}</button>`).join("")
+          : STATUTS_RAPIDES.map(s => `<button type="button" class="dps-st ${val(l, "statut") === s ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}">${esc(s)}</button>`).join("")}
       </div>
       <div class="dps-champs">
         ${perms.isEditor ? `<label>Intervenant<select data-dps-champ="categorieIntervenant">${["", "Interne SG", "Externe SG", "Interne site", "Externe site"].map(o => `<option value="${o}" ${o === val(l, "categorieIntervenant") ? "selected" : ""}>${o || "—"}</option>`).join("")}</select></label>` : ""}
@@ -926,7 +935,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       </div>
       ${val(l, "statut") === "Réalisé" && !TRAITE(l.statut) ? `<p class="dps-aide">${perms.isEditor ? "Vérifie la date, le contact et le commentaire, puis valide." : "Complète le contact et le commentaire, puis envoie au superviseur."}</p>` : ""}
       ` : `
-      <div class="dps-lecture"><span>Statut : <b>${esc(l.statut)}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : ""}</div>`}
+      <div class="dps-lecture"><span>Statut : <b>${esc(libStatut(l.statut))}</b></span>${l.intervenant ? `<span>Contact : <b>${esc(l.intervenant)}</b></span>` : ""}${l.dateIntervention ? `<span>Intervention : <b>${fr(l.dateIntervention)}</b></span>` : ""}${l.commentaireTech ? `<span>${esc(l.commentaireTech)}${l.commentaireTechPar ? ` <small>— ${esc(l.commentaireTechPar)}</small>` : ""}</span>` : ""}</div>`}
       ${(() => {
         const liees = lieesDe(l.id);
         // Toutes les demandes du site (sauf celle-ci, celles déjà reliées ici et
@@ -1099,7 +1108,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const l = lignes.find(x => x.id === sel.dataset.urgence), v = sel.value;
     const champs = v === l.urgenceDemandee ? { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" } : { urgenceCorrigee: v, urgenceCorrigeePar: utilisateur, urgenceCorrigeeLe: aujourdhui() };
     sel.disabled = true;
-    try { await maj(l.id, champs); window.toast?.(`Urgence ${v === l.urgenceDemandee ? "remise comme demandée" : `requalifiée : ${v}`}`); } catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; }
+    try { await maj(l.id, champs); window.toast?.(`Urgence ${v === l.urgenceDemandee ? "remise comme demandée" : `requalifiée : ${sel.selectedOptions[0]?.textContent || v}`}`); } catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; }
   }));
   container.querySelectorAll("[data-cat-panne]").forEach(sel => sel.addEventListener("change", async () => {
     sel.disabled = true;
