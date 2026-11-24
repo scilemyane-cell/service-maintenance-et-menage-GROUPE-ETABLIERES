@@ -286,7 +286,7 @@ export function initCarteSites(holder, dossiers, options = {}) {
     avecAdresse.forEach(d => { if (geoValide(d)) ajouterMarker(d); });
     const cadrer = () => {
       if (!map || Object.keys(markers).length === 0) return;
-      map.fitBounds(window.L.featureGroup(Object.values(markers)).getBounds().pad(0.2), { maxZoom: 14 });
+      map.fitBounds(window.L.featureGroup(Object.values(markers)).getBounds().pad(0.2), { maxZoom: 14, animate: false }); // sans animation : l'accueil se redessine souvent pendant le zoom (erreur Leaflet « _leaflet_pos »)
     };
     cadrer();
     // Si la carte a été créée avant que sa zone ait sa taille définitive
