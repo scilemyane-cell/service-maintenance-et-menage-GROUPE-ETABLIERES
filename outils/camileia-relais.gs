@@ -203,7 +203,11 @@ function messageWeb(req) {
   var ajax = { "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" };
   var base = pp.getProperty("CAMILEIA_BASE");
   // Variantes d'envoi (celle du navigateur d'abord) ; on s'arrête dès que le message apparaît.
+  var site = String((appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(false)).corps || {}).site || "").split("/").pop();
+  var fiche = "/DI/Details/Liste_All_DI/" + site + "/" + site + "/" + di;
   var essais = [
+    // Comme le navigateur : le formulaire de la fiche est envoyé sur l'adresse de la fiche elle-même.
+    function () { return postMultipart(fiche, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies, ajax); },
     function () { return postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies, ajax); },
     function () { return postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }], cookies, ajax); },
     function () { return UrlFetchApp.fetch(base + "/DI/Messages/" + di, { method: "post", payload: { message_tsa_text: texte }, headers: Object.assign({ Cookie: cookies }, ajax), muteHttpExceptions: true, followRedirects: false }).getContentText(); },
