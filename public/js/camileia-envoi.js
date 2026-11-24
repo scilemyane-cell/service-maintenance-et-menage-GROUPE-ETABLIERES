@@ -8,38 +8,59 @@ import * as cam from "./camileia.js";
 export const REF_SITES = doc(db, "config", "camileia-sites");
 // Catégorie de panne de l'appli (categories-pannes.js) → type de demande Camileia.
 export const REF_TYPES = doc(db, "config", "camileia-types");
-// Proposition par défaut (ids Camileia relevés dans Paramètres › Types de demandes).
-// Choisis d'après le contenu réel des demandes de l'appli (23/11/2026) :
-// sécurité incendie = surtout des DAAF ; électricité = surtout néons / ampoules.
-// Pas de type générique côté Camileia pour équipements, menuiserie, extérieurs et nuisibles.
+// Refonte du 24/11/2026 (outils/camileia-refonte-categories.js) : une catégorie Camileia par
+// catégorie de l'appli. Le type précis est choisi d'après les mots du descriptif (typePourCategorie).
+export const CATEGORIE_CAM = {
+  plomberie: 14, electricite: 11, equipements: 900006, menuiserie: 15, peinture: 9, serrurerie: 5,
+  chauffage: 2, nettoyage: 7, incendie: 17, courants: 900004, ecs: 900012, exterieur: 900013,
+  logistique: 12, toiture: 18, nuisibles: 900014, autre: 1,
+};
+// Type « générique » de chaque catégorie, si aucun mot du descriptif ne correspond à un type précis.
 export const TYPES_PROPOSES = {
-  nuisibles: 1,          // Autre
-  incendie: 900049,      // Détecteur de fumée
-  toiture: 34,           // Infiltration d'eau
-  ecs: 23,               // Il n'y a pas d'eau chaude
-  chauffage: 2,          // Problème de chauffage/climatisation
-  serrurerie: 27,        // Ma serrure ne fonctionne pas
-  electricite: 900053,   // Éclairage
-  equipements: 1,        // Autre (pas de type « équipement HS » générique)
   plomberie: 900024,     // Plomberie › Autre
-  menuiserie: 900018,    // Porte cassée
-  exterieur: 1,          // Autre (pas d'espaces verts dans Camileia)
-  peinture: 900042,      // Travaux › Peinture (900036 désactivé)
-  autre: 1,              // Autre
+  electricite: 900053,   // Éclairage
+  equipements: 900069, menuiserie: 900018, peinture: 900019, serrurerie: 900009,
+  chauffage: 2,          // Problème de chauffage / climatisation
+  nettoyage: 18,         // Problème de propreté
+  incendie: 900049,      // Détecteur de fumée
+  courants: 900028, ecs: 23, exterieur: 900083, logistique: 900085,
+  toiture: 34, nuisibles: 900095, autre: 900096,
 };
 export async function lireCorrespTypes() {
   let c = {}; try { c = (await getDoc(REF_TYPES))?.data()?.categories || {}; } catch { /* */ }
   const out = {}; Object.entries(TYPES_PROPOSES).forEach(([k, id]) => { out[k] = c[k] || `${cam.RACINE}/d_i_type_pannes/${id}`; });
   return out;
 }
+// Type Camileia pour une catégorie de l'appli : type de la catégorie Camileia dont le nom
+// ressemble le plus au descriptif (« fuite mitigeur » → Robinet / mitigeur…), sinon le type générique.
+const racine = (m) => m.slice(0, 5);
+export async function typePourCategorie(catApp, texte = "", typeActuel = null) {
+  const r = await referentiels();
+  const idC = String(CATEGORIE_CAM[catApp] ?? "");
+  const dans = r.types.filter(t => idType(t.categorie) === idC);
+  if (!dans.length) { const ct = await lireCorrespTypes(); return typeActif(ct[catApp], r) || typeParDefaut(r); }
+  if (typeActuel && dans.some(t => idType(t["@id"] || t.id) === idType(typeActuel))) return `${cam.RACINE}/d_i_type_pannes/${idType(typeActuel)}`;
+  const mots = new Set(sa(texte).split(" ").filter(m => m.length > 3).map(racine));
+  let meilleur = null, score = 0;
+  for (const t of dans) {
+    const lib = sa(cam.libelleLisible(t.libelle)); if (!lib || lib === "autre") continue;
+    const n = lib.split(" ").filter(m => m.length > 3 && mots.has(racine(m))).length;
+    if (n > score) { score = n; meilleur = t; }
+  }
+  if (meilleur) return `${cam.RACINE}/d_i_type_pannes/${idType(meilleur["@id"] || meilleur.id)}`;
+  const ct = await lireCorrespTypes(); const def = typeActif(ct[catApp], r);
+  if (def && dans.some(t => idType(t["@id"] || t.id) === idType(def))) return def;
+  const autre = dans.find(t => /^autre/.test(sa(cam.libelleLisible(t.libelle)))) || dans[0];
+  return `${cam.RACINE}/d_i_type_pannes/${idType(autre["@id"] || autre.id)}`;
+}
 export async function enregistrerCorrespTypes(categories) { await setDoc(REF_TYPES, { categories, le: Date.now() }); }
 // Type Camileia → catégorie de l'appli (sens retour), d'après la correspondance.
 // Catégorie Camileia (Paramètres › Catégories) → catégorie de panne de l'appli.
 const CAT_POUR_CATEGORIE_CAM = {
-  1: "autre", 2: "chauffage", 3: "chauffage", 4: "equipements", 5: "serrurerie", 6: "serrurerie", 7: "autre",
-  8: "equipements", 9: "peinture", 10: "electricite", 11: "electricite", 12: "autre", 13: "menuiserie",
-  14: "plomberie", 15: "menuiserie", 16: "peinture", 17: "incendie", 18: "toiture", 900003: "serrurerie",
-  900004: "electricite", 900005: "peinture", 900006: "equipements", 900007: "autre", 900008: "autre",
+  // catégories actuelles (refonte 24/11/2026) + anciennes désactivées (DI plus anciennes)
+  ...Object.fromEntries(Object.entries(CATEGORIE_CAM).map(([k, v]) => [v, k])),
+  3: "chauffage", 4: "chauffage", 6: "serrurerie", 8: "equipements", 10: "electricite", 13: "serrurerie", 16: "peinture",
+  900002: "logistique", 900003: "serrurerie", 900005: "peinture", 900007: "courants", 900008: "courants", 900009: "courants", 900010: "courants",
 };
 // Type de demande Camileia → catégorie de l'appli : d'abord la correspondance
 // enregistrée (type exact), sinon d'après la catégorie Camileia du type.
@@ -148,7 +169,7 @@ export async function envoyerDemande(d, { email = "" } = {}) {
   let local = null; try { local = await localPour(m.batiment, d.local); } catch { /* local facultatif */ }
   // Type : catégorie de la demande (corrigée ou automatique) → type Camileia de la correspondance.
   let typeIri = null;
-  try { const { categorieDe } = await import("./categories-pannes.js"); const ct = await lireCorrespTypes(); typeIri = ct[categorieDe(d)] || null; } catch { /* repli ci-dessous */ }
+  try { const { categorieDe } = await import("./categories-pannes.js"); typeIri = await typePourCategorie(categorieDe(d), `${descr} ${d.local || ""}`); } catch { /* repli ci-dessous */ }
   return cam.creerDI({
     libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: typeActif(typeIri, r) || typeActif(choisirType(d.type, r, c.typeDefaut), r) || typeParDefaut(r), // jamais vide ni désactivé : sinon la fiche Camileia plante (erreur 500)
     priorite: prio?.["@id"] || null, etat: etat?.["@id"], createur: contact?.["@id"] || null, demandeur: d.demandeur || null,

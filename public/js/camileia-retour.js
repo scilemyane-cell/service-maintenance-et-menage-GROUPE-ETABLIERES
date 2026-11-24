@@ -98,8 +98,8 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
       const ev = await import("./camileia-envoi.js");
       if ("categoriePanne" in fields) {
         const { categorieDe } = await import("./categories-pannes.js");
-        const ct = await ev.lireCorrespTypes();
-        const tp = ct[categorieDe({ ...t, ...fields })]; if (tp) champs.typepanne = idDe(tp);
+        const tp = await ev.typePourCategorie(categorieDe({ ...t, ...fields }), t.descriptif || t.descr || "", t.camileiaTypeIri);
+        if (tp) champs.typepanne = idDe(tp);
       }
       if (urg) { const pr = await ev.prioritePourUrgence(urg); if (pr) champs.priorite = idDe(pr); }
       if (champs.typepanne || champs.priorite) libelles.push("qualification");
