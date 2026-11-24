@@ -191,7 +191,8 @@ function fichierWeb(req) {
   if (!/^\/(upload\/|DI\/Message\/File\/)/.test(chemin) || chemin.indexOf("..") >= 0) return { erreur: "Adresse refusée" };
   var email = emailFirebase(req.idToken); if (!email) return { erreur: "Connexion à l'appli non vérifiée." };
   var pp = PropertiesService.getScriptProperties(), base = pp.getProperty("CAMILEIA_BASE");
-  var url = base + encodeURI(decodeURI(chemin));
+  // Camileia sert ses fichiers par /Home/read_file?path=… (accès direct /upload/… refusé, 403)
+  var url = base + (chemin.indexOf("/upload/") === 0 ? "/Home/read_file?path=" + encodeURIComponent(chemin) : encodeURI(decodeURI(chemin)));
   var lire = function (cookies) { return UrlFetchApp.fetch(url, { headers: cookies ? { Cookie: cookies } : {}, muteHttpExceptions: true, followRedirects: false }); };
   var r = lire(null);
   if (r.getResponseCode() !== 200 || /text\/html/i.test(String(r.getHeaders()["Content-Type"] || ""))) {
