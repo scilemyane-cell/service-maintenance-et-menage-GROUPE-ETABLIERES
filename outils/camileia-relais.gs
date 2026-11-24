@@ -129,6 +129,17 @@ function actionWeb(req) {
   if (page.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + " (identifiant ou mot de passe).", diag: DIAG };
 
   var form = lireFormulaire(page, "/DI/Modifier/");
+  if (req.lecture && form) { // lecture seule : champs de la fiche (sans rien enregistrer)
+    var sel = {};
+    page.replace(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi, function (t, a, o) {
+      var n = attr(a, "name"); if (!n) return "";
+      var opts = [], om, ro = /<option\b([^>]*)>([\s\S]*?)(?=<option\b|<\/option>|<\/optgroup>|$)/gi;
+      while ((om = ro.exec(o))) opts.push((aAttr(om[1], "selected") ? "*" : "") + attr(om[1], "value") + "=" + decoder(om[2]).replace(/<[^>]+>/g, "").trim());
+      sel[n] = opts.slice(0, 60); return "";
+    });
+    var lab = (page.match(/Suivi[\s\S]{0,400}/i) || [""])[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 300);
+    return { lecture: true, selects: sel, suivi: lab };
+  }
   if (!form) {
     var tt = page.match(/<title>([\s\S]*?)<\/title>/i);
     var corpsTxt = page.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
