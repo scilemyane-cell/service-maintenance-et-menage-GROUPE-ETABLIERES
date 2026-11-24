@@ -227,9 +227,23 @@ async function importerPhotos(brutes) {
   }
 }
 
+// Un seul appareil synchronise à la fois (sinon deux appareils écrivent les mêmes tickets en même temps,
+// doublent les appels au relais et l'écran saute) : « jeton » dans config/camileia-synchro, repris
+// par un autre appareil si le premier ne donne plus signe de vie depuis 3 minutes.
+const MON_APPAREIL = (() => { try { let v = localStorage.getItem("camileia-appareil"); if (!v) { v = Math.random().toString(36).slice(2); localStorage.setItem("camileia-appareil", v); } return v; } catch { return "x"; } })();
+async function aLaMain() {
+  try {
+    const ref = doc(db, "config", "camileia-synchro"); // pas dans demandes-camileia : son écoute redessinerait le suivi
+    const j = (await getDoc(ref))?.data() || {};
+    if (j.par && j.par !== MON_APPAREIL && Date.now() - (j.le || 0) < 3 * 60 * 1000) return false;
+    await setDoc(ref, { par: MON_APPAREIL, le: Date.now() });
+    return true;
+  } catch { return true; }
+}
 async function passage() {
   await cam.chargerRelaisPartage();
   if (etat.enCours || !cam.estConnecte()) return;
+  if (!(await aLaMain())) return;
   etat.enCours = true; signaler();
   try { const r = await synchroniser(); etat.crees = r.crees; etat.majs = r.majs; etat.erreur = ""; }
   catch (e) { etat.erreur = e?.message || String(e); console.warn("Synchro Camileia :", etat.erreur); }
