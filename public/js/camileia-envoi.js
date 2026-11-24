@@ -129,7 +129,7 @@ export async function envoyerDemande(d, { email = "" } = {}) {
   let typeIri = null;
   try { const { categorieDe } = await import("./categories-pannes.js"); const ct = await lireCorrespTypes(); typeIri = ct[categorieDe(d)] || null; } catch { /* repli ci-dessous */ }
   return cam.creerDI({
-    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: typeIri || choisirType(d.type, r, c.typeDefaut),
+    libelle, note, site: m.site, siteCode: m.siteCode, batiment: m.batiment, local, typepanne: typeIri || choisirType(d.type, r, c.typeDefaut) || `${cam.RACINE}/d_i_type_pannes/${TYPES_PROPOSES.autre}`, // jamais vide : Camileia ne sait pas afficher une DI sans type (erreur 500)
     priorite: prio?.["@id"] || null, etat: etat?.["@id"], createur: contact?.["@id"] || null, demandeur: d.demandeur || null,
   });
 }
