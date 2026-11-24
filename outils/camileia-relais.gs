@@ -213,9 +213,13 @@ function messageWeb(req) {
     function () { return UrlFetchApp.fetch(base + "/DI/Messages/" + di, { method: "post", payload: { message_tsa_text: texte }, headers: Object.assign({ Cookie: cookies }, ajax), muteHttpExceptions: true, followRedirects: false }).getContentText(); },
     function () { return UrlFetchApp.fetch(base + "/DI/Messages/" + di, { method: "post", payload: { "message_tsa[text]": texte }, headers: Object.assign({ Cookie: cookies }, ajax), muteHttpExceptions: true, followRedirects: false }).getContentText(); },
   ];
-  var res = "", k;
-  for (k = 0; k < essais.length; k++) { res = essais[k](); if (compter() > avant) return { ok: true, email: email, variante: k }; }
-  return { erreur: "Camileia n'a pas enregistré le message.", statut: DIAG.postStatut, detail: String(res).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200) };
+  var res = "", k, journal = [];
+  for (k = 0; k < essais.length; k++) {
+    DIAG.postStatut = null; res = essais[k]();
+    journal.push(k + ":" + DIAG.postStatut + ":" + String(res).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 120));
+    if (compter() > avant) return { ok: true, email: email, variante: k };
+  }
+  return { erreur: "Camileia n'a pas enregistré le message.", journal: journal, connecte: essai.indexOf("_username") < 0 };
 }
 
 function inspecterWeb(req) {
