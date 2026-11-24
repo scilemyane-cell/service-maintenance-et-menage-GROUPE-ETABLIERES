@@ -87,6 +87,8 @@ export async function synchroniser() {
     CHAMPS_CAMILEIA.forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
     // Ticket déjà traité dans l'appli : c'est l'appli qui fait foi pour le statut (comme avec l'Excel).
     if (!e.dateMaj) CHAMPS_TRAITEMENT.forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
+    // DI clôturée dans Camileia : c'est définitif, le ticket de l'appli passe « Réalisé » (Clôturée).
+    else if (/\/d_i_etats\/4$/.test(String(base.camileiaEtatIri || "")) && e.statut !== "Réalisé") { maj.statut = "Réalisé"; maj.dateStatut = base.dateStatut || e.dateStatut || ""; }
     if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
   }
   return { crees, majs, dis };

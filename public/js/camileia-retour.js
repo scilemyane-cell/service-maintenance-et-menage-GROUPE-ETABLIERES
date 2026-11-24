@@ -63,6 +63,13 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   const ref = doc(db, collection, id);
   const t = (await getDoc(ref))?.data();
   if (!t?.camileiaIri) return;
+  // DI clôturée dans Camileia : Camileia n'accepte plus aucune modification (erreur 500).
+  if (/\/d_i_etats\/4$/.test(String(t.camileiaEtatIri || ""))) {
+    const msg = "DI clôturée dans Camileia : elle ne peut plus être modifiée (ni statut, ni « Suivi par »). Rouvre-la dans Camileia si besoin.";
+    try { await updateDoc(ref, { camileiaRetourLe: Date.now(), camileiaRetour: "", camileiaRetourErreur: msg }); } catch { /* */ }
+    window.toast?.(`⚠️ ${msg}`, "error");
+    return;
+  }
   window.toast?.("⏳ Envoi à Camileia…");
   const faits = [], erreurs = [], avertissements = [];
   let contactIri = null;
