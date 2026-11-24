@@ -917,7 +917,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${lieesHTML(l)}${suggestionHTML(l)}${echangesCamHTML(l)}
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
-        ${CANAL_TEST_CAM ? BOUTONS_CAM.map(([s, lib]) => `<button type="button" class="dps-st ${val(l, "statut") === s || (s === "Planifié" && EN_COURS_CAM.includes(val(l, "statut"))) ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}" title="${s === "Réalisé" ? "Terminée : à valider par un superviseur, puis Clôturée" : ""}">${esc(lib)}</button>`).join("")
+        ${CANAL_TEST_CAM ? BOUTONS_CAM.map(([s, lib]) => `<button type="button" class="dps-st ${val(l, "statut") === s || (s === "Planifié" && EN_COURS_CAM.includes(val(l, "statut"))) ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}" title="${s === "Réalisé" ? (perms.isEditor ? "Superviseur : valide et CLÔTURE la DI dans Camileia (elle ne sera plus modifiable dans Camileia)" : "Terminée : à valider par un superviseur, puis Clôturée") : ""}">${esc(s === "Réalisé" && perms.isEditor ? "✅ Clôturer" : lib)}</button>`).join("")
           : STATUTS_RAPIDES.map(s => `<button type="button" class="dps-st ${val(l, "statut") === s ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}">${esc(s)}</button>`).join("")}
       </div>
       <div class="dps-champs">
