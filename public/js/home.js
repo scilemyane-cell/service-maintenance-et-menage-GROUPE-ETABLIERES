@@ -157,6 +157,7 @@ export function mountDashboard(container, user, categories, onSelect, onReorder,
 // et reconstruite à chaque arrivée, avec un effet de saut/scintillement
 // à l'ouverture. Voir la même logique dans planning.js (onglet Astreinte).
 let renderTimer = null;
+let dernierAccueil = { el: null, html: "", racine: null };
 function scheduleRender() {
   if (renderTimer) clearTimeout(renderTimer);
   renderTimer = setTimeout(() => { renderTimer = null; render(); }, 60);
@@ -797,8 +798,6 @@ function render() {
 
   if (debugForce) { next = { from: "Test A", to: "Test B", date: refDate, daysUntil: 0 }; }
 
-  if (clearCountdown) { clearCountdown(); clearCountdown = null; }
-
   const estAdmin = mountedUser.role === "admin" || mountedUser.role === "super_admin";
   const toutesPersonnes = [...new Set([...(people.n1 || []), ...(people.n2 || [])])];
   const maPersonne = personnePlanning(mountedUser, toutesPersonnes);
@@ -883,7 +882,7 @@ function render() {
   const jour = today.toLocaleDateString("fr-FR", { weekday: "short" });
   const heure = today.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
-  mountedContainer.innerHTML = `
+  const htmlAccueil = `
     <div class="gh">
       ${mesACompleter.length ? `
       <button class="gh-bandeau-completer" data-completer-accueil="${mesACompleter[0].id}">
@@ -973,6 +972,13 @@ function render() {
       </div>
     </div>
   `;
+  // Rien n'a changé à l'écran : on ne redessine pas (sinon l'accueil « saute » et la carte se recrée
+  // à chaque petite mise à jour des données, ex. synchro Camileia toutes les minutes).
+  if (dernierAccueil.el === mountedContainer && dernierAccueil.html === htmlAccueil && mountedContainer.isConnected && mountedContainer.firstElementChild === dernierAccueil.racine) return;
+  dernierAccueil = { el: mountedContainer, html: htmlAccueil };
+  if (clearCountdown) { clearCountdown(); clearCountdown = null; }
+  mountedContainer.innerHTML = htmlAccueil;
+  dernierAccueil.racine = mountedContainer.firstElementChild;
 
   mountedContainer.querySelectorAll("[data-construction]").forEach(btn => {
     btn.addEventListener("click", (e) => { e.stopPropagation(); onToggleConstructionRef?.(btn.dataset.construction); });
