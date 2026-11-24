@@ -144,7 +144,14 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
         faits.push(libelles.join(", ")); fait = true;
       } catch (e) { erreurs.push(e.message); }
     }
-    if (fait && etatIri && !erreurs.length) { try { await updateDoc(ref, { camileiaEtatIri: etatIri }); } catch { /* */ } }
+    // Mémorise ce qui a été envoyé : sinon la synchro suivante croit que Camileia a changé et ré-écrase l'appli.
+    if (fait && !erreurs.length) {
+      const memo = {};
+      if (etatIri) memo.camileiaEtatIri = etatIri;
+      if (champs.typepanne) memo.camileiaTypeIri = `${cam.RACINE}/d_i_type_pannes/${champs.typepanne}`;
+      if (champs.priorite) memo.camileiaPrioIri = `${cam.RACINE}/d_i_priorites/${champs.priorite}`;
+      if (Object.keys(memo).length) { try { await updateDoc(ref, memo); } catch { /* */ } }
+    }
   }
 
   // 3) Commentaire technicien → message dans la DI (signé par son contact).

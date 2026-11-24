@@ -180,8 +180,8 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
         let ko = 0; for (const p of photos) { try { await ajouterPhotoDemande(ref.id, p, utilisateur); } catch (er) { ko++; console.warn("Photo demande :", er); } }
         if (ko) window.toast?.(`⚠️ ${ko} photo(s) non envoyée(s)`, "error");
       }
-      const msgCam = "";
-      window.toast?.(`✓ Demande ${numero} créée${msgCam}.`);
+      const enTest = location.pathname.startsWith("/beta/");
+      window.toast?.(`✓ Demande ${numero} créée${enTest ? " dans l'Excel (visible dans la version validée — la version test n'affiche que Camileia)" : ""}.`);
       fermer(); onCree(numero, v.site.trim());
     } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); bouton.disabled = false; }
   });

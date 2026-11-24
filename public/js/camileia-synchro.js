@@ -125,7 +125,8 @@ export async function synchroniser() {
     // Priorité changée dans Camileia : l'urgence de l'appli suit.
     if (e.camileiaPrioIri !== undefined && (e.camileiaPrioIri || "") !== prioIri) { maj.camileiaPrioIri = prioIri; if (base.urgence && base.urgence !== (e.urgenceCorrigee || e.urgence)) { maj.urgence = base.urgence; maj.urgenceCorrigee = ""; } }
     else if (e.camileiaPrioIri === undefined) maj.camileiaPrioIri = prioIri;
-    if ((e.camileiaTypeIri || "") !== typeIri) { maj.camileiaTypeIri = typeIri; if (catAppli && e.categoriePanne !== catAppli) maj.categoriePanne = catAppli; }
+    // (catégorie Camileia « Autre » : on garde la catégorie de l'appli, plus précise)
+    if ((e.camileiaTypeIri || "") !== typeIri) { maj.camileiaTypeIri = typeIri; if (catAppli && catAppli !== "autre" && e.categoriePanne !== catAppli) maj.categoriePanne = catAppli; }
     // DI clôturée dans Camileia : c'est définitif, le ticket de l'appli passe « Réalisé » (Clôturée).
     else if (/\/d_i_etats\/4$/.test(String(base.camileiaEtatIri || "")) && e.statut !== "Réalisé") { maj.statut = "Réalisé"; maj.dateStatut = base.dateStatut || e.dateStatut || ""; }
     if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
