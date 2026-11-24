@@ -129,6 +129,9 @@ export async function synchroniser() {
     if ((e.camileiaTypeIri || "") !== typeIri) { maj.camileiaTypeIri = typeIri; if (catAppli && catAppli !== "autre" && e.categoriePanne !== catAppli) maj.categoriePanne = catAppli; }
     // DI clôturée dans Camileia : c'est définitif, le ticket de l'appli passe « Réalisé » (Clôturée).
     else if (/\/d_i_etats\/4$/.test(String(base.camileiaEtatIri || "")) && e.statut !== "Réalisé") { maj.statut = "Réalisé"; maj.dateStatut = base.dateStatut || e.dateStatut || ""; }
+    // Valeur absente côté Camileia (undefined) ou identique : rien à écrire. Sinon le ticket était réécrit
+    // à chaque passage (toutes les minutes) → l'écran du suivi se redessinait sans arrêt.
+    Object.keys(maj).forEach(k => { if (maj[k] === undefined || String(maj[k] ?? "") === String(e[k] ?? "")) delete maj[k]; });
     if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
   }
   return { crees, majs, dis };
