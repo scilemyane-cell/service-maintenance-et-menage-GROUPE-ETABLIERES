@@ -105,6 +105,21 @@ export async function modifierAuNomDe(diId, champs, idToken) {
   return d;
 }
 
+// Message dans le fil de la DI, publié par l'interface web au nom de la personne
+// connectée (Camileia envoie alors son mail de notification). { ok } ou { pasDeCompte }.
+export async function messageAuNomDe(diId, texte, idToken) {
+  const cfg = lireConfig();
+  if (cfg.mode !== "relais" || !cfg.relaisUrl) return { pasDeCompte: true };
+  let r;
+  try { r = await fetch(cfg.relaisUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ cle: cfg.relaisCle, action: "webMessage", idToken, di: diId, texte }) }); }
+  catch { throw new ErreurCamileia("Relais injoignable."); }
+  const d = await lireReponse(r);
+  if (!d || typeof d !== "object") throw new ErreurCamileia(`Réponse du relais illisible : ${String(d).slice(0, 200)}`);
+  if (d.erreur && /^Adresse refus/.test(d.erreur)) return { pasDeCompte: true, relaisAncien: true };
+  if (d.erreur) throw new ErreurCamileia(d.erreur);
+  return d;
+}
+
 // Appel générique. chemin = "/api-platform/d_is?page=1" ou une IRI.
 export async function appeler(methode, chemin, corps = null) {
   const cfg = lireConfig();

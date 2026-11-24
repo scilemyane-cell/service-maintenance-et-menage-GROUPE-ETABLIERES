@@ -175,9 +175,12 @@ export async function repondreDemandeur(id, texte, { collection } = {}) {
   let contact = null;
   try { contact = await contactPourAttribution(auth.currentUser?.uid, ""); } catch { /* */ }
   if (!contact) { try { const { contactParEmail } = await import("./camileia-envoi.js"); contact = await contactParEmail(auth.currentUser?.email); } catch { /* */ } }
-  const m = await cam.envoyerMessage(t.camileiaIri, texte, contact?.["@id"] || (contact?.id ? `${cam.RACINE}/contacts/${contact.id}` : null));
+  // D'abord par l'interface web au nom de la personne (mail de notification Camileia), sinon par l'API.
+  let m = null, viaWeb = false;
+  try { const r = await cam.messageAuNomDe(idDe(t.camileiaIri), texte, await auth.currentUser?.getIdToken?.()); viaWeb = !!r?.ok; } catch (e) { console.warn("Message web Camileia :", e); }
+  if (!viaWeb) { m = await cam.envoyerMessage(t.camileiaIri, texte, contact?.["@id"] || (contact?.id ? `${cam.RACINE}/contacts/${contact.id}` : null)); window.toast?.("⚠️ Message envoyé sans notification Camileia (compte web non relié)", "error"); }
   const msgs = Array.isArray(t.camileiaMessages) ? t.camileiaMessages : [];
-  msgs.push({ id: m?.id ?? Date.now(), auteur: contact ? `${contact.prenom || ""} ${contact.nom || ""}`.trim() : (auth.currentUser?.email || ""), contact: contact?.id ? String(contact.id) : "", texte, date: new Date().toISOString(), depuisAppli: true });
+  msgs.push({ id: m?.id ?? `app-${Date.now()}`, auteur: contact ? `${contact.prenom || ""} ${contact.nom || ""}`.trim() : (auth.currentUser?.email || ""), contact: contact?.id ? String(contact.id) : "", texte, date: new Date().toISOString(), depuisAppli: true });
   await updateDoc(ref, { camileiaMessages: msgs, camileiaMsgNonLu: false });
   return m;
 }

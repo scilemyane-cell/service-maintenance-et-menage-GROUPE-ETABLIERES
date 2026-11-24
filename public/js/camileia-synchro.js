@@ -145,10 +145,10 @@ async function importerMessages(brutes) {
     }
     msgs.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const avant = Array.isArray(d.camileiaMessages) ? d.camileiaMessages : [];
-    if (msgs.length === avant.length && msgs.every((m, i) => m.id === avant[i]?.id)) continue;
+    if (msgs.length === avant.length && msgs.every((m, i) => String(m.id) === String(avant[i]?.id))) continue;
     // Nouveau message qui ne vient pas de l'appli → « non lu » (badge sur la fiche)
     const nouveaux = msgs.filter(m => !avant.some(a => a.id === m.id));
-    const nonLu = nouveaux.some(m => !/^\[Appli SMM\]/.test(m.texte)) || !!d.camileiaMsgNonLu;
+    const nonLu = nouveaux.some(m => !/^\[Appli SMM\]/.test(m.texte) && !avant.some(a => a.depuisAppli && String(a.texte).trim() === String(m.texte).trim())) || !!d.camileiaMsgNonLu;
     const col = String(d.id).startsWith("cam-") ? "demandes-camileia" : "demandes";
     try { await updateDoc(doc(db, col, d.id), { camileiaMessages: msgs, camileiaMsgNonLu: nonLu }); } catch (e) { console.warn("Messages", d.id, e); }
   }

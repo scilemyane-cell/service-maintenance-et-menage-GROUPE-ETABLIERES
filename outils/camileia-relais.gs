@@ -40,7 +40,8 @@ function doPost(e) {
     var req = JSON.parse(e.postData.contents || "{}");
     if (!req.cle || req.cle !== p.getProperty("CLE_RELAIS")) return repondre({ erreur: "Clé de relais incorrecte." });
     if (req.action === "web") return repondre(actionWeb(req));
-    if (req.action === "inspecter") return repondre(inspecterWeb(req)); // lecture seule d'une page /DI/ (diagnostic)
+    if (req.action === "inspecter") return repondre(inspecterWeb(req));
+    if (req.action === "webMessage") return repondre(messageWeb(req)); // message dans la DI, au nom du technicien (Camileia prévient par mail) // lecture seule d'une page /DI/ (diagnostic)
     if (req.action === "diagWebApi") { // test du mécanisme de connexion web avec le compte API (aucun secret renvoyé)
       sessionWeb("diag-api", p.getProperty("CAMILEIA_LOGIN"), p.getProperty("CAMILEIA_MDP"), true);
       return repondre({ diag: DIAG });
@@ -182,6 +183,25 @@ function actionWeb(req) {
     appelCamileia("PUT", "/api-platform/d_is/" + di, corps, jeton(false));
   }
   return { ok: true, email: email, absents: absents, restaures: vides, suiviRefuse: suiviRefuse };
+}
+
+function messageWeb(req) {
+  var email = emailFirebase(req.idToken); if (!email) return { erreur: "Connexion à l'appli non vérifiée." };
+  var compte = PropertiesService.getScriptProperties().getProperty("WEB " + email); if (!compte) return { pasDeCompte: true, email: email };
+  var i = compte.indexOf(":"), login = (i < 0 ? compte : compte.slice(0, i)).trim(), mdp = i < 0 ? "" : compte.slice(i + 1);
+  var pp = PropertiesService.getScriptProperties();
+  if (!mdp && login === String(pp.getProperty("CAMILEIA_LOGIN") || "").trim()) mdp = pp.getProperty("CAMILEIA_MDP");
+  var di = parseInt(req.di, 10), texte = String(req.texte || "").trim();
+  if (!di || !texte) return { erreur: "DI ou message manquant." };
+  var cookies = sessionWeb(email, login, mdp, false);
+  var essai = getWeb("/DI/Messages/" + di, cookies);
+  if (essai.indexOf("_username") >= 0) { cookies = sessionWeb(email, login, mdp, true); essai = getWeb("/DI/Messages/" + di, cookies); }
+  if (essai.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + "." };
+  var avant = 0; try { avant = (JSON.parse(essai) || []).length; } catch (x) { /* */ }
+  var res = postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies);
+  var apres = -1; try { apres = (JSON.parse(getWeb("/DI/Messages/" + di, cookies)) || []).length; } catch (x) { /* */ }
+  if (apres <= avant) return { erreur: "Camileia n'a pas enregistré le message.", detail: String(res).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200) };
+  return { ok: true, email: email };
 }
 
 function inspecterWeb(req) {
