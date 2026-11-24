@@ -200,10 +200,18 @@ function messageWeb(req) {
   // Nombre de messages avant / après, lu par l'API (fiable).
   var compter = function () { var r = appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(false)); return ((r.corps && r.corps.messages) || []).length; };
   var avant = compter();
-  var res = postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies, { "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" });
-  var apres = compter();
-  if (apres <= avant) return { erreur: "Camileia n'a pas enregistré le message.", statut: DIAG.postStatut, detail: String(res).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200) };
-  return { ok: true, email: email };
+  var ajax = { "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" };
+  var base = pp.getProperty("CAMILEIA_BASE");
+  // Variantes d'envoi (celle du navigateur d'abord) ; on s'arrête dès que le message apparaît.
+  var essais = [
+    function () { return postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies, ajax); },
+    function () { return postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }], cookies, ajax); },
+    function () { return UrlFetchApp.fetch(base + "/DI/Messages/" + di, { method: "post", payload: { message_tsa_text: texte }, headers: Object.assign({ Cookie: cookies }, ajax), muteHttpExceptions: true, followRedirects: false }).getContentText(); },
+    function () { return UrlFetchApp.fetch(base + "/DI/Messages/" + di, { method: "post", payload: { "message_tsa[text]": texte }, headers: Object.assign({ Cookie: cookies }, ajax), muteHttpExceptions: true, followRedirects: false }).getContentText(); },
+  ];
+  var res = "", k;
+  for (k = 0; k < essais.length; k++) { res = essais[k](); if (compter() > avant) return { ok: true, email: email, variante: k }; }
+  return { erreur: "Camileia n'a pas enregistré le message.", statut: DIAG.postStatut, detail: String(res).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200) };
 }
 
 function inspecterWeb(req) {
@@ -217,6 +225,8 @@ function inspecterWeb(req) {
   while ((m = re.exec(page))) forms.push({ action: attr(m[1], "action"), method: attr(m[1], "method"), id: attr(m[1], "id"), champs: (m[2].match(/name="[^"]+"/g) || []).slice(0, 30) });
   var urls = (page.match(/["'](\/DI\/[^"'\s]+)["']/g) || []).filter(function (u, k, a) { return a.indexOf(u) === k; }).slice(0, 40);
   var js = (page.match(/(\$\.(?:ajax|post)|fetch)\([\s\S]{0,300}/g) || []).filter(function (x) { return /essage/i.test(x); }).slice(0, 5);
+  var p0 = page.indexOf("form_message"); var autour = p0 >= 0 ? page.slice(Math.max(0, p0 - 1500), p0 + 1500) : "";
+  js.push((autour.match(/url\s*[=:][^;\n]{0,160}/g) || []).join(" ## "));
   return { taille: page.length, titre: (page.match(/<title>([\s\S]*?)<\/title>/i) || [, ""])[1].trim(), forms: forms, urls: urls, js: js };
 }
 
