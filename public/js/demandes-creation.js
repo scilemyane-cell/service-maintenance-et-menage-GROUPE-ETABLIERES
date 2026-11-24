@@ -82,7 +82,14 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       const cam = await import("./camileia.js");
       await cam.chargerRelaisPartage(); if (!cam.estConnecte()) return;
       const { lireCorrespSites } = await import("./camileia-envoi.js");
-      const [sitesC, batsC, corr] = await Promise.all([cam.lireTout(`${cam.RACINE}/sites`, { maxPages: 2 }), cam.lireTout(`${cam.RACINE}/batiments`, { maxPages: 2 }), lireCorrespSites()]);
+      // Sites et bâtiments Camileia gardés 24 h sur l'appareil (liste immédiate à l'ouverture).
+      let lieux = null; try { lieux = JSON.parse(localStorage.getItem("camileia-sites-bats") || "null"); } catch { /* */ }
+      if (!lieux || Date.now() - lieux.le > 24 * 3600 * 1000) {
+        const [s1, b1] = await Promise.all([cam.lireTout(`${cam.RACINE}/sites`, { maxPages: 2 }), cam.lireTout(`${cam.RACINE}/batiments`, { maxPages: 2 })]);
+        lieux = { le: Date.now(), sites: s1.map(x => ({ id: x.id, libelle: x.libelle, code: x.code, actif: x.actif })), bats: b1.map(x => ({ id: x.id, libelle: x.libelle, site: x.site, actif: x.actif })) };
+        try { localStorage.setItem("camileia-sites-bats", JSON.stringify(lieux)); } catch { /* */ }
+      }
+      const [sitesC, batsC, corr] = [lieux.sites, lieux.bats, await lireCorrespSites()];
       const actifs = sitesC.filter(x => x.actif !== false);
       if (!actifs.length) return;
       camLieux = { sites: actifs, bats: batsC.filter(b => b.actif !== false), corr: corr.sites || {} };
@@ -104,7 +111,8 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
         const lib = actifs.find(x => iriS(x) === sIri)?.libelle || "";
         // Nom de site de l'appli relié à ce site + bâtiment (sinon à ce site, sinon le nom Camileia).
         const noms = Object.entries(camLieux.corr);
-        const relie = noms.find(([, m]) => m?.site === sIri && m?.batiment === bIri) || noms.find(([, m]) => m?.site === sIri);
+        const meme = (n) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const relie = noms.find(([n, m]) => m?.site === sIri && meme(n) === meme(lib)) || noms.find(([, m]) => m?.site === sIri && m?.batiment === bIri) || noms.find(([, m]) => m?.site === sIri);
         f.site.value = relie ? relie[0] : lib;
         const a = sites[f.site.value]; if (a) f.association.value = a;
       };
