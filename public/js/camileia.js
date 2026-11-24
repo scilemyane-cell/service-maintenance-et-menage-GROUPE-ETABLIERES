@@ -124,11 +124,30 @@ export async function messageAuNomDe(diId, texte, idToken) {
 export async function lireFichier(chemin, idToken) {
   const cfg = lireConfig();
   if (cfg.mode !== "relais" || !cfg.relaisUrl) throw new ErreurCamileia("relais non réglé");
-  const r = await fetch(cfg.relaisUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ cle: cfg.relaisCle, action: "webFichier", idToken, chemin }) });
-  const d = await lireReponse(r);
+  const d = await posterRelais(cfg.relaisUrl, { cle: cfg.relaisCle, action: "webFichier", idToken, chemin });
   if (!d?.b64) throw new ErreurCamileia(d?.erreur || "fichier illisible");
   const bin = atob(d.b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   return new Blob([u], { type: d.type || "image/jpeg" });
+}
+
+// Le relais Apps Script refuse les appels quand il y en a trop en même temps (échec immédiat,
+// vu côté navigateur comme « injoignable ») : on limite à 6 appels simultanés et on réessaie 2 fois les lectures.
+let enVol = 0; const file = [];
+const prendre = () => enVol < 6 ? (enVol++, Promise.resolve()) : new Promise(r => file.push(r));
+const rendre = () => { const s = file.shift(); if (s) s(); else enVol--; };
+async function posterRelais(url, corps, reessayer = true) {
+  await prendre();
+  try {
+    for (let essai = 0; ; essai++) {
+      try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(corps) });
+        const d = await lireReponse(r);
+        if (d && typeof d === "object") return d;
+        if (essai >= 2 || !reessayer) return d;
+      } catch (e) { if (essai >= 2 || !reessayer) throw e; }
+      await new Promise(r => setTimeout(r, 1500 * (essai + 1)));
+    }
+  } finally { rendre(); }
 }
 
 // Appel générique. chemin = "/api-platform/d_is?page=1" ou une IRI.
@@ -137,11 +156,10 @@ export async function appeler(methode, chemin, corps = null) {
   if (!chemin.startsWith("/")) chemin = "/" + chemin;
   if (cfg.mode === "relais") {
     if (!cfg.relaisUrl) throw new ErreurCamileia("Adresse du relais non renseignée.");
-    let r;
+    let d;
     // text/plain : requête « simple », sans pré-vérification CORS (Apps Script ne la gère pas).
-    try { r = await fetch(cfg.relaisUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ cle: cfg.relaisCle, methode, chemin, corps }) }); }
+    try { d = await posterRelais(cfg.relaisUrl, { cle: cfg.relaisCle, methode, chemin, corps }, methode === "GET"); } // écriture : pas de 2e envoi (doublon)
     catch { throw new ErreurCamileia("Relais injoignable : vérifie l'adresse du relais (déploiement Apps Script « Application Web », accès « Tout le monde »)."); }
-    const d = await lireReponse(r);
     if (!d || typeof d !== "object") throw new ErreurCamileia(`Réponse du relais illisible : ${String(d).slice(0, 200)}`);
     if (d.erreur) throw new ErreurCamileia(`Relais : ${d.erreur}`);
     if (d.statut >= 400) throw new ErreurCamileia(messageErreur(d.statut, d.corps), { statut: d.statut, corps: d.corps });
