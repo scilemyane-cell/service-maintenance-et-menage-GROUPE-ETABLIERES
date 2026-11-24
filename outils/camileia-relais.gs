@@ -165,7 +165,12 @@ function actionWeb(req) {
   });
   var res = postMultipart(form.action, form.champs, cookies);
   var ok = /modifi[ée]e avec succ/i.test(res);
-  if (!ok) return { erreur: "Camileia n'a pas confirmé l'enregistrement de la DI " + di + ".", absents: absents };
+  if (!ok) {
+    var txt = res.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
+    var errs = (txt.match(/<(?:li|span|div|p)[^>]*class="[^"]*(?:error|invalid|alert|danger|help-block)[^"]*"[^>]*>[\s\S]{0,300}?<\/(?:li|span|div|p)>/gi) || []).map(function (e) { return e.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(); }).filter(String).slice(0, 6);
+    var tt = txt.match(/<title>([\s\S]*?)<\/title>/i);
+    return { erreur: "Camileia n'a pas confirmé l'enregistrement de la DI " + di + ".", absents: absents, detail: errs, titre: tt ? tt[1].trim() : "", taille: res.length };
+  }
   // Garde-fou : un champ essentiel vidé par l'enregistrement est remis par l'API.
   var avant = api.corps, apres = appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(false)).corps || {};
   var vides = ["etat", "libelle", "typepanne", "priorite", "type", "batiment", "note"].filter(function (k) { return avant[k] && !apres[k] && !(k in ch); });
