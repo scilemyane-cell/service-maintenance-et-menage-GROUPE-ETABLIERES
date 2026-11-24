@@ -197,10 +197,12 @@ function messageWeb(req) {
   var essai = getWeb("/DI/Messages/" + di, cookies);
   if (essai.indexOf("_username") >= 0) { cookies = sessionWeb(email, login, mdp, true); essai = getWeb("/DI/Messages/" + di, cookies); }
   if (essai.indexOf("_username") >= 0) return { erreur: "Connexion web Camileia refusée pour " + email + "." };
-  var avant = 0; try { avant = (JSON.parse(essai) || []).length; } catch (x) { /* */ }
-  var res = postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies);
-  var apres = -1; try { apres = (JSON.parse(getWeb("/DI/Messages/" + di, cookies)) || []).length; } catch (x) { /* */ }
-  if (apres <= avant) return { erreur: "Camileia n'a pas enregistré le message.", detail: String(res).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200) };
+  // Nombre de messages avant / après, lu par l'API (fiable).
+  var compter = function () { var r = appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(false)); return ((r.corps && r.corps.messages) || []).length; };
+  var avant = compter();
+  var res = postMultipart("/DI/Messages/" + di, [{ nom: "message_tsa_text", valeur: texte }, { nom: "message_tsa_file", valeur: "", fichier: true }], cookies, { "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" });
+  var apres = compter();
+  if (apres <= avant) return { erreur: "Camileia n'a pas enregistré le message.", statut: DIAG.postStatut, detail: String(res).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 200) };
   return { ok: true, email: email };
 }
 
@@ -271,7 +273,7 @@ function getWeb(chemin, cookies) {
 }
 
 // Envoi du formulaire comme le navigateur (multipart, champs répétés permis).
-function postMultipart(chemin, champs, cookies) {
+function postMultipart(chemin, champs, cookies, entetes) {
   var base = PropertiesService.getScriptProperties().getProperty("CAMILEIA_BASE");
   var b = "----smm" + Utilities.getUuid().replace(/-/g, ""), corps = "";
   champs.forEach(function (c) {
@@ -282,8 +284,9 @@ function postMultipart(chemin, champs, cookies) {
   corps += "--" + b + "--\r\n";
   var r = UrlFetchApp.fetch(base + chemin, {
     method: "post", contentType: "multipart/form-data; boundary=" + b, payload: Utilities.newBlob(corps).getBytes(),
-    headers: { Cookie: cookies }, muteHttpExceptions: true, followRedirects: false,
+    headers: Object.assign({ Cookie: cookies }, entetes || {}), muteHttpExceptions: true, followRedirects: false,
   });
+  DIAG.postStatut = r.getResponseCode();
   var loc = r.getAllHeaders()["Location"];
   if (loc) return getWeb(String(loc).replace(/^https?:\/\/[^/]+/, ""), cookies);
   return r.getContentText();
