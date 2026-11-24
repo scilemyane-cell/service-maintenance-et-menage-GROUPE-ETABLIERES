@@ -34,9 +34,22 @@ export async function lireCorrespTypes() {
 }
 export async function enregistrerCorrespTypes(categories) { await setDoc(REF_TYPES, { categories, le: Date.now() }); }
 // Type Camileia → catégorie de l'appli (sens retour), d'après la correspondance.
-export function categorieAppliPourType(typeIri, corresp) {
-  const k = Object.entries(corresp || {}).find(([, iri]) => iri === typeIri);
-  return k ? k[0] : "";
+// Catégorie Camileia (Paramètres › Catégories) → catégorie de panne de l'appli.
+const CAT_POUR_CATEGORIE_CAM = {
+  1: "autre", 2: "chauffage", 3: "chauffage", 4: "equipements", 5: "serrurerie", 6: "serrurerie", 7: "autre",
+  8: "equipements", 9: "peinture", 10: "electricite", 11: "electricite", 12: "autre", 13: "menuiserie",
+  14: "plomberie", 15: "menuiserie", 16: "peinture", 17: "incendie", 18: "toiture", 900003: "serrurerie",
+  900004: "electricite", 900005: "peinture", 900006: "equipements", 900007: "autre", 900008: "autre",
+};
+// Type de demande Camileia → catégorie de l'appli : d'abord la correspondance
+// enregistrée (type exact), sinon d'après la catégorie Camileia du type.
+export function categorieAppliPourType(typeIri, corresp, types = []) {
+  const id = (v) => String(cam.iriDe(v) || v || "").split("/").pop();
+  if (!typeIri) return "";
+  const k = Object.entries(corresp || {}).find(([, iri]) => id(iri) === id(typeIri));
+  if (k) return k[0];
+  const t = types.find(x => id(x["@id"] || x.id) === id(typeIri));
+  return (t && CAT_POUR_CATEGORIE_CAM[id(t.categorie)]) || "";
 }
 const PRIO_POUR_URGENCE = { "critique": "vital", "urgent": "tres urgent", "normal": "moins urgent", "a planifier": "non urgent" };
 export async function prioritePourUrgence(urgence) {

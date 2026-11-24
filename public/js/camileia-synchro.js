@@ -80,14 +80,24 @@ export async function synchroniser() {
     const { lieuxNonResolus, ...champs } = d;
     const base = { ...champs, association: assoc(d.site), source: "camileia", creeDansApp: true, vuDansFichier: false };
     const brut = brutes.find(b => String(b.id) === String(d.camileiaId));
-    const catAppli = (await import("./camileia-envoi.js")).categorieAppliPourType(cam.iriDe(brut?.typepanne), ctypes);
+    let typesCam = []; try { typesCam = (await (await import("./camileia-envoi.js")).referentiels()).types; } catch { /* */ }
+    const typeIri = cam.iriDe(brut?.typepanne) || "";
+    const catAppli = (await import("./camileia-envoi.js")).categorieAppliPourType(typeIri, ctypes, typesCam);
     if (catAppli) base.categoriePanne = catAppli;
+    base.camileiaTypeIri = typeIri;
+    const prioIri = cam.iriDe(brut?.priorite) || "";
+    base.camileiaPrioIri = prioIri;
     const e = existants.get(id);
     if (!e) { await setDoc(doc(db, "demandes-camileia", id), { ...base, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }); crees++; continue; }
     const maj = {};
     CHAMPS_CAMILEIA.forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
     // Ticket déjà traité dans l'appli : c'est l'appli qui fait foi pour le statut (comme avec l'Excel).
     if (!e.dateMaj) CHAMPS_TRAITEMENT.forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
+    // Type de demande changé dans Camileia : la catégorie de l'appli suit, même si le ticket a déjà été traité.
+    // Priorité changée dans Camileia : l'urgence de l'appli suit.
+    if (e.camileiaPrioIri !== undefined && (e.camileiaPrioIri || "") !== prioIri) { maj.camileiaPrioIri = prioIri; if (base.urgence && base.urgence !== (e.urgenceCorrigee || e.urgence)) { maj.urgence = base.urgence; maj.urgenceCorrigee = ""; } }
+    else if (e.camileiaPrioIri === undefined) maj.camileiaPrioIri = prioIri;
+    if ((e.camileiaTypeIri || "") !== typeIri) { maj.camileiaTypeIri = typeIri; if (catAppli && e.categoriePanne !== catAppli) maj.categoriePanne = catAppli; }
     // DI clôturée dans Camileia : c'est définitif, le ticket de l'appli passe « Réalisé » (Clôturée).
     else if (/\/d_i_etats\/4$/.test(String(base.camileiaEtatIri || "")) && e.statut !== "Réalisé") { maj.statut = "Réalisé"; maj.dateStatut = base.dateStatut || e.dateStatut || ""; }
     if (Object.keys(maj).length) { await updateDoc(doc(db, "demandes-camileia", id), { ...maj, importMajLe: serverTimestamp() }); majs++; }
