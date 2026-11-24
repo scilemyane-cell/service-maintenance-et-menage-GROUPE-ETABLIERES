@@ -147,7 +147,16 @@ function actionWeb(req) {
   var res = postMultipart(form.action, form.champs, cookies);
   var ok = /modifi[ée]e avec succ/i.test(res);
   if (!ok) return { erreur: "Camileia n'a pas confirmé l'enregistrement de la DI " + di + ".", absents: absents };
-  return { ok: true, email: email, absents: absents };
+  // Garde-fou : un champ essentiel vidé par l'enregistrement est remis par l'API.
+  var avant = api.corps, apres = appelCamileia("GET", "/api-platform/d_is/" + di, null, jeton(false)).corps || {};
+  var vides = ["etat", "libelle", "typepanne", "priorite", "type", "batiment", "note"].filter(function (k) { return avant[k] && !apres[k] && !(k in ch); });
+  if (ch.etat && !apres.etat) vides.push("etat*");
+  if (vides.length) {
+    var corps = JSON.parse(JSON.stringify(apres)); delete corps.id;
+    vides.forEach(function (k) { if (k === "etat*") corps.etat = "/api-platform/d_i_etats/" + ch.etat; else corps[k] = avant[k]; });
+    appelCamileia("PUT", "/api-platform/d_is/" + di, corps, jeton(false));
+  }
+  return { ok: true, email: email, absents: absents, restaures: vides };
 }
 
 function emailFirebase(idToken) {
