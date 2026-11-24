@@ -146,6 +146,27 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
     if (!v.site.trim()) { etat.textContent = "Choisis le site."; (f.siteChoix.value === "__autre" ? f.siteAutre : f.siteChoix).focus(); return; }
     if (!v.descriptif.trim()) return;
     const bouton = f.querySelector('[type="submit"]'); bouton.disabled = true; etat.textContent = "⏳ Création…";
+    // Version de test + « Envoyer dans Camileia » : la demande ne va QUE dans Camileia. Elle revient
+    // dans l'appli comme ticket Camileia (visible seulement dans la version de test), jamais dans les
+    // demandes de l'Excel / de la version validée — pour ne pas mélanger tant que c'est en test.
+    if (v.envoyerCamileia) {
+      try {
+        etat.textContent = "⏳ Envoi dans Camileia…";
+        const { envoyerDemande } = await import("./camileia-envoi.js");
+        const { auth } = await import("./firebase-init.js");
+        const camChoix = f.siteChoix.value.startsWith("cam:") ? { camSite: f.siteChoix.value.slice(4), camBatiment: f.camBatiment.value || "", camSiteCode: camLieux?.sites.find(x => String(x.id) === f.siteChoix.value.slice(4))?.code || "" } : {};
+        const di = await envoyerDemande({ ...v, ...camChoix, site: v.site.trim(), numero: "" }, { email: auth.currentUser?.email || "" });
+        if (photos.length && di?.id != null) {
+          etat.textContent = "⏳ Envoi des photos…";
+          const { ajouterPhotoDemande } = await import("./demandes-photos.js");
+          for (const p of photos) { try { await ajouterPhotoDemande(`cam-${di.id}`, p, utilisateur); } catch (er) { console.warn("Photo demande :", er); } }
+        }
+        try { (await import("./camileia-synchro.js")).lancerMaintenant(); } catch { /* la synchro suivante la reprendra */ }
+        window.toast?.(`✓ Demande envoyée dans Camileia (${di?.numero || di?.id}) — elle arrive dans le suivi (version test) dans un instant.`);
+        fermer(); onCree(di?.numero || "", v.site.trim());
+      } catch (err) { console.error(err); etat.textContent = "❌ Camileia : " + (err?.message || err); bouton.disabled = false; }
+      return;
+    }
     try {
       const ref = doc(collection(db, "demandes"));
       const numero = await creerDemande({
@@ -159,19 +180,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
         let ko = 0; for (const p of photos) { try { await ajouterPhotoDemande(ref.id, p, utilisateur); } catch (er) { ko++; console.warn("Photo demande :", er); } }
         if (ko) window.toast?.(`⚠️ ${ko} photo(s) non envoyée(s)`, "error");
       }
-      let msgCam = "";
-      if (v.envoyerCamileia) {
-        etat.textContent = "⏳ Envoi dans Camileia…";
-        try {
-          const { envoyerDemande } = await import("./camileia-envoi.js");
-          const { auth } = await import("./firebase-init.js");
-          const camChoix = f.siteChoix.value.startsWith("cam:") ? { camSite: f.siteChoix.value.slice(4), camBatiment: f.camBatiment.value || "", camSiteCode: camLieux?.sites.find(x => String(x.id) === f.siteChoix.value.slice(4))?.code || "" } : {};
-          const di = await envoyerDemande({ ...v, ...camChoix, site: v.site.trim(), numero }, { email: auth.currentUser?.email || "" });
-          const { updateDemande } = await import("./firestore-data.js");
-          await updateDemande(ref.id, { camileiaId: di?.id ?? null, camileiaIri: di?.id != null ? `/api-platform/d_is/${di.id}` : "", camileiaNumero: di?.numero || "" });
-          msgCam = ` · envoyée dans Camileia (${di?.numero || di?.id})`;
-        } catch (er) { console.warn("Envoi Camileia :", er); window.toast?.(`⚠️ Demande créée dans l'appli, mais pas dans Camileia : ${er?.message || er}`, "error"); }
-      }
+      const msgCam = "";
       window.toast?.(`✓ Demande ${numero} créée${msgCam}.`);
       fermer(); onCree(numero, v.site.trim());
     } catch (err) { console.error(err); etat.textContent = "❌ " + (err?.message || err); bouton.disabled = false; }

@@ -74,7 +74,7 @@ export async function synchroniser() {
   let crees = 0, majs = 0;
   const dis = brutes.map(di => diVersDemande(di, { libelles, correspondances: c }));
   // DI créées depuis l'appli : déjà une demande → pas de ticket en double.
-  const dejaLiees = new Set(demandes.filter(d => d.source !== "camileia" && d.camileiaId != null).map(d => String(d.camileiaId)));
+  const dejaLiees = new Set(demandes.filter(d => d.source !== "camileia" && d.camileiaId != null && !d.supprimeeLe).map(d => String(d.camileiaId)));
   for (const d of dis) {
     if (dejaLiees.has(String(d.camileiaId))) continue;
     const id = `cam-${d.camileiaId}`;
@@ -167,7 +167,7 @@ async function importerMessages(brutes) {
   let equipe = new Set();
   try { const { getDoc: gd } = await import("./firestore-compte.js"); const m = (await gd(doc(db, "config", "camileia-contacts")))?.data()?.map || {}; equipe = new Set(Object.values(m).filter(Boolean).map(String)); } catch { /* */ }
   const parDi = new Map();
-  demandes.forEach(d => { const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
+  demandes.forEach(d => { if (d.supprimeeLe) return; const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
   for (const di of brutes) {
     const d = parDi.get(String(di.id)); if (!d) continue;
     const iris = (di.messages || []).map(m => cam.iriDe(m) || m).filter(Boolean);
@@ -194,7 +194,7 @@ async function importerMessages(brutes) {
 const CHAMPS_PHOTOS = ["photo_1", "photo_2", "photo_3", "photo_compterendu_1", "photo_compterendu_2", "photo_compterendu_3"];
 async function importerPhotos(brutes) {
   const parDi = new Map();
-  demandes.forEach(d => { const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
+  demandes.forEach(d => { if (d.supprimeeLe) return; const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
   let jeton = null;
   for (const di of brutes) {
     const d = parDi.get(String(di.id)); if (!d) continue;
@@ -223,6 +223,8 @@ async function passage() {
   catch (e) { etat.erreur = e?.message || String(e); console.warn("Synchro Camileia :", etat.erreur); }
   etat.derniere = Date.now(); etat.enCours = false; signaler();
 }
+// Synchro immédiate (ex. juste après l'envoi d'une demande dans Camileia).
+export function lancerMaintenant() { setTimeout(passage, 1500); }
 let minuteur = null;
 export function demarrer() {
   if (minuteur) return;
