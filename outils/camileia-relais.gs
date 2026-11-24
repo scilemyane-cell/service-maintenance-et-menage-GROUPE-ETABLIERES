@@ -40,6 +40,7 @@ function doPost(e) {
     var req = JSON.parse(e.postData.contents || "{}");
     if (!req.cle || req.cle !== p.getProperty("CLE_RELAIS")) return repondre({ erreur: "Clé de relais incorrecte." });
     if (req.action === "web") return repondre(actionWeb(req));
+    if (req.action === "inspecter") return repondre(inspecterWeb(req)); // lecture seule d'une page /DI/ (diagnostic)
     if (req.action === "diagWebApi") { // test du mécanisme de connexion web avec le compte API (aucun secret renvoyé)
       sessionWeb("diag-api", p.getProperty("CAMILEIA_LOGIN"), p.getProperty("CAMILEIA_MDP"), true);
       return repondre({ diag: DIAG });
@@ -181,6 +182,20 @@ function actionWeb(req) {
     appelCamileia("PUT", "/api-platform/d_is/" + di, corps, jeton(false));
   }
   return { ok: true, email: email, absents: absents, restaures: vides, suiviRefuse: suiviRefuse };
+}
+
+function inspecterWeb(req) {
+  var email = emailFirebase(req.idToken); if (!email) return { erreur: "Connexion à l'appli non vérifiée." };
+  var compte = PropertiesService.getScriptProperties().getProperty("WEB " + email); if (!compte) return { pasDeCompte: true };
+  var i = compte.indexOf(":"), login = compte.slice(0, i).trim(), mdp = compte.slice(i + 1);
+  var chemin = String(req.chemin || ""); if (chemin.indexOf("/DI/") !== 0 || chemin.indexOf("..") >= 0) return { erreur: "Adresse refusée" };
+  var cookies = sessionWeb(email, login, mdp, false), page = getWeb(chemin, cookies);
+  if (page.indexOf("_username") >= 0) { cookies = sessionWeb(email, login, mdp, true); page = getWeb(chemin, cookies); }
+  var forms = [], m, re = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi;
+  while ((m = re.exec(page))) forms.push({ action: attr(m[1], "action"), method: attr(m[1], "method"), id: attr(m[1], "id"), champs: (m[2].match(/name="[^"]+"/g) || []).slice(0, 30) });
+  var urls = (page.match(/["'](\/DI\/[^"'\s]+)["']/g) || []).filter(function (u, k, a) { return a.indexOf(u) === k; }).slice(0, 40);
+  var js = (page.match(/(\$\.(?:ajax|post)|fetch)\([\s\S]{0,300}/g) || []).filter(function (x) { return /essage/i.test(x); }).slice(0, 5);
+  return { taille: page.length, titre: (page.match(/<title>([\s\S]*?)<\/title>/i) || [, ""])[1].trim(), forms: forms, urls: urls, js: js };
 }
 
 function emailFirebase(idToken) {
