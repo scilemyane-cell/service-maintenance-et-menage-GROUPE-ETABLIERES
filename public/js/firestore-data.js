@@ -150,17 +150,21 @@ export async function listerInterventionsCorbeille() {
 const CANAL_TEST_DEM = typeof location !== "undefined" && location.pathname.startsWith("/beta/");
 export const COL_CAMILEIA = "demandes-camileia";
 export const estTicketCamileia = (id) => String(id || "").startsWith("cam-");
-function watchDemandesExcel(callback) {
+export function watchDemandesExcel(callback) {
   return ecoutePartagee("demandes:delta", ecouteDelta({ cle: "demandes", col: "demandes", champs: ["dateMaj", "importeLe", "importMajLe"] }), callback);
 }
 export function watchDemandes(callback) {
   if (!CANAL_TEST_DEM) return watchDemandesExcel(callback);
+  // Version de test (Super Admin) : seulement les tickets Camileia, pour ne pas mélanger avec les
+  // demandes de l'Excel (celles-ci restent dans la version validée). Ré-afficher l'Excel en test :
+  // localStorage « test-avec-excel » = "1".
+  const avecExcel = (() => { try { return localStorage.getItem("test-avec-excel") === "1"; } catch { return false; } })();
   return ecoutePartagee("demandes:fusion-camileia", (emettre) => {
-    let excel = null, cam = [];
-    const envoyer = () => { if (excel) emettre(cam.length ? [...excel, ...cam] : excel); };
-    watchDemandesExcel((l) => { excel = l; envoyer(); });
-    if (window.__smmRole === "super_admin") {
-      onSnapshot(collection(db, COL_CAMILEIA), (snap) => { cam = []; snap.forEach(d => { if (!d.id.startsWith("_")) cam.push({ id: d.id, ...d.data() }); }); envoyer(); },
+    let excel = avecExcel ? null : [], cam = [], camRecu = false;
+    const envoyer = () => { if (excel && (avecExcel || camRecu)) emettre(cam.length ? [...excel, ...cam] : excel); };
+    if (avecExcel) watchDemandesExcel((l) => { excel = l; envoyer(); });
+    {
+      onSnapshot(collection(db, COL_CAMILEIA), (snap) => { cam = []; camRecu = true; snap.forEach(d => { if (!d.id.startsWith("_")) cam.push({ id: d.id, ...d.data() }); }); envoyer(); },
         (e) => console.warn("Tickets Camileia (test) :", e?.message || e));
     }
   }, callback);

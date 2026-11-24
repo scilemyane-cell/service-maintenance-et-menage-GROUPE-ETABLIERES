@@ -24,6 +24,9 @@ const signaler = () => abonnes.forEach(cb => { try { cb(etat); } catch { /* */ }
 // Copie locale des demandes (écoute partagée déjà ouverte par l'appli : 0 lecture en plus).
 let demandes = null; const attentes = [];
 watchDemandes((l) => { demandes = l || []; attentes.splice(0).forEach(f => f()); });
+// Demandes de l'Excel (non affichées en test) : seulement pour deviner l'association d'un site.
+let demandesExcel = [];
+import("./firestore-data.js").then(m => m.watchDemandesExcel?.((l) => { demandesExcel = l || []; })).catch(() => { /* */ });
 const demandesPretes = () => (demandes ? Promise.resolve() : new Promise(r => attentes.push(r)));
 
 // Libellés : référentiels (6 h) + lieux (gardés sur l'appareil).
@@ -69,12 +72,12 @@ export async function synchroniser() {
   await resoudreLieux(brutes);
   const existants = new Map(demandes.filter(d => d.source === "camileia" && !String(d.id).startsWith("_")).map(d => [d.id, d]));
   const parSite = new Map();
-  demandes.forEach(d => { if (d.source !== "camileia" && d.site && d.association && d.association !== "Autres") parSite.set(sa(d.site), d.association); });
+  [...demandesExcel, ...demandes].forEach(d => { if (d.source !== "camileia" && d.site && d.association && d.association !== "Autres") parSite.set(sa(d.site), d.association); });
   const assoc = (site) => { const k = sa(site); if (parSite.has(k)) return parSite.get(k); for (const [s, a] of parSite) if (k && (s.startsWith(k) || k.startsWith(s))) return a; return "Autres"; };
   let crees = 0, majs = 0;
   const dis = brutes.map(di => diVersDemande(di, { libelles, correspondances: c }));
   // DI créées depuis l'appli : déjà une demande → pas de ticket en double.
-  const dejaLiees = new Set(demandes.filter(d => d.source !== "camileia" && d.camileiaId != null && !d.supprimeeLe).map(d => String(d.camileiaId)));
+  const dejaLiees = new Set([...demandesExcel, ...demandes].filter(d => d.source !== "camileia" && d.camileiaId != null && !d.supprimeeLe).map(d => String(d.camileiaId)));
   for (const d of dis) {
     if (dejaLiees.has(String(d.camileiaId))) continue;
     const id = `cam-${d.camileiaId}`;
