@@ -161,3 +161,27 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   else if (faits.length) window.toast?.(`✓ Camileia mis à jour (${faits.join(", ")})`);
   else window.toast?.("Camileia : rien à changer (déjà à jour)");
 }
+
+// Réponse au demandeur depuis la fiche (fil de messages de la DI Camileia),
+// signée par le contact Camileia de la personne connectée.
+export async function repondreDemandeur(id, texte, { collection } = {}) {
+  texte = String(texte || "").trim(); if (!texte) return;
+  await cam.chargerRelaisPartage();
+  if (!cam.estConnecte()) throw new Error("relais Camileia non réglé sur cet appareil");
+  const col = collection || (String(id).startsWith("cam-") ? "demandes-camileia" : "demandes");
+  const ref = doc(db, col, id);
+  const t = (await getDoc(ref))?.data();
+  if (!t?.camileiaIri) throw new Error("demande non reliée à Camileia");
+  let contact = null;
+  try { contact = await contactPourAttribution(auth.currentUser?.uid, ""); } catch { /* */ }
+  if (!contact) { try { const { contactParEmail } = await import("./camileia-envoi.js"); contact = await contactParEmail(auth.currentUser?.email); } catch { /* */ } }
+  const m = await cam.envoyerMessage(t.camileiaIri, texte, contact?.["@id"] || (contact?.id ? `${cam.RACINE}/contacts/${contact.id}` : null));
+  const msgs = Array.isArray(t.camileiaMessages) ? t.camileiaMessages : [];
+  msgs.push({ id: m?.id ?? Date.now(), auteur: contact ? `${contact.prenom || ""} ${contact.nom || ""}`.trim() : (auth.currentUser?.email || ""), contact: contact?.id ? String(contact.id) : "", texte, date: new Date().toISOString(), depuisAppli: true });
+  await updateDoc(ref, { camileiaMessages: msgs, camileiaMsgNonLu: false });
+  return m;
+}
+export async function marquerMessagesLus(id) {
+  const col = String(id).startsWith("cam-") ? "demandes-camileia" : "demandes";
+  try { await updateDoc(doc(db, col, id), { camileiaMsgNonLu: false }); } catch { /* */ }
+}

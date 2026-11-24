@@ -215,7 +215,10 @@ export async function lireReferentiels(onProgress = () => {}) {
 // ---- Envois vers Camileia (aucune suppression possible) ----
 // Message / compte rendu sur une DI.
 export function envoyerMessage(diIri, texte, contactIri = null) {
-  return appeler("POST", `${RACINE}/d_i_messages`, { di: diIri, contact: contactIri, message: texte, date: new Date().toISOString() });
+  // Heure locale avec son décalage (Camileia lit l'heure sans tenir compte du « Z »).
+  const n = new Date(), o = -n.getTimezoneOffset(), p = (x) => String(Math.abs(x)).padStart(2, "0");
+  const date = new Date(n.getTime() + o * 60000).toISOString().slice(0, 19) + (o >= 0 ? "+" : "-") + p(Math.trunc(o / 60)) + ":" + p(o % 60);
+  return appeler("POST", `${RACINE}/d_i_messages`, { di: diIri, contact: contactIri, message: texte, date });
 }
 // Changement d'état : l'API n'a que PUT (remplacement complet) → on relit
 // la DI juste avant pour ne rien écraser de ce qui a changé dans Camileia.

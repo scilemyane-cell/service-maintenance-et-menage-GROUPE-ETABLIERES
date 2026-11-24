@@ -177,6 +177,13 @@ const EN_COURS_CAM = ["Planifié", "Intervenant sollicité", "Commande en cours"
 const BOUTONS_CAM = [["Pris en compte", "Pris en compte"], ["Planifié", "En cours"], ["Demande de devis", "Attente devis"], ["Réalisé", "Terminée"], ["Annulé", "Non qualifiée"]];
 export const libStatut = (s) => !CANAL_TEST_CAM ? s : !s || s === "Non renseigné" ? "À qualifier" : s === "Réalisé" ? "Clôturée" : s === "Réalisé – à valider" ? "Terminée (à valider)" : s === "Annulé" ? "Non qualifiée" : s === "Demande de devis" ? "Attente devis" : EN_COURS_CAM.includes(s) ? "En cours" : s;
 const URGENCES_EDIT = CANAL_TEST_CAM ? [["Critique", "Vital"], ["Urgent", "Très urgent"], ["Normal", "Moins urgent"], ["À planifier", "Non urgent"]] : [["Critique", "Critique"], ["Urgent", "Urgent"], ["À planifier", "À planifier"], ["Normal", "Normal"]];
+// Fil de messages de la DI Camileia (version test) : lecture + réponse au demandeur.
+const fmtMsgDate = (d) => { const x = new Date(d); return isNaN(x) ? "" : x.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); };
+const echangesCamHTML = (l) => !CANAL_TEST_CAM || !l.camileiaIri ? "" : `<details class="dps-echanges-cam" data-cam-echanges="${esc(l.id)}" ${l.camileiaMsgNonLu ? "open" : ""}>
+  <summary>💬 Échanges avec le demandeur (Camileia)${l.camileiaMessages.length ? ` · ${l.camileiaMessages.length}` : ""}${l.camileiaMsgNonLu ? ` <span class="dps-pastille" style="background:#e53935;color:#fff">nouveau</span>` : ""}</summary>
+  <div style="display:flex;flex-direction:column;gap:6px;margin:6px 0">${l.camileiaMessages.length ? l.camileiaMessages.map(m => `<div style="padding:6px 8px;border-radius:8px;background:${/^\[Appli SMM\]/.test(m.texte) || m.depuisAppli ? "rgba(33,150,243,.12)" : "rgba(0,0,0,.05)"}"><small><b>${esc(m.auteur || "")}</b> · ${esc(fmtMsgDate(m.date))}</small><div style="white-space:pre-wrap">${esc(String(m.texte || "").replace(/^\[Appli SMM\]\s*/, ""))}</div></div>`).join("") : `<small class="hint">Aucun message pour l'instant.</small>`}</div>
+  ${/\/d_i_etats\/4$/.test(l.camileiaEtatIri) ? `<small class="hint">DI clôturée dans Camileia.</small>` : `<textarea rows="2" data-cam-rep="${esc(l.id)}" placeholder="Répondre au demandeur…" style="width:100%"></textarea><button type="button" class="dps-enregistrer" data-cam-rep-envoi="${esc(l.id)}">📤 Envoyer au demandeur</button>`}
+</details>`;
 const STATUTS_RAPIDES = ["Pris en compte", "Intervenant sollicité", "Demande de devis", "En attente de date d'intervention", "Planifié", "Commande en cours", "Réalisé", "Annulé", "Arbitrage budgétaire"];
 const ORDRE_URG = { "Critique": 0, "Urgent": 1, "À planifier": 2, "Normal": 3, "Non renseignée": 4 };
 const TRAITE = (s) => s === "Réalisé" || s === "Annulé";
@@ -906,7 +913,7 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
       ${perms.isEditor ? (() => { const auto = categorieAuto(`${l.descr || ""} ${l.type || ""}`), cur = categorieDe(l), info = CATEGORIES_PANNES.find(c => c.id === auto);
         return `<div class="dps-urg-edit"><label>Catégorie <select data-cat-panne="${esc(l.id)}"><option value="">${info.ic} ${esc(info.lib)} (auto)</option>${CATEGORIES_PANNES.map(c => `<option value="${c.id}" ${l.categoriePanne === c.id ? "selected" : ""}>${c.ic} ${esc(c.lib)}</option>`).join("")}</select></label>${l.categoriePanne && l.categoriePanne !== auto ? `<small>corrigée à la main</small>` : ""}</div>`; })() : ""}
       ${attribBlocHTML(l)}
-      ${lieesHTML(l)}${suggestionHTML(l)}
+      ${lieesHTML(l)}${suggestionHTML(l)}${echangesCamHTML(l)}
       ${perms.peutTraiter ? `
       <div class="dps-statuts" role="group" aria-label="Statut">
         ${CANAL_TEST_CAM ? BOUTONS_CAM.map(([s, lib]) => `<button type="button" class="dps-st ${val(l, "statut") === s || (s === "Planifié" && EN_COURS_CAM.includes(val(l, "statut"))) ? "on" : ""} ${s === "Réalisé" ? "ok" : s === "Annulé" ? "ko" : ""}" data-dps-statut="${esc(s)}" title="${s === "Réalisé" ? "Terminée : à valider par un superviseur, puis Clôturée" : ""}">${esc(lib)}</button>`).join("")
@@ -1112,6 +1119,17 @@ export function renderParSite(container, lignes, { toggleHTML, onToggle, perms, 
     const champs = v === l.urgenceDemandee ? { urgenceCorrigee: "", urgenceCorrigeePar: "", urgenceCorrigeeLe: "" } : { urgenceCorrigee: v, urgenceCorrigeePar: utilisateur, urgenceCorrigeeLe: aujourdhui() };
     sel.disabled = true;
     try { await maj(l.id, champs); window.toast?.(`Urgence ${v === l.urgenceDemandee ? "remise comme demandée" : `requalifiée : ${sel.selectedOptions[0]?.textContent || v}`}`); } catch (e) { alert("Échec : " + (e?.message || e)); sel.disabled = false; }
+  }));
+  container.querySelectorAll("[data-cam-echanges]").forEach(det => det.addEventListener("toggle", () => {
+    const l = lignes.find(x => x.id === det.dataset.camEchanges);
+    if (det.open && l?.camileiaMsgNonLu) import("./camileia-retour.js").then(m => m.marquerMessagesLus(l.id));
+  }));
+  container.querySelectorAll("[data-cam-rep-envoi]").forEach(b => b.addEventListener("click", async () => {
+    const zone = container.querySelector(`[data-cam-rep="${CSS.escape(b.dataset.camRepEnvoi)}"]`); const texte = zone?.value.trim(); if (!texte) { zone?.focus(); return; }
+    b.disabled = true; const avant = b.textContent; b.textContent = "⏳ Envoi…";
+    try { await (await import("./camileia-retour.js")).repondreDemandeur(b.dataset.camRepEnvoi, texte); zone.value = ""; window.toast?.("✓ Message envoyé dans Camileia"); }
+    catch (e) { window.toast?.(`⚠️ Message non envoyé : ${e?.message || e}`, "error"); }
+    finally { b.disabled = false; b.textContent = avant; }
   }));
   container.querySelectorAll("[data-cat-panne]").forEach(sel => sel.addEventListener("change", async () => {
     sel.disabled = true;

@@ -64,6 +64,7 @@ export async function synchroniser() {
   let ctypes = {}; try { ctypes = await (await import("./camileia-envoi.js")).lireCorrespTypes(); } catch { /* */ }
   const brutes = cam.avecIri(await cam.lireTout(`${cam.RACINE}/d_is`, { maxPages: 10 }), `${cam.RACINE}/d_is`);
   try { await surveillerDI(brutes); } catch (e) { console.warn("Surveillance DI Camileia :", e); }
+  try { await importerMessages(brutes); } catch (e) { console.warn("Messages Camileia :", e); }
   await resoudreLieux(brutes);
   const existants = new Map(demandes.filter(d => d.source === "camileia" && !String(d.id).startsWith("_")).map(d => [d.id, d]));
   const parSite = new Map();
@@ -123,6 +124,35 @@ async function surveillerDI(brutes) {
   }
   try { localStorage.setItem(CLE_SAINES, JSON.stringify(saines)); } catch { /* */ }
   if (reparees.length) window.toast?.(`🛠️ Camileia : DI réparée${reparees.length > 1 ? "s" : ""} automatiquement — ${reparees.join(" · ")}`, "error");
+}
+
+// ---- Échanges (messages de la DI) : Camileia → fiche de l'appli ----
+const CLE_MSG = "camileia-messages-cache";
+async function importerMessages(brutes) {
+  let cache = {}; try { cache = JSON.parse(localStorage.getItem(CLE_MSG) || "{}"); } catch { /* */ }
+  let contacts = []; try { contacts = (await (await import("./camileia-envoi.js")).referentiels()).contacts; } catch { /* */ }
+  const nomContact = (iri) => { const c = contacts.find(x => String(x.id) === String(cam.iriDe(iri) || iri || "").split("/").pop()); return c ? `${c.prenom || ""} ${c.nom || ""}`.trim() : ""; };
+  // Demandes de l'appli reliées à une DI (tickets Camileia + demandes envoyées depuis l'appli)
+  const parDi = new Map();
+  demandes.forEach(d => { const id = d.camileiaId ?? (String(d.camileiaIri || "").split("/").pop() || null); if (id != null && id !== "") parDi.set(String(id), d); });
+  for (const di of brutes) {
+    const d = parDi.get(String(di.id)); if (!d) continue;
+    const iris = (di.messages || []).map(m => cam.iriDe(m) || m).filter(Boolean);
+    const msgs = [];
+    for (const iri of iris) {
+      if (!cache[iri]) { try { const m = await cam.appeler("GET", iri); cache[iri] = { id: m.id, auteur: nomContact(m.contact) || "Camileia", contact: String(cam.iriDe(m.contact) || m.contact || ""), texte: String(m.message || ""), date: m.date || "" }; } catch { continue; } }
+      msgs.push(cache[iri]);
+    }
+    msgs.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const avant = Array.isArray(d.camileiaMessages) ? d.camileiaMessages : [];
+    if (msgs.length === avant.length && msgs.every((m, i) => m.id === avant[i]?.id)) continue;
+    // Nouveau message qui ne vient pas de l'appli → « non lu » (badge sur la fiche)
+    const nouveaux = msgs.filter(m => !avant.some(a => a.id === m.id));
+    const nonLu = nouveaux.some(m => !/^\[Appli SMM\]/.test(m.texte)) || !!d.camileiaMsgNonLu;
+    const col = String(d.id).startsWith("cam-") ? "demandes-camileia" : "demandes";
+    try { await updateDoc(doc(db, col, d.id), { camileiaMessages: msgs, camileiaMsgNonLu: nonLu }); } catch (e) { console.warn("Messages", d.id, e); }
+  }
+  try { localStorage.setItem(CLE_MSG, JSON.stringify(cache)); } catch { /* */ }
 }
 
 async function passage() {

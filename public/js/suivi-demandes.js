@@ -759,6 +759,7 @@ function ligneDepuisDoc(d) {
     local: (d.localCorrige != null ? d.localCorrige : d.local) || "", demandeur: d.demandeur || "", logementOccupe: d.logementOccupe || "",
     declarePar: d.declarePar || "", declareLe: d.declareLe || "", validePar: d.validePar || "", dateValidation: d.dateValidation || "", validation: d.validation || "", refusPar: d.refusPar || "", refusLe: d.refusLe || "", refusMotif: d.refusMotif || "",
     importeMs: d.importeLe?.toMillis ? d.importeLe.toMillis() : (d.importeLe?.seconds ? d.importeLe.seconds * 1000 : 0),
+    camileiaIri: d.camileiaIri || "", camileiaNumero: d.camileiaNumero || (d.source === "camileia" ? d.numero : ""), camileiaMessages: Array.isArray(d.camileiaMessages) ? d.camileiaMessages : [], camileiaMsgNonLu: !!d.camileiaMsgNonLu, camileiaEtatIri: d.camileiaEtatIri || "",
     lieeA: d.lieeA || "", lieeANumero: d.lieeANumero || "", mailsEnvoyes: Array.isArray(d.mailsEnvoyes) ? d.mailsEnvoyes : [],
     commentaireTechPar: d.commentaireTechPar || "", commentaireTechLe: d.commentaireTechLe || "", commentaireMajMs: d.commentaireMajMs || 0, commentaireMajPar: d.commentaireMajPar || "", versionPrecedente: d.versionPrecedente || null,
     actionPour: d.actionPour || "", actionPourNom: d.actionPourNom || "", actionTexte: d.actionTexte || "", actionEcheance: d.actionEcheance || "",
