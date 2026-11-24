@@ -153,7 +153,9 @@ async function importerMessages(brutes) {
     const nouveaux = msgs.filter(m => !avant.some(a => a.id === m.id));
     const nonLu = nouveaux.some(m => !/^\[Appli SMM\]/.test(m.texte) && !equipe.has(String(m.contact).split("/").pop()) && !avant.some(a => a.depuisAppli && String(a.texte).trim() === String(m.texte).trim())) || !!d.camileiaMsgNonLu;
     const col = String(d.id).startsWith("cam-") ? "demandes-camileia" : "demandes";
-    try { await updateDoc(doc(db, col, d.id), { camileiaMessages: msgs, camileiaMsgNonLu: nonLu }); } catch (e) { console.warn("Messages", d.id, e); }
+    // dateMaj : les autres appareils ne relisent que les demandes marquées modifiées (cache-delta).
+    try { await updateDoc(doc(db, col, d.id), { camileiaMessages: msgs, camileiaMsgNonLu: nonLu, ...(col === "demandes" ? { dateMaj: serverTimestamp() } : {}) }); } catch (e) { console.warn("Messages", d.id, e); }
+    if (nonLu && !d.camileiaMsgNonLu) window.toast?.(`💬 Nouveau message du demandeur sur ${d.numero || "une demande"} (Camileia)`);
   }
   try { localStorage.setItem(CLE_MSG, JSON.stringify(cache)); } catch { /* */ }
 }

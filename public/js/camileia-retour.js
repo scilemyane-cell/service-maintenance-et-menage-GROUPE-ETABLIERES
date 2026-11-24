@@ -3,7 +3,7 @@
 // commentaire technicien (en message). Échec = simple avertissement, le
 // ticket de l'appli reste enregistré ; l'erreur est notée sur le ticket.
 import { db } from "./firebase-init.js";
-import { doc, getDoc, updateDoc } from "./firestore-compte.js";
+import { doc, getDoc, updateDoc, serverTimestamp } from "./firestore-compte.js";
 import * as cam from "./camileia.js";
 import { statutPropose } from "./camileia-demandes.js";
 import { auth } from "./firebase-init.js";
@@ -181,10 +181,10 @@ export async function repondreDemandeur(id, texte, { collection } = {}) {
   if (!viaWeb) { m = await cam.envoyerMessage(t.camileiaIri, texte, contact?.["@id"] || (contact?.id ? `${cam.RACINE}/contacts/${contact.id}` : null)); window.toast?.("⚠️ Message envoyé sans notification Camileia (compte web non relié)", "error"); }
   const msgs = Array.isArray(t.camileiaMessages) ? t.camileiaMessages : [];
   msgs.push({ id: m?.id ?? `app-${Date.now()}`, auteur: contact ? `${contact.prenom || ""} ${contact.nom || ""}`.trim() : (auth.currentUser?.email || ""), contact: contact?.id ? String(contact.id) : "", texte, date: new Date().toISOString(), depuisAppli: true });
-  await updateDoc(ref, { camileiaMessages: msgs, camileiaMsgNonLu: false });
+  await updateDoc(ref, { camileiaMessages: msgs, camileiaMsgNonLu: false, ...(col === "demandes" ? { dateMaj: serverTimestamp() } : {}) });
   return m;
 }
 export async function marquerMessagesLus(id) {
   const col = String(id).startsWith("cam-") ? "demandes-camileia" : "demandes";
-  try { await updateDoc(doc(db, col, id), { camileiaMsgNonLu: false }); } catch { /* */ }
+  try { await updateDoc(doc(db, col, id), { camileiaMsgNonLu: false, ...(col === "demandes" ? { dateMaj: serverTimestamp() } : {}) }); } catch { /* */ }
 }
