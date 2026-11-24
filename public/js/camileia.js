@@ -218,7 +218,8 @@ const LIB_CATEGORIES = {"1": "Autre", "2": "Chauffage", "3": "Climatisation", "4
 export function avecLibellesWeb(liste, collection) {
   const dico = /d_i_type_pannes/.test(collection) ? LIB_TYPES_PANNE : /d_i_categorie_type_pannes/.test(collection) ? LIB_CATEGORIES : null;
   if (!dico) return liste;
-  return (liste || []).map(x => (x && dico[String(x.id)] ? { ...x, libelle: dico[String(x.id)] } : x));
+  // Seulement pour les libellés encore « codés » (custom.Xxx) : un libellé en clair (renommé depuis l'appli) est gardé tel quel.
+  return (liste || []).map(x => (x && dico[String(x.id)] && /^(custom|word|message|label)\./i.test(String(x.libelle || "")) ? { ...x, libelle: dico[String(x.id)] } : x));
 }
 
 // Libellés Camileia = clés de traduction (« word.Encours », « message.Attentedevis »).

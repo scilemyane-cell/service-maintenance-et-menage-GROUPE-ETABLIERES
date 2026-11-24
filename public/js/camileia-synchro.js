@@ -25,8 +25,10 @@ const signaler = () => abonnes.forEach(cb => { try { cb(etat); } catch { /* */ }
 let demandes = null; const attentes = [];
 watchDemandes((l) => { demandes = l || []; attentes.splice(0).forEach(f => f()); });
 // Demandes de l'Excel (non affichées en test) : seulement pour deviner l'association d'un site.
-let demandesExcel = [];
-import("./firestore-data.js").then(m => m.watchDemandesExcel?.((l) => { demandesExcel = l || []; })).catch(() => { /* */ });
+let demandesExcel = null;
+import("./firestore-data.js").then(m => m.watchDemandesExcel?.((l) => { demandesExcel = l || []; })).catch(() => { demandesExcel = []; });
+// Attend la liste de l'Excel (20 s max) : sinon association « Autres » et risque de ticket en double.
+const excelPret = async () => { for (let i = 0; i < 40 && !demandesExcel; i++) await new Promise(r => setTimeout(r, 500)); return demandesExcel || []; };
 const demandesPretes = () => (demandes ? Promise.resolve() : new Promise(r => attentes.push(r)));
 
 // Libellés : référentiels (6 h) + lieux (gardés sur l'appareil).
@@ -70,14 +72,15 @@ export async function synchroniser() {
   try { await importerMessages(brutes); } catch (e) { console.warn("Messages Camileia :", e); }
   try { await importerPhotos(brutes); } catch (e) { console.warn("Photos Camileia :", e); }
   await resoudreLieux(brutes);
+  const excel = await excelPret();
   const existants = new Map(demandes.filter(d => d.source === "camileia" && !String(d.id).startsWith("_")).map(d => [d.id, d]));
   const parSite = new Map();
-  [...demandesExcel, ...demandes].forEach(d => { if (d.source !== "camileia" && d.site && d.association && d.association !== "Autres") parSite.set(sa(d.site), d.association); });
+  [...excel, ...demandes].forEach(d => { if (d.source !== "camileia" && d.site && d.association && d.association !== "Autres") parSite.set(sa(d.site), d.association); });
   const assoc = (site) => { const k = sa(site); if (parSite.has(k)) return parSite.get(k); for (const [s, a] of parSite) if (k && (s.startsWith(k) || k.startsWith(s))) return a; return "Autres"; };
   let crees = 0, majs = 0;
   const dis = brutes.map(di => diVersDemande(di, { libelles, correspondances: c }));
   // DI créées depuis l'appli : déjà une demande → pas de ticket en double.
-  const dejaLiees = new Set([...demandesExcel, ...demandes].filter(d => d.source !== "camileia" && d.camileiaId != null && !d.supprimeeLe).map(d => String(d.camileiaId)));
+  const dejaLiees = new Set([...excel, ...demandes].filter(d => d.source !== "camileia" && d.camileiaId != null && !d.supprimeeLe).map(d => String(d.camileiaId)));
   for (const d of dis) {
     if (dejaLiees.has(String(d.camileiaId))) continue;
     const id = `cam-${d.camileiaId}`;
@@ -97,7 +100,7 @@ export async function synchroniser() {
     if (!e) {
       const tCam = typesCam.find(t => String(cam.iriDe(t) || t["@id"] || t.id).split("/").pop() === String(typeIri).split("/").pop());
       const motifUrgent = /^urgent/.test(sa(cam.libelleLisible(tCam?.libelle || "")));
-      const motUrgent = /(^|[^a-z])urgen(t|te|ce)([^a-z]|$)/.test(sa(`${brut?.libelle || ""} ${brut?.note || ""}`)) && !/(pas|non|moins) urgen/.test(sa(`${brut?.libelle || ""} ${brut?.note || ""}`));
+      const motUrgent = /(^|[^a-z])urgen(t|te|ce)s?([^a-z]|$)/.test(sa(`${brut?.libelle || ""} ${brut?.note || ""}`)) && !/(pas|non|moins) urgen/.test(sa(`${brut?.libelle || ""} ${brut?.note || ""}`));
       // « URGENT – Autre » : la catégorie vient de la description.
       if (motifUrgent && /\/d_i_categorie_type_pannes\/1$|^1$/.test(String(cam.iriDe(tCam?.categorie) || tCam?.categorie || ""))) {
         try { const { categorieAuto } = await import("./categories-pannes.js"); base.categoriePanne = categorieAuto(`${brut?.libelle || ""} ${brut?.note || ""}`); } catch { /* */ }
@@ -111,6 +114,8 @@ export async function synchroniser() {
         window.toast?.(`🔴 Demande URGENTE reçue de Camileia : ${base.numero || id} — ${String(base.descriptif || "").slice(0, 60)}`, "error");
       }
     }
+    // Photos jointes à la création depuis l'appli (rangées sous « cam-<id> » avant l'arrivée du ticket).
+    if (!e && !base.nbPhotos) { try { const n = (await (await import("./demandes-photos.js")).photosDemande(id)).length; if (n) base.nbPhotos = n; } catch { /* */ } }
     if (!e) { await setDoc(doc(db, "demandes-camileia", id), { ...base, importeLe: serverTimestamp(), importMajLe: serverTimestamp() }); crees++; continue; }
     const maj = {};
     CHAMPS_CAMILEIA.forEach(k => { if ((e[k] || "") !== (base[k] || "")) maj[k] = base[k]; });
