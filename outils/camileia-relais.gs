@@ -96,6 +96,7 @@ var CHAMPS_WEB = {
   dateinterventionplanifiee: P + "[dateinterventionplanifiee]",
   priorite: P + "[priorite]", typepanne: P + "[typepanne]",
   societes: P + "_societe[]", contacts: P + "_contact[]",
+  suivi: P + "_traitement[]", // colonne « Suivi par » de la liste des DI
 };
 
 // req = { idToken, di: 6, champs: { etat: 7, noteb: "…", contacts: [12], societes: [4] } }
@@ -145,14 +146,21 @@ function actionWeb(req) {
     var corpsTxt = page.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     return { erreur: "Fiche DI " + di + " non modifiable avec le compte de " + email + ".", diagPage: { url: url, titre: tt ? tt[1].trim() : "", taille: page.length, nbForms: (page.match(/<form\b/gi) || []).length, actions: (page.match(/<form\b[^>]*>/gi) || []).slice(0, 5), texte: corpsTxt.slice(0, 400) } };
   }
-  var absents = [];
+  var absents = [], suiviRefuse = false;
   var ch = req.champs || {};
   Object.keys(ch).forEach(function (k) {
     var nom = CHAMPS_WEB[k]; if (!nom) return;
     var present = form.noms[nom];
     if (!present) { absents.push(k); return; }
-    form.champs = form.champs.filter(function (c) { return c.nom !== nom; });
     var v = ch[k];
+    if (k === "suivi" && form.options[nom]) { // seulement les personnes proposées dans « Suivi par »
+      var voulus = Array.isArray(v) ? v : [v];
+      var garde = voulus.filter(function (x) { return form.options[nom].indexOf(String(x)) >= 0; });
+      if (garde.length < voulus.length) suiviRefuse = true;
+      if (voulus.length && !garde.length) return; // personne inconnue : on ne touche pas au « Suivi par » actuel
+      v = garde;
+    }
+    form.champs = form.champs.filter(function (c) { return c.nom !== nom; });
     (Array.isArray(v) ? v : [v]).forEach(function (x) { if (x !== null && x !== undefined) form.champs.push({ nom: nom, valeur: String(x) }); });
   });
   var res = postMultipart(form.action, form.champs, cookies);
@@ -167,7 +175,7 @@ function actionWeb(req) {
     vides.forEach(function (k) { if (k === "etat*") corps.etat = "/api-platform/d_i_etats/" + ch.etat; else corps[k] = avant[k]; });
     appelCamileia("PUT", "/api-platform/d_is/" + di, corps, jeton(false));
   }
-  return { ok: true, email: email, absents: absents, restaures: vides };
+  return { ok: true, email: email, absents: absents, restaures: vides, suiviRefuse: suiviRefuse };
 }
 
 function emailFirebase(idToken) {
@@ -247,7 +255,7 @@ function lireFormulaire(html, actionContient) {
   while ((m = re.exec(html))) {
     var action = attr(m[1], "action");
     if (!action || action.indexOf(actionContient) < 0) continue;
-    var corps = m[2].replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<!--[\s\S]*?-->/g, ""), champs = [], noms = {};
+    var corps = m[2].replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<!--[\s\S]*?-->/g, ""), champs = [], noms = {}, options = {};
     var ajoute = function (nom, valeur, fichier) { champs.push({ nom: nom, valeur: valeur, fichier: !!fichier }); noms[nom] = true; };
     // zones de texte (retirées du corps pour ne pas lire leurs contenus comme des balises)
     corps = corps.replace(/<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi, function (t, a, v) {
@@ -259,6 +267,7 @@ function lireFormulaire(html, actionContient) {
       if (aAttr(a, "disabled")) return "";
       var multiple = aAttr(a, "multiple"), liste = [], om, ro = /<option\b([^>]*)>([\s\S]*?)(?=<option\b|<\/option>|<\/optgroup>|$)/gi;
       while ((om = ro.exec(opts))) liste.push({ v: attr(om[1], "value") !== null ? attr(om[1], "value") : decoder(om[2]).trim(), sel: aAttr(om[1], "selected"), dis: aAttr(om[1], "disabled") });
+      options[nom] = liste.map(function (o) { return String(o.v); });
       var sel = liste.filter(function (o) { return o.sel; });
       if (!multiple && !sel.length) { var p = liste.filter(function (o) { return !o.dis; })[0]; if (p) sel = [p]; }
       if (!multiple) sel = sel.slice(-1);
@@ -274,7 +283,7 @@ function lireFormulaire(html, actionContient) {
       var v = attr(a, "value"); ajoute(nom, v === null ? (type === "checkbox" || type === "radio" ? "on" : "") : v);
       return "";
     });
-    return { action: decoder(action), champs: champs, noms: noms };
+    return { action: decoder(action), champs: champs, noms: noms, options: options };
   }
   return null;
 }

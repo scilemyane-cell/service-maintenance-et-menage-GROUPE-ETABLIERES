@@ -100,10 +100,11 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
   } catch (e) { erreurs.push(`qualification : ${e.message}`); }
   try {
     if ("attribueA" in fields && fields.attribueA !== "ext") {
-      if (!fields.attribueA) { champs.contacts = []; champs.societes = []; libelles.push("attribution retirée"); }
+      if (!fields.attribueA) { champs.suivi = []; libelles.push("attribution retirée"); }
       else {
         const c = await contactPourAttribution(fields.attribueA, fields.attribueANom);
-        if (c) { champs.contacts = [c.id ?? idDe(c["@id"])]; champs.societes = c.societe ? [idDe(c.societe)] : []; libelles.push(`attribuée à ${fields.attribueANom || c.prenom}`); }
+        // « Suivi par » (champ traitement) : seuls les contacts ayant un compte Camileia y sont proposés.
+        if (c) { champs.suivi = [c.id ?? idDe(c["@id"])]; libelles.push(`suivie par ${fields.attribueANom || c.prenom}`); }
         else avertissements.push(`${fields.attribueANom || "technicien"} introuvable dans les contacts Camileia : attribution non reportée`);
       }
     }
@@ -119,6 +120,7 @@ export async function renvoyerVersCamileia(id, fields, { collection = "demandes-
       if (r?.ok) {
         fait = true; faits.push(`${libelles.join(", ")} — tracé`);
         if (r.absents?.length) avertissements.push(`non modifiable avec ce compte Camileia : ${r.absents.join(", ")}`);
+        if (r.suiviRefuse) avertissements.push(`« Suivi par » : cette personne n'a pas de compte utilisateur Camileia`);
       } else if (!r?.pasDeCompte) erreurs.push("Camileia n'a pas confirmé la modification");
       else avertissements.push(r.relaisAncien ? "relais à mettre à jour : modification NON tracée dans Camileia" : `pas de compte Camileia relié pour ${r.email || auth.currentUser?.email} : modification NON tracée dans Camileia`);
     } catch (e) { erreurs.push(e.message); fait = true; /* pas de double envoi si le relais a répondu une erreur */ }
