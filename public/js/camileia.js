@@ -140,8 +140,12 @@ async function posterRelais(url, corps, reessayer = true) {
   try {
     for (let essai = 0; ; essai++) {
       try {
-        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(corps) });
-        const d = await lireReponse(r);
+        // Un appel peut rester bloqué côté Google (« En cours d'exécution » sans fin) : on abandonne après 45 s
+        // pour ne pas figer toute la synchro.
+        const ctrl = new AbortController(), minut = setTimeout(() => ctrl.abort(), 45000);
+        let d;
+        try { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(corps), signal: ctrl.signal }); d = await lireReponse(r); }
+        finally { clearTimeout(minut); }
         if (d && typeof d === "object") return d;
         if (essai >= 2 || !reessayer) return d;
       } catch (e) { if (essai >= 2 || !reessayer) throw e; }
