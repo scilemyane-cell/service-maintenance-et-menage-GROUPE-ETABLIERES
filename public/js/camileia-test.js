@@ -78,6 +78,7 @@ function rendre() {
     ${st.refs ? correspondancesHTML() : ""}
     ${cam.estConnecte() ? correspSitesHTML() : ""}
     ${cam.estConnecte() ? correspTypesHTML() : ""}
+    ${cam.estConnecte() ? correspContactsHTML() : ""}
     ${cam.estConnecte() ? creationHTML() : ""}
     ${st.dis.length ? simulationHTML() : ""}
     ${st.dis.length ? tableauHTML() : ""}
@@ -155,6 +156,43 @@ async function chargerCorrespTypes() {
   ct.categories = [...r.categories].sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
   ct.types = [...r.types].sort((a, b) => cam.libelleLisible(a.libelle).localeCompare(cam.libelleLisible(b.libelle), "fr"));
   ct.charge = true;
+}
+
+// ---- Correspondance des personnes de l'appli → contacts Camileia (« Suivi par ») ----
+const cc = { charge: false, users: [], contacts: [], societes: {}, map: {} };
+const REF_CONTACTS = doc(db, "config", "camileia-contacts");
+const san = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+function correspContactsHTML() {
+  if (!cc.charge) return `<div class="form-card"><h3 style="margin:0 0 6px;font-size:15px">8. Correspondance des personnes (attribution → « Suivi par »)</h3>
+    <p class="hint" style="margin:0 0 8px">Quand une demande est attribuée à quelqu'un dans l'appli, cette personne devient « Suivi par » dans Camileia. Relie chaque personne de l'appli à son contact Camileia.</p>
+    <button class="nav-btn" id="cc-ouvrir" ${st.occupe ? "disabled" : ""}>👷 Préparer la correspondance des personnes</button></div>`;
+  const opts = (val) => `<option value="">— pas dans Camileia —</option>` + Object.entries(cc.societes).map(([sIri, nomS]) => { const l = cc.contacts.filter(c => (c.societe || "") === sIri); return l.length ? `<optgroup label="${esc(nomS)}">${l.map(c => `<option value="${c.id}" ${String(c.id) === String(val) ? "selected" : ""}>${esc(`${c.prenom || ""} ${c.nom || ""}`.trim())}${c.utilisateur ? "" : " (sans compte)"}</option>`).join("")}</optgroup>` : ""; }).join("");
+  return `<div class="form-card" style="border-left:4px solid #6d4c41;overflow-x:auto">
+    <h3 style="margin:0 0 6px;font-size:15px">8. Correspondance des personnes (attribution → « Suivi par »)</h3>
+    <table class="table" style="width:100%;font-size:12px"><thead><tr><th>Personne dans l'appli</th><th>Contact Camileia</th></tr></thead><tbody>
+    ${cc.users.map((u, i) => `<tr><td>${esc(u.nom || u.email || u.uid)}<br><small>${esc(u.email || "")}</small></td><td><select data-cc="${i}">${opts(cc.map[u.uid])}</select></td></tr>`).join("")}
+    </tbody></table>
+    <button class="add-btn" id="cc-enregistrer" style="margin-top:8px">💾 Enregistrer la correspondance des personnes</button>
+  </div>`;
+}
+async function chargerCorrespContacts() {
+  const ev = await import("./camileia-envoi.js");
+  const [r, snap, cfg, socs] = await Promise.all([ev.referentiels(), getDocs(collection(db, "users")), getDoc(REF_CONTACTS), cam.lireTout(`${cam.RACINE}/societes`, { maxPages: 2 })]);
+  cc.contacts = [...r.contacts].sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, "fr"));
+  cc.societes = {}; socs.forEach(x => { cc.societes[`${cam.RACINE}/societes/${x.id}`] = x.libelle || x.nom || x.raisonsociale || `Société ${x.id}`; });
+  const vus = new Set(cc.contacts.map(c => c.societe || "")); Object.keys(cc.societes).forEach(k => { if (!vus.has(k)) delete cc.societes[k]; });
+  if (vus.has("")) cc.societes[""] = "Sans société";
+  cc.users = []; snap.forEach(d => cc.users.push({ uid: d.id, ...d.data() }));
+  cc.users = cc.users.filter(u => !u.desactive && u.actif !== false).sort((a, b) => (a.nom || a.email || "").localeCompare(b.nom || b.email || "", "fr"));
+  const enreg = cfg?.data()?.map || {};
+  cc.map = {};
+  cc.users.forEach(u => {
+    if (enreg[u.uid] !== undefined) { cc.map[u.uid] = enreg[u.uid]; return; }
+    const parMail = u.email && cc.contacts.find(c => String(c.email || "").toLowerCase() === String(u.email).toLowerCase());
+    const n = san(u.nom); const parNom = n && cc.contacts.filter(c => { const a = san(`${c.prenom} ${c.nom}`), b = san(`${c.nom} ${c.prenom}`); return a === n || b === n || (san(c.prenom) && n.split(" ")[0] === san(c.prenom) && n.includes(san(c.nom))); });
+    cc.map[u.uid] = parMail ? parMail.id : (parNom && parNom.length === 1 ? parNom[0].id : "");
+  });
+  cc.charge = true;
 }
 
 // ---- Créer une DI dans Camileia (test) ----
@@ -370,6 +408,12 @@ function brancher() {
   $("cr-createur")?.addEventListener("change", (e) => { cr.createur = e.target.value; });
   $("cam-cr-envoyer")?.addEventListener("click", envoyerCreation);
   $("ct-ouvrir")?.addEventListener("click", () => occuper("Lecture des types de demande Camileia…", chargerCorrespTypes));
+  $("cc-ouvrir")?.addEventListener("click", () => occuper("Lecture des contacts Camileia…", chargerCorrespContacts));
+  racine.querySelectorAll("select[data-cc]").forEach(sel => sel.addEventListener("change", () => { cc.map[cc.users[+sel.dataset.cc].uid] = sel.value; }));
+  $("cc-enregistrer")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
+    await setDoc(REF_CONTACTS, { map: cc.map, le: serverTimestamp() });
+    st.info = "Correspondance des personnes enregistrée.";
+  }));
   racine.querySelectorAll("select[data-ct]").forEach(sel => sel.addEventListener("change", () => { ct.map[ct.cats[+sel.dataset.ct].id] = sel.value; }));
   $("ct-enregistrer")?.addEventListener("click", () => occuper("Enregistrement…", async () => {
     await (await import("./camileia-envoi.js")).enregistrerCorrespTypes(ct.map);

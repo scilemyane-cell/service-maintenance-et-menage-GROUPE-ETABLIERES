@@ -40,6 +40,11 @@ const dateLocale = (v) => { const d = v ? new Date(v) : new Date(); if (isNaN(d)
 // Technicien attribué dans l'appli → contact (et société) Camileia.
 async function contactPourAttribution(uid, nom) {
   const ev = await import("./camileia-envoi.js");
+  // 1) correspondance enregistrée (Suivi des demandes › Camileia (test) › 8.)
+  try {
+    const m = (await getDoc(doc(db, "config", "camileia-contacts")))?.data()?.map || {};
+    if (m[uid]) { const r = await ev.referentiels(); const c = r.contacts.find(x => String(x.id) === String(m[uid])); if (c) return c; }
+  } catch { /* repli ci-dessous */ }
   let email = "";
   try { email = (await getDoc(doc(db, "users", uid)))?.data()?.email || ""; } catch { /* */ }
   let c = email ? await ev.contactParEmail(email) : null;
