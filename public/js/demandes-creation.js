@@ -39,6 +39,7 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
       <option value="__autre">✏️ Autre site (le taper)…</option>
     </select></label>
     <label class="ndm-autre-site" style="display:none">Nom du site<input name="siteAutre" placeholder="Tape le nom du site"></label>
+    <label class="ndm-bat-cam" style="display:none">Bâtiment<select name="camBatiment"></select></label>
     <input type="hidden" name="site" value="${esc(siteDefaut)}">
     <div class="ndm-2">
       <label>Association<select name="association">${["Agropolis", "École", "Armonia", "Autres"].map(a => `<option ${a === (sites[siteDefaut] || "") ? "selected" : ""}>${a}</option>`).join("")}</select></label>
@@ -66,11 +67,52 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
   const majSite = () => {
     const autre = f.siteChoix.value === "__autre";
     fond.querySelector(".ndm-autre-site").style.display = autre ? "" : "none";
+    if (f.siteChoix.value.startsWith("cam:")) return;
     f.site.value = autre ? f.siteAutre.value.trim() : f.siteChoix.value;
     const a = sites[f.site.value]; if (a) f.association.value = a;
   };
   f.siteChoix.addEventListener("change", () => { majSite(); if (f.siteChoix.value === "__autre") f.siteAutre.focus(); });
   f.siteAutre.addEventListener("input", majSite);
+  // Version test : liste des sites identique à Camileia (GMAO), puis bâtiment.
+  // La demande garde dans l'appli le nom de site relié (correspondance des sites),
+  // pour que l'attribution aux techniciens par site continue de marcher.
+  let camLieux = null;
+  if (location.pathname.startsWith("/beta/") && window.__smmRole === "super_admin") (async () => {
+    try {
+      const cam = await import("./camileia.js");
+      await cam.chargerRelaisPartage(); if (!cam.estConnecte()) return;
+      const { lireCorrespSites } = await import("./camileia-envoi.js");
+      const [sitesC, batsC, corr] = await Promise.all([cam.lireTout(`${cam.RACINE}/sites`, { maxPages: 2 }), cam.lireTout(`${cam.RACINE}/batiments`, { maxPages: 2 }), lireCorrespSites()]);
+      const actifs = sitesC.filter(x => x.actif !== false);
+      if (!actifs.length) return;
+      camLieux = { sites: actifs, bats: batsC.filter(b => b.actif !== false), corr: corr.sites || {} };
+      const iriS = (x) => `${cam.RACINE}/sites/${x.id}`, iriB = (x) => `${cam.RACINE}/batiments/${x.id}`;
+      // Site de l'appli → site Camileia (pour présélectionner)
+      const defaut = siteDefaut && camLieux.corr[siteDefaut];
+      f.siteChoix.innerHTML = `<option value="">— Choisis le site —</option>${actifs.map(x => `<option value="cam:${x.id}" ${defaut?.site === iriS(x) ? "selected" : ""}>${esc(x.libelle)}</option>`).join("")}<option value="__autre">✏️ Autre site (le taper)…</option>`;
+      const majBats = () => {
+        const id = f.siteChoix.value.startsWith("cam:") ? f.siteChoix.value.slice(4) : "";
+        const liste = id ? camLieux.bats.filter(b => String(b.site).endsWith(`/sites/${id}`)) : [];
+        const zone = fond.querySelector(".ndm-bat-cam");
+        zone.style.display = liste.length ? "" : "none";
+        f.camBatiment.innerHTML = liste.map(b => `<option value="${b.id}" ${defaut?.batiment === iriB(b) ? "selected" : ""}>${esc(b.libelle)}</option>`).join("");
+        majSiteCam();
+      };
+      const majSiteCam = () => {
+        const v = f.siteChoix.value; if (!v.startsWith("cam:")) return;
+        const sIri = `${cam.RACINE}/sites/${v.slice(4)}`, bIri = f.camBatiment.value ? `${cam.RACINE}/batiments/${f.camBatiment.value}` : "";
+        const lib = actifs.find(x => iriS(x) === sIri)?.libelle || "";
+        // Nom de site de l'appli relié à ce site + bâtiment (sinon à ce site, sinon le nom Camileia).
+        const noms = Object.entries(camLieux.corr);
+        const relie = noms.find(([, m]) => m?.site === sIri && m?.batiment === bIri) || noms.find(([, m]) => m?.site === sIri);
+        f.site.value = relie ? relie[0] : lib;
+        const a = sites[f.site.value]; if (a) f.association.value = a;
+      };
+      f.siteChoix.addEventListener("change", majBats);
+      f.camBatiment.addEventListener("change", majSiteCam);
+      majBats();
+    } catch (er) { console.warn("Sites Camileia :", er); }
+  })();
   // Photos : compressées tout de suite (aperçu), envoyées après la création de la demande.
   const photos = [];
   const dessinerVign = () => { const z = fond.querySelector("[data-ndm-vign]"); z.innerHTML = photos.map((p, i) => `<span class="ndm-vign"><img src="${p}" alt=""><button type="button" data-ndm-retirer="${i}" aria-label="Retirer">✕</button></span>`).join("");
@@ -113,7 +155,8 @@ export function ouvrirNouvelleDemande({ lignes = [], siteDefaut = "", utilisateu
         try {
           const { envoyerDemande } = await import("./camileia-envoi.js");
           const { auth } = await import("./firebase-init.js");
-          const di = await envoyerDemande({ ...v, site: v.site.trim(), numero }, { email: auth.currentUser?.email || "" });
+          const camChoix = f.siteChoix.value.startsWith("cam:") ? { camSite: f.siteChoix.value.slice(4), camBatiment: f.camBatiment.value || "", camSiteCode: camLieux?.sites.find(x => String(x.id) === f.siteChoix.value.slice(4))?.code || "" } : {};
+          const di = await envoyerDemande({ ...v, ...camChoix, site: v.site.trim(), numero }, { email: auth.currentUser?.email || "" });
           const { updateDemande } = await import("./firestore-data.js");
           await updateDemande(ref.id, { camileiaId: di?.id ?? null, camileiaIri: di?.id != null ? `/api-platform/d_is/${di.id}` : "", camileiaNumero: di?.numero || "" });
           msgCam = ` · envoyée dans Camileia (${di?.numero || di?.id})`;

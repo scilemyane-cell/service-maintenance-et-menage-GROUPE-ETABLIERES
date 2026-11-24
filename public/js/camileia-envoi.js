@@ -113,7 +113,8 @@ const PRIORITE_POUR_URGENCE = { "critique": "vital", "urgent": "tres urgent", "n
 // Crée la DI dans Camileia pour une demande de l'appli. Renvoie la DI créée.
 export async function envoyerDemande(d, { email = "" } = {}) {
   const c = await lireCorrespSites();
-  const m = c.sites?.[d.site];
+  // Site et bâtiment choisis directement dans la liste Camileia (formulaire de la version test).
+  const m = d.camSite && d.camBatiment ? { site: `${cam.RACINE}/sites/${d.camSite}`, batiment: `${cam.RACINE}/batiments/${d.camBatiment}`, siteCode: d.camSiteCode || c.sites?.[d.site]?.siteCode } : c.sites?.[d.site];
   if (!m?.site || !m?.batiment) throw new Error(`Site « ${d.site} » non relié à Camileia (Suivi des demandes › Camileia (test) › Correspondance des sites).`);
   const r = await referentiels();
   const voulu = PRIORITE_POUR_URGENCE[sa(d.urgence)];
