@@ -227,7 +227,10 @@
         // ajoutés (ex. intervenant non modifiable) s'appliquent tout de suite, même sur un téléphone resté ouvert.
         const terrain = ["technicien", "menage", "mi_temps"].includes(currentUser?.role);
         const saisie = (() => { const a = document.activeElement; return a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !["button", "checkbox", "radio"].includes(a.type))); })();
-        const ok = (window.__modeTele || (terrain && !saisie)) && !(deja && (deja.v === String(versionEnLigne.version) || Date.now() - deja.t < 600000));
+        // Télé de l'atelier : JAMAIS de rechargement en journée pour une nouvelle version (ça la faisait sortir du
+        // plein écran) — elle se met à jour toute seule la nuit (rechargement de 4 h).
+        if (window.__modeTele || currentCategory === "ecran-atelier") return;
+        const ok = (terrain && !saisie) && !(deja && (deja.v === String(versionEnLigne.version) || Date.now() - deja.t < 600000));
         if (ok) { try { localStorage.setItem("etablieres-tele-recharge", JSON.stringify({ v: String(versionEnLigne.version), t: Date.now() })); } catch { /* */ } location.reload(); }
         else bandeauNouvelleVersion(versionEnLigne);
       }
@@ -665,7 +668,9 @@
     window.__smmNom = user?.nom || user?.email || "";
     window.__smmRole = user?.role || null;
     import("./geoloc-partage.js").then(m => m.initPartagePosition(user, modulesConstruction)).catch(() => {});
-    suivreMembresAstreinte(() => { try { render(); } catch (e) { /* écran pas encore prêt */ } });
+    // L'écran atelier suit l'astreinte lui-même : NE PAS redessiner toute l'appli (ça recréait l'écran
+    // et faisait sortir la télé du plein écran à chaque modification du planning d'astreinte).
+    suivreMembresAstreinte(() => { if (currentCategory === "ecran-atelier") return; try { render(); } catch (e) { /* écran pas encore prêt */ } });
     // Télé de l'atelier : .../app.html?ecran=atelier ouvre directement l'écran,
     // en mode télé (plein écran dans la fenêtre, sans la barre de l'appli).
     if (new URLSearchParams(window.location.search).get("ecran") === "atelier" && currentCategory === null) {
@@ -889,8 +894,14 @@
     return [...nouvelles.filter(c => c.id === "direct"), ...classees, ...nouvelles.filter(c => c.id !== "direct")];
   }
 
+  // Écran atelier déjà affiché : les mises à jour de données de l'appli (utilisateurs, accès, astreinte…)
+  // ne doivent PAS le reconstruire — sinon la télé « saute » et sort du plein écran. L'écran se met à
+  // jour tout seul (ses propres écoutes + rafraîchissement toutes les 30 s).
+  let atelierAffiche = null;
   function render() {
     const app = document.getElementById("app");
+    if (currentCategory === "ecran-atelier" && atelierAffiche && atelierAffiche.isConnected && atelierAffiche.dataset.sous === String(currentSubtab) && atelierAffiche.dataset.uid === String(currentUser?.uid || "")) return;
+    atelierAffiche = null;
     try { suivreMesActions(currentUser?.role ? utilisateurEffectif()?.uid : null); suivreAValider(currentUser?.role); suivreDemandesOuvertes(currentUser?.role); } catch (e) { console.error(e); }
 
     if (currentUser.role === null) {
@@ -1186,6 +1197,7 @@
         cible = document.getElementById("mod-corps");
       }
       activeSub.mount(cible, userPourModule);
+      if (category.id === "ecran-atelier" && cible) { atelierAffiche = cible; cible.dataset.sous = String(currentSubtab); cible.dataset.uid = String(currentUser?.uid || ""); }
       return;
     }
 
