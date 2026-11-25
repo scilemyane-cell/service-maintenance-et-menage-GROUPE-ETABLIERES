@@ -304,6 +304,27 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
   </div>`;
   const $ = (s) => fond.querySelector(s);
   const vue = $(".pc-vue"), scene = $(".pc-scene"), img = $(".pc-img"), reps = $(".pc-reps"), msg = $(".pc-msg");
+  // Loupe HD : quand on grossit au-delà de l'image enregistrée, la zone visible est redessinée
+  // depuis le PDF d'origine à la résolution de l'écran (plus de flou au zoom).
+  const hdCv = document.createElement("canvas"); hdCv.className = "pc-hd"; img.after(hdCv);
+  let hdMinuterie = 0, hdJeton = 0;
+  function cacherHD() { hdJeton++; clearTimeout(hdMinuterie); hdCv.style.display = "none"; }
+  // Le calque HD suit le plan (mêmes coordonnées) : on le garde pendant le geste, on le redessine à l'arrêt.
+  function planifierHD() { clearTimeout(hdMinuterie); hdJeton++; if (st.s * (window.devicePixelRatio || 1) <= 1.05) hdCv.style.display = "none"; hdMinuterie = setTimeout(rendreHD, 220); }
+  async function rendreHD() {
+    const m = st.meta?.pdf?.morceaux, p = st.meta?.pages.find(x => x.n === st.page); if (!m || !p || !img.complete) return;
+    const k = st.s * (window.devicePixelRatio || 1); if (k <= 1.05) return; // l'image enregistrée suffit
+    const W = vue.clientWidth, H = vue.clientHeight;
+    const x0 = Math.max(0, -st.tx / st.s), y0 = Math.max(0, -st.ty / st.s), x1 = Math.min(p.w, (W - st.tx) / st.s), y1 = Math.min(p.h, (H - st.ty) / st.s);
+    if (x1 - x0 < 2 || y1 - y0 < 2) return;
+    const larg = Math.min(4096, (x1 - x0) * k, 4096 * (x1 - x0) / (y1 - y0)), jeton = ++hdJeton, page = st.page;
+    try {
+      const cv = await rendeurHD(dossier.id, m)(page, larg, { x: x0 / p.w, y: y0 / p.h, w: (x1 - x0) / p.w, h: (y1 - y0) / p.h });
+      if (jeton !== hdJeton || page !== st.page) return;
+      hdCv.width = cv.width; hdCv.height = cv.height; hdCv.getContext("2d").drawImage(cv, 0, 0);
+      Object.assign(hdCv.style, { display: "block", left: x0 + "px", top: y0 + "px", width: (x1 - x0) + "px", height: (y1 - y0) + "px" });
+    } catch (e) { console.warn("Loupe HD indisponible", e); }
+  }
   $("[data-fermer]").onclick = fermer;
 
   $("[data-import]")?.addEventListener("change", async (e) => {
@@ -454,7 +475,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
 
   // ---- Page / image / zoom ----
   async function allerPage(n) {
-    st.page = n; st.sel = null; dessinerBarre(); if (st.edition) dessinerPanneau();
+    st.page = n; st.sel = null; cacherHD(); dessinerBarre(); if (st.edition) dessinerPanneau();
     const p = st.meta.pages.find(x => x.n === n); if (!p) return;
     img.style.width = p.w + "px"; img.style.height = p.h + "px"; scene.style.width = p.w + "px"; scene.style.height = p.h + "px";
     // Mise en page Groupe Établières / AppSMM autour du plan (comme à l'impression).
@@ -480,7 +501,7 @@ export function ouvrirPlanCles({ dossier, user, editeur, focus = null }) {
     if (!cacheImages.has(cle)) { const s = await getDoc(refPage(dossier.id, n)); cacheImages.set(cle, s.exists() ? s.data().data : ""); }
     return cacheImages.get(cle);
   }
-  function appliquer() { scene.style.transform = `translate(${st.tx}px,${st.ty}px) scale(${st.s})`; scene.style.setProperty("--inv", String(Math.max(1, 9.5 / (17 * st.s)))); }
+  function appliquer() { scene.style.transform = `translate(${st.tx}px,${st.ty}px) scale(${st.s})`; scene.style.setProperty("--inv", String(Math.max(1, 9.5 / (17 * st.s)))); planifierHD(); }
   function ajuster() {
     const p = st.meta?.pages.find(x => x.n === st.page); if (!p) return;
     const W = vue.clientWidth, H = vue.clientHeight, hb = p.w * 0.06, hp = p.w * 0.03, Ht = p.h + hb + hp;
@@ -629,7 +650,7 @@ body.pc-ouvert{overflow:hidden}
 .pc-corps{flex:1;display:flex;min-height:0}
 .pc-vue{flex:1;position:relative;overflow:hidden;background:#e9ecf1;touch-action:none;cursor:grab}.pc-vue:active{cursor:grabbing}.pc-fond.pc-edit .pc-vue{cursor:crosshair}
 .pc-scene{position:absolute;left:0;top:0;transform-origin:0 0;--inv:1}.pc-img{display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.15)}
-.pc-reps{position:absolute;inset:0}
+.pc-reps{position:absolute;inset:0}.pc-hd{position:absolute;display:none;pointer-events:none;background:#fff}
 .pc-m{position:absolute;transform:translate(-50%,-50%) scale(var(--inv));transform-origin:center;background:rgba(255,255,255,.93);color:var(--k);border:2px solid var(--k);border-radius:5px;padding:0 5px;font:700 17px/1.2 system-ui,sans-serif;white-space:nowrap;cursor:pointer;user-select:none;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .pc-m.terne{opacity:.22}.pc-m.fort{background:var(--k);color:#fff;z-index:2;box-shadow:0 0 0 4px color-mix(in srgb,var(--k) 35%,transparent)}.pc-m.sel{outline:3px solid #111;z-index:3}
 .pc-fond.pc-edit .pc-m{cursor:move}
