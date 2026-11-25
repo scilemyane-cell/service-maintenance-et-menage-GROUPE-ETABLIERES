@@ -1,5 +1,6 @@
   import { watchAuth, logout, roleLabel } from "./auth.js";
   import "./ui-feedback.js";
+  import "./champs-fichier-surs.js"; // photo prise pendant un redessin de l'écran : plus perdue
   import { installerGardeDates } from "./saisie-dates.js";
   installerGardeDates();
   import { watchCompteursAlertCount } from "./compteurs-data.js";
