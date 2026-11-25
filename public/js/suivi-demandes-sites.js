@@ -374,7 +374,8 @@ export function brancherActions(container, { lignes, maj, utilisateur, utilisate
       const ia = await import("./ia.js");
       // Descriptif et « action à faire » = ce qu'il FAUT faire (infinitif) ; réponse = note libre.
       const aFaire = champ.matches("[data-corr-descr], [data-act-texte], [data-edit-texte]");
-      const t = (await (aFaire ? ia.redigerDescriptifDemande({ notes, mots: motsConnus(lignes) }) : ia.redigerCommentaireDemande({ descr: l.descr, notes, mots: motsConnus(lignes) }))).replace(/\*\*/g, "").trim();
+      if (!aFaire) ia.ajouterMotsConnus?.(motsConnus(lignes));
+      const t = (await (aFaire ? ia.redigerDescriptifDemande({ notes, mots: motsConnus(lignes) }) : champ.matches("[data-cam-rep]") ? ia.corrigerMessage(notes) : ia.redigerCommentaireDemande({ descr: l.descr, notes, mots: motsConnus(lignes) }))).replace(/\*\*/g, "").trim();
       const { proposerIA } = await import("./ia-suggestion.js");
       if (t) proposerIA(b, t, (v) => { champ.value = v; champ.dispatchEvent(new Event("input", { bubbles: true })); });
     } catch (err) { console.error(err); import("./ia-suggestion.js").then(m => m.signalerErreurIA(err)); }
