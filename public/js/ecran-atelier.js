@@ -314,7 +314,7 @@ async function surClic(e) {
     else if (a === "edit") { edition = !edition; render(); }
     else if (a === "v1" || a === "v2") { try { localStorage.setItem("ea-v2", a === "v2" ? "1" : "0"); } catch { /* */ } render(); }
     else if (a === "plein") {
-      try { if (document.fullscreenElement) await document.exitFullscreen(); else await conteneur.requestFullscreen(); } catch { /* refusé */ }
+      try { if (document.fullscreenElement) await document.exitFullscreen(); else { await conteneur.requestFullscreen(); window.toast?.("Astuce : pour un écran qui reste en plein écran même après une mise à jour, utilise la touche F11 du clavier.", "info"); } } catch { /* refusé */ }
       try { if (!wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch { /* pas de verrou */ }
       render();
     }
@@ -354,8 +354,11 @@ export function mountEcranAtelier(container, u) {
       const lance = Date.now();
       setInterval(() => { if (new Date().getHours() === 4 && Date.now() - lance > 3600000) location.reload(); }, 600000);
     }
-    document.addEventListener("fullscreenchange", () => conteneur && document.contains(conteneur) && render());
-    window.addEventListener("resize", () => conteneur && document.contains(conteneur) && ajuster());
+    // Entrée / sortie du plein écran : la taille de la fenêtre n'est pas encore à jour à cet instant → on
+    // réajuste aussi un peu après (sinon l'écran gardait un mauvais format jusqu'au rafraîchissement suivant).
+    const reajuster = () => { if (conteneur && document.contains(conteneur)) { ajuster(); setTimeout(ajuster, 300); setTimeout(ajuster, 1200); } };
+    document.addEventListener("fullscreenchange", () => { if (conteneur && document.contains(conteneur)) { render(); reajuster(); } });
+    window.addEventListener("resize", reajuster);
     // Réglage de la marge télé au clavier : « + » agrandit, « - » réduit (mémorisé sur cet appareil).
     document.addEventListener("keydown", (e) => {
       if (!conteneur || !document.contains(conteneur) || !(window.__modeTele || document.fullscreenElement) || e.target.closest?.("input,textarea")) return;
