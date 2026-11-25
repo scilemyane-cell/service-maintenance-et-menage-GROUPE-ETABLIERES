@@ -251,7 +251,7 @@ function accordIrreguliers(texte) {
   });
 }
 
-export async function corrigerOrthographe(texte, { participes = true, heuristiques = true } = {}) {
+export async function corrigerOrthographe(texte, { participes = true, heuristiques = true, prudent = false } = {}) {
   texte = sortirDesMajuscules(texte);
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -272,6 +272,14 @@ export async function corrigerOrthographe(texte, { participes = true, heuristiqu
       if (!suggestionSure(orig, r, m)) return;
       // Relecture d'un texte déjà rédigé : seulement les vraies fautes, pas les conseils de style (synonymes…).
       if (!heuristiques && /style|register|locale|duplication/i.test(`${m.rule?.issueType || ""} ${m.rule?.category?.id || ""}`)) return;
+      // Sans l'IA (repli), on reste prudent : fautes de frappe / accents / ponctuation / majuscules seulement.
+      // Les « corrections » de grammaire du correcteur seul créaient des fautes (« commander » → « commandé »,
+      // « dès qu'elle arrive » → « arrivant »).
+      if (prudent) {
+        const typo = m.rule?.issueType === "misspelling" || /TYPOS|MORFOLOGIK|HUNSPELL/i.test(`${m.rule?.category?.id || ""} ${m.rule?.id || ""}`);
+        const forme = /PUNCTUATION|TYPOGRAPHY|CASING|WHITESPACE/i.test(m.rule?.category?.id || "") || /whitespace|typographical/i.test(m.rule?.issueType || "");
+        if (!typo && !forme) return;
+      }
       out = out.slice(0, m.offset) + r + out.slice(m.offset + m.length);
     });
     out = nomsPropres(out);
@@ -310,7 +318,7 @@ ${notes}`);
     const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
     if (t && t.length <= Math.max(60, notes.length * 1.5) && (motsT >= Math.ceil(motsN * 0.8) || notes.length < 25)) return relire(t);
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
-  return corrigerOrthographe(notes, { participes: false, heuristiques: false });
+  return corrigerOrthographe(notes, { participes: false, heuristiques: false, prudent: true });
 }
 
 // Notes de terrain souvent télégraphiques (« devis valider interventions le 21
@@ -343,7 +351,7 @@ ${notes}`); // modèle complet : les modèles « lite » créaient des fautes
     const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
     if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return relire(t);
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
-  return corrigerOrthographe(notes, { participes: false });
+  return corrigerOrthographe(notes, { participes: false, heuristiques: false, prudent: true });
 }
 
 // Descriptif d'une NOUVELLE demande : c'est ce qui ne va pas ou ce qu'il faut
@@ -374,5 +382,5 @@ ${notes}`); // modèle complet : les modèles « lite » créaient des fautes
     if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return relire(t);
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
   // Repli : correcteur seul, sans transformer les infinitifs en participes.
-  return corrigerOrthographe(notes, { participes: false });
+  return corrigerOrthographe(notes, { participes: false, heuristiques: false, prudent: true });
 }
