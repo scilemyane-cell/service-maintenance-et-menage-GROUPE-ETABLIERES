@@ -5,6 +5,8 @@
 // séparée pour ne pas interférer avec le reste de l'appli.
 import { firebaseConfig } from "./firebase-config.js";
 
+// Clé de SITE reCAPTCHA Enterprise (publique, faite pour être dans le code) — projet service-maintenance-et-menage.
+const CLE_RECAPTCHA = "6LctpDEuAAAAALhTiXeNSZP4c4Xs3_8aLJkK7M9y";
 const VERSION = "12.19.0"; // SDK récent : nécessaire pour les modèles Gemini 3.x
 // Google retire régulièrement des modèles : on essaie les plus récents d'abord,
 // et si Google en recommande un autre dans son message d'erreur, on l'essaie
@@ -33,7 +35,16 @@ async function modele() {
   const { initializeApp, getApps } = libApp;
   const { getAI, getGenerativeModel, GoogleAIBackend } = libAI;
   const app = getApps().find(a => a.name === "ia") || initializeApp(firebaseConfig, "ia");
-  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  // App Check (obligatoire pour l'IA Firebase depuis l'été 2026) : reCAPTCHA Enterprise (Fraud Defense), invisible pour l'utilisateur.
+  // Jeton « à usage limité » : un jeton volé ne peut pas être réutilisé.
+  let avecAppCheck = false;
+  try {
+    const v = libApp.SDK_VERSION || VERSION;
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-app-check.js`);
+    if (!app.__appCheck) { app.__appCheck = initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(CLE_RECAPTCHA), isTokenAutoRefreshEnabled: true }); }
+    avecAppCheck = true;
+  } catch (e) { console.warn("App Check indisponible :", e); }
+  const ai = getAI(app, { backend: new GoogleAIBackend(), ...(avecAppCheck ? { useLimitedUseAppCheckTokens: true } : {}) });
   modeleMemo = { ai, getGenerativeModel };
   return modeleMemo;
 }
@@ -251,7 +262,7 @@ function accordIrreguliers(texte) {
   });
 }
 
-export async function corrigerOrthographe(texte, { participes = true } = {}) {
+export async function corrigerOrthographe(texte, { participes = true, heuristiques = true, prudent = false } = {}) {
   texte = sortirDesMajuscules(texte);
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -270,15 +281,55 @@ export async function corrigerOrthographe(texte, { participes = true } = {}) {
       if (r == null) return;
       const orig = texte.slice(m.offset, m.offset + m.length);
       if (!suggestionSure(orig, r, m)) return;
+      // Relecture d'un texte déjà rédigé : seulement les vraies fautes, pas les conseils de style (synonymes…).
+      if (!heuristiques && /style|register|locale|duplication/i.test(`${m.rule?.issueType || ""} ${m.rule?.category?.id || ""}`)) return;
+      // Sans l'IA (repli), on reste prudent : fautes de frappe / accents / ponctuation / majuscules seulement.
+      // Les « corrections » de grammaire du correcteur seul créaient des fautes (« commander » → « commandé »,
+      // « dès qu'elle arrive » → « arrivant »).
+      if (prudent) {
+        const typo = m.rule?.issueType === "misspelling" || /TYPOS|MORFOLOGIK|HUNSPELL/i.test(`${m.rule?.category?.id || ""} ${m.rule?.id || ""}`);
+        const forme = /PUNCTUATION|TYPOGRAPHY|CASING|WHITESPACE/i.test(m.rule?.category?.id || "") || /whitespace|typographical/i.test(m.rule?.issueType || "");
+        if (!typo && !forme) return;
+      }
       out = out.slice(0, m.offset) + r + out.slice(m.offset + m.length);
     });
     out = nomsPropres(out);
-    if (participes) out = accordParticipes(out);
-    out = accordIrreguliers(out);
+    if (participes && heuristiques) out = accordParticipes(out);
+    if (heuristiques) out = accordIrreguliers(out);
     out = out.replace(/\s+([,.])/g, "$1").replace(/^\s*(\p{Ll})/u, (x, c) => c.toUpperCase()).trim();
     if (out && !/[.!?…]$/.test(out)) out += ".";
     return out;
   } finally { clearTimeout(t); }
+}
+
+// Relecture du texte rendu par l'IA avec le correcteur (LanguageTool), SANS nos règles maison
+// (accords devinés) : rattrape les fautes que l'IA laisse ou crée (« à changé », « il sont »…).
+async function relire(t) {
+  try { return await corrigerOrthographe(t, { participes: false, heuristiques: false }); } catch { return t; }
+}
+const GARDE_TEMPS = `RÈGLE ABSOLUE SUR LES VERBES : ne change jamais le temps ni le mode d'un verbe. Après « à », « pour », « de », « sans », « va / vais / allons / vont », « dois / doit / devons », « peux / peut / pouvons », « faut », « faire », un verbe reste à l'INFINITIF (« passer changer le joint », « à réparer », « il faut vérifier »).`;
+
+// Message adressé à un demandeur (réponse Camileia) : correction minimale, le ton et les temps
+// restent ceux de l'auteur — surtout pas de reformulation.
+export async function corrigerMessage(texte) {
+  const notes = String(texte || "").trim();
+  try {
+    let t = await genererTexte(`Tu corriges l'orthographe d'un message écrit par un technicien de maintenance à la personne qui a fait une demande d'intervention.
+Corrige UNIQUEMENT : fautes d'orthographe, de frappe et de dictée vocale, accents, accords, ponctuation, majuscules.
+NE CHANGE PAS : le sens, le ton, l'ordre des idées, les mots choisis quand ils sont corrects, les noms, les chiffres, les dates, la signature. N'ajoute rien, n'enlève rien.
+${GARDE_TEMPS}
+Exemples :
+- « bonjour on passe demain matin changer le robinet » → « Bonjour, on passe demain matin changer le robinet. »
+- « la piece est commander on vous tien au courant » → « La pièce est commandée, on vous tient au courant. »
+Réponds UNIQUEMENT par le message corrigé, sans guillemets, sans Markdown.
+
+Message :
+${notes}`);
+    t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
+    const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
+    if (t && t.length <= Math.max(60, notes.length * 1.5) && (motsT >= Math.ceil(motsN * 0.8) || notes.length < 25)) return relire(t);
+  } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
+  return corrigerOrthographe(notes, { participes: false, heuristiques: false, prudent: true });
 }
 
 // Notes de terrain souvent télégraphiques (« devis valider interventions le 21
@@ -292,25 +343,26 @@ export async function redigerCommentaireDemande(f) {
   try {
     let t = await genererTexte(`Tu corriges une note écrite vite par un technicien de maintenance (Groupe Établières), dans le champ « commentaire » d'une demande d'intervention.
 OBJECTIF : un français correct et professionnel, en gardant EXACTEMENT le sens. Phrases courtes, mais complètes : rajoute les articles et petits mots manquants (le, la, du, de…).
-À CORRIGER : orthographe, accords (genre et nombre), participes passés à la place des infinitifs (« devis valider » → « devis validé », « fuite reparer » → « fuite réparée »), articles et prépositions manquants ou faux (« le 21 et 22 octobre » → « les 21 et 22 octobre »), ponctuation entre les idées, majuscule en début de phrase, noms propres (Vendée Habitat, Sonepar…).
+À CORRIGER : orthographe, accords (genre et nombre), participe passé à la place d'un infinitif SEULEMENT quand le mot décrit une chose déjà faite et n'est précédé d'aucun petit mot (« devis valider » → « devis validé », « fuite reparer » → « fuite réparée »), articles et prépositions manquants ou faux (« le 21 et 22 octobre » → « les 21 et 22 octobre »), ponctuation entre les idées, majuscule en début de phrase, noms propres (Vendée Habitat, Sonepar…).
 INTERDIT : ajouter une information, une cause, une action, une date, un résultat ou une formule de politesse qui n'est pas écrite ; supprimer un nom, une initiale, une référence, un chiffre ; transformer une question ou un message adressé à quelqu'un en constat (garde la question, le destinataire et la signature).
 Exemples :
 - « devis valider interventions le 21 et 22 octobre » → « Devis validé, interventions les 21 et 22 octobre. »
 - « joint siphon changer fuite stopper » → « Joint de siphon changé, fuite stoppée. »
 - « changer disjoncteur general du logement fait » → « Disjoncteur général du logement changé. »
 - « bonjour julie as tu relancer l entreprise ? VB » → « Bonjour Julie, as-tu relancé l'entreprise ? VB »
+${GARDE_TEMPS}
 Réponds UNIQUEMENT par le texte corrigé, sans guillemets, sans Markdown.
 
 Contexte de la demande (ne pas recopier) : ${f.descr || "—"}
 
 Texte à corriger :
-${notes}`, { rapide: true });
+${notes}`); // modèle complet : les modèles « lite » créaient des fautes
     t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
     // Garde-fous : ni trop longue (invention), ni tronquée (« en attente d'un »).
     const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
-    if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return t;
+    if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return relire(t);
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
-  return corrigerOrthographe(notes);
+  return corrigerOrthographe(notes, { participes: false, heuristiques: false, prudent: true });
 }
 
 // Descriptif d'une NOUVELLE demande : c'est ce qui ne va pas ou ce qu'il faut
@@ -335,11 +387,11 @@ Exemples :
 Réponds UNIQUEMENT par le texte corrigé, sans guillemets, sans Markdown.
 
 Texte à corriger :
-${notes}`, { rapide: true });
+${notes}`); // modèle complet : les modèles « lite » créaient des fautes
     t = String(t || "").replace(/^["«»\s]+|["«»\s]+$/g, "").replace(/\*\*/g, "").trim();
     const motsT = t.split(/\s+/).length, motsN = notes.split(/\s+/).length;
-    if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return t;
+    if (t && t.length <= Math.max(60, notes.length * 2) && (motsT >= Math.ceil(motsN * 0.7) || notes.length < 25)) return relire(t);
   } catch (e) { console.warn("IA indisponible, repli sur le correcteur orthographique :", e); }
   // Repli : correcteur seul, sans transformer les infinitifs en participes.
-  return corrigerOrthographe(notes, { participes: false });
+  return corrigerOrthographe(notes, { participes: false, heuristiques: false, prudent: true });
 }
