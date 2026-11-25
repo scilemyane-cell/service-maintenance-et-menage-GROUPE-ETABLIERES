@@ -315,7 +315,7 @@ function vueFeuille(p) {
         </div>
         <div class="form-card">
           <b>📷 Photos</b>
-          ${modif ? `<div class="ev-ph-btns">${["avant", "apres", ""].map(m => `<label class="nav-btn">📷 ${MOMENTS[m]}<input type="file" accept="image/*" capture="environment" data-ph-add="${m}" hidden multiple></label>`).join("")}</div>` : ""}
+          ${modif ? `<div class="ev-ph-btns">${["avant", "apres", ""].map(m => `<button type="button" class="nav-btn" data-ph-prendre="${m}">📷 ${MOMENTS[m]}</button>`).join("")}</div>` : ""}
           <div class="ev-photos">${vignettes || `<span class="hint">Aucune photo.</span>`}</div>
         </div>
         ${p.valide ? `<div class="ev-ok">✅ Feuille vérifiée et validée${p.validePar ? ` par ${esc(p.validePar)}` : ""}</div>` : p.envoye ? `<div class="hint" style="color:#b07000;font-weight:600">⏳ Envoyée au responsable — en attente de vérification</div>` : ""}
@@ -470,6 +470,8 @@ async function surClic(e) {
     const taches = { ...(p.taches || {}), [cle]: !p.taches?.[cle] };
     sauverPlusTard(p.id, { taches }, 300); render(); return;
   }
+  const prendre = t.closest("[data-ph-prendre]");
+  if (prendre) { prendrePhoto(prendre.dataset.phPrendre); return; }
   const del = t.closest("[data-ph-del]");
   if (del) {
     if (await confirmDialog("Supprimer cette photo ?", { danger: true, texteValider: "Supprimer" })) {
@@ -523,18 +525,38 @@ async function surChangement(e) {
   if (t.matches(".ev-date")) { ui.date = t.value; return; }
   if (t.matches(".ev-annee")) { ui.anneeImpr = Number(t.value); return; }
   if (t.matches("[data-ph-moment]")) { majPhotoEV(t.dataset.phMoment, { moment: t.value }).catch(err => toast("Échec : " + err.message, "error")); return; }
-  if (t.matches("[data-ph-add]")) {
-    const p = passageOuvert(); if (!p) return;
-    const fichiers = [...(t.files || [])]; t.value = "";
-    for (const f of fichiers) {
-      try {
-        statut = "⏳ Envoi de la photo…"; majStatut();
-        const data = await compresserPhoto(f);
-        await ajouterPhotoEV({ passageId: p.id, siteId: p.siteId, date: p.date, agentUid: p.agentUid, moment: t.dataset.phAdd, data });
-        statut = "✅ Photo ajoutée"; majStatut();
-      } catch (err) { console.error(err); toast("Photo non enregistrée : " + (err.message || err), "error"); }
-    }
+}
+
+// Prise de photo : le champ « fichier » vit HORS de la page (qui est redessinée à chaque mise à jour).
+// Avant, il était dans la feuille : si la feuille se redessinait pendant que l'appareil photo était
+// ouvert (synchro, autre agent…), au retour la photo arrivait sur un champ disparu et était perdue
+// sans message — d'où « j'ai pris les photos avant, à la fin il n'y en a plus ».
+let champPhoto = null;
+function prendrePhoto(moment) {
+  const p = passageOuvert(); if (!p) return;
+  if (!champPhoto) {
+    champPhoto = Object.assign(document.createElement("input"), { type: "file", accept: "image/*", multiple: true });
+    champPhoto.setAttribute("capture", "environment"); champPhoto.hidden = true;
+    document.body.appendChild(champPhoto);
+    champPhoto.addEventListener("change", async () => {
+      const cible = champPhoto._cible; const fichiers = [...(champPhoto.files || [])]; champPhoto.value = "";
+      if (!cible || !fichiers.length) return;
+      let ok = 0;
+      for (const f of fichiers) {
+        try {
+          statut = `⏳ Envoi de la photo${fichiers.length > 1 ? ` ${ok + 1}/${fichiers.length}` : ""}…`; majStatut();
+          const data = await compresserPhoto(f);
+          await ajouterPhotoEV({ ...cible, data });
+          ok++;
+        } catch (err) { console.error(err); toast("Photo non enregistrée : " + (err.message || err), "error"); }
+      }
+      statut = ok ? `✅ ${ok} photo${ok > 1 ? "s" : ""} ajoutée${ok > 1 ? "s" : ""}` : ""; majStatut();
+      if (ok) toast(`📷 ${ok} photo${ok > 1 ? "s" : ""} enregistrée${ok > 1 ? "s" : ""}`, "success");
+    });
   }
+  // La feuille visée est retenue au moment du clic (pas au retour de l'appareil photo).
+  champPhoto._cible = { passageId: p.id, siteId: p.siteId, date: p.date, agentUid: p.agentUid, moment };
+  champPhoto.click();
 }
 
 // ---------- Impression ----------
