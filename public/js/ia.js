@@ -5,6 +5,8 @@
 // séparée pour ne pas interférer avec le reste de l'appli.
 import { firebaseConfig } from "./firebase-config.js";
 
+// Clé de SITE reCAPTCHA v3 (publique, faite pour être dans le code) — projet service-maintenance-et-menage.
+const CLE_RECAPTCHA = "6LctpDEuAAAAALhTiXeNSZP4c4Xs3_8aLJkK7M9y";
 const VERSION = "12.19.0"; // SDK récent : nécessaire pour les modèles Gemini 3.x
 // Google retire régulièrement des modèles : on essaie les plus récents d'abord,
 // et si Google en recommande un autre dans son message d'erreur, on l'essaie
@@ -33,7 +35,16 @@ async function modele() {
   const { initializeApp, getApps } = libApp;
   const { getAI, getGenerativeModel, GoogleAIBackend } = libAI;
   const app = getApps().find(a => a.name === "ia") || initializeApp(firebaseConfig, "ia");
-  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  // App Check (obligatoire pour l'IA Firebase depuis l'été 2026) : reCAPTCHA v3, invisible pour l'utilisateur.
+  // Jeton « à usage limité » : un jeton volé ne peut pas être réutilisé.
+  let avecAppCheck = false;
+  try {
+    const v = libApp.SDK_VERSION || VERSION;
+    const { initializeAppCheck, ReCaptchaV3Provider } = await import(`https://www.gstatic.com/firebasejs/${v}/firebase-app-check.js`);
+    if (!app.__appCheck) { app.__appCheck = initializeAppCheck(app, { provider: new ReCaptchaV3Provider(CLE_RECAPTCHA), isTokenAutoRefreshEnabled: true }); }
+    avecAppCheck = true;
+  } catch (e) { console.warn("App Check indisponible :", e); }
+  const ai = getAI(app, { backend: new GoogleAIBackend(), ...(avecAppCheck ? { useLimitedUseAppCheckTokens: true } : {}) });
   modeleMemo = { ai, getGenerativeModel };
   return modeleMemo;
 }
